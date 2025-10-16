@@ -4,6 +4,7 @@ import { fetchPlanningAnalytics } from "@/lib/events/planning-analytics";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { GoalManager } from "@/components/planning/goal-manager";
 import { EventClonePanel } from "@/components/planning/event-clone-panel";
+import { AiMetadataPanel } from "@/components/planning/ai-metadata-panel";
 
 const PlanningAnalyticsClient = dynamic(
   () => import("@/components/planning/planning-analytics-client"),
@@ -58,6 +59,23 @@ type GoalRecord = {
   created_at: string | null;
 };
 
+type AiContentRecord = {
+  id: string;
+  event_id: string;
+  version: number;
+  synopsis: string | null;
+  hero_copy: string | null;
+  seo_keywords: unknown;
+  audience_tags: unknown;
+  talent_bios: unknown;
+  generated_at: string | null;
+  published_at: string | null;
+  event?: {
+    title: string | null;
+    venue?: { name: string | null } | null;
+  } | null;
+};
+
 export default async function PlanningPage() {
   const profile = await getCurrentUserProfile();
   const isHQPlanner = profile?.role === "hq_planner";
@@ -65,21 +83,52 @@ export default async function PlanningPage() {
   let planningError: string | null = null;
   let planningData: Awaited<ReturnType<typeof fetchPlanningAnalytics>> | null = null;
   let goals: GoalRecord[] = [];
+  let aiContent: AiContentRecord[] = [];
+  let goalError: string | null = null;
+  let aiError: string | null = null;
 
   if (isHQPlanner) {
     try {
       planningData = await fetchPlanningAnalytics();
       const supabase = createSupabaseServerClient();
-      const { data: goalRows, error: goalError } = await supabase
-        .from("goals")
-        .select("id,label,description,active,created_at")
-        .order("label", { ascending: true });
+      const [goalResult, aiResult] = await Promise.all([
+        supabase
+          .from("goals")
+          .select("id,label,description,active,created_at")
+          .order("label", { ascending: true }),
+        supabase
+          .from("ai_content")
+          .select(
+            `
+              id,
+              event_id,
+              version,
+              synopsis,
+              hero_copy,
+              seo_keywords,
+              audience_tags,
+              talent_bios,
+              generated_at,
+              published_at,
+              event:events(id,title,venue:venues(name))
+            `
+          )
+          .order("generated_at", { ascending: false })
+          .limit(20),
+      ]);
 
-      if (goalError) {
-        planningError =
-          goalError.message ?? "Unable to load goals catalogue.";
+      if (goalResult.error) {
+        goalError =
+          goalResult.error.message ?? "Unable to load goals catalogue.";
       } else {
-        goals = (goalRows ?? []) as GoalRecord[];
+        goals = (goalResult.data ?? []) as GoalRecord[];
+      }
+
+      if (aiResult.error) {
+        aiError =
+          aiResult.error.message ?? "Unable to load AI metadata.";
+      } else {
+        aiContent = (aiResult.data ?? []) as AiContentRecord[];
       }
     } catch (error) {
       planningError = error instanceof Error ? error.message : "Unable to load planning analytics.";
@@ -135,12 +184,26 @@ return (
     )}
 
     {isHQPlanner && planningError === null ? (
-      <EventClonePanel events={planningData.summaries} />
-
-      <GoalManager goals={goals} />
+      <div className="space-y-6">
+        {planningData ? (
+          <EventClonePanel events={planningData.summaries} />
+        ) : null}
+        {goalError ? (
+          <div className="rounded-lg border border-dashed border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {goalError}
+          </div>
+        ) : (
+          <GoalManager goals={goals} />
+        )}
+        {aiError ? (
+          <div className="rounded-lg border border-dashed border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {aiError}
+          </div>
+        ) : (
+          <AiMetadataPanel content={aiContent} />
+        )}
+      </div>
     ) : null}
-
-      <GoalManager goals={goals} />
 
     <div className="grid gap-5 md:grid-cols-2">
       {planningTracks.map((area) => (

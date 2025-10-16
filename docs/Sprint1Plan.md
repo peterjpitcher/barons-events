@@ -23,6 +23,7 @@ Establish authenticated access, venue/user management, core event data structure
 - ✅ Planning feed API (`/api/planning-feed`) delivers HQ analytics payloads for dashboards and calendar hooks.
 - ✅ Planning dashboard surfaces reviewer SLA trend tiles and ships an ICS calendar feed with conflict flags for HQ planners.
 - ✅ HQ goal catalogue management live with create/archive controls for planners.
+- ✅ AI metadata review workspace added so planners can publish or retract enrichment outputs.
 - ⏳ Automated tests for event/reviewer actions and migration regression checks still outstanding.
 
 ## Key Deliverables
