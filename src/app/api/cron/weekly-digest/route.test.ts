@@ -9,6 +9,11 @@ vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServiceRoleClient: vi.fn(),
 }));
 
+vi.mock("@/lib/notifications/scheduler-emails", () => ({
+  __esModule: true,
+  sendWeeklyDigestEmail: vi.fn(),
+}));
+
 const fetchPlanningAnalytics = vi.mocked(
   (await import("@/lib/events/planning-analytics")).fetchPlanningAnalytics
 );
@@ -17,12 +22,12 @@ const createSupabaseServiceRoleClient = vi.mocked(
 );
 
 const supabaseMock = {
-  from: vi.fn(() => ({
-    insert: () => ({
-      error: null,
-    }),
-  })),
+  from: vi.fn(),
 };
+
+const sendWeeklyDigestEmail = vi.mocked(
+  (await import("@/lib/notifications/scheduler-emails")).sendWeeklyDigestEmail
+);
 
 const buildRequest = (authorized: boolean) =>
   new Request("https://example.com/api/cron/weekly-digest", {
@@ -33,10 +38,30 @@ const buildRequest = (authorized: boolean) =>
 
 beforeEach(() => {
   process.env.CRON_SECRET = "secret";
-  supabaseMock.from.mockReturnValue({
-    insert: () => ({
-      error: null,
-    }),
+  supabaseMock.from.mockImplementation((table: string) => {
+    if (table === "weekly_digest_logs") {
+      return {
+        insert: () => ({
+          error: null,
+        }),
+      };
+    }
+
+    if (table === "users") {
+      return {
+        select: () => ({
+          eq: () => ({
+            data: [
+              { email: "exec1@example.com" },
+              { email: "exec2@example.com" },
+            ],
+            error: null,
+          }),
+        }),
+      };
+    }
+
+    return {} as never;
   });
   createSupabaseServiceRoleClient.mockReturnValue(supabaseMock as never);
   fetchPlanningAnalytics.mockResolvedValue({
@@ -64,5 +89,11 @@ describe("GET /api/cron/weekly-digest", () => {
 
     expect(response.status).toBe(200);
     expect(body.message).toMatch(/snapshot/i);
+    expect(body.emailsSent).toBe(2);
+    expect(sendWeeklyDigestEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        recipients: ["exec1@example.com", "exec2@example.com"],
+      })
+    );
   });
 });

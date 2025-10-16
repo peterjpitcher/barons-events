@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
 import { validateCronRequest } from "@/lib/cron/auth";
+import { sendSlaWarningEmail } from "@/lib/notifications/scheduler-emails";
 
 type EventRow = {
   id: string;
@@ -89,6 +90,32 @@ export async function GET(request: Request) {
       continue;
     }
 
+    const { data: reviewer } = await supabase
+      .from("users")
+      .select("email,full_name")
+      .eq("id", event.assigned_reviewer_id)
+      .maybeSingle();
+
+    const reviewerEmail = reviewer?.email as string | null;
+
+    if (!reviewerEmail) {
+      skipped += 1;
+      continue;
+    }
+
+    const dashboardUrl =
+      `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/reviews`;
+
+    await sendSlaWarningEmail({
+      reviewerEmail,
+      reviewerName: (reviewer?.full_name as string | null) ?? null,
+      eventTitle: event.title,
+      venueName: event.venue?.name ?? null,
+      startAt: event.start_at,
+      severity: category,
+      dashboardUrl,
+    });
+
     const { error: insertError } = await supabase.from("notifications").insert({
       user_id: event.assigned_reviewer_id,
       type: "sla_warning",
@@ -99,7 +126,8 @@ export async function GET(request: Request) {
         start_at: event.start_at,
         severity: category,
       },
-      status: "queued",
+      status: "sent",
+      sent_at: new Date().toISOString(),
     });
 
     if (insertError) {

@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { updateAiContentPublicationAction } from "@/actions/ai";
+import {
+  saveAiContentAction,
+  updateAiContentPublicationAction,
+} from "@/actions/ai";
 
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
@@ -146,6 +149,81 @@ describe("updateAiContentPublicationAction", () => {
     expect(recordAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({
         action: "ai_content.retracted",
+      })
+    );
+  });
+});
+
+describe("saveAiContentAction", () => {
+  beforeEach(() => {
+    getCurrentUserProfile.mockResolvedValue({
+      id: "user-1",
+      role: "hq_planner",
+    } as never);
+  });
+
+  it("rejects non-HQ planners", async () => {
+    getCurrentUserProfile.mockResolvedValue({
+      id: "user-2",
+      role: "reviewer",
+    } as never);
+
+    const result = await saveAiContentAction(undefined, buildFormData({
+      contentId: "00000000-0000-4000-8000-000000000000",
+      synopsis: "",
+      heroCopy: "",
+    }));
+
+    expect(result).toEqual({
+      error: "Only HQ planners can manage AI metadata.",
+    });
+  });
+
+  it("validates field lengths", async () => {
+    const longText = "x".repeat(3000);
+
+    const result = await saveAiContentAction(undefined, buildFormData({
+      contentId: "00000000-0000-4000-8000-000000000000",
+      synopsis: longText,
+      heroCopy: "",
+    }));
+
+    expect(result?.fieldErrors?.synopsis).toBeDefined();
+  });
+
+  it("surfaces Supabase errors", async () => {
+    updateError = { message: "update failed" };
+
+    const result = await saveAiContentAction(undefined, buildFormData({
+      contentId: "00000000-0000-4000-8000-000000000000",
+      synopsis: "Updated synopsis",
+      heroCopy: "Hero copy",
+      seoKeywords: "live music, tasting",
+      audienceTags: "hq, premium",
+      talentBios: "DJ Night",
+    }));
+
+    expect(result).toEqual({
+      error: "Unable to update AI metadata: update failed",
+    });
+    expect(recordAuditLog).not.toHaveBeenCalled();
+  });
+
+  it("updates metadata and records audit", async () => {
+    const result = await saveAiContentAction(undefined, buildFormData({
+      contentId: "00000000-0000-4000-8000-000000000000",
+      synopsis: "Updated synopsis",
+      heroCopy: "Hero copy",
+      seoKeywords: "live music, tasting",
+      audienceTags: "hq, premium",
+      talentBios: "DJ Night",
+    }));
+
+    expect(result).toEqual({ success: true });
+    expect(recordAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "ai_content.updated",
+        entityType: "ai_content",
       })
     );
   });

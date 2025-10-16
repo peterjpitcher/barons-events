@@ -5,10 +5,19 @@ vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServiceRoleClient: vi.fn(),
 }));
 
+vi.mock("@/lib/notifications/scheduler-emails", () => ({
+  __esModule: true,
+  sendSlaWarningEmail: vi.fn(),
+}));
+
 vi.mock("@/lib/events/planning-analytics", () => ({}));
 
 const createSupabaseServiceRoleClient = vi.mocked(
   (await import("@/lib/supabase/server")).createSupabaseServiceRoleClient
+);
+
+const sendSlaWarningEmail = vi.mocked(
+  (await import("@/lib/notifications/scheduler-emails")).sendSlaWarningEmail
 );
 
 const buildRequest = (authorized: boolean) =>
@@ -94,6 +103,22 @@ describe("GET /api/cron/sla-reminders", () => {
         } as unknown as SupabaseQuery;
       }
 
+      if (table === "users") {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({
+                data: {
+                  email: "reviewer@example.com",
+                  full_name: "Rita Reviewer",
+                },
+                error: null,
+              }),
+            }),
+          }),
+        } as unknown as SupabaseQuery;
+      }
+
       return {} as SupabaseQuery;
     });
 
@@ -102,5 +127,12 @@ describe("GET /api/cron/sla-reminders", () => {
 
     expect(response.status).toBe(200);
     expect(body.queued).toBe(1);
+    expect(sendSlaWarningEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reviewerEmail: "reviewer@example.com",
+        eventTitle: "Tap Takeover",
+        severity: "overdue",
+      })
+    );
   });
 });

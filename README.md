@@ -79,7 +79,7 @@ Barons Events Platform is the internal workspace for planning, approving, and an
 - Event pipeline surfaces status analytics plus schedule conflict warnings and a planning feed snapshot to keep venues coordinated.
 - Planning Ops dashboard consumes `/api/planning-feed` for live analytics (status tiles, conflicts, reviewer SLA gaps).
 - HQ planners manage strategic goals via an active/inactive catalogue to guide venue submissions.
-- AI metadata oversight workspace lists generated content, allowing planners to publish or retract metadata once reviewed.
+- AI metadata workspace lets planners edit, publish, or retract AI output before handing off downstream.
 - Event list shows per-draft version timelines with submission snapshots, diff summaries, and audit entries.
 - Reviews queue surfaces assignment + decision workflows with Supabase-backed history feed.
 
@@ -88,4 +88,4 @@ Barons Events Platform is the internal workspace for planning, approving, and an
 - Seed overlapping events (including venue space variations) and reviewer workloads in Supabase to validate SLA + conflict analytics end-to-end.
  - Wire the cron endpoints to Resend email templates and verify notifications flow end-to-end.
  - Hook the planning calendar feed into exec dashboards and external calendars to validate consumption at scale.
- - Extend AI metadata workspace with inline editing and regeneration controls ahead of website publishing integrations.
+- Build AI regeneration controls and wire publishing into external website automation.
