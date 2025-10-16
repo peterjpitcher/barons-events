@@ -1,36 +1,87 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Barons Events Platform
+
+## Overview
+Barons Events Platform is the internal workspace for planning, approving, and analysing pub events. The first build targets Sprint 1 foundations: authentication, venue management, and draft event creation scaffolding.
+
+## Documentation
+- `docs/PRD.md` – Product requirements and success metrics.
+- `docs/ProjectPlan.md` – Solo delivery roadmap and iteration flow.
+- `docs/Sprint1Plan.md` – Current backlog and Definition of Done.
+- `docs/SupabaseSchema.md` – Database schema and RLS plan.
+- `docs/TechStack.md` – Lean Next.js + Supabase + Resend stack decisions.
+- `docs/UXFlowNotes.md` – UX flows and wireframe guidance.
 
 ## Getting Started
+1. Install dependencies:
+   ```bash
+   npm install
+   ```
+2. Copy `.env.example` to `.env.local` and populate Supabase, Resend, and OpenAI credentials (Supabase keys for development are already provided in the shared `.env.local`).
+3. Apply Supabase migrations and seed data (requires the Supabase CLI to be installed and linked to your project):
+   ```bash
+   npm run supabase:reset
+   ```
+   This command resets the local database, runs all migrations, and seeds reviewer/venue demo data used by the event timelines.
+4. Start the development server:
+   ```bash
+   npm run dev
+   ```
+5. Open http://localhost:3000 to view the authenticated workspace shell.
+   - Anonymous visitors are redirected to `/login`. Use your Supabase email/password to sign in.
+   - Once signed in, the navigation shell and workstream pages become available.
 
-First, run the development server:
+## Scripts
+- `npm run dev` – Start the development server.
+- `npm run build` – Create a production build (runs with `TAILWIND_DISABLE_LIGHTNINGCSS=1` to avoid native Lightning CSS requirements in local builds/CI).
+- `npm run start` – Run the production build locally.
+- `npm run lint` – Execute ESLint.
+- `npm test` – Run Vitest unit tests (analytics helpers, event & reviewer server actions).
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## Continuous Integration
+- GitHub Actions workflow (`.github/workflows/ci.yml`) installs dependencies, runs ESLint, and executes Vitest on every push/PR to `main`.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Internal APIs
+- `GET /api/planning-feed` – HQ-only analytics feed returning status counts, venue-space conflicts, upcoming events, and submissions awaiting reviewer assignment.
+- `GET /api/planning-feed/calendar` – ICS calendar export including conflict flags and reviewer assignments for planning subscriptions.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Authentication & Sessions
+- Supabase Auth powers sign-in at `/login`, using the same credentials configured in `.env.local`.
+- Middleware enforces authenticated access across the workspace and redirects back to `/` after a successful sign-in.
+- The top-right header surfaces the signed-in user name (from Supabase metadata) and a `Sign out` action that clears the session.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Project Structure Highlights
+- `src/actions` – Server actions (e.g., Supabase sign-in/sign-out).
+- `src/lib` – Shared utilities for environment parsing, Supabase clients, and session helpers.
+- `src/components` – Reusable UI components, including the navigation shell and auth form.
+- `src/app/*` – App Router pages for the dashboard, workstreams (`venues`, `events`, `reviews`, `planning`, `settings`), and auth.
+- `supabase/migrations` – SQL migrations for schema (users, venues, goals, events).
+- `supabase/seed.sql` – Base seed data for venues and goals.
 
-## Learn More
+## Database (Supabase)
+- Make sure the Supabase CLI is installed and linked to the project (`supabase link` + `supabase login`).
+- Apply migrations without dropping data: `npm run supabase:migrate`
+- Reset and reseed local database: `npm run supabase:reset`
+- Seeds currently create three sample venues, overlapping event timelines (across venue spaces), and default goals. Update `supabase/seed.sql` with project-specific data as needed.
+- Event and review timelines expect seeded versions/audit entries; run `npm run supabase:reset` before your first build to ensure the tables are populated.
 
-To learn more about Next.js, take a look at the following resources:
+## Tech Highlights
+- Next.js App Router with server-side Supabase interactions.
+- Supabase Postgres + Auth for storage and identity (see `/docs/SupabaseSchema.md`).
+- Tailwind CSS v4 utilities via the new `@import "tailwindcss"` directive.
+- Environment variables managed locally through `.env.local` and in production via Vercel environment settings.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Feature Snapshot
+- Venue CRUD (HQ only) feeds Supabase and writes audit-log entries.
+- Event draft creation form (venue managers/HQ) stores a version `1` snapshot for future timeline views.
+- Reviewer queue supports HQ filters (per reviewer / unassigned), SLA escalation cues, and queue analytics for active submissions with audit-backed decision flows.
+- Event pipeline surfaces status analytics plus schedule conflict warnings and a planning feed snapshot to keep venues coordinated.
+- Planning Ops dashboard consumes `/api/planning-feed` for live analytics (status tiles, conflicts, reviewer SLA gaps).
+- HQ planners manage strategic goals via an active/inactive catalogue to guide venue submissions.
+- Event list shows per-draft version timelines with submission snapshots, diff summaries, and audit entries.
+- Reviews queue surfaces assignment + decision workflows with Supabase-backed history feed.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Next Steps & Known Gaps
+- Add automated tests covering event/reviewer server actions, version history inserts, and conflict detection logic.
+- Seed overlapping events (including venue space variations) and reviewer workloads in Supabase to validate SLA + conflict analytics end-to-end.
+- Automate reviewer SLA reminder cron jobs and weekly digest emails now that dashboard insights are live.
+- Hook the planning calendar feed into exec dashboards and external calendars to validate consumption at scale.
