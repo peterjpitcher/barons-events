@@ -80,6 +80,7 @@ Barons Events Platform is the internal workspace for planning, approving, and an
 - Planning Ops dashboard consumes `/api/planning-feed` for live analytics (status tiles, conflicts, reviewer SLA gaps).
 - HQ planners manage strategic goals via an active/inactive catalogue to guide venue submissions.
 - AI metadata workspace lets planners edit, publish, or retract AI output before handing off downstream.
+- Executive digest preview surfaces weekly metrics/upcoming highlights that power the digest email.
 - Event list shows per-draft version timelines with submission snapshots, diff summaries, and audit entries.
 - Reviews queue surfaces assignment + decision workflows with Supabase-backed history feed.
 

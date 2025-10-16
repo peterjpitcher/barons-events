@@ -5,6 +5,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { GoalManager } from "@/components/planning/goal-manager";
 import { EventClonePanel } from "@/components/planning/event-clone-panel";
 import { AiMetadataPanel } from "@/components/planning/ai-metadata-panel";
+import { ExecutiveDigestPanel } from "@/components/planning/executive-digest-panel";
 
 const PlanningAnalyticsClient = dynamic(
   () => import("@/components/planning/planning-analytics-client"),
@@ -202,6 +203,12 @@ return (
         ) : (
           <AiMetadataPanel content={aiContent} />
         )}
+        <ExecutiveDigestPanel
+          statusCounts={planningData.statusCounts}
+          conflicts={planningData.conflicts.length}
+          awaitingReviewer={planningData.awaitingReviewer.length}
+          upcoming={planningData.upcoming.slice(0, 8)}
+        />
       </div>
     ) : null}
 
