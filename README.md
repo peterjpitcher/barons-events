@@ -43,6 +43,8 @@ Barons Events Platform is the internal workspace for planning, approving, and an
 ## Internal APIs
 - `GET /api/planning-feed` – HQ-only analytics feed returning status counts, venue-space conflicts, upcoming events, and submissions awaiting reviewer assignment.
 - `GET /api/planning-feed/calendar` – ICS calendar export including conflict flags and reviewer assignments for planning subscriptions.
+- `GET /api/cron/sla-reminders` – Vercel Cron endpoint (requires `CRON_SECRET`) that queues reviewer SLA notifications for overdue and imminent submissions.
+- `GET /api/cron/weekly-digest` – Vercel Cron endpoint that snapshots weekly planning metrics into `weekly_digest_logs` for executive digests.
 
 ## Authentication & Sessions
 - Supabase Auth powers sign-in at `/login`, using the same credentials configured in `.env.local`.
@@ -84,6 +86,6 @@ Barons Events Platform is the internal workspace for planning, approving, and an
 ## Next Steps & Known Gaps
 - Add automated tests covering event/reviewer server actions, version history inserts, and conflict detection logic.
 - Seed overlapping events (including venue space variations) and reviewer workloads in Supabase to validate SLA + conflict analytics end-to-end.
-- Automate reviewer SLA reminder cron jobs and weekly digest emails now that dashboard insights are live.
-- Hook the planning calendar feed into exec dashboards and external calendars to validate consumption at scale.
-- Extend AI metadata workspace with inline editing and regeneration controls ahead of website publishing integrations.
+ - Wire the cron endpoints to Resend email templates and verify notifications flow end-to-end.
+ - Hook the planning calendar feed into exec dashboards and external calendars to validate consumption at scale.
+ - Extend AI metadata workspace with inline editing and regeneration controls ahead of website publishing integrations.
