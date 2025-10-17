@@ -25,6 +25,7 @@ const sampleAnalytics = {
   totalEvents: 2,
   calendarEvents: [],
   reviewerSla: [],
+  slaWarningQueued: 0,
   summaries: [{ id: "event-1" }],
 };
 
@@ -68,7 +69,11 @@ describe("GET /api/planning-feed", () => {
       calendarEvents: [],
       reviewerSla: [],
       summaries: [{ id: "event-1" }],
+      slaWarningQueued: 0,
     });
+    expect(body.metadata).toBeDefined();
+    expect(body.metadata.calendarFeedUrl).toBe("http://localhost:3000/api/planning-feed/calendar");
+    expect(typeof body.metadata.generatedAt).toBe("string");
   });
 
   it("surfaces errors from planning analytics fetch", async () => {

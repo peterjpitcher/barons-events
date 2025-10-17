@@ -1,7 +1,7 @@
 import React from "react";
 import SlaWarningEmail from "@/emails/sla-warning";
 import WeeklyDigestEmail from "@/emails/weekly-digest";
-import { sendTransactionalEmail } from "@/lib/notifications/resend";
+import { sendTransactionalEmail, type SendTransactionalEmailResult } from "@/lib/notifications/resend";
 
 export async function sendSlaWarningEmail({
   reviewerEmail,
@@ -19,7 +19,7 @@ export async function sendSlaWarningEmail({
   startAt?: string | null;
   severity: "warning" | "overdue";
   dashboardUrl: string;
-}) {
+}): Promise<SendTransactionalEmailResult> {
   const reactEmail = (
     <SlaWarningEmail
       reviewerName={reviewerName}
@@ -31,7 +31,7 @@ export async function sendSlaWarningEmail({
     />
   );
 
-  await sendTransactionalEmail({
+  return sendTransactionalEmail({
     to: reviewerEmail,
     subject:
       severity === "overdue"
@@ -61,16 +61,16 @@ export async function sendWeeklyDigestEmail({
     venueSpace: string | null;
   }>;
   planningUrl: string;
-}) {
+}): Promise<SendTransactionalEmailResult | null> {
   if (recipients.length === 0) {
-    return;
+    return null;
   }
 
   const reactEmail = (
     <WeeklyDigestEmail metrics={metrics} upcoming={upcoming} planningUrl={planningUrl} />
   );
 
-  await sendTransactionalEmail({
+  return sendTransactionalEmail({
     to: recipients,
     subject: "Barons Events · Weekly planning digest",
     react: reactEmail,

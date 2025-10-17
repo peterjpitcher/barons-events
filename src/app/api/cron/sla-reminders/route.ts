@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
 import { validateCronRequest } from "@/lib/cron/auth";
 import { sendSlaWarningEmail } from "@/lib/notifications/scheduler-emails";
+import { reportCronFailure } from "@/lib/cron/alert";
 
 type EventRow = {
   id: string;
@@ -9,6 +10,18 @@ type EventRow = {
   start_at: string | null;
   assigned_reviewer_id: string | null;
   venue?: { name: string | null } | null;
+};
+
+type NotificationRow = {
+  id: string;
+  status: string;
+  payload: {
+    event_id?: string;
+    send_meta?: {
+      attempted_at?: string;
+      retry_count?: number;
+    };
+  } | null;
 };
 
 const MS_IN_DAY = 1000 * 60 * 60 * 24;
@@ -55,16 +68,46 @@ export async function GET(request: Request) {
     .not("assigned_reviewer_id", "is", null);
 
   if (error) {
+    await reportCronFailure({
+      job: "sla-reminders",
+      message: "Failed to query submitted events",
+      detail: error.message,
+    });
     return NextResponse.json(
       { error: error.message },
       { status: 500 }
     );
   }
 
-  const events = (data ?? []) as EventRow[];
+  const events = (data ?? []).map((event) => {
+    const raw = event as unknown as {
+      id: string;
+      title: string;
+      start_at: string | null;
+      assigned_reviewer_id: string | null;
+      venue?:
+        | { name: string | null }
+        | Array<{ name: string | null }>
+        | null;
+    };
+
+    const venueValue = Array.isArray(raw.venue)
+      ? raw.venue[0] ?? null
+      : raw.venue ?? null;
+
+    return {
+      id: raw.id,
+      title: raw.title,
+      start_at: raw.start_at,
+      assigned_reviewer_id: raw.assigned_reviewer_id,
+      venue: venueValue,
+    } satisfies EventRow;
+  });
   let processed = 0;
   let queued = 0;
   let skipped = 0;
+  let failed = 0;
+  const failedEvents: Array<{ eventId: string; reviewerId: string; error: string }> = [];
 
   for (const event of events) {
     const category = categorize(event.start_at);
@@ -78,16 +121,32 @@ export async function GET(request: Request) {
     const since = new Date(Date.now() - MS_IN_DAY).toISOString();
     const { data: existing } = await supabase
       .from("notifications")
-      .select("id")
+      .select("id,status,payload")
       .eq("type", "sla_warning")
       .eq("user_id", event.assigned_reviewer_id)
       .contains("payload", { event_id: event.id })
       .gte("created_at", since)
+      .order("created_at", { ascending: false })
       .limit(1);
 
-    if (existing && existing.length > 0) {
+    const latest = (existing?.[0] as NotificationRow | undefined) ?? null;
+    const lastAttemptAt = latest?.payload?.send_meta?.attempted_at ?? null;
+
+    if (latest?.status === "sent") {
       skipped += 1;
       continue;
+    }
+
+    if (lastAttemptAt) {
+      const lastAttemptDate = new Date(lastAttemptAt);
+      if (!Number.isNaN(lastAttemptDate.getTime())) {
+        const minutesSinceLastAttempt =
+          (Date.now() - lastAttemptDate.getTime()) / (1000 * 60);
+        if (minutesSinceLastAttempt < 60) {
+          skipped += 1;
+          continue;
+        }
+      }
     }
 
     const { data: reviewer } = await supabase
@@ -106,41 +165,119 @@ export async function GET(request: Request) {
     const dashboardUrl =
       `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/reviews`;
 
-    await sendSlaWarningEmail({
-      reviewerEmail,
-      reviewerName: (reviewer?.full_name as string | null) ?? null,
-      eventTitle: event.title,
-      venueName: event.venue?.name ?? null,
-      startAt: event.start_at,
-      severity: category,
-      dashboardUrl,
-    });
+    const attemptedAt = new Date().toISOString();
+    let messageId: string | null = null;
+    let sendError: string | null = null;
+    let sendFailed = false;
 
-    const { error: insertError } = await supabase.from("notifications").insert({
-      user_id: event.assigned_reviewer_id,
-      type: "sla_warning",
-      payload: {
-        event_id: event.id,
-        title: event.title,
-        venue: event.venue?.name ?? null,
-        start_at: event.start_at,
+    try {
+      const result = await sendSlaWarningEmail({
+        reviewerEmail,
+        reviewerName: (reviewer?.full_name as string | null) ?? null,
+        eventTitle: event.title,
+        venueName: event.venue?.name ?? null,
+        startAt: event.start_at,
         severity: category,
-      },
-      status: "sent",
-      sent_at: new Date().toISOString(),
-    });
+        dashboardUrl,
+      });
+      messageId = result?.id ?? null;
+    } catch (error) {
+      sendFailed = true;
+      sendError =
+        error instanceof Error ? error.message : "Unknown Resend error.";
+      console.error(
+        "[cron][sla-reminders] Failed to send SLA reminder",
+        JSON.stringify({
+          eventId: event.id,
+          reviewerId: event.assigned_reviewer_id,
+          error: sendError,
+        })
+      );
+    }
 
-    if (insertError) {
-      skipped += 1;
+    const retryCount =
+      (latest?.payload?.send_meta?.retry_count ?? 0) + (sendFailed ? 1 : 0);
+
+    const payload = {
+      event_id: event.id,
+      title: event.title,
+      venue: event.venue?.name ?? null,
+      start_at: event.start_at,
+      severity: category,
+      send_meta: {
+        attempted_at: attemptedAt,
+        message_id: messageId,
+        error: sendError,
+        retry_count: retryCount,
+        retry_after: sendFailed
+          ? new Date(Date.now() + 60 * 60 * 1000).toISOString()
+          : null,
+      },
+    };
+
+    const { error: upsertError } = await supabase
+      .from("notifications")
+      .upsert(
+        {
+          id: latest?.id,
+          user_id: event.assigned_reviewer_id,
+          type: "sla_warning",
+          payload,
+          status: sendFailed ? "queued" : "sent",
+          sent_at: sendFailed ? null : attemptedAt,
+        },
+        { onConflict: "id" }
+      );
+
+    if (upsertError) {
+      sendFailed = true;
+      sendError = upsertError.message;
+      console.error(
+        "[cron][sla-reminders] Failed to record notification",
+        JSON.stringify({
+          eventId: event.id,
+          reviewerId: event.assigned_reviewer_id,
+          error: upsertError.message,
+        })
+      );
+    }
+
+    if (sendFailed) {
+      failed += 1;
+      failedEvents.push({
+        eventId: event.id,
+        reviewerId: event.assigned_reviewer_id,
+        error: sendError ?? "Unknown error",
+      });
+      continue;
+    }
+
+    if (sendFailed) {
       continue;
     }
 
     queued += 1;
+    console.log(
+      "[cron][sla-reminders] Sent SLA reminder",
+      JSON.stringify({
+        eventId: event.id,
+        reviewerId: event.assigned_reviewer_id,
+        messageId,
+        severity: category,
+      })
+    );
   }
 
-  return NextResponse.json({
-    processed,
-    queued,
-    skipped,
-  });
+  const summary = { processed, queued, skipped, failed };
+  console.log("[cron][sla-reminders] Summary", JSON.stringify(summary));
+
+  if (failedEvents.length > 0) {
+    await reportCronFailure({
+      job: "sla-reminders",
+      message: "One or more SLA reminders failed to send",
+      detail: JSON.stringify({ summary, failedEvents }),
+    });
+  }
+
+  return NextResponse.json(summary);
 }

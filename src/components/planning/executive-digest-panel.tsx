@@ -1,12 +1,45 @@
 "use client";
 
-import type { EventSummary } from "@/lib/events/analytics";
+import { useMemo } from "react";
+import useSWR from "swr";
+import Link from "next/link";
+
+type EventSummary = {
+  id: string;
+  title: string;
+  status: string;
+  startAt: string | null;
+  venueName: string | null;
+  venueSpace: string | null;
+};
+
+type PlanningAnalyticsResponse = {
+  statusCounts: Record<string, number>;
+  conflicts: Array<{
+    key: string;
+    venueName: string;
+    venueSpace: string;
+    first: EventSummary;
+    second: EventSummary;
+  }>;
+  upcoming: EventSummary[];
+  awaitingReviewer: EventSummary[];
+  metadata?: {
+    calendarFeedUrl: string;
+    generatedAt: string;
+  };
+};
 
 type ExecutiveDigestPanelProps = {
-  statusCounts: Record<string, number>;
-  conflicts: number;
-  awaitingReviewer: number;
-  upcoming: EventSummary[];
+  initialData: PlanningAnalyticsResponse;
+};
+
+const fetcher = async (url: string) => {
+  const response = await fetch(url, { credentials: "include" });
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+  return (await response.json()) as PlanningAnalyticsResponse;
 };
 
 const formatDateTime = (value: string | null) => {
@@ -27,14 +60,23 @@ const formatDateTime = (value: string | null) => {
 };
 
 export function ExecutiveDigestPanel({
-  statusCounts,
-  conflicts,
-  awaitingReviewer,
-  upcoming,
+  initialData,
 }: ExecutiveDigestPanelProps) {
-  const submitted = statusCounts.submitted ?? 0;
-  const needsRevisions = statusCounts.needs_revisions ?? 0;
-  const approved = statusCounts.approved ?? 0;
+  const { data, error } = useSWR("/api/planning-feed", fetcher, {
+    fallbackData: initialData,
+    revalidateOnFocus: false,
+  });
+
+  const analytics = useMemo(() => data ?? initialData, [data, initialData]);
+
+  const submitted = analytics.statusCounts.submitted ?? 0;
+  const needsRevisions = analytics.statusCounts.needs_revisions ?? 0;
+  const approved = analytics.statusCounts.approved ?? 0;
+  const awaitingReviewer = analytics.awaitingReviewer.length;
+  const conflicts = analytics.conflicts.length;
+  const upcoming = analytics.upcoming;
+  const calendarHref = analytics.metadata?.calendarFeedUrl ?? "/api/planning-feed/calendar";
+  const subscribeCopy = `Subscribe HQ exec calendars to ${calendarHref} so conflict alerts land alongside the weekly digest.`;
 
   return (
     <div className="space-y-4 rounded-xl border border-black/[0.08] bg-white p-6 shadow-sm">
@@ -44,6 +86,27 @@ export function ExecutiveDigestPanel({
           Quick snapshot of the metrics and highlights that feed the weekly executive digest.
         </p>
       </header>
+
+      {error ? (
+        <div className="rounded-lg border border-dashed border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          Unable to refresh digest metrics; showing cached snapshot.
+        </div>
+      ) : null}
+
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-black/15 bg-black/[0.02] p-3">
+        <div className="flex max-w-md flex-col gap-1 text-xs text-black/60">
+          <span>{subscribeCopy}</span>
+          <span className="text-[11px] text-black/50">
+            Checklist reference: <code>docs/Runbooks/ExecutiveCalendar.md</code>
+          </span>
+        </div>
+        <a
+          href={calendarHref}
+          className="inline-flex items-center rounded-full border border-black/[0.12] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-black transition hover:bg-black hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black/50"
+        >
+          Subscribe via ICS
+        </a>
+      </div>
 
       <dl className="grid gap-3 sm:grid-cols-4">
         <DigestMetric label="Submitted" value={submitted} tone="text-amber-700" />
@@ -71,7 +134,12 @@ export function ExecutiveDigestPanel({
               className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-white px-3 py-2 text-sm text-black/80"
             >
               <div className="flex flex-col">
-                <span className="font-medium text-black">{event.title}</span>
+                <Link
+                  href={`/events/${event.id}`}
+                  className="font-medium text-black transition hover:text-black/80 hover:underline"
+                >
+                  {event.title}
+                </Link>
                 <span className="text-xs text-black/60">
                   {event.venueName ?? "Venue TBC"} · {event.venueSpace ?? "General space"}
                 </span>

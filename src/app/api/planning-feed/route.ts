@@ -25,6 +25,11 @@ export async function GET() {
       calendarEvents: analytics.calendarEvents,
       reviewerSla: analytics.reviewerSla,
       summaries: analytics.summaries,
+      slaWarningQueued: analytics.slaWarningQueued,
+      metadata: {
+        calendarFeedUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/api/planning-feed/calendar`,
+        generatedAt: new Date().toISOString(),
+      },
     });
   } catch (error) {
     return NextResponse.json(

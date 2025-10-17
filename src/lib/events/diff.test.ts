@@ -99,4 +99,21 @@ describe("diffSnapshot", () => {
       },
     ]);
   });
+
+  it("tags diffs with a source identifier", () => {
+    const diff = diffSnapshot(
+      { title: "Old" },
+      { title: "New" },
+      { sourceTag: "manual" }
+    );
+
+    expect(diff).toEqual([
+      {
+        field: "title",
+        before: "Old",
+        after: "New",
+        source: "manual",
+      },
+    ]);
+  });
 });

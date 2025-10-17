@@ -12,12 +12,20 @@ vi.mock("@/lib/notifications/scheduler-emails", () => ({
 
 vi.mock("@/lib/events/planning-analytics", () => ({}));
 
+vi.mock("@/lib/cron/alert", () => ({
+  reportCronFailure: vi.fn(),
+}));
+
 const createSupabaseServiceRoleClient = vi.mocked(
   (await import("@/lib/supabase/server")).createSupabaseServiceRoleClient
 );
 
 const sendSlaWarningEmail = vi.mocked(
   (await import("@/lib/notifications/scheduler-emails")).sendSlaWarningEmail
+);
+
+const reportCronFailure = vi.mocked(
+  (await import("@/lib/cron/alert")).reportCronFailure
 );
 
 const buildRequest = (authorized: boolean) =>
@@ -52,6 +60,7 @@ beforeEach(() => {
   process.env.CRON_SECRET = "secret";
   createSupabaseServiceRoleClient.mockReturnValue(supabaseMock as never);
   supabaseMock.from.mockReset();
+  reportCronFailure.mockReset();
 });
 
 describe("GET /api/cron/sla-reminders", () => {
@@ -85,19 +94,20 @@ describe("GET /api/cron/sla-reminders", () => {
       }
 
       if (table === "notifications") {
-        const chain = {
+        const chain: SupabaseQuery = {
           eq: () => chain,
           contains: () => chain,
           gte: () => chain,
+          order: () => chain,
           limit: () => ({
             data: [],
             error: null,
           }),
-        };
+        } as unknown as SupabaseQuery;
 
         return {
           select: () => chain,
-          insert: () => ({
+          upsert: () => ({
             error: null,
           }),
         } as unknown as SupabaseQuery;
@@ -132,6 +142,35 @@ describe("GET /api/cron/sla-reminders", () => {
         reviewerEmail: "reviewer@example.com",
         eventTitle: "Tap Takeover",
         severity: "overdue",
+      })
+    );
+  });
+
+  it("reports errors when event query fails", async () => {
+    supabaseMock.from.mockImplementation((table: string) => {
+      if (table === "events") {
+        return {
+          select: () => ({
+            eq: () => ({
+              not: () => ({
+                data: null,
+                error: { message: "database offline" },
+              }),
+            }),
+          }),
+        } as unknown as SupabaseQuery;
+      }
+      return {} as never;
+    });
+
+    const response = await GET(buildRequest(true));
+    const body = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(body).toMatchObject({ error: "database offline" });
+    expect(reportCronFailure).toHaveBeenCalledWith(
+      expect.objectContaining({
+        job: "sla-reminders",
       })
     );
   });

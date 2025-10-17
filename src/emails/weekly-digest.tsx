@@ -67,35 +67,52 @@ export default function WeeklyDigestEmail({
                   Your weekly snapshot of submission flow, reviewer coverage, and upcoming highlights.
                 </p>
 
-                <table
-                  width="100%"
-                  cellPadding={0}
-                  cellSpacing={0}
-                  style={{ borderCollapse: "collapse", marginBottom: "20px" }}
-                >
+                <table width="100%" cellPadding={0} cellSpacing={0} style={{ borderCollapse: "collapse", marginBottom: "20px" }}>
                   <tbody>
                     <tr>
-                      <td style={{ padding: "12px 16px", border: "1px solid #e5e7eb" }}>
-                        <strong style={{ display: "block", color: "#111827", fontSize: "20px" }}>
-                          {metrics.statusCounts.submitted ?? 0}
-                        </strong>
-                        <span style={{ color: "#4b5563", fontSize: "12px" }}>Awaiting decision</span>
-                      </td>
-                      <td style={{ padding: "12px 16px", border: "1px solid #e5e7eb" }}>
-                        <strong style={{ display: "block", color: "#111827", fontSize: "20px" }}>
-                          {metrics.conflicts}
-                        </strong>
-                        <span style={{ color: "#4b5563", fontSize: "12px" }}>Venue conflicts flagged</span>
-                      </td>
-                      <td style={{ padding: "12px 16px", border: "1px solid #e5e7eb" }}>
-                        <strong style={{ display: "block", color: "#111827", fontSize: "20px" }}>
-                          {metrics.awaitingReviewer}
-                        </strong>
-                        <span style={{ color: "#4b5563", fontSize: "12px" }}>Submissions unassigned</span>
-                      </td>
+                      {[
+                        {
+                          label: "Submitted",
+                          value: metrics.statusCounts.submitted ?? 0,
+                          tone: "#b45309",
+                          copy: "Awaiting reviewer decision",
+                        },
+                        {
+                          label: "Needs revisions",
+                          value: metrics.statusCounts.needs_revisions ?? 0,
+                          tone: "#be123c",
+                          copy: "Returned to venue managers",
+                        },
+                        {
+                          label: "Approved",
+                          value: metrics.statusCounts.approved ?? 0,
+                          tone: "#047857",
+                          copy: "Ready for publishing hand-off",
+                        },
+                        {
+                          label: "Venue conflicts",
+                          value: metrics.conflicts,
+                          tone: "#111827",
+                          copy: "Overlaps flagged in timeline",
+                        },
+                      ].map((metric) => (
+                        <td key={metric.label} style={{ padding: "12px 16px", border: "1px solid #e5e7eb", width: "25%" }}>
+                          <span style={{ display: "block", fontSize: "12px", letterSpacing: "0.08em", textTransform: "uppercase", color: "#6b7280" }}>
+                            {metric.label}
+                          </span>
+                          <strong style={{ display: "block", color: metric.tone, fontSize: "22px", marginTop: "4px" }}>
+                            {metric.value}
+                          </strong>
+                          <span style={{ color: "#4b5563", fontSize: "12px" }}>{metric.copy}</span>
+                        </td>
+                      ))}
                     </tr>
                   </tbody>
                 </table>
+
+                <p style={{ margin: "0 0 18px 0", fontSize: "12px", color: "#4b5563" }}>
+                  Unassigned submissions: <strong>{metrics.awaitingReviewer}</strong> — follow up with planners to ensure coverage.
+                </p>
 
                 <h2 style={{ margin: "0 0 12px 0", fontSize: "16px", color: "#111827" }}>Upcoming highlights</h2>
                 {upcoming.length === 0 ? (

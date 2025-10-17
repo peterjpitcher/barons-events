@@ -1,8 +1,11 @@
-export type DraftDiff = Array<{
+export type DraftDiffEntry = {
   field: string;
   before: unknown;
   after: unknown;
-}>;
+  source?: string;
+};
+
+export type DraftDiff = DraftDiffEntry[];
 
 const IGNORED_FIELDS = new Set([
   "id",
@@ -19,6 +22,7 @@ type Snapshot = Record<string, unknown> | null | undefined;
 
 type DiffOptions = {
   ignoredFields?: string[];
+  sourceTag?: string;
 };
 
 export function diffSnapshot(
@@ -54,11 +58,17 @@ export function diffSnapshot(
     const normalisedCurrent = normaliseValue(current);
 
     if (!isEqual(normalisedPrevious, normalisedCurrent)) {
-      changes.push({
+      const change: DraftDiffEntry = {
         field,
         before: normalisedPrevious,
         after: normalisedCurrent,
-      });
+      };
+
+      if (options.sourceTag) {
+        change.source = options.sourceTag;
+      }
+
+      changes.push(change);
     }
   }
 

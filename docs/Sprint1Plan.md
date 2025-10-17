@@ -81,6 +81,13 @@ Establish authenticated access, venue/user management, core event data structure
 - Add GitHub workflow for lint (ESLint) and unit tests (Jest placeholder).
 - Document developer setup in README.
 
+## Outstanding TODOs (Sprint 1 Wrap-Up)
+- ✅ **Cron monitoring uplift**: Runbook now includes staging verification logs, helper script for triggering crons, and the Planning Ops monitoring panel surfaces queued retries plus webhook heartbeats.
+- ✅ **Executive integrations**: Executive digest exposes an ICS subscribe CTA, conflict drill-down links, parity verified via `scripts/check-planning-parity.mjs`, and runbooks now document Google/Outlook pilot quirks.
+- ✅ **AI metadata controls**: Regeneration pipeline now consumes OpenAI output, normalises list fields, and queues publish payloads with webhook/error handling tests.
+- ✅ **Timeline polish**: Event detail timelines badge AI vs. manual diffs, and the planning AI panel filters Draft/Published entries.
+- ✅ **Test coverage**: Vitest exercises regenerate → publish flows plus AI dispatch webhook success/failure paths; existing reviewer coverage remains the next expansion target.
+
 ## Testing & Validation
 - Draft smoke test checklist covering auth, navigation, venue CRUD, and event submission + reviewer decision paths.
 - Unit coverage in `src/actions/events.test.ts` now validates draft creation/submission server actions (auth, validation, Supabase error handling); extend to reviewer flows next.

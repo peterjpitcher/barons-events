@@ -14,6 +14,10 @@ vi.mock("@/lib/notifications/scheduler-emails", () => ({
   sendWeeklyDigestEmail: vi.fn(),
 }));
 
+vi.mock("@/lib/cron/alert", () => ({
+  reportCronFailure: vi.fn(),
+}));
+
 const fetchPlanningAnalytics = vi.mocked(
   (await import("@/lib/events/planning-analytics")).fetchPlanningAnalytics
 );
@@ -27,6 +31,10 @@ const supabaseMock = {
 
 const sendWeeklyDigestEmail = vi.mocked(
   (await import("@/lib/notifications/scheduler-emails")).sendWeeklyDigestEmail
+);
+
+const reportCronFailure = vi.mocked(
+  (await import("@/lib/cron/alert")).reportCronFailure
 );
 
 const buildRequest = (authorized: boolean) =>
@@ -74,6 +82,9 @@ beforeEach(() => {
     calendarEvents: [],
     reviewerSla: [],
   } as never);
+  sendWeeklyDigestEmail.mockReset();
+  sendWeeklyDigestEmail.mockResolvedValue({ id: "digest-email-id" });
+  reportCronFailure.mockReset();
 });
 
 describe("GET /api/cron/weekly-digest", () => {
@@ -90,9 +101,63 @@ describe("GET /api/cron/weekly-digest", () => {
     expect(response.status).toBe(200);
     expect(body.message).toMatch(/snapshot/i);
     expect(body.emailsSent).toBe(2);
+    expect(body.sendId).toBe("digest-email-id");
     expect(sendWeeklyDigestEmail).toHaveBeenCalledWith(
       expect.objectContaining({
         recipients: ["exec1@example.com", "exec2@example.com"],
+      })
+    );
+  });
+
+  it("reports send failures", async () => {
+    sendWeeklyDigestEmail.mockRejectedValueOnce(new Error("Resend outage"));
+
+    const response = await GET(buildRequest(true));
+    const body = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(body).toMatchObject({ error: "Resend outage" });
+    expect(reportCronFailure).toHaveBeenCalledWith(
+      expect.objectContaining({
+        job: "weekly-digest",
+        message: "Weekly digest email failed to send",
+      })
+    );
+  });
+
+  it("reports log insert failures", async () => {
+    supabaseMock.from.mockImplementation((table: string) => {
+      if (table === "weekly_digest_logs") {
+        return {
+          insert: () => ({
+            error: { message: "permission denied" },
+          }),
+        };
+      }
+
+      if (table === "users") {
+        return {
+          select: () => ({
+            eq: () => ({
+              data: [{ email: "exec@example.com" }],
+              error: null,
+            }),
+          }),
+        };
+      }
+
+      return {} as never;
+    });
+
+    const response = await GET(buildRequest(true));
+    const body = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(body).toMatchObject({ error: "permission denied" });
+    expect(reportCronFailure).toHaveBeenCalledWith(
+      expect.objectContaining({
+        job: "weekly-digest",
+        message: "Failed to record weekly digest log",
       })
     );
   });

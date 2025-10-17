@@ -31,7 +31,7 @@ const ensureHQPlanner = async (): Promise<
     }
   | {
       error?: undefined;
-      profile: Awaited<ReturnType<typeof getCurrentUserProfile>>;
+      profile: NonNullable<Awaited<ReturnType<typeof getCurrentUserProfile>>>;
     }
 > => {
   const profile = await getCurrentUserProfile();

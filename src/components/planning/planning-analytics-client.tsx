@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo } from "react";
 import useSWR from "swr";
 
@@ -49,6 +50,16 @@ type PlanningAnalyticsResponse = {
   totalEvents: number;
   calendarEvents: CalendarEvent[];
   reviewerSla: ReviewerSlaSnapshot[];
+  slaWarningQueued: number;
+  metadata?: {
+    calendarFeedUrl: string;
+    generatedAt: string;
+  };
+};
+
+type EventLinkOptions = {
+  source?: string;
+  hash?: string;
 };
 
 type PlanningAnalyticsClientProps = {
@@ -91,6 +102,20 @@ const statusLabels: Record<string, string> = {
   rejected: "Rejected",
   published: "Published",
   completed: "Completed",
+};
+
+const buildEventHref = (eventId: string, options: EventLinkOptions = {}) => {
+  const params = new URLSearchParams();
+
+  if (options.source) {
+    params.set("source", options.source);
+  }
+
+  const query = params.toString();
+  const hash = options.hash ? `#${options.hash}` : "";
+  const queryPrefix = query.length > 0 ? `?${query}` : "";
+
+  return `/events/${eventId}${queryPrefix}${hash}`;
 };
 
 export function PlanningAnalyticsClient({
@@ -141,6 +166,7 @@ export function PlanningAnalyticsClient({
   const reviewerSlaPreview = analytics.reviewerSla.slice(0, 4);
   const calendarConflictCount = analytics.calendarEvents.filter((event) => event.conflict).length;
   const nextCalendarEvent = analytics.calendarEvents[0];
+  const queuedSlaWarningCount = analytics.slaWarningQueued ?? 0;
 
   if (analytics.totalEvents === 0) {
     return (
@@ -194,7 +220,12 @@ export function PlanningAnalyticsClient({
                 className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-black/[0.06] bg-black/[0.015] px-3 py-2 text-sm text-black/80"
               >
                 <div className="flex flex-col">
-                  <span className="font-medium text-black">{event.title}</span>
+                  <Link
+                    href={buildEventHref(event.id, { source: "planning", hash: "timeline" })}
+                    className="font-medium text-black transition hover:text-black/80 hover:underline"
+                  >
+                    {event.title}
+                  </Link>
                   <span className="text-xs text-black/60">
                     {event.venueName ?? "Unknown venue"} · {event.venueSpace ?? "General space"}
                   </span>
@@ -215,25 +246,35 @@ export function PlanningAnalyticsClient({
       {conflictPreview.length > 0 ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <span className="font-semibold">Venue-space conflicts</span>
+            <div>
+              <span className="font-semibold">Venue-space conflicts</span>
+              <p className="text-xs text-amber-800">
+                Use the conflict timeline link to jump straight into the event history view.
+              </p>
+            </div>
             <span className="text-xs uppercase tracking-wide text-amber-700">
               {analytics.conflicts.length} overlap{analytics.conflicts.length === 1 ? "" : "s"}
             </span>
           </div>
-          <div className="mt-3 space-y-2">
+          <div className="mt-3 space-y-3">
             {conflictPreview.map((pair) => (
               <div
                 key={pair.key}
-                className="rounded-lg border border-amber-200 bg-white/70 px-3 py-2 text-sm text-amber-900"
+                className="rounded-lg border border-amber-200 bg-white/70 px-3 py-3 text-sm text-amber-900 shadow-sm"
               >
-                <div className="flex flex-col">
-                  <span className="font-medium">{pair.venueName}</span>
-                  <span className="text-xs text-amber-700">{pair.venueSpace}</span>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-col">
+                    <span className="font-medium">{pair.venueName}</span>
+                    <span className="text-xs text-amber-700">{pair.venueSpace}</span>
+                  </div>
+                  <span className="text-[11px] uppercase tracking-wide text-amber-700">
+                    Conflict window
+                  </span>
                 </div>
-                <span className="block text-xs text-amber-800">
-                  {pair.first.title} ({formatDateTime(pair.first.startAt)}) overlaps with{" "}
-                  {pair.second.title} ({formatDateTime(pair.second.startAt)})
-                </span>
+                <div className="mt-2 grid gap-2 md:grid-cols-2">
+                  <ConflictEventCard event={pair.first} />
+                  <ConflictEventCard event={pair.second} />
+                </div>
               </div>
             ))}
             {analytics.conflicts.length > conflictPreview.length ? (
@@ -243,6 +284,19 @@ export function PlanningAnalyticsClient({
               </div>
             ) : null}
           </div>
+        </div>
+      ) : null}
+      {queuedSlaWarningCount > 0 ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-4 text-sm text-amber-900">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span className="font-semibold">SLA reminders queued</span>
+            <span className="text-xs uppercase tracking-wide text-amber-700">
+              {queuedSlaWarningCount} pending email{queuedSlaWarningCount === 1 ? "" : "s"}
+            </span>
+          </div>
+          <p className="mt-2 text-xs text-amber-800">
+            Resend is retrying these SLA warnings. If the queue keeps growing, review notifications in Supabase or check the cron alert channel.
+          </p>
         </div>
       ) : null}
 
@@ -321,7 +375,7 @@ export function PlanningAnalyticsClient({
               </p>
             </div>
             <a
-              href="/api/planning-feed/calendar"
+              href={analytics.metadata?.calendarFeedUrl ?? "/api/planning-feed/calendar"}
               className="inline-flex items-center rounded-full border border-black/[0.12] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-black hover:bg-black hover:text-white"
             >
               Download ICS
@@ -347,6 +401,11 @@ export function PlanningAnalyticsClient({
             The feed refreshes with every analytics run. Conflicted events include “Conflict” in the
             summary line so they stand out in calendar views.
           </p>
+          {analytics.metadata?.generatedAt ? (
+            <p className="mt-1 text-[10px] uppercase tracking-wide text-black/40">
+              Snapshot generated {formatDateTime(analytics.metadata.generatedAt)}
+            </p>
+          ) : null}
         </div>
       </div>
 
@@ -370,7 +429,12 @@ export function PlanningAnalyticsClient({
                 className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-black/[0.06] bg-black/[0.015] px-3 py-2 text-sm text-black/80"
               >
                 <div className="flex flex-col">
-                  <span className="font-medium text-black">{event.title}</span>
+                  <Link
+                    href={buildEventHref(event.id, { source: "planning" })}
+                    className="font-medium text-black transition hover:text-black/80 hover:underline"
+                  >
+                    {event.title}
+                  </Link>
                   <span className="text-xs text-black/60">
                     {event.venueName ?? "Unknown venue"} · {event.venueSpace ?? "General space"}
                   </span>
@@ -391,3 +455,48 @@ export function PlanningAnalyticsClient({
 }
 
 export default PlanningAnalyticsClient;
+
+type ConflictEventCardProps = {
+  event: EventSummary;
+};
+
+function ConflictEventCard({ event }: ConflictEventCardProps) {
+  const statusLabel = statusLabels[event.status] ?? event.status;
+  const timelineHref = buildEventHref(event.id, {
+    source: "conflict",
+    hash: "timeline",
+  });
+  const detailHref = buildEventHref(event.id, { source: "planning" });
+
+  return (
+    <div className="flex flex-col gap-2 rounded-md border border-amber-200 bg-amber-50/60 p-3 text-xs text-amber-900">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Link
+          href={detailHref}
+          className="font-semibold text-amber-900 transition hover:text-amber-800 hover:underline"
+        >
+          {event.title}
+        </Link>
+        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-900">
+          {statusLabel}
+        </span>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-2 text-amber-800">
+        <span>{formatDateTime(event.startAt)}</span>
+        <span>{event.venueSpace ?? "General space"}</span>
+      </div>
+      <Link
+        href={timelineHref}
+        className="inline-flex items-center justify-center rounded-full border border-amber-300 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-900 transition hover:bg-amber-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400"
+      >
+        Open conflict timeline
+      </Link>
+      <Link
+        href={detailHref}
+        className="inline-flex items-center justify-center rounded-full border border-transparent px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-900 transition hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400"
+      >
+        View event detail
+      </Link>
+    </div>
+  );
+}
