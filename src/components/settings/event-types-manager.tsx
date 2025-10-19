@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createEventTypeAction, updateEventTypeAction, deleteEventTypeAction } from "@/actions/event-types";
 import type { EventTypeRow } from "@/lib/event-types";
@@ -17,15 +18,20 @@ export function EventTypesManager({ eventTypes }: ManagerProps) {
   return (
     <div className="space-y-6">
       <CreateEventTypeForm />
-      <div className="grid gap-4 md:grid-cols-2">
-        {eventTypes.map((type) => (
-          <EventTypeCard key={type.id} type={type} />
-        ))}
-        {eventTypes.length === 0 ? (
-          <Card className="md:col-span-2">
-            <CardContent className="py-8 text-center text-subtle">No event types yet. Add the first one above.</CardContent>
-          </Card>
-        ) : null}
+      <div className="space-y-4">
+        <div className="grid gap-4 md:hidden">
+          {eventTypes.map((type) => (
+            <EventTypeCardMobile key={type.id} type={type} />
+          ))}
+          {eventTypes.length === 0 ? (
+            <Card>
+              <CardContent className="py-8 text-center text-subtle">
+                No event types yet. Add the first one above.
+              </CardContent>
+            </Card>
+          ) : null}
+        </div>
+        <EventTypeDesktopList eventTypes={eventTypes} />
       </div>
     </div>
   );
@@ -67,29 +73,32 @@ function CreateEventTypeForm() {
   );
 }
 
-function EventTypeCard({ type }: { type: EventTypeRow }) {
+function EventTypeCardMobile({ type }: { type: EventTypeRow }) {
   const [updateState, updateAction] = useActionState(updateEventTypeAction, undefined);
   const [deleteState, deleteAction] = useActionState(deleteEventTypeAction, undefined);
+  const router = useRouter();
 
   useEffect(() => {
     if (updateState?.message) {
       if (updateState.success) {
         toast.success(updateState.message);
+        router.refresh();
       } else {
         toast.error(updateState.message);
       }
     }
-  }, [updateState]);
+  }, [updateState, router]);
 
   useEffect(() => {
     if (deleteState?.message) {
       if (deleteState.success) {
         toast.success(deleteState.message);
+        router.refresh();
       } else {
         toast.error(deleteState.message);
       }
     }
-  }, [deleteState]);
+  }, [deleteState, router]);
 
   return (
     <Card>
@@ -112,5 +121,89 @@ function EventTypeCard({ type }: { type: EventTypeRow }) {
         </form>
       </CardContent>
     </Card>
+  );
+}
+
+function EventTypeDesktopList({ eventTypes }: { eventTypes: EventTypeRow[] }) {
+  if (eventTypes.length === 0) {
+    return (
+      <div className="hidden rounded-[var(--radius)] border border-[var(--color-border)] bg-white py-8 text-center text-subtle md:block">
+        No event types yet. Add the first one above.
+      </div>
+    );
+  }
+
+  return (
+    <div className="hidden overflow-hidden rounded-[var(--radius)] border border-[var(--color-border)] bg-white md:block">
+      <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] gap-4 border-b border-[var(--color-border)] bg-[var(--color-muted-surface)] px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-subtle">
+        <div>Event type</div>
+        <div>Added</div>
+        <div className="text-right">Actions</div>
+      </div>
+      <ul>
+        {eventTypes.map((type, index) => (
+          <EventTypeDesktopRow key={type.id} type={type} isFirst={index === 0} />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function EventTypeDesktopRow({ type, isFirst }: { type: EventTypeRow; isFirst: boolean }) {
+  const [updateState, updateAction] = useActionState(updateEventTypeAction, undefined);
+  const [deleteState, deleteAction] = useActionState(deleteEventTypeAction, undefined);
+  const router = useRouter();
+
+  useEffect(() => {
+    if (updateState?.message) {
+      if (updateState.success) {
+        toast.success(updateState.message);
+        router.refresh();
+      } else {
+        toast.error(updateState.message);
+      }
+    }
+  }, [updateState, router]);
+
+  useEffect(() => {
+    if (deleteState?.message) {
+      if (deleteState.success) {
+        toast.success(deleteState.message);
+        router.refresh();
+      } else {
+        toast.error(deleteState.message);
+      }
+    }
+  }, [deleteState, router]);
+
+  const formattedDate = new Date(type.created_at).toLocaleDateString("en-GB");
+
+  return (
+    <li
+      className={`border-[var(--color-border)] px-5 py-4 ${
+        isFirst ? "border-b" : "border-y"
+      } hover:bg-[rgba(39,54,64,0.03)]`}
+    >
+      <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] items-center gap-4">
+        <form
+          action={updateAction}
+          className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3"
+        >
+          <input type="hidden" name="typeId" value={type.id} />
+          <div className="flex flex-col gap-1">
+            <label className="sr-only" htmlFor={`event-type-desktop-${type.id}`}>
+              Event type name
+            </label>
+            <Input id={`event-type-desktop-${type.id}`} name="label" defaultValue={type.label} required />
+          </div>
+          <SubmitButton label="Save" pendingLabel="Saving..." className="justify-self-end" />
+        </form>
+        <p className="text-sm text-subtle">Added {formattedDate}</p>
+        <form action={deleteAction} className="flex justify-end">
+          <input type="hidden" name="typeId" value={type.id} />
+          <SubmitButton label="Remove" pendingLabel="Removing..." variant="destructive" />
+        </form>
+      </div>
+    </li>
   );
 }
