@@ -1,40 +1,60 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { LoginForm } from "@/components/auth/login-form";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { signInAction } from "@/actions/auth";
 import { getSession } from "@/lib/auth";
+import { SubmitButton } from "@/components/ui/submit-button";
 
-export default async function LoginPage() {
+export const metadata = {
+  title: "Sign in · Barons Events",
+  description: "Enter your Barons workspace details to continue."
+};
+
+export default async function LoginPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const session = await getSession();
+  const query = await searchParams;
+  const errorMessage = query.error === "auth"
+    ? "Those details didn't match."
+    : query.error === "invalid"
+      ? "Please check your email and password."
+      : null;
 
   if (session) {
     redirect("/");
   }
 
   return (
-    <section className="mx-auto flex min-h-[70vh] max-w-4xl flex-col justify-center gap-10 px-6 py-16">
-      <div className="space-y-4 text-center">
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-wide text-black/50">
-            Barons Events Platform
+    <div className="flex min-h-screen items-center justify-center bg-[var(--color-canvas)] px-4 py-12">
+      <Card className="w-full max-w-md shadow-soft">
+        <CardHeader>
+          <CardTitle>Welcome back</CardTitle>
+          <CardDescription>
+            Use your Barons email and password. If you&apos;re not sure, speak with the central planning
+            team.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form action={signInAction} className="space-y-6">
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input id="email" name="email" type="email" autoComplete="email" required />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input id="password" name="password" type="password" autoComplete="current-password" required />
+            </div>
+            {errorMessage ? <p className="text-sm text-[var(--color-antique-burgundy)]">{errorMessage}</p> : null}
+            <SubmitButton label="Sign in" />
+          </form>
+          <p className="mt-6 text-sm text-muted">
+            Locked out? <Link href="mailto:central.planner@barons.example" className="underline">Email the
+            planners</Link>.
           </p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-black">
-            Welcome back
-          </h1>
-        </div>
-        <p className="mx-auto max-w-2xl text-sm text-black/70">
-          Sign in to continue the Sprint 1 build. Need access? Ask an HQ planner
-          for an invitation and ensure your Supabase account is provisioned.
-        </p>
-      </div>
-
-      <LoginForm />
-
-      <div className="text-center text-sm text-black/60">
-        <Link href="https://app.supabase.com" className="underline">
-          Manage Supabase users
-        </Link>{" "}
-        · <span>Forgotten password? Use the Supabase reset email flow.</span>
-      </div>
-    </section>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

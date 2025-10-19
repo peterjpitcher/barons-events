@@ -14,14 +14,14 @@
 
 ## Data & Auth
 - **Database**: Supabase Postgres with row-level security policies enforcing per-role access.
-- **Auth**: Supabase Auth (email/password, optional magic links) with role mapping (`venue_manager`, `reviewer`, `hq_planner`, `executive`).
+- **Auth**: Supabase Auth (email/password, optional magic links) with role mapping (`venue_manager`, `reviewer`, `central_planner`, `executive`).
 - **Storage**: Supabase Storage buckets for attachments and AI-generated assets.
 - **Client Access**: Public anon key restricted to read flows; mutations executed through server-side Supabase client.
 
 ## Business Logic & Jobs
 - **Server Actions/API Routes**: Handle event submissions, approvals, AI enrichment, notifications, debrief recording, reporting exports.
 - **Planning Analytics**: Event pipeline surfaces status metrics plus venue-space conflict detection feeding the planning dashboard snapshot feed.
-- **APIs**: `/api/planning-feed` serves HQ-only analytics (status counts, conflicts, upcoming submissions) for dashboards and calendar integrations; `/api/planning-feed/calendar` exports an ICS feed with conflict flags for external calendars.
+- **APIs**: `/api/planning-feed` serves central-planner-only analytics (status counts, conflicts, upcoming submissions) for dashboards and calendar integrations; `/api/planning-feed/calendar` exports an ICS feed with conflict flags for external calendars.
 - **Scheduling**: Vercel Cron hits `/api/cron/sla-reminders` (reviewer SLA queue) and `/api/cron/weekly-digest` (executive snapshot); both require a `CRON_SECRET` bearer token.
 - **Job Coordination**: Supabase tables track job state and deduplication; retries handled in server logic.
 

@@ -11,18 +11,18 @@ Establish authenticated access, venue/user management, core event data structure
 - ✅ README and workspace docs aligned; dev env configured with Supabase credentials.
 - ✅ Next.js navigation shell live with workstream placeholders and status labels.
 - ✅ Supabase Auth wired into middleware, login form, and session-aware layout.
-- ✅ HQ planner venue listing connected to Supabase with create/edit flows for venues.
+- ✅ Central planner venue listing connected to Supabase with create/edit flows for venues.
 - ✅ Initial Supabase migrations + seed scripts (venues, users, goals, events) checked in.
-- ✅ Venue audit logging landed with activity feed surfaced for HQ planners.
+- ✅ Venue audit logging landed with activity feed surfaced for Central planners.
 - ✅ Event draft server action and draft creation form connected to Supabase.
 - ✅ Event timeline shows draft/submission history with diff summaries and an audit feed sourced from `event_versions` and `audit_log`.
 - ✅ Reviewer assignment RPC + server action wired into the reviews queue with audit logging.
 - ✅ Reviewer decision workflow updates event status, approvals, and audit trail under the new RLS policies.
-- ✅ Reviewer queue UI now exposes per-reviewer filtering plus SLA escalation cues and queue summary analytics for HQ planners.
+- ✅ Reviewer queue UI now exposes per-reviewer filtering plus SLA escalation cues and queue summary analytics for Central planners.
 - ✅ Event pipeline now includes status analytics, venue-space aware conflict detection, and a planning feed snapshot to spotlight scheduling risks.
-- ✅ Planning feed API (`/api/planning-feed`) delivers HQ analytics payloads for dashboards and calendar hooks.
-- ✅ Planning dashboard surfaces reviewer SLA trend tiles and ships an ICS calendar feed with conflict flags for HQ planners.
-- ✅ HQ goal catalogue management live with create/archive controls for planners.
+- ✅ Planning feed API (`/api/planning-feed`) delivers central planning analytics payloads for dashboards and calendar hooks.
+- ✅ Planning dashboard surfaces reviewer SLA trend tiles and ships an ICS calendar feed with conflict flags for Central planners.
+- ✅ Central planning goal catalogue management live with create/archive controls for planners.
 - ✅ AI metadata workspace now supports inline edits plus publish/retract flows for enrichment outputs.
 - ✅ Cron scaffolding landed for reviewer SLA reminders and weekly digest snapshots (secured via `CRON_SECRET`).
 - ⏳ Automated tests for event/reviewer actions and migration regression checks still outstanding.
@@ -31,7 +31,7 @@ Establish authenticated access, venue/user management, core event data structure
 1. Supabase project configured with core tables, row-level security policies, and role mappings.
 2. Next.js app deployed to Vercel with baseline layout, navigation, and protected routes.
 3. Auth flows using Supabase (sign up/in, password reset, role-based redirects).
-4. Venue and user management screens (list, detail, basic CRUD restricted to HQ planners).
+4. Venue and user management screens (list, detail, basic CRUD restricted to Central planners).
 5. Event draft schema and API abstractions (server actions) for create/read/update drafts.
 6. Audit logging scaffold capturing user actions on venues and drafts.
 7. CI/CD pipeline using Vercel previews and lint/test checks.
@@ -39,19 +39,19 @@ Establish authenticated access, venue/user management, core event data structure
 ## Backlog Items
 ### EP-101 Supabase Project Setup
 - Configure environments (dev, staging) and initialise schema.
-- Define roles/groups for venue managers, reviewers, HQ planners, executives.
+- Define roles/groups for venue managers, reviewers, Central planners, executives.
 - Establish seed data script for venues and roles.
 
 ### EP-102 RLS Policies & Row-Level Functions
 - Implement policies restricting access to venue/event data based on user role.
-- Write helper RPC for HQ planners to manage assignments.
+- Write helper RPC for Central planners to manage assignments.
 
 ### EP-103 Next.js Project Bootstrap
 - Scaffold Next.js App Router project with TypeScript, Tailwind, ESLint, Prettier.
 - Configure environment variables and Supabase client with server-only access.
 
 ### EP-104 Auth Flow Implementation
-- Build sign-in, sign-up (HQ invites), password reset pages.
+- Build sign-in, sign-up (central planning invites), password reset pages.
 - Server actions for role-based routing; protect routes via middleware.
 
 ### EP-105 Layout & Navigation Shell
@@ -59,7 +59,7 @@ Establish authenticated access, venue/user management, core event data structure
 - Implement placeholder pages for dashboard, venues, events, reviews.
 
 ### EP-106 Venue Management CRUD
-- HQ-only list/detail screens, create/edit venue forms.
+- Central-planner-only list/detail screens, create/edit venue forms.
 - Server actions for Supabase writes, with validation via Zod.
 
 ### EP-107 Event Draft Schema & API

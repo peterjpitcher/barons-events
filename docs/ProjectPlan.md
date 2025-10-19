@@ -9,7 +9,7 @@ Each phase is sequential and handled directly by us (Developer + Product Owner).
    - Exit Criteria: Shared understanding captured in PRD with assumptions validated.
 
 2. **UX & Service Sketching**  
-   - Activities: Produce low-fi wireframes for key flows (submission, review, HQ dashboard, debrief), define navigation structure, capture UX notes.  
+  - Activities: Produce low-fi wireframes for key flows (submission, review, central planning dashboard, debrief), define navigation structure, capture UX notes.  
    - Lead: Developer (with feedback from Product Owner).  
    - Exit Criteria: Wireframes approved, design decisions documented in `docs/UXFlowNotes.md`.
 
@@ -91,11 +91,12 @@ Each phase is sequential and handled directly by us (Developer + Product Owner).
 - Cron observability runbook, helper scripts, and SLA monitoring panel shipped (queued retries, webhook heartbeats).
 - Monitoring panel now consumes `cron_notification_failures`, exports `/api/monitoring/cron/failures`, and surfaces recent alert log entries.
 - Vitest coverage added for cron routes + monitoring APIs; CI enforces `TAILWIND_DISABLE_LIGHTNINGCSS=1`.
+- Reviewer notifications sidebar embedded in Planning Ops highlights recent SLA alerts with quick mailto/timeline links. Decision modal templates and reviewer queue UI now share the new component kit with unit coverage.
 
 **Outstanding backlog**  
 - Automate cron webhook 200 checks (scheduled heartbeat + alert) and surface status in the panel header.  
+- Build reviewer notifications history endpoint + planning sidebar filters (depends on data model decisions).  
 - Extend reviewer server-action tests with Supabase/RLS integration scenarios (assign/decision error branches).  
-- Capture remediation guidance for webhook alerts in runbook once automation lands.  
 - Seed QA loop: add scripted smoke checklist + ensure reseed flows exercise monitoring dashboards.
 
 ### Workstream B – Planning & Executive Experience
@@ -111,25 +112,19 @@ Each phase is sequential and handled directly by us (Developer + Product Owner).
 - Monitor executive calendar adoption and capture additional pilot feedback after the next staged reseed + digest run.  
 - Schedule parity script checks as part of release smoke tests once staging data is refreshed.  
 
-### Workstream C – AI Workflow & Data Health
-**Assigned to Dev B (AI/Supabase focus).**
+### Workstream C – Debriefs, Settings & Documentation Polish
+**Assigned to Dev B (Venue Manager/Ops focus).**
 
 **Status**  
-- Regeneration flow now consumes live OpenAI responses, normalises list fields, and persists new `ai_content` versions ready for publish.  
-- The AI dispatcher posts `content_id` payloads downstream, marks failures via `ai_publish_queue`, and raises `reportCronFailure` alerts; Vitest covers webhook success/error paths.  
-- Seed hygiene tooling (`npm run seed:check` / `seed:exec`) enforces 120-day freshness and queue/content parity, with README and runbook guidance published.  
-- Event timelines and the planning AI panel now use `diffSnapshot` source tags plus manual/AI filters to spotlight changes.
+- Post-event debrief page delivers grouped panels (performance, observations, media), reminder timeline, and runbook links for QA and cron escalation.  
+- Settings workspace refreshed with profile summary card, notification toggles (including reviewer SLA alerts), team role overview, and documentation quick links.  
+- Planning Ops surfaces reference the latest runbooks (Cron monitoring, Executive calendar) and expose the reviewer notifications sidebar.  
+- Documentation updated: UI implementation plan, UX flow notes for debrief/settings, and new `docs/Runbooks/DebriefQA.md` checklist.
 
-**Goals**  
-- Wire real AI regenerate responses (`generateAiMetadata`) and ensure server action hydrates `ai_content` accurately.  
-- Build dispatcher/cron job that processes `ai_publish_queue` and marks records `dispatched`, logging failures.  
-- Add integration tests covering regenerate → edit → publish → dispatch flow and AI cron dispatch routes.  
-- Data quality work: automated validation that seeded AI content matches schema, make/reseed helper for exec/AI demos, document regional tweaks and AI content refresh cadence.  
-- UI polish: use `diffSnapshot` in event timelines to highlight AI-generated vs. manual changes; add filters to help planners inspect AI deltas.
-
-**Remaining scope**  
-- Monitor staging dispatch runs once downstream webhook credentials are configured; extend Runbook with any discovered production caveats.  
-- Schedule quarterly seed refresh reminders aligned with the 120-day freshness guard.
+**Next steps**  
+- Wire debrief submission to the forthcoming Supabase `record_debrief` action and persist reminder state from real data.  
+- Capture and store mobile + desktop screenshots for the debrief and settings pages once wiring lands.  
+- Add integration coverage for the notification preferences module once the `user_preferences` table/RPC is finalised.
 
 ## Appendix – Executive Calendar Subscription Playbook
 ### Google Calendar (Web)

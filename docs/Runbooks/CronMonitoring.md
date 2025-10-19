@@ -56,9 +56,11 @@ Ensure automated jobs (`/api/cron/sla-reminders`, `/api/cron/weekly-digest`) run
   - `Export JSON` button to download the latest snapshot via `/api/monitoring/cron/snapshot`.
   - `Failure log` button opening `/api/monitoring/cron/failures` (JSON view backed by `cron_notification_failures`) for long-tail retries.
   - Header note showing the timestamp of the most recent alert and the current webhook heartbeat status.
+  - Summary tiles for queued reminders, failed reminders, and webhook configuration presented as cards with skeleton placeholders while data refreshes.
   - Event drill-down links for queued reminders (navigates to `/events/<eventId>` when available).
   - Reviewer contact shortcut (mailto) and next retry timestamp pulled from `payload.send_meta.retry_after`.
   - Recent alert list sourced from `cron_alert_logs` (heartbeat successes/failures and webhook errors).
+  - Ping results surface via inline alert messaging so operators get immediate feedback when running the webhook heartbeat check.
 
 ### Webhook heartbeat automation
 - Endpoint: `GET /api/cron/alert-heartbeat` (Vercel Cron, same `CRON_SECRET`).
@@ -78,7 +80,7 @@ Ensure automated jobs (`/api/cron/sla-reminders`, `/api/cron/weekly-digest`) run
 
 ### Seed smoke checklist
 - Run `npm run supabase:reset` to ensure notifications and AI content demo data are seeded.
-- Start the app (`npm run dev`) and log in as `hq.planner@barons.example`; open Planning Ops to confirm:
+- Start the app (`npm run dev`) and log in as `central.planner@barons.example`; open Planning Ops to confirm:
   1. SLA tile shows “No queued reminders” (or the expected seeded count).
   2. Heartbeat badge reports “Webhook healthy”.
   3. Failure log export returns seeded rows (if any) from `/api/monitoring/cron/failures`.

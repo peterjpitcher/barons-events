@@ -1,46 +1,37 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { z } from "zod";
+import { createSupabaseActionClient } from "@/lib/supabase/server";
 
-type SignInState = {
-  error?: string;
-};
+const credentialsSchema = z.object({
+  email: z.string().email({ message: "Enter a valid email" }),
+  password: z.string().min(6, { message: "Password must be at least 6 characters" })
+});
 
-const invalidCredentialsMessage =
-  "We couldn't sign you in with those credentials. Please try again.";
-
-export async function signInAction(
-  _prevState: SignInState | undefined,
-  formData: FormData
-): Promise<SignInState> {
-  const email = formData.get("email");
-  const password = formData.get("password");
-
-  if (typeof email !== "string" || typeof password !== "string") {
-    return { error: "Email and password are required." };
-  }
-
-  const supabase = createSupabaseServerClient();
-  const { error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
+export async function signInAction(formData: FormData) {
+  const parsed = credentialsSchema.safeParse({
+    email: formData.get("email"),
+    password: formData.get("password")
   });
 
+  if (!parsed.success) {
+    redirect("/login?error=invalid");
+  }
+
+  const supabase = await createSupabaseActionClient();
+
+  const { error } = await supabase.auth.signInWithPassword(parsed.data);
+
   if (error) {
-    return {
-      error:
-        error.message === "Invalid login credentials"
-          ? invalidCredentialsMessage
-          : error.message,
-    };
+    redirect("/login?error=auth");
   }
 
   redirect("/");
 }
 
 export async function signOutAction() {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseActionClient();
   await supabase.auth.signOut();
   redirect("/login");
 }

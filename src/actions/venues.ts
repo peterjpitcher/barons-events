@@ -1,233 +1,244 @@
 "use server";
 
-import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { z } from "zod";
-import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
-import { getCurrentUserProfile, type UserProfile } from "@/lib/profile";
-import { recordAuditLog } from "@/lib/audit";
+import { getCurrentUser } from "@/lib/auth";
+import {
+  createVenue,
+  updateVenue,
+  deleteVenue,
+  createVenueArea,
+  updateVenueArea,
+  deleteVenueArea
+} from "@/lib/venues";
 
-export type VenueFormState = {
-  error?: string;
-  fieldErrors?: Partial<Record<VenueFieldName, string>>;
+type ActionResult = {
+  success: boolean;
+  message?: string;
 };
-
-export const timezoneOptions = [
-  "Europe/London",
-  "Europe/Dublin",
-  "Europe/Belfast",
-  "Europe/Paris",
-];
 
 const venueSchema = z.object({
-  name: z
-    .string()
-    .min(1, "Name is required")
-    .min(2, "Name must be at least 2 characters"),
-  address: z
-    .string()
-    .max(500, "Address should be 500 characters or fewer"),
-  region: z
-    .string()
-    .max(100, "Region should be 100 characters or fewer"),
-  timezone: z
-    .string()
-    .refine(
-      (value) => timezoneOptions.includes(value),
-      "Timezone must be one of the supported options"
-    ),
-  capacity: z
-    .string()
-    .regex(/^\d*$/, "Capacity must be a whole number")
-    .refine(
-      (value) => value === "" || Number.parseInt(value, 10) >= 0,
-      "Capacity must be a positive number"
-    ),
+  venueId: z.string().uuid().optional(),
+  name: z.string().min(2, "Add a venue name"),
+  address: z.string().max(240).optional()
 });
 
-type VenueFieldName = keyof z.infer<typeof venueSchema>;
-
-type PlannerCheck =
-  | {
-      error: VenueFormState;
-      profile?: undefined;
-    }
-  | {
-      error?: undefined;
-      profile: UserProfile;
-    };
-
-const ensureHQPlanner = async (): Promise<PlannerCheck> => {
-  const profile = await getCurrentUserProfile();
-
-  if (!profile || profile.role !== "hq_planner") {
-    return {
-      error: {
-        error: "Only HQ planners can perform this action.",
-      },
-    };
-  }
-
-  return { profile };
-};
-
-const parseVenueForm = (
-  formData: FormData
-): { data: z.infer<typeof venueSchema>; issues?: VenueFormState } => {
-  const submission = {
-    name: String(formData.get("name") ?? ""),
-    address: String(formData.get("address") ?? ""),
-    region: String(formData.get("region") ?? ""),
-    timezone: String(formData.get("timezone") ?? "Europe/London"),
-    capacity: String(formData.get("capacity") ?? ""),
-  };
-
-  const sanitized = {
-    name: submission.name.trim(),
-    address: submission.address.trim(),
-    region: submission.region.trim(),
-    timezone: submission.timezone,
-    capacity: submission.capacity,
-  };
-
-  const result = venueSchema.safeParse(submission);
-
-  if (!result.success) {
-    const flattened = result.error.flatten().fieldErrors;
-    const fieldErrors: VenueFormState["fieldErrors"] = {};
-
-    Object.entries(flattened).forEach(([key, messages]) => {
-      if (!messages || messages.length === 0) return;
-      fieldErrors[key as VenueFieldName] = messages[0];
-    });
-
-    return {
-      data: sanitized,
-      issues: {
-        fieldErrors,
-        error: "Please correct the highlighted fields.",
-      },
-    };
-  }
-
-  return { data: sanitized };
-};
-
 export async function createVenueAction(
-  _prevState: VenueFormState | undefined,
+  _: ActionResult | undefined,
   formData: FormData
-): Promise<VenueFormState | void> {
-  const permissionCheck = await ensureHQPlanner();
-  if ("error" in permissionCheck) {
-    return permissionCheck.error;
+): Promise<ActionResult> {
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect("/login");
+  }
+  if (user.role !== "central_planner") {
+    return { success: false, message: "Only planners can create venues." };
   }
 
-  const parsed = parseVenueForm(formData);
-  if (parsed.issues) {
-    return parsed.issues;
-  }
-
-  const supabase = createSupabaseServiceRoleClient();
-  const capacityValue =
-    parsed.data.capacity === ""
-      ? null
-      : Number.parseInt(parsed.data.capacity, 10);
-
-  const { data, error } = await supabase
-    .from("venues")
-    .insert({
-      name: parsed.data.name,
-      address: parsed.data.address.length === 0 ? null : parsed.data.address,
-      region: parsed.data.region.length === 0 ? null : parsed.data.region,
-      timezone: parsed.data.timezone,
-      capacity: capacityValue,
-    })
-    .select("id")
-    .single();
-
-  if (error) {
-    return {
-      error: `Unable to create venue: ${error.message}`,
-    };
-  }
-
-  await recordAuditLog({
-    actorId: permissionCheck.profile.id,
-    action: "venue.created",
-    entityType: "venue",
-    entityId: data?.id,
-    details: {
-      name: parsed.data.name,
-      region: parsed.data.region || null,
-      timezone: parsed.data.timezone,
-      capacity: capacityValue,
-    },
+  const parsed = venueSchema.safeParse({
+    name: formData.get("name"),
+    address: formData.get("address")
   });
 
-  revalidatePath("/venues");
-  redirect("/venues?status=created");
+  if (!parsed.success) {
+    return { success: false, message: parsed.error.issues[0]?.message ?? "Check the form and try again." };
+  }
+
+  try {
+    await createVenue({
+      name: parsed.data.name,
+      address: parsed.data.address ?? null
+    });
+    revalidatePath("/venues");
+    return { success: true, message: "Venue added." };
+  } catch (error) {
+    console.error(error);
+    return { success: false, message: "Could not save the venue right now." };
+  }
 }
 
 export async function updateVenueAction(
-  _prevState: VenueFormState | undefined,
+  _: ActionResult | undefined,
   formData: FormData
-): Promise<VenueFormState | void> {
-  const permissionCheck = await ensureHQPlanner();
-  if ("error" in permissionCheck) {
-    return permissionCheck.error;
+): Promise<ActionResult> {
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect("/login");
+  }
+  if (user.role !== "central_planner") {
+    return { success: false, message: "Only planners can update venues." };
   }
 
-  const venueId = formData.get("venueId");
-
-  if (typeof venueId !== "string" || venueId.trim().length === 0) {
-    return {
-      error: "Invalid venue identifier.",
-    };
-  }
-
-  const parsed = parseVenueForm(formData);
-  if (parsed.issues) {
-    return parsed.issues;
-  }
-
-  const supabase = createSupabaseServiceRoleClient();
-  const capacityValue =
-    parsed.data.capacity === ""
-      ? null
-      : Number.parseInt(parsed.data.capacity, 10);
-
-  const { data, error } = await supabase
-    .from("venues")
-    .update({
-      name: parsed.data.name,
-      address: parsed.data.address.length === 0 ? null : parsed.data.address,
-      region: parsed.data.region.length === 0 ? null : parsed.data.region,
-      timezone: parsed.data.timezone,
-      capacity: capacityValue,
-    })
-    .eq("id", venueId)
-    .select("id")
-    .single();
-
-  if (error) {
-    return {
-      error: `Unable to update venue: ${error.message}`,
-    };
-  }
-
-  await recordAuditLog({
-    actorId: permissionCheck.profile.id,
-    action: "venue.updated",
-    entityType: "venue",
-    entityId: data?.id ?? venueId,
-    details: {
-      name: parsed.data.name,
-      region: parsed.data.region || null,
-      timezone: parsed.data.timezone,
-      capacity: capacityValue,
-    },
+  const parsed = venueSchema.safeParse({
+    venueId: formData.get("venueId"),
+    name: formData.get("name"),
+    address: formData.get("address")
   });
 
-  revalidatePath("/venues");
-  redirect("/venues?status=updated");
+  if (!parsed.success) {
+    return { success: false, message: parsed.error.issues[0]?.message ?? "Check the form and try again." };
+  }
+  if (!parsed.data.venueId) {
+    return { success: false, message: "Missing venue reference." };
+  }
+
+  try {
+    await updateVenue(parsed.data.venueId, {
+      name: parsed.data.name,
+      address: parsed.data.address ?? null
+    });
+    revalidatePath("/venues");
+    return { success: true, message: "Venue updated." };
+  } catch (error) {
+    console.error(error);
+    return { success: false, message: "Could not update the venue right now." };
+  }
+}
+
+const deleteSchema = z.object({
+  venueId: z.string().uuid()
+});
+
+export async function deleteVenueAction(
+  _: ActionResult | undefined,
+  formData: FormData
+): Promise<ActionResult> {
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect("/login");
+  }
+  if (user.role !== "central_planner") {
+    return { success: false, message: "Only planners can delete venues." };
+  }
+
+  const parsed = deleteSchema.safeParse({
+    venueId: formData.get("venueId")
+  });
+
+  if (!parsed.success) {
+    return { success: false, message: "Missing venue reference." };
+  }
+
+  try {
+    await deleteVenue(parsed.data.venueId);
+    revalidatePath("/venues");
+    return { success: true, message: "Venue removed." };
+  } catch (error) {
+    console.error(error);
+    return { success: false, message: "Could not delete the venue right now." };
+  }
+}
+
+const areaSchema = z.object({
+  areaId: z.string().uuid().optional(),
+  venueId: z.string().uuid(),
+  name: z.string().min(2, "Add an area name"),
+  capacity: z.union([z.coerce.number().int().min(0).max(10000), z.undefined(), z.null()]).optional()
+});
+
+export async function createVenueAreaAction(
+  _: ActionResult | undefined,
+  formData: FormData
+): Promise<ActionResult> {
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect("/login");
+  }
+  if (user.role !== "central_planner") {
+    return { success: false, message: "Only planners can create areas." };
+  }
+
+  const parsed = areaSchema.safeParse({
+    venueId: formData.get("venueId"),
+    name: formData.get("name"),
+    capacity: formData.get("capacity")
+  });
+
+  if (!parsed.success) {
+    return { success: false, message: parsed.error.issues[0]?.message ?? "Check the details." };
+  }
+
+  try {
+    await createVenueArea({
+      venueId: parsed.data.venueId,
+      name: parsed.data.name,
+      capacity: parsed.data.capacity ?? null
+    });
+    revalidatePath("/venues");
+    return { success: true, message: "Area added." };
+  } catch (error) {
+    console.error(error);
+    return { success: false, message: "Could not create the area right now." };
+  }
+}
+
+export async function updateVenueAreaAction(
+  _: ActionResult | undefined,
+  formData: FormData
+): Promise<ActionResult> {
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect("/login");
+  }
+  if (user.role !== "central_planner") {
+    return { success: false, message: "Only planners can update areas." };
+  }
+
+  const parsed = areaSchema.safeParse({
+    areaId: formData.get("areaId"),
+    venueId: formData.get("venueId"),
+    name: formData.get("name"),
+    capacity: formData.get("capacity")
+  });
+
+  if (!parsed.success || !parsed.data.areaId) {
+    return { success: false, message: parsed.success ? "Missing area reference." : parsed.error.issues[0]?.message ?? "Check the details." };
+  }
+
+  try {
+    await updateVenueArea(parsed.data.areaId, {
+      name: parsed.data.name,
+      capacity: parsed.data.capacity ?? null
+    });
+    revalidatePath("/venues");
+    return { success: true, message: "Area updated." };
+  } catch (error) {
+    console.error(error);
+    return { success: false, message: "Could not update the area right now." };
+  }
+}
+
+const deleteAreaSchema = z.object({
+  areaId: z.string().uuid()
+});
+
+export async function deleteVenueAreaAction(
+  _: ActionResult | undefined,
+  formData: FormData
+): Promise<ActionResult> {
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect("/login");
+  }
+  if (user.role !== "central_planner") {
+    return { success: false, message: "Only planners can delete areas." };
+  }
+
+  const parsed = deleteAreaSchema.safeParse({
+    areaId: formData.get("areaId")
+  });
+
+  if (!parsed.success) {
+    return { success: false, message: "Missing area reference." };
+  }
+
+  try {
+    await deleteVenueArea(parsed.data.areaId);
+    revalidatePath("/venues");
+    return { success: true, message: "Area removed." };
+  } catch (error) {
+    console.error(error);
+    return { success: false, message: "Could not delete the area right now." };
+  }
 }

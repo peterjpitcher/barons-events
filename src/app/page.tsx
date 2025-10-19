@@ -1,83 +1,180 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
-import { RoleGlance } from "@/components/dashboard/role-glance";
-import { mainNavigation } from "@/lib/navigation";
+import { redirect } from "next/navigation";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { getCurrentUser } from "@/lib/auth";
+import { getStatusCounts, listEventsForUser, listReviewQueue, findConflicts } from "@/lib/events";
 
-const cards = mainNavigation.filter((item) => item.href !== "/");
+const roleCopy: Record<string, { heading: string; body: string }> = {
+  central_planner: {
+    heading: "Today’s planning view",
+    body: "Check in on pending submissions, watch for clashes, and keep the pipeline moving."
+  },
+  reviewer: {
+    heading: "Your review queue",
+    body: "Look over new requests, give quick feedback, and keep venues informed."
+  },
+  venue_manager: {
+    heading: "Your upcoming plans",
+    body: "Draft fresh ideas, tidy earlier submissions, and stay on top of reviewer notes."
+  },
+  executive: {
+    heading: "Snapshot",
+    body: "Track event totals and key updates at a glance."
+  }
+};
 
-const statusStyles = {
-  available: "bg-emerald-100 text-emerald-700",
-  "in-progress": "bg-amber-100 text-amber-700",
-  upcoming: "bg-slate-200 text-slate-700",
-} as const;
+export default async function OverviewPage() {
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect("/login");
+  }
 
-const statusCopy = {
-  available: "Live",
-  "in-progress": "Active build",
-  upcoming: "Queued",
-} as const;
+  const copy = roleCopy[user.role] ?? roleCopy["central_planner"];
+  const events = await listEventsForUser(user);
+  const upcoming = events
+    .filter((event) => new Date(event.start_at) >= new Date())
+    .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
+    .slice(0, 5);
 
-export default function Home() {
-  return (
-    <section className="space-y-10">
-      <div className="max-w-3xl space-y-4">
-        <h1 className="text-3xl font-semibold tracking-tight">
-          Orchestrate the Barons event pipeline and planning analytics
-        </h1>
-        <p className="text-base text-black/70">
-          The workspace now streams live submission analytics, reviewer queue data,
-          and venue-space conflict warnings to keep planners and reviewers aligned.
-        </p>
-      </div>
+  const cards: ReactNode[] = [];
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="rounded-lg border border-black/5 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-medium">Current focus</h2>
-          <p className="mt-2 text-sm text-black/70">
-            Stabilise pipeline analytics: status tiles, conflict detection, and reviewer
-            SLA insights powered by refreshed Supabase seeds.
-          </p>
-        </div>
-        <div className="rounded-lg border border-black/5 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-medium">Next steps</h2>
-          <p className="mt-2 text-sm text-black/70">
-            Automate tests for server actions, expose the planning feed via calendar APIs,
-            and wire notifications for reviewer escalations.
-          </p>
-        </div>
-      </div>
+  if (user.role === "central_planner") {
+    const [statusCounts, queue, conflicts] = await Promise.all([
+      getStatusCounts(),
+      listReviewQueue(user),
+      findConflicts()
+    ]);
 
-      <RoleGlance />
-
-      <div className="space-y-4">
-        <h2 className="text-xl font-semibold">Workstream status</h2>
-        <div className="grid gap-4 md:grid-cols-2">
-          {cards.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="group flex h-full flex-col justify-between rounded-xl border border-black/[0.08] bg-white p-5 shadow-sm transition hover:border-black/15 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black/40"
-            >
-              <div className="space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                  <h3 className="text-lg font-medium text-black">
-                    {item.title}
-                  </h3>
-                  <span
-                    className={`rounded-full px-3 py-1 text-xs font-semibold ${statusStyles[item.status]}`}
-                  >
-                    {statusCopy[item.status]}
-                  </span>
-                </div>
-                <p className="text-sm text-black/70">{item.description}</p>
-              </div>
-              <span className="mt-6 inline-flex items-center gap-1 text-sm font-medium text-black group-hover:underline">
-                View track
-                <span aria-hidden>→</span>
-              </span>
-            </Link>
+    cards.push(
+      <Card key="status">
+        <CardHeader>
+          <CardTitle>Pipeline at a glance</CardTitle>
+          <CardDescription>See how the workflow is tracking right now.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-3">
+          {Object.entries(statusCounts).map(([status, count]) => (
+            <div key={status} className="rounded-[var(--radius)] border border-[rgba(39,54,64,0.12)] bg-white/80 px-4 py-3 shadow-soft">
+              <p className="text-sm text-subtle">{status.replace("_", " ")}</p>
+              <p className="text-2xl font-semibold text-[var(--color-primary-700)]">{count}</p>
+            </div>
           ))}
+        </CardContent>
+      </Card>
+    );
+
+    cards.push(
+      <Card key="queue">
+        <CardHeader className="flex items-center justify-between">
+          <div>
+            <CardTitle>Reviews needing attention</CardTitle>
+            <CardDescription>Work with reviewers to keep things moving.</CardDescription>
+          </div>
+          <Button asChild variant="secondary">
+            <Link href="/reviews">Open queue</Link>
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {queue.slice(0, 4).map((event) => (
+            <div key={event.id} className="flex flex-col gap-1 rounded-[var(--radius)] border border-[rgba(39,54,64,0.12)] bg-white/80 px-4 py-3 text-sm shadow-soft md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="font-medium text-[var(--color-text)]">{event.title}</p>
+                <p className="text-subtle">{event.venue?.name ?? ""} · {new Date(event.start_at).toLocaleString("en-GB")}</p>
+              </div>
+              <Badge variant="info">{event.status.replace("_", " ")}</Badge>
+            </div>
+          ))}
+          {queue.length === 0 ? <p className="text-sm text-subtle">All caught up.</p> : null}
+        </CardContent>
+      </Card>
+    );
+
+    cards.push(
+      <Card key="conflicts">
+        <CardHeader>
+          <CardTitle>Potential clashes</CardTitle>
+          <CardDescription>Look out for overlapping events in the same space.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {conflicts.length === 0 ? (
+            <p className="text-sm text-subtle">No conflicts spotted in upcoming plans.</p>
+          ) : (
+            conflicts.map((pair, index) => (
+              <div key={`${pair.event.id}-${index}`} className="rounded-[var(--radius)] border border-[rgba(110,60,61,0.3)] bg-white/80 px-4 py-3 text-sm text-[var(--color-antique-burgundy)] shadow-soft">
+                <p className="font-semibold">{pair.event.title}</p>
+                <p>Overlaps with <span className="font-medium">{pair.conflictingWith.title}</span> in {pair.event.venue_space} – {pair.event.venue?.name}</p>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
+    );
+  } else if (user.role === "reviewer") {
+    const queue = await listReviewQueue(user);
+    cards.push(
+      <Card key="queue">
+        <CardHeader className="flex items-center justify-between">
+          <div>
+            <CardTitle>Your queue</CardTitle>
+            <CardDescription>Pick off the oldest submissions first.</CardDescription>
+          </div>
+          <Button asChild variant="secondary">
+            <Link href="/reviews">Open queue</Link>
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {queue.slice(0, 5).map((event) => (
+            <div key={event.id} className="rounded-[var(--radius)] border border-[rgba(39,54,64,0.12)] bg-white/80 px-4 py-3 text-sm shadow-soft">
+              <p className="font-medium text-[var(--color-text)]">{event.title}</p>
+              <p className="text-subtle">{event.venue?.name ?? ""} · {new Date(event.start_at).toLocaleString("en-GB")}</p>
+            </div>
+          ))}
+          {queue.length === 0 ? <p className="text-sm text-subtle">No reviews waiting.</p> : null}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  cards.push(
+    <Card key="upcoming">
+      <CardHeader className="flex items-center justify-between">
+        <div>
+          <CardTitle>{user.role === "venue_manager" ? "Upcoming at your venue" : "Next confirmed events"}</CardTitle>
+          <CardDescription>Keep everyone lined up for the week ahead.</CardDescription>
         </div>
+        {(user.role === "venue_manager" || user.role === "central_planner") && (
+          <Button asChild>
+            <Link href="/events/new">New draft</Link>
+          </Button>
+        )}
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {upcoming.length === 0 ? (
+          <p className="text-sm text-subtle">Nothing upcoming yet.</p>
+        ) : (
+          upcoming.map((event) => (
+            <div key={event.id} className="flex flex-col gap-1 rounded-[var(--radius)] border border-[rgba(39,54,64,0.12)] bg-white/80 px-4 py-3 text-sm shadow-soft md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="font-medium text-[var(--color-text)]">{event.title}</p>
+                <p className="text-subtle">{event.venue?.name ?? ""} · {new Date(event.start_at).toLocaleString("en-GB")}</p>
+              </div>
+              <Badge variant="neutral">{event.status.replace("_", " ")}</Badge>
+            </div>
+          ))
+        )}
+      </CardContent>
+    </Card>
+  );
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="font-brand-serif text-3xl text-[var(--color-primary-700)]">{copy.heading}</h1>
+        <p className="mt-2 max-w-2xl text-base text-subtle">{copy.body}</p>
       </div>
-    </section>
+      <div className="grid gap-6 lg:grid-cols-2">{cards}</div>
+    </div>
   );
 }

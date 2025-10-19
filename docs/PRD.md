@@ -11,7 +11,7 @@ Deliver a centralised hub for cross-venue event planning that streamlines submis
 
 ## Scope
 ### In Scope
-- Multi-role web application for venue managers, reviewers, HQ planners, and executive viewers.
+- Multi-role web application for venue managers, reviewers, Central planners, and executive viewers.
 - Event submission workflow, approvals, AI enrichment, dashboards, debrief collection, notifications, and data export hooks.
 
 ### Out of Scope
@@ -21,9 +21,9 @@ Deliver a centralised hub for cross-venue event planning that streamlines submis
 - Public-facing website build.
 
 ## Assumptions
-- Authentication uses Supabase email/password (with optional magic links); HQ admins assign user roles.
+- Authentication uses Supabase email/password (with optional magic links); central planning admins assign user roles.
 - Multiple managers can be attached to a single venue through individual accounts.
-- Reviewer routing is managed manually via venue-to-reviewer mapping maintained by HQ planners.
+- Reviewer routing is managed manually via venue-to-reviewer mapping maintained by Central planners.
 - AI enrichment leverages a managed LLM service with human review before external publishing.
 - Takings and attendance data are entered manually during debriefs in the first release.
 - Weekly executive digest emails summarise KPIs and upcoming events.
@@ -31,15 +31,15 @@ Deliver a centralised hub for cross-venue event planning that streamlines submis
 ## Personas
 - **Venue Manager**: Creates and edits event drafts, submits requests, responds to feedback, completes post-event debriefs.
 - **Regional Reviewer**: Reviews submissions for assigned venues, approves, rejects, or requests revisions, and provides feedback.
-- **HQ Planner**: Monitors pipeline, manages calendars, enriches metadata, publishes downstream exports, and maintains reviewer assignments.
+- **Central Planner**: Monitors pipeline, manages calendars, enriches metadata, publishes downstream exports, and maintains reviewer assignments.
 - **Executive Viewer**: Receives weekly digest emails and accesses read-only dashboards for performance tracking.
 
 ## Core User Journeys
 1. Venue manager drafts event → validates required fields → submits for review → receives decision or feedback → resubmits if needed → approved event locks core fields.
 2. Regional reviewer triages queue (with SLA indicators) → inspects details → approves, requests changes, or rejects → feedback captured in audit log.
-3. HQ planner monitors dashboard/calendar → resolves scheduling conflicts → clones or sequences events → edits metadata → triggers exports.
-4. Approved event triggers automatic AI enrichment → HQ reviews and optionally edits metadata → publishes structured payload to downstream systems.
-5. Day-after-event reminder prompts venue manager to complete debrief → HQ reviews insights and tracks compliance.
+3. Central planner monitors dashboard/calendar → resolves scheduling conflicts → clones or sequences events → edits metadata → triggers exports.
+4. Approved event triggers automatic AI enrichment → central planning reviews and optionally edits metadata → publishes structured payload to downstream systems.
+5. Day-after-event reminder prompts venue manager to complete debrief → central planning reviews insights and tracks compliance.
 
 ## Functional Requirements
 ### Event Creation & Management
@@ -51,7 +51,7 @@ Deliver a centralised hub for cross-venue event planning that streamlines submis
 - Decisions: approve (locks core fields), needs revisions (reopens editable fields), reject (final decision with rationale).
 - Feedback templates with optional rich-text notes; all actions logged.
 
-### HQ Oversight
+### Central Oversight
 - Dashboard with status tiles, SLA breaches, and recent activity feed.
 - Calendar and list views with conflict detection (overlapping events at the same venue) plus override capability.
 - Tools to clone events, manage goal list, adjust metadata, and trigger exports.
@@ -61,7 +61,7 @@ Deliver a centralised hub for cross-venue event planning that streamlines submis
 - Server-side review interface with version history, manual edits, publish toggle, and provenance logging.
 
 ### Post-Event Debrief
-- Reminder emails and in-app alerts at 09:00 local time the day after the event, plus a second reminder after 24 hours and escalation to HQ at 48 hours overdue.
+- Reminder emails and in-app alerts at 09:00 local time the day after the event, plus a second reminder after 24 hours and escalation to central planning at 48 hours overdue.
 - Debrief captures actual attendance, wet takings, food takings, promotional effectiveness rating, notable wins, issues, observations, and optional media uploads.
 - Debrief status visible in dashboards and analytics.
 

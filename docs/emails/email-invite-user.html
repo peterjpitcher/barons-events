@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>You’re invited to EventHub</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: #E7E0D4;
+        color: #273640;
+        font-family: "Geist", "Inter", "Helvetica Neue", Arial, sans-serif;
+      }
+      .wrap {
+        padding: 48px 16px;
+      }
+      .card {
+        max-width: 600px;
+        margin: 0 auto;
+        background: #ffffff;
+        border-radius: 26px;
+        box-shadow: 0 28px 60px -30px rgba(15, 27, 58, 0.3);
+        overflow: hidden;
+      }
+      .header {
+        padding: 44px 48px 36px;
+        background: linear-gradient(135deg, #273640, #1a232c);
+        color: #B49A67;
+        text-align: center;
+      }
+      .header h1 {
+        margin: 0;
+        font-family: "Playfair Display", "Georgia", serif;
+        font-size: 30px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .header p {
+        margin: 14px 0 0;
+        font-size: 14px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+      }
+      .content {
+        padding: 40px 48px 36px;
+        font-size: 15px;
+        line-height: 1.7;
+      }
+      .content h2 {
+        margin: 0 0 18px;
+        font-size: 22px;
+      }
+      .steps {
+        margin: 24px 0;
+        padding: 18px 20px;
+        border-radius: 18px;
+        background: rgba(39, 54, 64, 0.06);
+        font-size: 14px;
+        line-height: 1.6;
+      }
+      .steps ol {
+        margin: 12px 0;
+        padding-left: 18px;
+      }
+      .cta {
+        display: inline-block;
+        margin: 24px 0 14px;
+        padding: 15px 36px;
+        background-color: #273640;
+        color: #ffffff;
+        text-decoration: none;
+        border-radius: 999px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        font-weight: 600;
+      }
+      .footer {
+        padding: 0 48px 44px;
+        font-size: 13px;
+        color: #6E3C3D;
+      }
+      a.inline {
+        color: #273640;
+        font-weight: 600;
+        text-decoration: underline dotted;
+      }
+      @media (max-width: 640px) {
+        .header,
+        .content,
+        .footer {
+          padding-left: 28px;
+          padding-right: 28px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <div class="header">
+          <h1>EventHub</h1>
+          <p>A Barons Innovation</p>
+        </div>
+        <div class="content">
+          <h2>Welcome to EventHub</h2>
+          <p><strong>You've been invited to collaborate.</strong></p>
+          <p>
+            A central planner created an EventHub account for you so you can review submissions, manage venues, and stay in sync with the latest campaigns.
+          </p>
+          <div class="steps">
+            <strong>Getting started:</strong>
+            <ol>
+              <li>Use the button below to accept your invite.</li>
+              <li>Set a password and pick up the onboarding tips on the home page.</li>
+              <li>Update your notification preferences in Settings → Notifications.</li>
+            </ol>
+          </div>
+          <p style="text-align: center">
+            <a class="cta" href="{{ .ConfirmationURL }}">Accept invitation</a>
+          </p>
+          <p>
+            If you weren’t expecting this invite, ignore the email or let the planning team know so we can tidy things up.
+          </p>
+        </div>
+        <div class="footer">
+          Need help? Email <a class="inline" href="mailto:peter@orangejelly.co.uk">peter@orangejelly.co.uk</a>.
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
