@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useEffect, useRef } from "react";
+import { useActionState, useEffect, useRef, type ComponentProps } from "react";
+import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -18,6 +19,10 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { SubmitButton } from "@/components/ui/submit-button";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import type { LucideIcon } from "lucide-react";
+import { Loader2, Save, Trash2 } from "lucide-react";
 
 type VenueArea = Database["public"]["Tables"]["venue_areas"]["Row"];
 
@@ -218,30 +223,61 @@ function VenueAreaRow({ area, venueId }: { area: VenueArea; venueId: string }) {
 
   return (
     <div className="rounded-[var(--radius)] border border-[var(--color-border)] bg-white p-4">
-      <form action={formAction} className="flex flex-wrap items-end gap-3">
-        <input type="hidden" name="areaId" value={area.id} />
-        <input type="hidden" name="venueId" value={venueId} />
-        <div className="flex-1 min-w-[160px] space-y-2">
-          <Label htmlFor={`area-name-${area.id}`}>Area name</Label>
-          <Input id={`area-name-${area.id}`} name="name" defaultValue={area.name} required />
-        </div>
-        <div className="w-32 space-y-2">
-          <Label htmlFor={`area-capacity-${area.id}`}>Capacity</Label>
-          <Input
-            id={`area-capacity-${area.id}`}
-            name="capacity"
-            type="number"
-            min={0}
-            defaultValue={area.capacity ?? ""}
-            placeholder="120"
-          />
-        </div>
-        <SubmitButton label="Save area" pendingLabel="Saving..." />
-      </form>
-      <form action={deleteAction} className="mt-3 inline-flex">
-        <input type="hidden" name="areaId" value={area.id} />
-        <SubmitButton label="Remove area" pendingLabel="Removing..." variant="destructive" />
-      </form>
+      <div className="flex flex-wrap items-end gap-3">
+        <form action={formAction} className="flex flex-1 flex-wrap items-end gap-3">
+          <input type="hidden" name="areaId" value={area.id} />
+          <input type="hidden" name="venueId" value={venueId} />
+          <div className="flex-1 min-w-[160px] space-y-2">
+            <Label htmlFor={`area-name-${area.id}`}>Area name</Label>
+            <Input id={`area-name-${area.id}`} name="name" defaultValue={area.name} required />
+          </div>
+          <div className="w-32 space-y-2">
+            <Label htmlFor={`area-capacity-${area.id}`}>Capacity</Label>
+            <Input
+              id={`area-capacity-${area.id}`}
+              name="capacity"
+              type="number"
+              min={0}
+              defaultValue={area.capacity ?? ""}
+              placeholder="120"
+            />
+          </div>
+          <IconSubmitButton label="Save area" pendingLabel="Saving..." icon={Save} />
+        </form>
+        <form action={deleteAction} className="flex items-end">
+          <input type="hidden" name="areaId" value={area.id} />
+          <IconSubmitButton label="Remove area" pendingLabel="Removing..." icon={Trash2} variant="destructive" />
+        </form>
+      </div>
     </div>
+  );
+}
+
+type IconSubmitButtonProps = {
+  label: string;
+  pendingLabel?: string;
+  icon: LucideIcon;
+} & Omit<ComponentProps<typeof Button>, "type" | "size" | "children">;
+
+function IconSubmitButton({ label, pendingLabel = "Please wait...", icon: Icon, variant = "primary", className, ...props }: IconSubmitButtonProps) {
+  const { pending } = useFormStatus();
+  const pendingText = pendingLabel ?? label;
+
+  return (
+    <Button
+      type="submit"
+      variant={variant}
+      size="icon"
+      className={cn("gap-0", className)}
+      aria-label={label}
+      {...props}
+    >
+      {pending ? (
+        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+      ) : (
+        <Icon className="h-4 w-4" aria-hidden="true" />
+      )}
+      <span className="sr-only">{pending ? pendingText : label}</span>
+    </Button>
   );
 }

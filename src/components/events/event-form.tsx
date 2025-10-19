@@ -101,13 +101,21 @@ export function EventForm({ mode, defaultValues, venues, reviewers, eventTypes, 
   );
 
   const areaOptions = selectedVenue?.areas ?? [];
+  const areaNames = areaOptions.map((area) => area.name);
   const typeOptions = eventTypes.length ? eventTypes : ["General"];
 
   useEffect(() => {
-    if (!spaceValue && areaOptions.length) {
+    if (!areaOptions.length) {
+      if (spaceValue) {
+        setSpaceValue("");
+      }
+      return;
+    }
+
+    if (!areaOptions.some((area) => area.name === spaceValue)) {
       setSpaceValue(areaOptions[0].name);
     }
-  }, [selectedVenueId, areaOptions, spaceValue]);
+  }, [areaOptions, spaceValue]);
 
   function handleVenueChange(value: string) {
     setSelectedVenueId(value);
@@ -189,27 +197,38 @@ export function EventForm({ mode, defaultValues, venues, reviewers, eventTypes, 
                   </option>
                 ))}
               </Select>
-              <p className="text-xs text-subtle">Need a new option? Add it via Settings → Event types.</p>
+              <p className="text-xs text-subtle">Need a new option? Add it in Settings.</p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="venueSpace">Space</Label>
-              <Input
-                id="venueSpace"
-                name="venueSpace"
-                value={spaceValue}
-                onChange={(event) => setSpaceValue(event.target.value)}
-                list={areaOptions.length ? `areas-${selectedVenueId}` : undefined}
-                placeholder="Main Bar"
-                required
-              />
-              <p className="text-xs text-subtle">Choose the specific space. Suggestions come from the venue areas list.</p>
               {areaOptions.length ? (
-                <datalist id={`areas-${selectedVenueId}`}>
+                <Select
+                  id="venueSpace"
+                  name="venueSpace"
+                  value={areaNames.includes(spaceValue) ? spaceValue : ""}
+                  onChange={(event) => setSpaceValue(event.target.value)}
+                  required
+                >
+                  <option value="" disabled>
+                    Choose space
+                  </option>
                   {areaOptions.map((area) => (
-                    <option key={area.id} value={area.name} />
+                    <option key={area.id} value={area.name}>
+                      {area.name}
+                    </option>
                   ))}
-                </datalist>
-              ) : null}
+                </Select>
+              ) : (
+                <Input
+                  id="venueSpace"
+                  name="venueSpace"
+                  value={spaceValue}
+                  onChange={(event) => setSpaceValue(event.target.value)}
+                  placeholder="Main Bar"
+                  required
+                />
+              )}
+              <p className="text-xs text-subtle">Choose the specific space. Suggestions come from the venue areas list.</p>
             </div>
           </div>
 

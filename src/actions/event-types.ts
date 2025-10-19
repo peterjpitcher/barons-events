@@ -35,7 +35,7 @@ export async function createEventTypeAction(
 
   try {
     await createEventType(parsed.data.label);
-    revalidatePath("/settings/event-types");
+    revalidatePath("/settings");
     return { success: true, message: "Event type added." };
   } catch (error) {
     console.error(error);
@@ -68,7 +68,7 @@ export async function updateEventTypeAction(
 
   try {
     await updateEventType(parsed.data.typeId, parsed.data.label);
-    revalidatePath("/settings/event-types");
+    revalidatePath("/settings");
     return { success: true, message: "Event type updated." };
   } catch (error) {
     console.error(error);
@@ -100,7 +100,7 @@ export async function deleteEventTypeAction(
 
   try {
     await deleteEventType(parsed.data.typeId);
-    revalidatePath("/settings/event-types");
+    revalidatePath("/settings");
     return { success: true, message: "Event type removed." };
   } catch (error) {
     console.error(error);

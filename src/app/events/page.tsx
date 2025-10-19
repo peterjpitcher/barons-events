@@ -50,7 +50,7 @@ export default async function EventsPage() {
         </div>
         {(user.role === "venue_manager" || user.role === "central_planner") && (
           <Button asChild>
-            <Link href="/events/new">New draft</Link>
+            <Link href="/events/new">New Event</Link>
           </Button>
         )}
       </div>

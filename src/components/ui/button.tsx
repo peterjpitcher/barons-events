@@ -8,7 +8,7 @@ import {
 import { cn } from "@/lib/utils";
 
 type ButtonVariant = "primary" | "secondary" | "outline" | "ghost" | "subtle" | "destructive";
-type ButtonSize = "sm" | "md" | "lg";
+type ButtonSize = "sm" | "md" | "lg" | "icon";
 
 export type ButtonProps = {
   variant?: ButtonVariant;
@@ -37,7 +37,8 @@ const variantClass: Record<ButtonVariant, string> = {
 const sizeClass: Record<ButtonSize, string> = {
   sm: "h-9 px-4 text-sm",
   md: "h-10 px-5 text-[0.95rem]",
-  lg: "h-12 px-6 text-base"
+  lg: "h-12 px-6 text-base",
+  icon: "h-10 w-10"
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(

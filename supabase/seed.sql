@@ -37,15 +37,16 @@ on conflict (id) do update set
   name = excluded.name,
   capacity = excluded.capacity;
 
--- Event types
 insert into public.event_types (label)
 values
-  ('Tasting'),
-  ('Quiz'),
-  ('Live Music'),
-  ('Brunch'),
-  ('Seasonal'),
-  ('Workshop')
+  ('Tap Takeover'),
+  ('Pub Quiz'),
+  ('Live Music Night'),
+  ('Brunch Club'),
+  ('Seasonal Celebration'),
+  ('Charity Fundraiser'),
+  ('Sports Screening'),
+  ('Gin Masterclass')
 on conflict (label) do nothing;
 
 -- Demo accounts
@@ -155,7 +156,7 @@ values
     '33333333-3333-3333-3333-333333333333',
     '22222222-2222-2222-2222-222222222222',
     'Cask Ale Showcase',
-    'Tasting',
+    'Tap Takeover',
     'submitted',
     timezone('utc', '2025-04-18 18:00:00'),
     timezone('utc', '2025-04-18 22:00:00'),
@@ -173,7 +174,7 @@ values
     '33333333-3333-3333-3333-333333333333',
     '22222222-2222-2222-2222-222222222222',
     'Quiz Night Relaunch',
-    'Quiz',
+    'Pub Quiz',
     'needs_revisions',
     timezone('utc', '2025-04-11 19:00:00'),
     timezone('utc', '2025-04-11 21:30:00'),
@@ -191,7 +192,7 @@ values
     '11111111-1111-1111-1111-111111111111',
     null,
     'City Tap Jazz Brunch',
-    'Brunch',
+    'Brunch Club',
     'draft',
     timezone('utc', '2025-04-27 11:00:00'),
     timezone('utc', '2025-04-27 14:00:00'),
@@ -229,7 +230,7 @@ values
     1,
     jsonb_build_object(
       'title', 'Cask Ale Showcase',
-      'event_type', 'Tasting',
+      'event_type', 'Tap Takeover',
       'status', 'submitted'
     ),
     timezone('utc', now()),
@@ -241,7 +242,7 @@ values
     1,
     jsonb_build_object(
       'title', 'Quiz Night Relaunch',
-      'event_type', 'Quiz',
+      'event_type', 'Pub Quiz',
       'status', 'needs_revisions'
     ),
     timezone('utc', '2025-02-15 10:00:00'),
@@ -253,7 +254,7 @@ values
     1,
     jsonb_build_object(
       'title', 'City Tap Jazz Brunch',
-      'event_type', 'Brunch',
+      'event_type', 'Brunch Club',
       'status', 'draft'
     ),
     null,
