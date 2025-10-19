@@ -6,7 +6,27 @@ import { listVenuesWithAreas } from "@/lib/venues";
 import { listReviewers } from "@/lib/reviewers";
 import { listEventTypes } from "@/lib/event-types";
 
-export default async function NewEventPage() {
+type SearchParams = Record<string, string | string[] | undefined>;
+
+type PageProps = {
+  searchParams?: Promise<SearchParams>;
+};
+
+function parseDateParam(value?: string | string[]): string | undefined {
+  if (!value) return undefined;
+  const stringValue = Array.isArray(value) ? value[0] : value;
+  if (!stringValue) return undefined;
+  const parsed = new Date(stringValue);
+  if (Number.isNaN(parsed.getTime())) return undefined;
+  return parsed.toISOString();
+}
+
+function parseStringParam(value?: string | string[]): string | undefined {
+  if (!value) return undefined;
+  return Array.isArray(value) ? value[0] ?? undefined : value;
+}
+
+export default async function NewEventPage({ searchParams }: PageProps) {
   const user = await getCurrentUser();
   if (!user) {
     redirect("/login");
@@ -16,12 +36,23 @@ export default async function NewEventPage() {
     redirect("/");
   }
 
-  const [venues, reviewers, eventTypes] = await Promise.all([
+  const searchParamsPromise =
+    searchParams?.then((params) => params as SearchParams).catch(() => ({} as SearchParams)) ??
+    Promise.resolve({} as SearchParams);
+
+  const [resolvedSearchParams, venues, reviewers, eventTypes] = await Promise.all([
+    searchParamsPromise,
     listVenuesWithAreas(),
     listReviewers(),
     listEventTypes()
   ]);
   const availableVenues = user.role === "venue_manager" ? venues.filter((venue) => venue.id === user.venueId) : venues;
+  const initialStartAt = parseDateParam(resolvedSearchParams.startAt);
+  const initialEndAt =
+    parseDateParam(resolvedSearchParams.endAt) ??
+    (initialStartAt ? new Date(new Date(initialStartAt).getTime() + 3 * 60 * 60 * 1000).toISOString() : undefined);
+  const requestedVenueId = parseStringParam(resolvedSearchParams.venueId);
+  const initialVenueId = availableVenues.some((venue) => venue.id === requestedVenueId) ? requestedVenueId : undefined;
 
   return (
     <div className="space-y-6">
@@ -40,6 +71,9 @@ export default async function NewEventPage() {
         eventTypes={eventTypes.map((type) => type.label)}
         role={user.role}
         userVenueId={user.venueId}
+        initialStartAt={initialStartAt}
+        initialEndAt={initialEndAt}
+        initialVenueId={initialVenueId}
       />
     </div>
   );

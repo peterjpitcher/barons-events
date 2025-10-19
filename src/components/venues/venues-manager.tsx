@@ -17,12 +17,11 @@ import type { Database } from "@/lib/supabase/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
-import { Loader2, Save, Trash2 } from "lucide-react";
+import { Loader2, Save, Trash2, Plus } from "lucide-react";
 
 type VenueArea = Database["public"]["Tables"]["venue_areas"]["Row"];
 
@@ -34,17 +33,20 @@ export function VenuesManager({ venues }: VenuesManagerProps) {
   return (
     <div className="space-y-6">
       <VenueCreateForm />
-      <div className="grid gap-4 md:grid-cols-2">
-        {venues.map((venue) => (
-          <VenueCard key={venue.id} venue={venue} />
-        ))}
-        {venues.length === 0 ? (
-          <Card className="md:col-span-2">
-            <CardContent className="py-8 text-center text-subtle">
-              No venues yet. Add your first location above.
-            </CardContent>
-          </Card>
-        ) : null}
+      <div className="space-y-4">
+        <div className="grid gap-4 md:hidden">
+          {venues.map((venue) => (
+            <VenueCardMobile key={venue.id} venue={venue} />
+          ))}
+          {venues.length === 0 ? (
+            <Card>
+              <CardContent className="py-8 text-center text-subtle">
+                No venues yet. Add your first location above.
+              </CardContent>
+            </Card>
+          ) : null}
+        </div>
+        <VenueDesktopList venues={venues} />
       </div>
     </div>
   );
@@ -78,18 +80,21 @@ function VenueCreateForm() {
             <Label htmlFor="new-venue-name">Venue name</Label>
             <Input id="new-venue-name" name="name" placeholder="Barons Riverside" required />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="new-venue-address">Address</Label>
-            <Textarea id="new-venue-address" name="address" rows={3} placeholder="12 River Walk, Guildford" />
+          <div className="flex justify-end">
+            <SubmitButton
+              label="Add venue"
+              pendingLabel="Saving..."
+              icon={<Plus className="h-4 w-4" aria-hidden="true" />}
+              hideLabel
+            />
           </div>
-          <SubmitButton label="Add venue" pendingLabel="Saving..." />
         </form>
       </CardContent>
     </Card>
   );
 }
 
-function VenueCard({ venue }: { venue: VenueWithAreas }) {
+function VenueCardMobile({ venue }: { venue: VenueWithAreas }) {
   const [state, formAction] = useActionState(updateVenueAction, undefined);
   const [deleteState, deleteAction] = useActionState(deleteVenueAction, undefined);
   const router = useRouter();
@@ -127,29 +132,130 @@ function VenueCard({ venue }: { venue: VenueWithAreas }) {
             <Label htmlFor={`venue-name-${venue.id}`}>Venue name</Label>
             <Input id={`venue-name-${venue.id}`} name="name" defaultValue={venue.name} required />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor={`venue-address-${venue.id}`}>Address</Label>
-            <Textarea
-              id={`venue-address-${venue.id}`}
-              name="address"
-              rows={3}
-              defaultValue={venue.address ?? ""}
-              placeholder="Street, town, postcode"
+          <div className="flex items-center justify-end gap-2">
+            <SubmitButton
+              label="Remove venue"
+              pendingLabel="Removing..."
+              variant="destructive"
+              icon={<Trash2 className="h-4 w-4" aria-hidden="true" />}
+              formAction={deleteAction}
+              hideLabel
+            />
+            <SubmitButton
+              label="Save venue"
+              pendingLabel="Saving..."
+              icon={<Save className="h-4 w-4" aria-hidden="true" />}
+              hideLabel
             />
           </div>
-          <SubmitButton label="Save venue" pendingLabel="Saving..." />
         </form>
         <VenueAreas venueId={venue.id} areas={venue.areas} />
-        <form action={deleteAction} className="inline-flex">
-          <input type="hidden" name="venueId" value={venue.id} />
-          <SubmitButton label="Remove venue" pendingLabel="Removing..." variant="destructive" />
-        </form>
       </CardContent>
     </Card>
   );
 }
 
-function VenueAreas({ venueId, areas }: { venueId: string; areas: VenueArea[] }) {
+function VenueDesktopList({ venues }: VenuesManagerProps) {
+  if (venues.length === 0) {
+    return (
+      <div className="hidden rounded-[var(--radius)] border border-[var(--color-border)] bg-white py-8 text-center text-subtle md:block">
+        No venues yet. Add your first location above.
+      </div>
+    );
+  }
+
+  return (
+    <div className="hidden overflow-hidden rounded-[var(--radius)] border border-[var(--color-border)] bg-white md:block">
+      <div className="grid grid-cols-[minmax(0,3fr)_minmax(0,2fr)_auto] gap-4 border-b border-[var(--color-border)] bg-[var(--color-muted-surface)] px-6 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-subtle">
+        <div>Venue</div>
+        <div>Spaces</div>
+        <div className="text-right">Actions</div>
+      </div>
+      <ul>
+        {venues.map((venue, index) => (
+          <VenueDesktopRow key={venue.id} venue={venue} isFirst={index === 0} />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function VenueDesktopRow({ venue, isFirst }: { venue: VenueWithAreas; isFirst: boolean }) {
+  const [state, formAction] = useActionState(updateVenueAction, undefined);
+  const [deleteState, deleteAction] = useActionState(deleteVenueAction, undefined);
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!state?.message) return;
+    if (state.success) {
+      toast.success(state.message);
+      router.refresh();
+    } else {
+      toast.error(state.message);
+    }
+  }, [state, router]);
+
+  useEffect(() => {
+    if (!deleteState?.message) return;
+    if (deleteState.success) {
+      toast.success(deleteState.message);
+      router.refresh();
+    } else {
+      toast.error(deleteState.message);
+    }
+  }, [deleteState, router]);
+
+  return (
+    <li
+      className={`border-[var(--color-border)] px-6 py-5 ${isFirst ? "border-b" : "border-y"} hover:bg-[rgba(39,54,64,0.03)]`}
+    >
+      <form action={formAction} className="grid grid-cols-[minmax(0,3fr)_minmax(0,2fr)_auto] items-start gap-4">
+        <input type="hidden" name="venueId" value={venue.id} />
+        <div className="flex flex-col gap-2">
+          <label className="sr-only" htmlFor={`venue-name-desktop-${venue.id}`}>
+            Venue name
+          </label>
+          <Input id={`venue-name-desktop-${venue.id}`} name="name" defaultValue={venue.name} required />
+        </div>
+        <div className="space-y-1 text-sm text-subtle">
+          <span>{venue.areas.length ? `${venue.areas.length} space${venue.areas.length === 1 ? "" : "s"}` : "No spaces yet"}</span>
+          {venue.areas.length ? (
+            <p className="text-xs text-[var(--color-text-muted)]">
+              {venue.areas.map((area) => area.name).join(", ")}
+            </p>
+          ) : null}
+        </div>
+        <div className="flex items-center justify-end gap-2">
+          <SubmitButton
+            label="Remove venue"
+            pendingLabel="Removing..."
+            variant="destructive"
+            icon={<Trash2 className="h-4 w-4" aria-hidden="true" />}
+            formAction={deleteAction}
+            hideLabel
+          />
+          <SubmitButton
+            label="Save changes"
+            pendingLabel="Saving..."
+            icon={<Save className="h-4 w-4" aria-hidden="true" />}
+            hideLabel
+          />
+        </div>
+      </form>
+      <VenueAreas venueId={venue.id} areas={venue.areas} variant="list" />
+    </li>
+  );
+}
+
+function VenueAreas({
+  venueId,
+  areas,
+  variant = "card"
+}: {
+  venueId: string;
+  areas: VenueArea[];
+  variant?: "card" | "list";
+}) {
   const [state, formAction] = useActionState(createVenueAreaAction, undefined);
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
@@ -165,8 +271,13 @@ function VenueAreas({ venueId, areas }: { venueId: string; areas: VenueArea[] })
     }
   }, [state, router]);
 
+  const containerClass =
+    variant === "card"
+      ? "space-y-4 rounded-[var(--radius)] border border-[var(--color-border)] bg-white/70 p-4"
+      : "mt-5 space-y-4 border-t border-[var(--color-border)] pt-5";
+
   return (
-    <div className="space-y-4 rounded-[var(--radius)] border border-[var(--color-border)] bg-white/70 p-4">
+    <div className={containerClass}>
       <div>
         <h4 className="text-sm font-semibold text-[var(--color-primary-700)]">Venue areas</h4>
         <p className="text-xs text-subtle">
@@ -183,20 +294,33 @@ function VenueAreas({ venueId, areas }: { venueId: string; areas: VenueArea[] })
           <Label htmlFor={`new-area-capacity-${venueId}`}>Capacity</Label>
           <Input id={`new-area-capacity-${venueId}`} name="capacity" type="number" min={0} placeholder="120" />
         </div>
-        <SubmitButton label="Add area" pendingLabel="Saving..." />
+        <SubmitButton
+          label="Add area"
+          pendingLabel="Saving..."
+          icon={<Plus className="h-4 w-4" aria-hidden="true" />}
+          hideLabel
+        />
       </form>
       <div className="space-y-3">
         {areas.length === 0 ? (
           <p className="text-sm text-subtle">No areas yet. Add the core spaces above.</p>
         ) : (
-          areas.map((area) => <VenueAreaRow key={area.id} area={area} venueId={venueId} />)
+          areas.map((area) => <VenueAreaRow key={area.id} area={area} venueId={venueId} variant={variant} />)
         )}
       </div>
     </div>
   );
 }
 
-function VenueAreaRow({ area, venueId }: { area: VenueArea; venueId: string }) {
+function VenueAreaRow({
+  area,
+  venueId,
+  variant = "card"
+}: {
+  area: VenueArea;
+  venueId: string;
+  variant?: "card" | "list";
+}) {
   const [state, formAction] = useActionState(updateVenueAreaAction, undefined);
   const [deleteState, deleteAction] = useActionState(deleteVenueAreaAction, undefined);
   const router = useRouter();
@@ -221,8 +345,13 @@ function VenueAreaRow({ area, venueId }: { area: VenueArea; venueId: string }) {
     }
   }, [deleteState, router]);
 
+  const containerClass =
+    variant === "card"
+      ? "rounded-[var(--radius)] border border-[var(--color-border)] bg-white p-4"
+      : "rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[rgba(39,54,64,0.04)] p-3";
+
   return (
-    <div className="rounded-[var(--radius)] border border-[var(--color-border)] bg-white p-4">
+    <div className={containerClass}>
       <div className="flex flex-wrap items-end gap-3">
         <form action={formAction} className="flex flex-1 flex-wrap items-end gap-3">
           <input type="hidden" name="areaId" value={area.id} />

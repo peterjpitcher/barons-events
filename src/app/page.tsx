@@ -146,7 +146,7 @@ export default async function OverviewPage() {
         </div>
         {(user.role === "venue_manager" || user.role === "central_planner") && (
           <Button asChild>
-            <Link href="/events/new">New draft</Link>
+            <Link href="/events/new">New Event</Link>
           </Button>
         )}
       </CardHeader>

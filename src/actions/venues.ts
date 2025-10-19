@@ -20,8 +20,7 @@ type ActionResult = {
 
 const venueSchema = z.object({
   venueId: z.string().uuid().optional(),
-  name: z.string().min(2, "Add a venue name"),
-  address: z.string().max(240).optional()
+  name: z.string().min(2, "Add a venue name")
 });
 
 export async function createVenueAction(
@@ -37,8 +36,7 @@ export async function createVenueAction(
   }
 
   const parsed = venueSchema.safeParse({
-    name: formData.get("name"),
-    address: formData.get("address")
+    name: formData.get("name")
   });
 
   if (!parsed.success) {
@@ -48,7 +46,7 @@ export async function createVenueAction(
   try {
     await createVenue({
       name: parsed.data.name,
-      address: parsed.data.address ?? null
+      address: null
     });
     revalidatePath("/venues");
     return { success: true, message: "Venue added." };
@@ -72,8 +70,7 @@ export async function updateVenueAction(
 
   const parsed = venueSchema.safeParse({
     venueId: formData.get("venueId"),
-    name: formData.get("name"),
-    address: formData.get("address")
+    name: formData.get("name")
   });
 
   if (!parsed.success) {
@@ -86,7 +83,7 @@ export async function updateVenueAction(
   try {
     await updateVenue(parsed.data.venueId, {
       name: parsed.data.name,
-      address: parsed.data.address ?? null
+      address: null
     });
     revalidatePath("/venues");
     return { success: true, message: "Venue updated." };

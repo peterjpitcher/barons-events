@@ -1,6 +1,6 @@
 # Barons Events MVP
 
-This build is a slimmed-down reboot focused on the core flows for Sprint 1: event drafting, reviewer decisions, planner oversight, and post-event debriefs. Everything else has been archived under `archive_pre_mvp/` for reference.
+This build is a slimmed-down reboot focused on the core flows for Sprint 1: event drafting, reviewer decisions, planner oversight, and post-event debriefs.
 
 ## Stack
 - Next.js 15 (App Router, TypeScript, Tailwind v4)
@@ -61,7 +61,6 @@ supabase/
   migrations/      // MVP schema
   seed.sql         // Demo data
 docs/              // Original product, UX, and schema documentation (untouched)
-archive_pre_mvp/   // Full previous implementation
 ```
 
 ## Outstanding Follow-ups

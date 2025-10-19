@@ -41,9 +41,15 @@ export function AppShell({ user, children }: AppShellProps) {
             <NavLink key={item.href} href={item.href} label={item.label} />
           ))}
         </nav>
-        <div className="mt-auto rounded-[var(--radius)] border border-white/10 bg-white/5 p-4 text-sm leading-relaxed text-white/80">
-          <p className="font-medium text-white">{user.fullName ?? user.email}</p>
-          <p className="capitalize text-white/70">{user.role.replace("_", " ")}</p>
+        <div className="mt-auto space-y-4">
+          <div className="rounded-[var(--radius)] border border-white/10 bg-white/5 p-4 text-sm leading-relaxed text-white/80">
+            <p className="font-medium text-white">{user.fullName ?? user.email}</p>
+            <p className="capitalize text-white/70">{user.role.replace("_", " ")}</p>
+          </div>
+          <div className="flex items-center justify-center">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="Barons" className="h-12 w-auto" />
+          </div>
         </div>
       </aside>
 

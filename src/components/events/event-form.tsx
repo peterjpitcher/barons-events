@@ -31,6 +31,9 @@ export type EventFormProps = {
   eventTypes: string[];
   role: UserRole;
   userVenueId?: string | null;
+  initialStartAt?: string;
+  initialEndAt?: string;
+  initialVenueId?: string;
 };
 
 function toLocalInputValue(date?: string | null) {
@@ -52,7 +55,18 @@ function addHours(localIso: string, hours: number) {
   return adjusted.toISOString().slice(0, 16);
 }
 
-export function EventForm({ mode, defaultValues, venues, reviewers, eventTypes, role, userVenueId }: EventFormProps) {
+export function EventForm({
+  mode,
+  defaultValues,
+  venues,
+  reviewers,
+  eventTypes,
+  role,
+  userVenueId,
+  initialStartAt,
+  initialEndAt,
+  initialVenueId
+}: EventFormProps) {
   const [draftState, draftAction] = useActionState(saveDraftAction, undefined);
   const [submitState, submitAction] = useActionState(submitEventAction, undefined);
 
@@ -77,11 +91,12 @@ export function EventForm({ mode, defaultValues, venues, reviewers, eventTypes, 
   }, [submitState]);
 
   const canChooseVenue = role === "central_planner";
-  const defaultVenueId = defaultValues?.venue_id ?? userVenueId ?? venues[0]?.id ?? "";
+  const preferredVenueId = initialVenueId ?? defaultValues?.venue_id ?? userVenueId ?? venues[0]?.id ?? "";
+  const defaultVenueId = venues.some((venue) => venue.id === preferredVenueId) ? preferredVenueId : venues[0]?.id ?? "";
   const [selectedVenueId, setSelectedVenueId] = useState(defaultVenueId);
-  const [startValue, setStartValue] = useState(toLocalInputValue(defaultValues?.start_at));
-  const [endValue, setEndValue] = useState(toLocalInputValue(defaultValues?.end_at));
-  const [endDirty, setEndDirty] = useState(Boolean(defaultValues?.end_at));
+  const [startValue, setStartValue] = useState(toLocalInputValue(defaultValues?.start_at ?? initialStartAt));
+  const [endValue, setEndValue] = useState(toLocalInputValue(defaultValues?.end_at ?? initialEndAt));
+  const [endDirty, setEndDirty] = useState(Boolean(defaultValues?.end_at ?? initialEndAt));
   const [spaceValue, setSpaceValue] = useState(defaultValues?.venue_space ?? "");
 
   const defaultFocus = useMemo(

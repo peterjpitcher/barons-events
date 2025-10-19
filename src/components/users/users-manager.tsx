@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { useRouter } from "next/navigation";
+import { Send, Save } from "lucide-react";
 
 type VenueRow = Database["public"]["Tables"]["venues"]["Row"];
 
@@ -30,15 +31,18 @@ export function UsersManager({ users, venues }: UsersManagerProps) {
   return (
     <div className="space-y-6">
       <InviteUserForm venues={venues} />
-      <div className="grid gap-4">
-        {users.map((user) => (
-          <UserCard key={user.id} user={user} venues={venues} />
-        ))}
-        {users.length === 0 ? (
-          <Card>
-            <CardContent className="py-8 text-center text-subtle">No workspace users yet.</CardContent>
-          </Card>
-        ) : null}
+      <div className="space-y-4">
+        <div className="grid gap-4 md:hidden">
+          {users.map((user) => (
+            <UserCardMobile key={user.id} user={user} venues={venues} />
+          ))}
+          {users.length === 0 ? (
+            <Card>
+              <CardContent className="py-8 text-center text-subtle">No workspace users yet.</CardContent>
+            </Card>
+          ) : null}
+        </div>
+        <UserDesktopList users={users} venues={venues} />
       </div>
     </div>
   );
@@ -60,7 +64,7 @@ function InviteUserForm({ venues }: { venues: VenueRow[] }) {
     }
   }, [state, router]);
 
-  return ( 
+  return (
     <Card>
       <CardHeader>
         <CardTitle>Invite a new user</CardTitle>
@@ -106,7 +110,7 @@ function InviteUserForm({ venues }: { venues: VenueRow[] }) {
   );
 }
 
-function UserCard({ user, venues }: { user: AppUserRow; venues: VenueRow[] }) {
+function UserCardMobile({ user, venues }: { user: AppUserRow; venues: VenueRow[] }) {
   const [state, formAction] = useActionState(updateUserAction, undefined);
   const router = useRouter();
 
@@ -164,11 +168,119 @@ function UserCard({ user, venues }: { user: AppUserRow; venues: VenueRow[] }) {
               ))}
             </Select>
           </div>
-          <div className="md:col-span-2">
-            <SubmitButton label="Save changes" pendingLabel="Saving..." />
+          <div className="md:col-span-2 flex justify-end">
+            <SubmitButton
+              label="Save changes"
+              pendingLabel="Saving..."
+              icon={<Save className="h-4 w-4" aria-hidden="true" />}
+              hideLabel
+            />
           </div>
         </form>
       </CardContent>
     </Card>
+  );
+}
+
+function UserDesktopList({ users, venues }: UsersManagerProps) {
+  if (users.length === 0) {
+    return (
+      <div className="hidden rounded-[var(--radius)] border border-[var(--color-border)] bg-white py-8 text-center text-subtle md:block">
+        No workspace users yet.
+      </div>
+    );
+  }
+
+  return (
+    <div className="hidden overflow-hidden rounded-[var(--radius)] border border-[var(--color-border)] bg-white md:block">
+      <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,2fr)_auto] gap-4 border-b border-[var(--color-border)] bg-[var(--color-muted-surface)] px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-subtle">
+        <div>Name</div>
+        <div>Email</div>
+        <div>Role</div>
+        <div>Linked venue</div>
+        <div className="text-right">Actions</div>
+      </div>
+      <ul>
+        {users.map((user, index) => (
+          <UserDesktopRow key={user.id} user={user} venues={venues} isFirst={index === 0} />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function UserDesktopRow({ user, venues, isFirst }: { user: AppUserRow; venues: VenueRow[]; isFirst: boolean }) {
+  const [state, formAction] = useActionState(updateUserAction, undefined);
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!state?.message) return;
+    if (state.success) {
+      toast.success(state.message);
+      router.refresh();
+    } else {
+      toast.error(state.message);
+    }
+  }, [state, router]);
+
+  return (
+    <li
+      className={`border-[var(--color-border)] px-5 py-4 ${
+        isFirst ? "border-b" : "border-y"
+      } hover:bg-[rgba(39,54,64,0.03)]`}
+    >
+      <form action={formAction} className="grid grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,2fr)_auto] items-center gap-4">
+        <input type="hidden" name="userId" value={user.id} />
+        <div className="flex flex-col gap-1">
+          <label className="sr-only" htmlFor={`desktop-fullName-${user.id}`}>
+            Full name
+          </label>
+          <Input
+            id={`desktop-fullName-${user.id}`}
+            name="fullName"
+            defaultValue={user.full_name ?? ""}
+            placeholder="Full name"
+          />
+        </div>
+        <div className="space-y-1">
+          <span className="text-xs font-medium uppercase tracking-[0.18em] text-subtle">Email</span>
+          <p className="truncate text-sm text-[var(--color-text)]">{user.email}</p>
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="sr-only" htmlFor={`desktop-role-${user.id}`}>
+            Role
+          </label>
+          <Select id={`desktop-role-${user.id}`} name="role" defaultValue={user.role}>
+            {Object.entries(roleLabels).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="sr-only" htmlFor={`desktop-venue-${user.id}`}>
+            Linked venue
+          </label>
+          <Select id={`desktop-venue-${user.id}`} name="venueId" defaultValue={user.venue_id ?? ""}>
+            <option value="">No linked venue</option>
+            {venues.map((venue) => (
+              <option key={venue.id} value={venue.id}>
+                {venue.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div className="flex justify-end">
+          <SubmitButton
+            label="Save changes"
+            pendingLabel="Saving..."
+            className="min-w-[6rem]"
+            icon={<Save className="h-4 w-4" aria-hidden="true" />}
+            hideLabel
+          />
+        </div>
+      </form>
+    </li>
   );
 }

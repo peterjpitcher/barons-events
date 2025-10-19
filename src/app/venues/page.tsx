@@ -25,7 +25,7 @@ export default async function VenuesPage() {
       <Card>
         <CardHeader>
           <CardTitle>Venues</CardTitle>
-          <CardDescription>Keep addresses and spaces current so submissions stay tidy.</CardDescription>
+          <CardDescription>Keep venue names and spaces current so submissions stay tidy.</CardDescription>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-subtle">
