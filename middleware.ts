@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
-const authRoutes = ["/login"];
+const authRoutes = ["/login", "/forgot-password", "/reset-password"];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -33,8 +33,12 @@ export async function middleware(req: NextRequest) {
   } = await supabase.auth.getSession();
 
   const isAuthRoute = authRoutes.some((route) => pathname.startsWith(route));
+  const staticAssetPattern = /\.(?:css|js|json|svg|png|jpg|jpeg|gif|webp|ico|txt|map)$/i;
   const isPublicAsset =
-    pathname.startsWith("/_next") || pathname.startsWith("/public") || pathname === "/favicon.ico";
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/public") ||
+    pathname === "/favicon.ico" ||
+    staticAssetPattern.test(pathname);
 
   if (isPublicAsset) {
     return res;
@@ -43,7 +47,8 @@ export async function middleware(req: NextRequest) {
   if (!session && !isAuthRoute) {
     const redirectUrl = req.nextUrl.clone();
     redirectUrl.pathname = "/login";
-    redirectUrl.searchParams.set("redirectedFrom", pathname);
+    const originalPath = `${pathname}${req.nextUrl.search ?? ""}`;
+    redirectUrl.searchParams.set("redirectedFrom", originalPath);
     return NextResponse.redirect(redirectUrl);
   }
 
