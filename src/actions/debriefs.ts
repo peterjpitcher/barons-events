@@ -8,6 +8,7 @@ import { upsertDebrief } from "@/lib/debriefs";
 import { debriefSchema } from "@/lib/validation";
 import { createSupabaseActionClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
+import { sendPostEventDigestEmail } from "@/lib/notifications";
 
 type ActionResult = {
   success: boolean;
@@ -55,6 +56,8 @@ export async function submitDebriefAction(
     await (supabase.from("events") as any)
       .update({ status: "completed" })
       .eq("id", values.eventId);
+
+    await sendPostEventDigestEmail(values.eventId);
 
     revalidatePath(`/events/${values.eventId}`);
     return { success: true, message: "Debrief saved." };

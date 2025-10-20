@@ -20,8 +20,7 @@ export const eventFormSchema = z.object({
   wetPromo: z.string().max(240).optional(),
   foodPromo: z.string().max(240).optional(),
   goalFocus: z.string().max(120).optional(),
-  notes: z.string().max(1000).optional(),
-  assignedReviewerId: z.string().uuid().optional().nullable()
+  notes: z.string().max(1000).optional()
 });
 
 export const decisionSchema = z.object({

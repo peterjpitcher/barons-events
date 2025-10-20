@@ -80,7 +80,12 @@ export default async function OverviewPage() {
           {queue.slice(0, 4).map((event) => (
             <div key={event.id} className="flex flex-col gap-1 rounded-[var(--radius)] border border-[rgba(39,54,64,0.12)] bg-white/80 px-4 py-3 text-sm shadow-soft md:flex-row md:items-center md:justify-between">
               <div>
-                <p className="font-medium text-[var(--color-text)]">{event.title}</p>
+                <Link
+                  href={`/events/${event.id}`}
+                  className="font-medium text-[var(--color-text)] transition-colors hover:text-[var(--color-primary-600)]"
+                >
+                  {event.title}
+                </Link>
                 <p className="text-subtle">{event.venue?.name ?? ""} · {new Date(event.start_at).toLocaleString("en-GB")}</p>
               </div>
               <Badge variant="info">{event.status.replace("_", " ")}</Badge>
@@ -103,8 +108,22 @@ export default async function OverviewPage() {
           ) : (
             conflicts.map((pair, index) => (
               <div key={`${pair.event.id}-${index}`} className="rounded-[var(--radius)] border border-[rgba(110,60,61,0.3)] bg-white/80 px-4 py-3 text-sm text-[var(--color-antique-burgundy)] shadow-soft">
-                <p className="font-semibold">{pair.event.title}</p>
-                <p>Overlaps with <span className="font-medium">{pair.conflictingWith.title}</span> in {pair.event.venue_space} – {pair.event.venue?.name}</p>
+                <Link
+                  href={`/events/${pair.event.id}`}
+                  className="font-semibold transition-colors hover:text-[var(--color-primary-600)]"
+                >
+                  {pair.event.title}
+                </Link>
+                <p>
+                  Overlaps with{" "}
+                  <Link
+                    href={`/events/${pair.conflictingWith.id}`}
+                    className="font-medium transition-colors hover:text-[var(--color-primary-600)]"
+                  >
+                    {pair.conflictingWith.title}
+                  </Link>{" "}
+                  in {pair.event.venue_space} – {pair.event.venue?.name}
+                </p>
               </div>
             ))
           )}
@@ -127,7 +146,12 @@ export default async function OverviewPage() {
         <CardContent className="space-y-3">
           {queue.slice(0, 5).map((event) => (
             <div key={event.id} className="rounded-[var(--radius)] border border-[rgba(39,54,64,0.12)] bg-white/80 px-4 py-3 text-sm shadow-soft">
-              <p className="font-medium text-[var(--color-text)]">{event.title}</p>
+              <Link
+                href={`/events/${event.id}`}
+                className="font-medium text-[var(--color-text)] transition-colors hover:text-[var(--color-primary-600)]"
+              >
+                {event.title}
+              </Link>
               <p className="text-subtle">{event.venue?.name ?? ""} · {new Date(event.start_at).toLocaleString("en-GB")}</p>
             </div>
           ))}
@@ -157,7 +181,12 @@ export default async function OverviewPage() {
           upcoming.map((event) => (
             <div key={event.id} className="flex flex-col gap-1 rounded-[var(--radius)] border border-[rgba(39,54,64,0.12)] bg-white/80 px-4 py-3 text-sm shadow-soft md:flex-row md:items-center md:justify-between">
               <div>
-                <p className="font-medium text-[var(--color-text)]">{event.title}</p>
+                <Link
+                  href={`/events/${event.id}`}
+                  className="font-medium text-[var(--color-text)] transition-colors hover:text-[var(--color-primary-600)]"
+                >
+                  {event.title}
+                </Link>
                 <p className="text-subtle">{event.venue?.name ?? ""} · {new Date(event.start_at).toLocaleString("en-GB")}</p>
               </div>
               <Badge variant="neutral">{event.status.replace("_", " ")}</Badge>

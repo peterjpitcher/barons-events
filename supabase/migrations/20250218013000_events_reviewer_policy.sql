@@ -1,8 +1,8 @@
-create policy "events reviewers manage assigned"
+create policy "events assignees manage assigned"
   on public.events
   for update
-  using (auth.uid() = assigned_reviewer_id)
+  using (auth.uid() = assignee_id)
   with check (
-    auth.uid() = assigned_reviewer_id
+    auth.uid() = assignee_id
     and status in ('submitted','needs_revisions','approved','rejected')
   );

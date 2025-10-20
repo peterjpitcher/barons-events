@@ -26,6 +26,7 @@ export interface Database {
           name: string;
           address: string | null;
           capacity: number | null;
+          default_reviewer_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -63,7 +64,7 @@ export interface Database {
           goal_focus: string | null;
           notes: string | null;
           created_by: string;
-          assigned_reviewer_id: string | null;
+          assignee_id: string | null;
           submitted_at: string | null;
           created_at: string;
           updated_at: string;

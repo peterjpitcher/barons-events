@@ -48,7 +48,11 @@ export default async function ReviewsPage() {
             <Card key={event.id} className="border-[rgba(39,54,64,0.12)]">
               <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                 <div>
-                  <CardTitle className="text-xl text-[var(--color-primary-700)]">{event.title}</CardTitle>
+                  <CardTitle className="text-xl text-[var(--color-primary-700)]">
+                    <Link href={`/events/${event.id}`} className="transition-colors hover:text-[var(--color-primary-500)]">
+                      {event.title}
+                    </Link>
+                  </CardTitle>
                   <CardDescription>
                     {event.venue?.name ?? ""} · {timeFormat.format(new Date(event.start_at))}
                   </CardDescription>
@@ -64,7 +68,7 @@ export default async function ReviewsPage() {
                   </p>
                 </div>
                 <div className="flex flex-col gap-3">
-                  {user.role === "reviewer" && event.assigned_reviewer_id === user.id ? (
+                  {user.role === "reviewer" && event.assignee_id === user.id ? (
                     <DecisionForm eventId={event.id} />
                   ) : (
                     <Button variant="secondary" asChild>

@@ -1,28 +1,32 @@
 -- Demo venues
-insert into public.venues (id, name, capacity, address)
+insert into public.venues (id, name, capacity, address, default_reviewer_id)
 values
   (
     '9f9c5da2-8a6e-4db0-84b7-8ae0b25177e7',
     'Barons Riverside',
     180,
-    '12 River Walk, Guildford'
+    '12 River Walk, Guildford',
+    '22222222-2222-2222-2222-222222222222'
   ),
   (
     'c04ef2b5-2741-430b-9148-6a51fdd5dcd2',
     'Barons City Tap',
     220,
-    '85 Market Street, London'
+    '85 Market Street, London',
+    '22222222-2222-2222-2222-222222222222'
   ),
   (
     '0a077fe4-513b-438a-a60d-608c516d6b32',
     'Barons Lakeside',
     150,
-    '44 Willow Lane, Reading'
+    '44 Willow Lane, Reading',
+    '22222222-2222-2222-2222-222222222222'
   )
 on conflict (id) do update set
   name = excluded.name,
   capacity = excluded.capacity,
-  address = excluded.address;
+  address = excluded.address,
+  default_reviewer_id = excluded.default_reviewer_id;
 
 -- Venue areas
 insert into public.venue_areas (id, venue_id, name, capacity)
@@ -135,7 +139,7 @@ insert into public.events (
   id,
   venue_id,
   created_by,
-  assigned_reviewer_id,
+  assignee_id,
   title,
   event_type,
   status,
@@ -207,7 +211,7 @@ values
 on conflict (id) do update set
   venue_id = excluded.venue_id,
   created_by = excluded.created_by,
-  assigned_reviewer_id = excluded.assigned_reviewer_id,
+  assignee_id = excluded.assignee_id,
   title = excluded.title,
   event_type = excluded.event_type,
   status = excluded.status,

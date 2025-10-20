@@ -49,7 +49,7 @@ Keep executive stakeholders aligned by ensuring the weekly digest email metrics 
 
 ## Seed Prep (Reviewer Coverage)
 1. Open `supabase/seed.sql` and update the `region` fields for seeded users (`central_planner`, `reviewer`, `venue_manager`) so they mirror the territories covered in the upcoming demo.
-2. Adjust the seeded reviewer assignment (`assigned_reviewer_id`) on submitted events to reflect the planners and reviewers who will be showcased.
+2. Adjust the seeded assignee (`assignee_id`) on submitted events to reflect the planners and reviewers who will be showcased.
 3. Run `npm run supabase:reset` to apply the updates locally, then confirm the Planning Ops dashboard and reviewer queue reflect the new regional mix.
 4. Record any region overrides and venue mappings in your demo notes so they can be reverted after the session.
 

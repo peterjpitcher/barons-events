@@ -13,6 +13,7 @@ import {
   deleteVenueAreaAction
 } from "@/actions/venues";
 import type { VenueWithAreas } from "@/lib/venues";
+import type { ReviewerOption } from "@/lib/reviewers";
 import type { Database } from "@/lib/supabase/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -22,21 +23,23 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
 import { Loader2, Save, Trash2, Plus } from "lucide-react";
+import { Select } from "@/components/ui/select";
 
 type VenueArea = Database["public"]["Tables"]["venue_areas"]["Row"];
 
 type VenuesManagerProps = {
   venues: VenueWithAreas[];
+  reviewers: ReviewerOption[];
 };
 
-export function VenuesManager({ venues }: VenuesManagerProps) {
+export function VenuesManager({ venues, reviewers }: VenuesManagerProps) {
   return (
     <div className="space-y-6">
-      <VenueCreateForm />
+      <VenueCreateForm reviewers={reviewers} />
       <div className="space-y-4">
         <div className="grid gap-4 md:hidden">
           {venues.map((venue) => (
-            <VenueCardMobile key={venue.id} venue={venue} />
+            <VenueCardMobile key={venue.id} venue={venue} reviewers={reviewers} />
           ))}
           {venues.length === 0 ? (
             <Card>
@@ -46,13 +49,13 @@ export function VenuesManager({ venues }: VenuesManagerProps) {
             </Card>
           ) : null}
         </div>
-        <VenueDesktopList venues={venues} />
+        <VenueDesktopList venues={venues} reviewers={reviewers} />
       </div>
     </div>
   );
 }
 
-function VenueCreateForm() {
+function VenueCreateForm({ reviewers }: { reviewers: ReviewerOption[] }) {
   const [state, formAction] = useActionState(createVenueAction, undefined);
   const formRef = useRef<HTMLFormElement>(null);
   const router = useRouter();
@@ -80,6 +83,18 @@ function VenueCreateForm() {
             <Label htmlFor="new-venue-name">Venue name</Label>
             <Input id="new-venue-name" name="name" placeholder="Barons Riverside" required />
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="new-venue-default-reviewer">Default reviewer</Label>
+            <Select id="new-venue-default-reviewer" name="defaultReviewerId" defaultValue="">
+              <option value="">No default reviewer</option>
+              {reviewers.map((reviewer) => (
+                <option key={reviewer.id} value={reviewer.id}>
+                  {reviewer.name}
+                </option>
+              ))}
+            </Select>
+            <p className="text-xs text-subtle">When new events are submitted, they’ll be routed to this reviewer first.</p>
+          </div>
           <div className="flex justify-end">
             <SubmitButton
               label="Add venue"
@@ -94,7 +109,7 @@ function VenueCreateForm() {
   );
 }
 
-function VenueCardMobile({ venue }: { venue: VenueWithAreas }) {
+function VenueCardMobile({ venue, reviewers }: { venue: VenueWithAreas; reviewers: ReviewerOption[] }) {
   const [state, formAction] = useActionState(updateVenueAction, undefined);
   const [deleteState, deleteAction] = useActionState(deleteVenueAction, undefined);
   const router = useRouter();
@@ -132,6 +147,22 @@ function VenueCardMobile({ venue }: { venue: VenueWithAreas }) {
             <Label htmlFor={`venue-name-${venue.id}`}>Venue name</Label>
             <Input id={`venue-name-${venue.id}`} name="name" defaultValue={venue.name} required />
           </div>
+          <div className="space-y-2">
+            <Label htmlFor={`venue-default-${venue.id}`}>Default reviewer</Label>
+            <Select
+              id={`venue-default-${venue.id}`}
+              name="defaultReviewerId"
+              defaultValue={venue.default_reviewer_id ?? ""}
+            >
+              <option value="">No default reviewer</option>
+              {reviewers.map((reviewer) => (
+                <option key={reviewer.id} value={reviewer.id}>
+                  {reviewer.name}
+                </option>
+              ))}
+            </Select>
+            <p className="text-xs text-subtle">Choose who receives submissions from this site by default.</p>
+          </div>
           <div className="flex items-center justify-end gap-2">
             <SubmitButton
               label="Remove venue"
@@ -155,7 +186,7 @@ function VenueCardMobile({ venue }: { venue: VenueWithAreas }) {
   );
 }
 
-function VenueDesktopList({ venues }: VenuesManagerProps) {
+function VenueDesktopList({ venues, reviewers }: VenuesManagerProps) {
   if (venues.length === 0) {
     return (
       <div className="hidden rounded-[var(--radius)] border border-[var(--color-border)] bg-white py-8 text-center text-subtle md:block">
@@ -173,14 +204,14 @@ function VenueDesktopList({ venues }: VenuesManagerProps) {
       </div>
       <ul>
         {venues.map((venue, index) => (
-          <VenueDesktopRow key={venue.id} venue={venue} isFirst={index === 0} />
+          <VenueDesktopRow key={venue.id} venue={venue} reviewers={reviewers} isFirst={index === 0} />
         ))}
       </ul>
     </div>
   );
 }
 
-function VenueDesktopRow({ venue, isFirst }: { venue: VenueWithAreas; isFirst: boolean }) {
+function VenueDesktopRow({ venue, reviewers, isFirst }: { venue: VenueWithAreas; reviewers: ReviewerOption[]; isFirst: boolean }) {
   const [state, formAction] = useActionState(updateVenueAction, undefined);
   const [deleteState, deleteAction] = useActionState(deleteVenueAction, undefined);
   const router = useRouter();
@@ -217,13 +248,32 @@ function VenueDesktopRow({ venue, isFirst }: { venue: VenueWithAreas; isFirst: b
           </label>
           <Input id={`venue-name-desktop-${venue.id}`} name="name" defaultValue={venue.name} required />
         </div>
-        <div className="space-y-1 text-sm text-subtle">
-          <span>{venue.areas.length ? `${venue.areas.length} space${venue.areas.length === 1 ? "" : "s"}` : "No spaces yet"}</span>
-          {venue.areas.length ? (
-            <p className="text-xs text-[var(--color-text-muted)]">
-              {venue.areas.map((area) => area.name).join(", ")}
-            </p>
-          ) : null}
+        <div className="space-y-3 text-sm text-subtle">
+          <div>
+            <span>{venue.areas.length ? `${venue.areas.length} space${venue.areas.length === 1 ? "" : "s"}` : "No spaces yet"}</span>
+            {venue.areas.length ? (
+              <p className="text-xs text-[var(--color-text-muted)]">
+                {venue.areas.map((area) => area.name).join(", ")}
+              </p>
+            ) : null}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor={`venue-default-desktop-${venue.id}`} className="text-[0.7rem] uppercase tracking-[0.2em] text-subtle">
+              Default reviewer
+            </Label>
+            <Select
+              id={`venue-default-desktop-${venue.id}`}
+              name="defaultReviewerId"
+              defaultValue={venue.default_reviewer_id ?? ""}
+            >
+              <option value="">No default reviewer</option>
+              {reviewers.map((reviewer) => (
+                <option key={reviewer.id} value={reviewer.id}>
+                  {reviewer.name}
+                </option>
+              ))}
+            </Select>
+          </div>
         </div>
         <div className="flex items-center justify-end gap-2">
           <SubmitButton

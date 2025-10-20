@@ -37,11 +37,12 @@ export async function listVenuesWithAreas(): Promise<VenueWithAreas[]> {
   }));
 }
 
-export async function createVenue(payload: { name: string; address?: string | null }) {
+export async function createVenue(payload: { name: string; address?: string | null; defaultReviewerId?: string | null }) {
   const supabase = await createSupabaseActionClient();
   const { error } = await supabase.from("venues").insert({
     name: payload.name,
-    address: payload.address ?? null
+    address: payload.address ?? null,
+    default_reviewer_id: payload.defaultReviewerId ?? null
   });
 
   if (error) {
@@ -49,13 +50,14 @@ export async function createVenue(payload: { name: string; address?: string | nu
   }
 }
 
-export async function updateVenue(id: string, updates: { name: string; address?: string | null }) {
+export async function updateVenue(id: string, updates: { name: string; address?: string | null; defaultReviewerId?: string | null }) {
   const supabase = await createSupabaseActionClient();
   const { error } = await supabase
     .from("venues")
     .update({
       name: updates.name,
-      address: updates.address ?? null
+      address: updates.address ?? null,
+      default_reviewer_id: updates.defaultReviewerId ?? null
     })
     .eq("id", id);
 

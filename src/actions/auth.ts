@@ -2,7 +2,8 @@
 
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { createSupabaseActionClient } from "@/lib/supabase/server";
+import { createSupabaseActionClient, createSupabaseServiceRoleClient } from "@/lib/supabase/server";
+import { sendPasswordResetEmail } from "@/lib/notifications";
 
 const credentialsSchema = z.object({
   email: z.string().email({ message: "Enter a valid email" }),
@@ -107,14 +108,40 @@ export async function requestPasswordResetAction(formData: FormData) {
     redirect(`/forgot-password?${params.toString()}`);
   }
 
-  const supabase = await createSupabaseActionClient();
   const redirectUrl = new URL("/reset-password", resolveAppUrl()).toString();
-  const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
-    redirectTo: redirectUrl
-  });
 
-  if (error) {
-    console.error("Password reset request failed", error);
+  let resetEmailSent = false;
+
+  try {
+    const adminClient = createSupabaseServiceRoleClient();
+    const { data, error } = await adminClient.auth.admin.generateLink({
+      type: "recovery",
+      email: parsed.data.email,
+      options: {
+        redirectTo: redirectUrl
+      }
+    });
+
+    if (error) {
+      if ((error as { code?: string }).code !== "user_not_found") {
+        console.error("Password reset link generation failed", error);
+      }
+    } else if (data?.properties?.action_link) {
+      resetEmailSent = await sendPasswordResetEmail(parsed.data.email, data.properties.action_link);
+    }
+  } catch (error) {
+    console.error("Password reset link generation threw", error);
+  }
+
+  if (!resetEmailSent) {
+    const supabase = await createSupabaseActionClient();
+    const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
+      redirectTo: redirectUrl
+    });
+
+    if (error) {
+      console.error("Password reset request failed", error);
+    }
   }
 
   const params = new URLSearchParams({ status: "sent", email: parsed.data.email });

@@ -3,7 +3,6 @@ import { EventForm } from "@/components/events/event-form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCurrentUser } from "@/lib/auth";
 import { listVenuesWithAreas } from "@/lib/venues";
-import { listReviewers } from "@/lib/reviewers";
 import { listEventTypes } from "@/lib/event-types";
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -40,10 +39,9 @@ export default async function NewEventPage({ searchParams }: PageProps) {
     searchParams?.then((params) => params as SearchParams).catch(() => ({} as SearchParams)) ??
     Promise.resolve({} as SearchParams);
 
-  const [resolvedSearchParams, venues, reviewers, eventTypes] = await Promise.all([
+  const [resolvedSearchParams, venues, eventTypes] = await Promise.all([
     searchParamsPromise,
     listVenuesWithAreas(),
-    listReviewers(),
     listEventTypes()
   ]);
   const availableVenues = user.role === "venue_manager" ? venues.filter((venue) => venue.id === user.venueId) : venues;
@@ -67,7 +65,6 @@ export default async function NewEventPage({ searchParams }: PageProps) {
       <EventForm
         mode="create"
         venues={availableVenues}
-        reviewers={reviewers}
         eventTypes={eventTypes.map((type) => type.label)}
         role={user.role}
         userVenueId={user.venueId}

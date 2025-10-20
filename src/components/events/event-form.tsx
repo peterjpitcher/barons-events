@@ -2,32 +2,22 @@
 
 import { useActionState, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { saveDraftAction, submitEventAction } from "@/actions/events";
+import { saveEventDraftAction, submitEventForReviewAction } from "@/actions/events";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
-import type { ReviewerOption } from "@/lib/reviewers";
+import { Select } from "@/components/ui/select";
+import { EVENT_GOALS } from "@/lib/event-goals";
 import type { EventSummary } from "@/lib/events";
 import type { UserRole } from "@/lib/types";
 import type { VenueWithAreas } from "@/lib/venues";
-
-const eventFocusOptions = [
-  { value: "grow_sales", label: "Grow sales", helper: "Use when the event aims to increase revenue or average spend." },
-  { value: "guest_data", label: "Drive guest data collection", helper: "Perfect for loyalty sign-ups, email capture, or surveys." },
-  { value: "guest_engagement", label: "Drive guest engagement", helper: "Focus on keeping guests entertained and staying longer." },
-  { value: "community", label: "Boost community presence", helper: "Charity nights, local partnerships, or neighbourhood outreach." },
-  { value: "staff_development", label: "Staff development", helper: "Training sessions or shadows that build team skills." },
-  { value: "brand_partnerships", label: "Strengthen brand partnerships", helper: "Supplier collaborations, co-branded promotions, or launches." }
-];
 
 export type EventFormProps = {
   mode: "create" | "edit";
   defaultValues?: EventSummary;
   venues: VenueWithAreas[];
-  reviewers: ReviewerOption[];
   eventTypes: string[];
   role: UserRole;
   userVenueId?: string | null;
@@ -59,7 +49,6 @@ export function EventForm({
   mode,
   defaultValues,
   venues,
-  reviewers,
   eventTypes,
   role,
   userVenueId,
@@ -67,8 +56,8 @@ export function EventForm({
   initialEndAt,
   initialVenueId
 }: EventFormProps) {
-  const [draftState, draftAction] = useActionState(saveDraftAction, undefined);
-  const [submitState, submitAction] = useActionState(submitEventAction, undefined);
+  const [draftState, draftAction] = useActionState(saveEventDraftAction, undefined);
+  const [submitState, submitAction] = useActionState(submitEventForReviewAction, undefined);
 
   useEffect(() => {
     if (draftState?.message) {
@@ -99,7 +88,7 @@ export function EventForm({
   const [endDirty, setEndDirty] = useState(Boolean(defaultValues?.end_at ?? initialEndAt));
   const [spaceValue, setSpaceValue] = useState(defaultValues?.venue_space ?? "");
 
-  const defaultFocus = useMemo(
+  const defaultGoals = useMemo(
     () =>
       new Set(
         (defaultValues?.goal_focus ?? "")
@@ -202,6 +191,18 @@ export function EventForm({
             </div>
           </div>
 
+          <div className="space-y-2">
+            <Label htmlFor="eventDetails">Event details</Label>
+            <Textarea
+              id="eventDetails"
+              name="notes"
+              rows={4}
+              defaultValue={defaultValues?.notes ?? ""}
+              placeholder="Summarise the activation, key beats, partners, and any standout experiences."
+            />
+            <p className="text-xs text-subtle">Share the overview that helps teams understand what's happening and why it matters.</p>
+          </div>
+
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="eventType">Event type</Label>
@@ -299,41 +300,28 @@ export function EventForm({
             </div>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="foodPromo">Food promotion</Label>
-              <Input
-                id="foodPromo"
-                name="foodPromo"
-                defaultValue={defaultValues?.food_promo ?? ""}
-                placeholder="Sharing boards, brunch specials"
-              />
-              <p className="text-xs text-subtle">List any paired food promotions or add-ons.</p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="notes">Notes for reviewers</Label>
-              <Textarea
-                id="notes"
-                name="notes"
-                rows={4}
-                defaultValue={defaultValues?.notes ?? ""}
-                placeholder="Add context, support needs, or rota notes."
-              />
-              <p className="text-xs text-subtle">Include supplier info, staffing considerations, or anything reviewers should flag.</p>
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="foodPromo">Food promotion</Label>
+            <Input
+              id="foodPromo"
+              name="foodPromo"
+              defaultValue={defaultValues?.food_promo ?? ""}
+              placeholder="Sharing boards, brunch specials"
+            />
+            <p className="text-xs text-subtle">List any paired food promotions or add-ons.</p>
           </div>
 
           <div className="space-y-3">
-            <Label>Focus</Label>
+            <Label>Goals</Label>
             <p className="text-xs text-subtle">Select the goals that matter for this event. Pick as many as apply.</p>
             <div className="grid gap-2 sm:grid-cols-2">
-              {eventFocusOptions.map((option) => (
+              {EVENT_GOALS.map((option) => (
                 <label key={option.value} className="flex items-start gap-2 text-sm text-[var(--color-text)]">
                   <input
                     type="checkbox"
                     name="goalFocus"
                     value={option.value}
-                    defaultChecked={defaultFocus.has(option.value)}
+                    defaultChecked={defaultGoals.has(option.value)}
                     className="mt-1 h-4 w-4 rounded border-[var(--color-border)] text-[var(--color-primary-700)] focus:ring-[var(--color-primary-500)]"
                   />
                   <span>
@@ -344,23 +332,6 @@ export function EventForm({
                 </label>
               ))}
             </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="assignedReviewerId">Reviewer (optional)</Label>
-            <Select
-              id="assignedReviewerId"
-              name="assignedReviewerId"
-              defaultValue={defaultValues?.assigned_reviewer_id ?? ""}
-            >
-              <option value="">Assign later</option>
-              {reviewers.map((reviewer) => (
-                <option key={reviewer.id} value={reviewer.id}>
-                  {reviewer.name}
-                </option>
-              ))}
-            </Select>
-            <p className="text-xs text-subtle">Leave blank to let the planning team triage the request.</p>
           </div>
         </CardContent>
       </Card>

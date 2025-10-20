@@ -505,6 +505,8 @@ function MonthCalendar({ events, monthCursor, onChangeMonth, canCreate, createVe
 
 function EventListItem({ event }: { event: EventWithDates }) {
   const status = statusConfig[event.status] ?? statusConfig.draft;
+  const venueName = event.venue?.name ?? "Unknown venue";
+  const startLabel = event.start.format("ddd D MMM · HH:mm");
   const timeRange = `${event.start.format("HH:mm")} – ${event.end.format("HH:mm")}`;
   const details = `${event.title} at ${event.venue_space}${event.venue?.name ? ` · ${event.venue.name}` : ""}`;
   return (
@@ -513,10 +515,17 @@ function EventListItem({ event }: { event: EventWithDates }) {
       className="rounded-[var(--radius-sm)] border border-[rgba(39,54,64,0.12)] bg-[var(--color-muted-surface)] px-2 py-1 text-xs text-[var(--color-text)] md:flex md:items-center md:justify-between md:gap-3 md:rounded-none md:border-0 md:bg-transparent md:px-0 md:py-2"
     >
       <div className="flex flex-col gap-0.5 md:min-w-[0]">
-        <span className="truncate text-sm font-semibold text-[var(--color-text)] md:text-[0.95rem]">{event.title}</span>
+        <Link
+          href={`/events/${event.id}`}
+          className="truncate text-sm font-semibold text-[var(--color-text)] transition-colors hover:text-[var(--color-primary-700)] md:text-[0.95rem]"
+        >
+          {event.title}
+        </Link>
         <span className="text-[0.65rem] text-subtle md:text-xs">
-          {timeRange} · {event.venue_space}
+          {venueName} · {event.venue_space}
         </span>
+        <span className="text-[0.65rem] text-subtle md:text-xs">{startLabel}</span>
+        <span className="text-[0.65rem] text-subtle md:hidden">{timeRange}</span>
       </div>
       <Badge variant={status.tone} className="mt-1 shrink-0 self-start px-2 py-0.5 text-[0.65rem] md:mt-0">
         {status.label}
@@ -642,43 +651,73 @@ type VenueMatrixRowProps = {
 };
 
 function VenueMatrixRow({ venue, events, days, canCreate, createVenueId }: VenueMatrixRowProps) {
-  const dayStart = days[0].startOf("day");
-  const dayEnd = days[days.length - 1].endOf("day");
-
-  const eventsPerDay = days.map((day) => {
+  const eventsByDay = days.map((day) => {
     const dayStartEdge = day.startOf("day");
     const dayEndEdge = day.endOf("day");
-    return events.some(
-      (event) =>
-        (event.start.isBefore(dayEndEdge) || event.start.isSame(dayEndEdge)) &&
-        (event.end.isAfter(dayStartEdge) || event.end.isSame(dayStartEdge))
-    );
-  });
-
-  const segments = events.map((event) => {
-    const clampedStart = event.start.isBefore(dayStart) ? dayStart : event.start;
-    const clampedEnd = event.end.isAfter(dayEnd) ? dayEnd : event.end;
-    const startIndex = Math.max(0, clampedStart.startOf("day").diff(dayStart, "day"));
-    const endIndex = Math.min(days.length - 1, clampedEnd.startOf("day").diff(dayStart, "day"));
-    const span = Math.max(1, endIndex - startIndex + 1);
-    return {
-      event,
-      startIndex,
-      span
-    };
+    return events
+      .filter(
+        (event) =>
+          (event.start.isBefore(dayEndEdge) || event.start.isSame(dayEndEdge)) &&
+          (event.end.isAfter(dayStartEdge) || event.end.isSame(dayStartEdge))
+      )
+      .map((event) => {
+        const displayStart = event.start.isBefore(dayStartEdge) ? dayStartEdge : event.start;
+        const displayEnd = event.end.isAfter(dayEndEdge) ? dayEndEdge : event.end;
+        return {
+          event,
+          displayStart,
+          displayEnd,
+          spansPrevious: event.start.isBefore(dayStartEdge),
+          spansNext: event.end.isAfter(dayEndEdge)
+        };
+      });
   });
 
   return (
     <tr className="border-t border-[var(--color-border)]">
       <th className="border-r border-[var(--color-border)] px-4 py-3 text-left align-top text-sm text-[var(--color-text)]">
         <div className="font-semibold">{venue.name}</div>
-        <div className="text-xs text-subtle">{segments.length} event{segments.length === 1 ? "" : "s"}</div>
+        <div className="text-xs text-subtle">{events.length} event{events.length === 1 ? "" : "s"}</div>
       </th>
       <td colSpan={7} className="p-0">
-        <div className="grid grid-cols-7 gap-px bg-[var(--color-border)]">
+        <div className="grid grid-cols-7 gap-0 border border-[var(--color-border)] bg-white">
           {days.map((day, index) => (
-            <div key={day.toISOString()} className="relative min-h-[6.5rem] bg-white p-2">
-              {canCreate && !eventsPerDay[index] ? (
+            <div
+              key={day.toISOString()}
+              className="relative flex min-h-[6.5rem] flex-col gap-2 border border-[var(--color-border)] bg-white p-2"
+              style={{
+                borderLeftWidth: index === 0 ? undefined : 0,
+                borderTopWidth: 0,
+                borderBottomWidth: 0
+              }}
+            >
+              {eventsByDay[index].map(({ event, displayStart, displayEnd, spansPrevious, spansNext }) => (
+                <div
+                  key={`${event.id}-${day.format("YYYY-MM-DD")}`}
+                  className="rounded-[var(--radius-sm)] border border-[rgba(39,54,64,0.12)] bg-white p-2 text-xs text-[var(--color-text)] shadow-soft"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <Link
+                      href={`/events/${event.id}`}
+                      className="truncate font-semibold transition-colors hover:text-[var(--color-primary-700)]"
+                    >
+                      {event.title}
+                    </Link>
+                    <Badge variant={statusConfig[event.status]?.tone ?? "neutral"} className="px-2 py-0.5 text-[0.65rem]">
+                      {(statusConfig[event.status] ?? statusConfig.draft).label}
+                    </Badge>
+                  </div>
+                  <div className="mt-1 space-y-0.5 text-[0.7rem]">
+                    <p>{event.venue_space}</p>
+                    <p>
+                      {spansPrevious ? "from prev · " : ""}
+                      {displayStart.format("HH:mm")} → {displayEnd.format("HH:mm")}
+                      {spansNext ? " · continues" : ""}
+                    </p>
+                  </div>
+                </div>
+              ))}
+              {canCreate ? (
                 (() => {
                   const startAt = day.hour(19).minute(0).second(0).millisecond(0);
                   const endAt = startAt.add(3, "hour");
@@ -692,34 +731,13 @@ function VenueMatrixRow({ venue, events, days, canCreate, createVenueId }: Venue
                       asChild
                       variant="ghost"
                       size="sm"
-                      className="h-6 px-2 text-[0.7rem] text-[var(--color-primary-700)]"
+                      className="h-6 self-start px-2 text-[0.7rem] text-[var(--color-primary-700)]"
                     >
                       <Link href={href}>Add</Link>
                     </Button>
                   );
                 })()
               ) : null}
-            </div>
-          ))}
-          {segments.map(({ event, startIndex, span }) => (
-            <div
-              key={event.id}
-              className="relative z-10 m-1 rounded-[var(--radius-sm)] border border-[rgba(39,54,64,0.12)] bg-[var(--color-muted-surface)] p-2 text-xs text-[var(--color-text)] shadow-soft"
-              style={{ gridColumn: `${startIndex + 1} / span ${span}`, gridRow: "1" }}
-              title={`${event.title} · ${event.venue_space}${event.venue?.name ? ` @ ${event.venue.name}` : ""}\n${event.start.format("dddd D MMM HH:mm")} → ${event.end.format("dddd D MMM HH:mm")}`}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="truncate font-semibold">{event.title}</span>
-                <Badge variant={statusConfig[event.status]?.tone ?? "neutral"} className="px-2 py-0.5 text-[0.65rem]">
-                  {(statusConfig[event.status] ?? statusConfig.draft).label}
-                </Badge>
-              </div>
-              <div className="mt-1 space-y-0.5 text-[0.7rem]">
-                <p>{event.venue_space}</p>
-                <p>
-                  {event.start.format("ddd HH:mm")} → {event.end.format("ddd HH:mm")}
-                </p>
-              </div>
             </div>
           ))}
         </div>

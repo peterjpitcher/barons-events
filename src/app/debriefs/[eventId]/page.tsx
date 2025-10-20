@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { DebriefForm } from "@/components/events/debrief-form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,7 +36,14 @@ export default async function DebriefPage({ params }: { params: Promise<{ eventI
         <CardContent>
           <div className="mb-6 rounded-[var(--radius)] bg-muted-surface px-4 py-3 text-sm text-subtle">
             <p>
-              Event: <span className="font-medium text-[var(--color-text)]">{event.title}</span> ({new Date(event.start_at).toLocaleDateString("en-GB")})
+              Event:{" "}
+              <Link
+                href={`/events/${event.id}`}
+                className="font-medium text-[var(--color-text)] transition-colors hover:text-[var(--color-primary-600)]"
+              >
+                {event.title}
+              </Link>{" "}
+              ({new Date(event.start_at).toLocaleDateString("en-GB")})
             </p>
           </div>
           <DebriefForm eventId={event.id} defaults={event.debrief} />

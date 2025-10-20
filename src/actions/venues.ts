@@ -18,9 +18,20 @@ type ActionResult = {
   message?: string;
 };
 
+const uuidOrUndefined = z.preprocess(
+  (value) => {
+    if (typeof value === "string" && value.trim().length === 0) {
+      return undefined;
+    }
+    return value;
+  },
+  z.string().uuid().optional()
+);
+
 const venueSchema = z.object({
   venueId: z.string().uuid().optional(),
-  name: z.string().min(2, "Add a venue name")
+  name: z.string().min(2, "Add a venue name"),
+  defaultReviewerId: uuidOrUndefined
 });
 
 export async function createVenueAction(
@@ -36,7 +47,8 @@ export async function createVenueAction(
   }
 
   const parsed = venueSchema.safeParse({
-    name: formData.get("name")
+    name: formData.get("name"),
+    defaultReviewerId: formData.get("defaultReviewerId")
   });
 
   if (!parsed.success) {
@@ -46,7 +58,8 @@ export async function createVenueAction(
   try {
     await createVenue({
       name: parsed.data.name,
-      address: null
+      address: null,
+      defaultReviewerId: parsed.data.defaultReviewerId ?? null
     });
     revalidatePath("/venues");
     return { success: true, message: "Venue added." };
@@ -70,7 +83,8 @@ export async function updateVenueAction(
 
   const parsed = venueSchema.safeParse({
     venueId: formData.get("venueId"),
-    name: formData.get("name")
+    name: formData.get("name"),
+    defaultReviewerId: formData.get("defaultReviewerId")
   });
 
   if (!parsed.success) {
@@ -83,7 +97,8 @@ export async function updateVenueAction(
   try {
     await updateVenue(parsed.data.venueId, {
       name: parsed.data.name,
-      address: null
+      address: null,
+      defaultReviewerId: parsed.data.defaultReviewerId ?? null
     });
     revalidatePath("/venues");
     return { success: true, message: "Venue updated." };

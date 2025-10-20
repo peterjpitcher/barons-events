@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { listVenuesWithAreas } from "@/lib/venues";
+import { listReviewers } from "@/lib/reviewers";
 import { VenuesManager } from "@/components/venues/venues-manager";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -18,7 +19,7 @@ export default async function VenuesPage() {
     redirect("/");
   }
 
-  const venues = await listVenuesWithAreas();
+  const [venues, reviewers] = await Promise.all([listVenuesWithAreas(), listReviewers()]);
 
   return (
     <div className="space-y-6">
@@ -33,7 +34,7 @@ export default async function VenuesPage() {
           </p>
         </CardContent>
       </Card>
-      <VenuesManager venues={venues} />
+      <VenuesManager venues={venues} reviewers={reviewers} />
     </div>
   );
 }

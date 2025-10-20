@@ -59,7 +59,7 @@
 | goal_id | uuid (FK goals.id) | |
 | promo_tags | jsonb | Structured references to wet/food promotions. |
 | created_by | uuid (FK users.id) | |
-| assigned_reviewer_id | uuid (FK users.id) | |
+| assignee_id | uuid (FK users.id) | |
 | priority_flag | boolean | |
 | created_at | timestamptz | |
 | updated_at | timestamptz | |
@@ -221,7 +221,7 @@
 
 ### events
 - Venue managers: `SELECT/INSERT/UPDATE` where `created_by = auth.uid()` or `venue_id` matches assigned venue and status in (`draft`, `needs_revisions`); no delete.
-- Reviewers: `SELECT` where `assigned_reviewer_id = auth.uid()` or venue region matches; `UPDATE` restricted to status changes via RPC.
+- Reviews & assignments: `SELECT` where `assignee_id = auth.uid()` or venue region matches; `UPDATE` restricted to status changes via RPC.
 - Central planners: full `SELECT/UPDATE/DELETE` (soft delete) through server role.
 - Executives: `SELECT` events with status ≥ `approved`.
 

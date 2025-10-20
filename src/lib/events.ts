@@ -1,12 +1,65 @@
 import { createSupabaseActionClient, createSupabaseReadonlyClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
 import type { AppUser, EventStatus } from "@/lib/types";
+import { recordAuditLogEntry } from "@/lib/audit-log";
 
 type EventRow = Database["public"]["Tables"]["events"]["Row"];
 type VenueRow = Database["public"]["Tables"]["venues"]["Row"];
 type VersionRow = Database["public"]["Tables"]["event_versions"]["Row"];
 type ApprovalRow = Database["public"]["Tables"]["approvals"]["Row"];
 type DebriefRow = Database["public"]["Tables"]["debriefs"]["Row"];
+
+type TrackedEventField =
+  | "title"
+  | "event_type"
+  | "start_at"
+  | "end_at"
+  | "venue_id"
+  | "venue_space"
+  | "expected_headcount"
+  | "wet_promo"
+  | "food_promo"
+  | "goal_focus"
+  | "notes";
+
+const EVENT_FIELD_LABELS: Record<TrackedEventField, string> = {
+  title: "Title",
+  event_type: "Type",
+  start_at: "Start time",
+  end_at: "End time",
+  venue_id: "Venue",
+  venue_space: "Space",
+  expected_headcount: "Headcount",
+  wet_promo: "Wet promotion",
+  food_promo: "Food promotion",
+  goal_focus: "Goals",
+  notes: "Notes"
+};
+
+function labelsForInitialValues(record: EventRow): string[] {
+  const labels: string[] = [];
+  (Object.keys(EVENT_FIELD_LABELS) as TrackedEventField[]).forEach((field) => {
+    const value = record[field];
+    if (value !== null && value !== "" && value !== undefined) {
+      labels.push(EVENT_FIELD_LABELS[field]);
+    }
+  });
+  return labels;
+}
+
+function labelsForUpdatedValues(previous: EventRow, updates: Partial<EventRow>): string[] {
+  const labels: string[] = [];
+  (Object.keys(EVENT_FIELD_LABELS) as TrackedEventField[]).forEach((field) => {
+    if (!Object.prototype.hasOwnProperty.call(updates, field)) {
+      return;
+    }
+    const nextValue = updates[field];
+    if (previous[field] !== nextValue) {
+      labels.push(EVENT_FIELD_LABELS[field]);
+    }
+  });
+  return labels;
+}
 
 export type EventSummary = EventRow & {
   venue: Pick<VenueRow, "id" | "name">;
@@ -29,7 +82,7 @@ export async function listReviewQueue(user: AppUser): Promise<EventSummary[]> {
     .order("start_at", { ascending: true });
 
   if (user.role === "reviewer") {
-    query = query.eq("assigned_reviewer_id", user.id);
+    query = query.eq("assignee_id", user.id);
   }
 
   const { data, error } = await query;
@@ -59,7 +112,7 @@ export async function listEventsForUser(user: AppUser): Promise<EventSummary[]> 
   } else if (user.role === "venue_manager") {
     query = query.eq("created_by", user.id);
   } else if (user.role === "reviewer") {
-    query = query.eq("assigned_reviewer_id", user.id);
+    query = query.eq("assignee_id", user.id);
   } else {
     query = query.limit(10);
   }
@@ -144,7 +197,8 @@ export async function createEventDraft(payload: {
       wet_promo: payload.wetPromo ?? null,
       food_promo: payload.foodPromo ?? null,
       goal_focus: payload.goalFocus ?? null,
-      notes: payload.notes ?? null
+      notes: payload.notes ?? null,
+      assignee_id: payload.createdBy
     })
     .select()
     .single();
@@ -171,11 +225,35 @@ export async function createEventDraft(payload: {
     submitted_by: payload.createdBy
   });
 
+  await recordAuditLogEntry({
+    entity: "event",
+    entityId: data.id,
+    action: "event.created",
+    actorId: payload.createdBy,
+    meta: {
+      status: "draft",
+      assigneeId: payload.createdBy,
+      changes: labelsForInitialValues(data)
+    }
+  });
+
   return data;
 }
 
-export async function updateEventDraft(eventId: string, updates: Partial<EventRow>) {
+export async function updateEventDraft(eventId: string, updates: Partial<EventRow>, actorId?: string | null) {
   const supabase = await createSupabaseActionClient();
+
+  const { data: existing, error: fetchError } = await supabase
+    .from("events")
+    .select("*")
+    .eq("id", eventId)
+    .single();
+
+  if (fetchError) {
+    throw new Error(`Could not load event: ${fetchError.message}`);
+  }
+
+  const previous = existing as EventRow;
 
   const { data, error } = await supabase
     .from("events")
@@ -186,6 +264,19 @@ export async function updateEventDraft(eventId: string, updates: Partial<EventRo
 
   if (error) {
     throw new Error(`Could not update event: ${error.message}`);
+  }
+
+  if (actorId) {
+    const labels = labelsForUpdatedValues(previous, updates);
+    if (labels.length) {
+      await recordAuditLogEntry({
+        entity: "event",
+        entityId: eventId,
+        action: "event.updated",
+        actorId,
+        meta: { changes: labels }
+      });
+    }
   }
 
   return data;
@@ -227,7 +318,8 @@ export async function recordApproval(params: {
 }) {
   const supabase = await createSupabaseActionClient();
 
-  const decision = params.decision === "needs_revisions" ? "needs_revisions" : params.decision === "rejected" ? "rejected" : "approved";
+  const decision =
+    params.decision === "needs_revisions" ? "needs_revisions" : params.decision === "rejected" ? "rejected" : "approved";
 
   const { error } = await supabase.from("approvals").insert({
     event_id: params.eventId,
@@ -309,14 +401,14 @@ export async function findConflicts(): Promise<Array<{ event: EventSummary; conf
   return conflicts;
 }
 
-export async function assignReviewer(eventId: string, reviewerId: string | null) {
+export async function updateEventAssignee(eventId: string, assigneeId: string | null) {
   const supabase = await createSupabaseActionClient();
   const { error } = await supabase
     .from("events")
-    .update({ assigned_reviewer_id: reviewerId })
+    .update({ assignee_id: assigneeId })
     .eq("id", eventId);
 
   if (error) {
-    throw new Error(`Could not assign reviewer: ${error.message}`);
+    throw new Error(`Could not update assignee: ${error.message}`);
   }
 }

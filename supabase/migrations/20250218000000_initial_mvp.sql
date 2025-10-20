@@ -24,6 +24,7 @@ create table public.venues (
   timezone text not null default 'Europe/London',
   capacity integer,
   address text,
+  default_reviewer_id uuid references public.users(id) on delete set null,
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
 );
@@ -46,7 +47,7 @@ create table public.events (
   id uuid primary key default gen_random_uuid(),
   venue_id uuid not null references public.venues(id) on delete cascade,
   created_by uuid not null references public.users(id) on delete cascade,
-  assigned_reviewer_id uuid references public.users(id) on delete set null,
+  assignee_id uuid references public.users(id) on delete set null,
   title text not null,
   event_type text not null,
   status text not null check (status in ('draft','submitted','needs_revisions','approved','rejected','completed')),
@@ -66,7 +67,7 @@ create table public.events (
 create index events_venue_idx on public.events(venue_id);
 create index events_status_idx on public.events(status);
 create index events_start_idx on public.events(start_at);
-create index events_reviewer_idx on public.events(assigned_reviewer_id);
+create index events_assignee_idx on public.events(assignee_id);
 
 -- Snapshot of drafts/submissions
 create table public.event_versions (
@@ -183,7 +184,7 @@ create policy "events visible to participants"
   for select using (
     public.current_user_role() = 'central_planner'
     or auth.uid() = created_by
-    or auth.uid() = assigned_reviewer_id
+    or auth.uid() = assignee_id
   );
 
 create policy "managers create events"
@@ -212,7 +213,7 @@ create policy "versions follow event access"
         and (
           public.current_user_role() = 'central_planner'
           or auth.uid() = e.created_by
-          or auth.uid() = e.assigned_reviewer_id
+          or auth.uid() = e.assignee_id
         )
     )
   );
@@ -226,7 +227,7 @@ create policy "versions insert by event editors"
         and (
           public.current_user_role() = 'central_planner'
           or auth.uid() = e.created_by
-          or auth.uid() = e.assigned_reviewer_id
+          or auth.uid() = e.assignee_id
         )
     )
   );
@@ -241,7 +242,7 @@ create policy "approvals visible with event"
         and (
           public.current_user_role() = 'central_planner'
           or auth.uid() = e.created_by
-          or auth.uid() = e.assigned_reviewer_id
+          or auth.uid() = e.assignee_id
         )
     )
   );
@@ -267,7 +268,7 @@ create policy "debriefs visible with event"
         and (
           public.current_user_role() = 'central_planner'
           or auth.uid() = e.created_by
-          or auth.uid() = e.assigned_reviewer_id
+          or auth.uid() = e.assignee_id
         )
     )
   );
