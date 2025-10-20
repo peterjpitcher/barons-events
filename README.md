@@ -50,6 +50,9 @@ This build is a slimmed-down reboot focused on the core flows for Sprint 1: ev
 - `npm run supabase:reset` – Resets and seeds the linked Supabase project
 - `npm run supabase:migrate` – Pushes migrations to the linked Supabase project
 
+## Deployment Notes
+- Vercel tracks the `main` branch; triggering a redeploy from the dashboard forces a fresh build when needed.
+
 ## Project Structure
 ```
 src/
