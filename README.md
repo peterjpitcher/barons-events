@@ -52,6 +52,7 @@ This build is a slimmed-down reboot focused on the core flows for Sprint 1: ev
 
 ## Deployment Notes
 - Vercel tracks the `main` branch; triggering a redeploy from the dashboard forces a fresh build when needed.
+- If auto-deploys are paused, resume them or manually redeploy the desired commit.
 
 ## Project Structure
 ```
