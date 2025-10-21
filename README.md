@@ -71,3 +71,4 @@ docs/              // Original product, UX, and schema documentation (untouched)
 - Restore ESLint once the `@rushstack/eslint-patch` issue is resolved (tracked separately).
 - Flesh out Vitest coverage for server actions and date helpers.
 - Hook Resend templates and cron jobs when we expand beyond MVP.
+- Capture a lightweight checklist for manual Vercel rollbacks before launch.
