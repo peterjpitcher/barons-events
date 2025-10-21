@@ -86,7 +86,23 @@ export function EventForm({
   const [startValue, setStartValue] = useState(toLocalInputValue(defaultValues?.start_at ?? initialStartAt));
   const [endValue, setEndValue] = useState(toLocalInputValue(defaultValues?.end_at ?? initialEndAt));
   const [endDirty, setEndDirty] = useState(Boolean(defaultValues?.end_at ?? initialEndAt));
-  const [spaceValue, setSpaceValue] = useState(defaultValues?.venue_space ?? "");
+  const [spaceValues, setSpaceValues] = useState(() => {
+    const raw = defaultValues?.venue_space ?? "";
+    const seen = new Set<string>();
+    const values: string[] = [];
+    raw
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .forEach((item) => {
+        const key = item.toLowerCase();
+        if (!seen.has(key)) {
+          seen.add(key);
+          values.push(item);
+        }
+      });
+    return values;
+  });
 
   const defaultGoals = useMemo(
     () =>
@@ -105,30 +121,12 @@ export function EventForm({
   );
 
   const areaOptions = selectedVenue?.areas ?? [];
-  const areaNames = areaOptions.map((area) => area.name);
   const typeOptions = eventTypes.length ? eventTypes : ["General"];
-
-  useEffect(() => {
-    if (!areaOptions.length) {
-      if (spaceValue) {
-        setSpaceValue("");
-      }
-      return;
-    }
-
-    if (!areaOptions.some((area) => area.name === spaceValue)) {
-      setSpaceValue(areaOptions[0].name);
-    }
-  }, [areaOptions, spaceValue]);
 
   function handleVenueChange(value: string) {
     setSelectedVenueId(value);
     const firstArea = venues.find((venue) => venue.id === value)?.areas?.[0]?.name;
-    if (firstArea) {
-      setSpaceValue(firstArea);
-    } else {
-      setSpaceValue("");
-    }
+    setSpaceValues(firstArea ? [firstArea] : []);
   }
 
   function handleStartChange(value: string) {
@@ -143,6 +141,55 @@ export function EventForm({
     setEndDirty(true);
     setEndValue(value);
   }
+
+  const areaCapacityMap = useMemo(() => {
+    const map = new Map<string, number | null>();
+    areaOptions.forEach((area) => {
+      map.set(area.name.trim().toLowerCase(), typeof area.capacity === "number" ? area.capacity : null);
+    });
+    return map;
+  }, [areaOptions]);
+
+  useEffect(() => {
+    if (!areaOptions.length) {
+      return;
+    }
+    setSpaceValues((current) => {
+      if (current.length > 0) {
+        return current;
+      }
+      const first = areaOptions[0]?.name;
+      return first ? [first] : current;
+    });
+  }, [areaOptions]);
+
+  function toggleSpace(spaceName: string) {
+    const trimmed = spaceName.trim();
+    if (!trimmed) return;
+    setSpaceValues((current) => {
+      const exists = current.some((item) => item.toLowerCase() === trimmed.toLowerCase());
+      if (exists) {
+        return current.filter((item) => item.toLowerCase() !== trimmed.toLowerCase());
+      }
+      return [...current, trimmed];
+    });
+  }
+
+  function removeSpace(spaceName: string) {
+    setSpaceValues((current) => current.filter((item) => item.toLowerCase() !== spaceName.toLowerCase()));
+  }
+
+  const joinedSpaces = spaceValues.map((value) => value.trim()).filter(Boolean).join(", ");
+  const totalCapacity = useMemo(() => {
+    let total = 0;
+    spaceValues.forEach((space) => {
+      const capacity = areaCapacityMap.get(space.trim().toLowerCase());
+      if (typeof capacity === "number") {
+        total += capacity;
+      }
+    });
+    return total;
+  }, [spaceValues, areaCapacityMap]);
 
   return (
     <form action={draftAction} className="space-y-6">
@@ -216,35 +263,87 @@ export function EventForm({
               <p className="text-xs text-subtle">Need a new option? Add it in Settings.</p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="venueSpace">Space</Label>
+              <Label htmlFor="venueSpace">Spaces</Label>
+              <input
+                id="venueSpace"
+                name="venueSpace"
+                value={joinedSpaces}
+                readOnly
+                className="sr-only"
+                aria-hidden="true"
+                tabIndex={-1}
+              />
               {areaOptions.length ? (
-                <Select
-                  id="venueSpace"
-                  name="venueSpace"
-                  value={areaNames.includes(spaceValue) ? spaceValue : ""}
-                  onChange={(event) => setSpaceValue(event.target.value)}
-                  required
-                >
-                  <option value="" disabled>
-                    Choose space
-                  </option>
-                  {areaOptions.map((area) => (
-                    <option key={area.id} value={area.name}>
-                      {area.name}
-                    </option>
+                <div className="rounded-[var(--radius)] border border-[var(--color-border)] bg-white p-3">
+                  <p className="text-xs font-medium uppercase tracking-[0.12em] text-subtle">Venue spaces</p>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                    {areaOptions.map((area) => {
+                      const isChecked = spaceValues.some(
+                        (item) => item.toLowerCase() === area.name.trim().toLowerCase()
+                      );
+                      const capacityLabel =
+                        typeof area.capacity === "number" ? `${area.capacity.toLocaleString()} capacity` : "Capacity not set";
+                      return (
+                        <label
+                          key={area.id}
+                          className="flex cursor-pointer items-start gap-2 rounded-[var(--radius-sm)] border border-transparent px-2 py-1.5 text-sm text-[var(--color-text)] transition hover:border-[var(--color-border)]"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => toggleSpace(area.name)}
+                            className="mt-0.5 h-4 w-4 rounded border-[var(--color-border)] text-[var(--color-primary-700)] focus:ring-[var(--color-primary-500)]"
+                          />
+                          <span className="flex flex-col leading-tight">
+                            <span className="font-medium">{area.name}</span>
+                            <span className="text-[0.65rem] text-subtle">{capacityLabel}</span>
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+              {areaOptions.length === 0 ? (
+                <p className="text-xs text-subtle">
+                  No bookable spaces found for this venue. Add them in Venues before scheduling.
+                </p>
+              ) : null}
+              {spaceValues.length ? (
+                <div className="flex flex-wrap gap-2">
+                  {spaceValues.map((space) => (
+                    <span
+                      key={space}
+                      className="inline-flex items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-muted-surface)] px-3 py-1 text-xs font-medium text-[var(--color-text)]"
+                    >
+                      <span>
+                        {space}
+                        {(() => {
+                          const capacity = areaCapacityMap.get(space.trim().toLowerCase());
+                          return typeof capacity === "number" ? ` (${capacity.toLocaleString()})` : "";
+                        })()}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => removeSpace(space)}
+                        className="text-subtle transition hover:text-[var(--color-danger)]"
+                        aria-label={`Remove ${space}`}
+                      >
+                        ×
+                      </button>
+                    </span>
                   ))}
-                </Select>
-              ) : (
-                <Input
-                  id="venueSpace"
-                  name="venueSpace"
-                  value={spaceValue}
-                  onChange={(event) => setSpaceValue(event.target.value)}
-                  placeholder="Main Bar"
-                  required
-                />
-              )}
-              <p className="text-xs text-subtle">Choose the specific space. Suggestions come from the venue areas list.</p>
+                </div>
+              ) : areaOptions.length > 0 ? (
+                <p className="text-xs text-[var(--color-danger)]">Add at least one space.</p>
+              ) : null}
+              <p className="text-xs text-subtle">
+                Pick every space the event uses. Update the venue profile if something is missing.
+              </p>
+              <p className="text-xs font-semibold text-[var(--color-text)]">
+                Planned capacity:{" "}
+                {totalCapacity > 0 ? totalCapacity.toLocaleString() : "Select spaces with capacities to calculate"}
+              </p>
             </div>
           </div>
 

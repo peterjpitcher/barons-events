@@ -1,6 +1,7 @@
 import { Resend } from "resend";
 import { createSupabaseReadonlyClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
+import { formatSpacesLabel } from "@/lib/venue-spaces";
 
 const RESEND_FROM_ADDRESS = process.env.RESEND_FROM_EMAIL ?? "Barons Events <events@barons.example>";
 const APP_BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://events.barons.example";
@@ -319,7 +320,7 @@ export async function sendEventSubmittedEmail(eventId: string) {
         `Event: ${event.title}`,
         `Venue: ${event.venue?.name ?? "Unknown venue"}`,
         `When: ${formatEventWindow(event)}`,
-        `Space: ${event.venue_space}`,
+        formatSpacesLabel(event.venue_space),
         `Assignee: ${event.assignee?.full_name ?? "Unassigned"}`
       ]
     });
@@ -425,7 +426,7 @@ export async function sendDebriefReminderEmail(eventId: string) {
       meta: [
         `Event: ${event.title}`,
         `When: ${formatEventWindow(event)}`,
-        `Space: ${event.venue_space}`
+        formatSpacesLabel(event.venue_space)
       ]
     });
 
@@ -461,7 +462,7 @@ export async function sendUpcomingEventReminderEmail(eventId: string) {
         `Event: ${event.title}`,
         `Venue: ${event.venue?.name ?? "Unknown venue"}`,
         `When: ${formatEventWindow(event)}`,
-        `Space: ${event.venue_space}`
+        formatSpacesLabel(event.venue_space)
       ]
     });
 
@@ -558,7 +559,7 @@ export async function sendAssigneeReassignmentEmail(
             `Event: ${event.title}`,
             `Venue: ${event.venue?.name ?? "Unknown venue"}`,
             `When: ${formatEventWindow(event)}`,
-            `Space: ${event.venue_space}`
+            formatSpacesLabel(event.venue_space)
           ]
         });
 

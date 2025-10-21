@@ -18,20 +18,106 @@ type ActionResult = {
   message?: string;
 };
 
+function normaliseVenueSpacesField(value: FormDataEntryValue | null): string {
+  if (typeof value !== "string") {
+    return "";
+  }
+  const entries = value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (entries.length === 0) {
+    return "";
+  }
+  const unique: string[] = [];
+  const seen = new Set<string>();
+  entries.forEach((entry) => {
+    const key = entry.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      unique.push(entry);
+    }
+  });
+  return unique.join(", ");
+}
+
+async function autoApproveEvent(params: {
+  eventId: string;
+  actorId: string;
+  previousStatus: string | null;
+  previousAssignee: string | null;
+}) {
+  const supabase = await createSupabaseActionClient();
+  const nowIso = new Date().toISOString();
+
+  const { error: updateError } = await supabase
+    .from("events")
+    .update({
+      status: "approved",
+      assignee_id: null,
+      submitted_at: nowIso
+    })
+    .eq("id", params.eventId);
+
+  if (updateError) {
+    throw updateError;
+  }
+
+  await recordApproval({
+    eventId: params.eventId,
+    reviewerId: params.actorId,
+    decision: "approved"
+  });
+
+  const changes: string[] = [];
+  if (params.previousStatus !== "approved") {
+    changes.push("Status");
+  }
+  if ((params.previousAssignee ?? null) !== null) {
+    changes.push("Assignee");
+  }
+
+  if (changes.length) {
+    await recordAuditLogEntry({
+      entity: "event",
+      entityId: params.eventId,
+      action: "event.status_changed",
+      actorId: params.actorId,
+      meta: {
+        status: "approved",
+        previousStatus: params.previousStatus,
+        assigneeId: null,
+        previousAssigneeId: params.previousAssignee,
+        autoApproved: true,
+        changes
+      }
+    });
+  }
+
+  await appendEventVersion(params.eventId, params.actorId, {
+    status: "approved",
+    submitted_at: nowIso,
+    autoApproved: true
+  });
+}
+
 export async function saveEventDraftAction(_: ActionResult | undefined, formData: FormData): Promise<ActionResult> {
   const user = await getCurrentUser();
   if (!user) {
     redirect("/login");
   }
 
+  const rawEventId = formData.get("eventId");
+  const eventId = typeof rawEventId === "string" ? rawEventId.trim() || undefined : undefined;
+
   const parsed = eventFormSchema.safeParse({
-    eventId: formData.get("eventId") ?? undefined,
+    eventId,
     venueId: formData.get("venueId") ?? user.venueId,
     title: formData.get("title"),
     eventType: formData.get("eventType"),
     startAt: formData.get("startAt"),
     endAt: formData.get("endAt"),
-    venueSpace: formData.get("venueSpace"),
+    venueSpace: normaliseVenueSpacesField(formData.get("venueSpace")),
     expectedHeadcount: formData.get("expectedHeadcount") ?? undefined,
     wetPromo: formData.get("wetPromo") ?? undefined,
     foodPromo: formData.get("foodPromo") ?? undefined,
@@ -92,6 +178,17 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
       notes: values.notes ?? null
     });
 
+    if (user.role === "central_planner") {
+      await autoApproveEvent({
+        eventId: created.id,
+        actorId: user.id,
+        previousStatus: (created.status as string | null) ?? null,
+        previousAssignee: (created.assignee_id as string | null) ?? null
+      });
+      revalidatePath(`/events/${created.id}`);
+      revalidatePath("/reviews");
+    }
+
     revalidatePath("/events");
     redirect(`/events/${created.id}`);
   } catch (error) {
@@ -132,7 +229,7 @@ export async function submitEventForReviewAction(
           eventType: formData.get("eventType"),
           startAt: formData.get("startAt"),
           endAt: formData.get("endAt"),
-          venueSpace: formData.get("venueSpace"),
+          venueSpace: normaliseVenueSpacesField(formData.get("venueSpace")),
           expectedHeadcount: formData.get("expectedHeadcount") ?? undefined,
           wetPromo: formData.get("wetPromo") ?? undefined,
           foodPromo: formData.get("foodPromo") ?? undefined,
@@ -186,6 +283,33 @@ export async function submitEventForReviewAction(
 
     if (existingEventError) {
       throw existingEventError;
+    }
+
+    if (user.role === "central_planner") {
+      if (!existingEvent) {
+        throw new Error("Event not found.");
+      }
+
+      if (existingEvent.status === "approved") {
+        revalidatePath(`/events/${targetEventId}`);
+        revalidatePath("/events");
+        revalidatePath("/reviews");
+        return { success: true, message: "Event already approved." };
+      }
+
+      await autoApproveEvent({
+        eventId: targetEventId,
+        actorId: user.id,
+        previousStatus: (existingEvent.status as string | null) ?? null,
+        previousAssignee: (existingEvent.assignee_id as string | null) ?? null
+      });
+
+      await sendReviewDecisionEmail(targetEventId, "approved");
+
+      revalidatePath(`/events/${targetEventId}`);
+      revalidatePath("/events");
+      revalidatePath("/reviews");
+      return { success: true, message: "Event approved instantly." };
     }
 
     async function resolveAssignee(): Promise<string | null> {

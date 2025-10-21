@@ -2,6 +2,7 @@ import { createSupabaseActionClient, createSupabaseReadonlyClient } from "@/lib/
 import type { Database } from "@/lib/supabase/types";
 import type { AppUser, EventStatus } from "@/lib/types";
 import { recordAuditLogEntry } from "@/lib/audit-log";
+import { parseVenueSpaces } from "@/lib/venue-spaces";
 
 type EventRow = Database["public"]["Tables"]["events"]["Row"];
 type VenueRow = Database["public"]["Tables"]["venues"]["Row"];
@@ -385,7 +386,19 @@ export async function findConflicts(): Promise<Array<{ event: EventSummary; conf
     for (let j = i + 1; j < events.length; j++) {
       const first = events[i];
       const second = events[j];
-      if (first.venue_id !== second.venue_id || first.venue_space !== second.venue_space) {
+      if (first.venue_id !== second.venue_id) {
+        continue;
+      }
+
+      const firstSpaces = parseVenueSpaces(first.venue_space).map((space) => space.toLowerCase());
+      const secondSpaces = parseVenueSpaces(second.venue_space).map((space) => space.toLowerCase());
+      if (firstSpaces.length === 0 || secondSpaces.length === 0) {
+        continue;
+      }
+
+      const firstSet = new Set(firstSpaces);
+      const hasOverlap = secondSpaces.some((space) => firstSet.has(space));
+      if (!hasOverlap) {
         continue;
       }
 

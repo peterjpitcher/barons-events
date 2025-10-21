@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { DecisionForm } from "@/components/reviews/decision-form";
 import { getCurrentUser } from "@/lib/auth";
 import { listReviewQueue } from "@/lib/events";
+import { parseVenueSpaces } from "@/lib/venue-spaces";
 
 const statusTone: Record<string, "info" | "warning" | "success" | "neutral"> = {
   submitted: "info",
@@ -44,6 +45,9 @@ export default async function ReviewsPage() {
       <div className="grid gap-4">
         {queue.map((event) => {
           const tone = statusTone[event.status] ?? "neutral";
+          const spaces = parseVenueSpaces(event.venue_space);
+          const spaceLabel = spaces.length > 1 ? "Spaces" : "Space";
+          const spaceDisplay = spaces.length ? spaces.join(", ") : "Not specified";
           return (
             <Card key={event.id} className="border-[rgba(39,54,64,0.12)]">
               <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -61,7 +65,9 @@ export default async function ReviewsPage() {
               </CardHeader>
               <CardContent className="grid gap-4 md:grid-cols-[2fr_1fr] md:items-center">
                 <div className="text-sm text-muted">
-                  <p>Space: <span className="font-medium text-[var(--color-text)]">{event.venue_space}</span></p>
+                  <p>
+                    {spaceLabel}: <span className="font-medium text-[var(--color-text)]">{spaceDisplay}</span>
+                  </p>
                   <p>Type: <span className="font-medium text-[var(--color-text)]">{event.event_type}</span></p>
                   <p>
                     Submitted: <span className="font-medium text-[var(--color-text)]">{event.submitted_at ? timeFormat.format(new Date(event.submitted_at)) : "Draft"}</span>

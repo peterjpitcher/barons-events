@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { EventDetail } from "@/lib/events";
+import { formatSpacesLabel } from "@/lib/venue-spaces";
 
 export type GeneratedEventMeta = {
   metaTitle: string;
@@ -14,7 +15,7 @@ function buildPrompt(event: EventDetail): string {
     `Title: ${event.title}`,
     `Status: ${event.status}`,
     `Venue: ${event.venue?.name ?? "Unknown venue"}`,
-    `Space: ${event.venue_space}`,
+    formatSpacesLabel(event.venue_space),
     `Type: ${event.event_type}`,
     `Start: ${new Date(event.start_at).toISOString()}`,
     `End: ${new Date(event.end_at).toISOString()}`,

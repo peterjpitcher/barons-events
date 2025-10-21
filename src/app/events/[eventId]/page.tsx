@@ -16,6 +16,7 @@ import { listVenuesWithAreas } from "@/lib/venues";
 import { listEventTypes } from "@/lib/event-types";
 import { listAssignableUsers, getUsersByIds } from "@/lib/users";
 import { updateAssigneeAction } from "@/actions/events";
+import { parseVenueSpaces } from "@/lib/venue-spaces";
 
 const statusCopy: Record<string, { label: string; tone: "neutral" | "info" | "success" | "warning" | "danger" }> = {
   draft: { label: "Draft", tone: "neutral" },
@@ -68,10 +69,11 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
     };
   });
   const hasGoalDetails = goalDetails.length > 0;
+  const venueSpaces = parseVenueSpaces(event.venue_space);
 
   const canEdit =
     (user.role === "central_planner" || (user.role === "venue_manager" && event.created_by === user.id)) &&
-    ["draft", "needs_revisions"].includes(event.status);
+    ["draft", "submitted", "needs_revisions"].includes(event.status);
   const canReview =
     (user.role === "reviewer" && event.assignee_id === user.id && ["submitted", "needs_revisions"].includes(event.status)) ||
     (user.role === "central_planner" && ["submitted", "needs_revisions"].includes(event.status));
@@ -271,7 +273,10 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
                   <span className="font-semibold text-[var(--color-text)]">Type:</span> {event.event_type}
                 </p>
                 <p>
-                  <span className="font-semibold text-[var(--color-text)]">Space:</span> {event.venue_space}
+                  <span className="font-semibold text-[var(--color-text)]">
+                    {venueSpaces.length > 1 ? "Spaces" : "Space"}:
+                  </span>{" "}
+                  {venueSpaces.length ? venueSpaces.join(", ") : "Not specified"}
                 </p>
                 <p>
                   <span className="font-semibold text-[var(--color-text)]">Start:</span>{" "}

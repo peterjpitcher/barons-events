@@ -45,6 +45,36 @@ const statusConfig: Record<
   completed: { label: "Completed", tone: "success" }
 };
 
+const statusAccentStyles: Record<
+  EventSummary["status"],
+  { badge: string; dot: string }
+> = {
+  draft: {
+    badge: "bg-[rgba(39,54,64,0.08)] text-[var(--color-text-subtle)] border border-[rgba(39,54,64,0.18)]",
+    dot: "bg-[rgba(39,54,64,0.45)]"
+  },
+  submitted: {
+    badge: "bg-[rgba(95,124,145,0.22)] text-[var(--color-info)] border border-[rgba(95,124,145,0.4)]",
+    dot: "bg-[var(--color-info)]"
+  },
+  needs_revisions: {
+    badge: "bg-[rgba(192,139,60,0.2)] text-[var(--color-warning)] border border-[rgba(192,139,60,0.45)]",
+    dot: "bg-[var(--color-warning)]"
+  },
+  approved: {
+    badge: "bg-[rgba(79,122,105,0.22)] text-[var(--color-success)] border border-[rgba(79,122,105,0.45)]",
+    dot: "bg-[var(--color-success)]"
+  },
+  rejected: {
+    badge: "bg-[rgba(177,91,96,0.24)] text-[var(--color-danger)] border border-[rgba(177,91,96,0.45)]",
+    dot: "bg-[var(--color-danger)]"
+  },
+  completed: {
+    badge: "bg-[rgba(79,122,105,0.28)] text-[var(--color-success)] border border-[rgba(79,122,105,0.5)]",
+    dot: "bg-[var(--color-success)]"
+  }
+};
+
 const localStorageKey = "events-board-view";
 
 function startOfIsoWeek(date: dayjs.Dayjs) {
@@ -505,31 +535,41 @@ function MonthCalendar({ events, monthCursor, onChangeMonth, canCreate, createVe
 
 function EventListItem({ event }: { event: EventWithDates }) {
   const status = statusConfig[event.status] ?? statusConfig.draft;
+  const accent = statusAccentStyles[event.status] ?? statusAccentStyles.draft;
   const venueName = event.venue?.name ?? "Unknown venue";
-  const startLabel = event.start.format("ddd D MMM · HH:mm");
-  const timeRange = `${event.start.format("HH:mm")} – ${event.end.format("HH:mm")}`;
-  const details = `${event.title} at ${event.venue_space}${event.venue?.name ? ` · ${event.venue.name}` : ""}`;
+  const spacesLabel = event.venue_space?.trim().length ? event.venue_space : "Space to be confirmed";
+  const timeRange = `${event.start.format("HH:mm")} → ${event.end.format("HH:mm")}`;
+  const hoverDetails = [
+    `Venue: ${venueName}`,
+    `Spaces: ${spacesLabel}`,
+    `Starts: ${event.start.format("dddd D MMMM, HH:mm")}`,
+    `Ends: ${event.end.format("dddd D MMMM, HH:mm")}`
+  ].join("\n");
+
   return (
     <li
-      title={`${details}\n${event.start.format("dddd D MMMM, HH:mm")} → ${event.end.format("dddd D MMMM, HH:mm")}`}
-      className="rounded-[var(--radius-sm)] border border-[rgba(39,54,64,0.12)] bg-[var(--color-muted-surface)] px-2 py-1 text-xs text-[var(--color-text)] md:flex md:items-center md:justify-between md:gap-3 md:rounded-none md:border-0 md:bg-transparent md:px-0 md:py-2"
+      title={hoverDetails}
+      className="flex flex-col gap-1.5 rounded-[var(--radius-sm)] border border-[rgba(39,54,64,0.12)] bg-white p-2 text-xs text-[var(--color-text)] shadow-soft"
     >
-      <div className="flex flex-col gap-0.5 md:min-w-[0]">
-        <Link
-          href={`/events/${event.id}`}
-          className="truncate text-sm font-semibold text-[var(--color-text)] transition-colors hover:text-[var(--color-primary-700)] md:text-[0.95rem]"
-        >
-          {event.title}
-        </Link>
-        <span className="text-[0.65rem] text-subtle md:text-xs">
-          {venueName} · {event.venue_space}
-        </span>
-        <span className="text-[0.65rem] text-subtle md:text-xs">{startLabel}</span>
-        <span className="text-[0.65rem] text-subtle md:hidden">{timeRange}</span>
+      <Link
+        href={`/events/${event.id}`}
+        className="truncate text-sm font-semibold text-[var(--color-text)] transition-colors hover:text-[var(--color-primary-700)]"
+      >
+        {event.title}
+      </Link>
+      <div className="flex flex-col gap-0.5 text-[0.7rem] text-subtle">
+        <span className="truncate">{venueName}</span>
+        <span className="truncate">{spacesLabel}</span>
+        <span>{timeRange}</span>
       </div>
-      <Badge variant={status.tone} className="mt-1 shrink-0 self-start px-2 py-0.5 text-[0.65rem] md:mt-0">
-        {status.label}
-      </Badge>
+      <div className="mt-auto border-t border-[rgba(39,54,64,0.12)] pt-2">
+        <span
+          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.58rem] font-semibold uppercase tracking-[0.14em] ${accent.badge}`}
+        >
+          <span className={`h-1.5 w-1.5 rounded-full ${accent.dot}`} aria-hidden="true" />
+          {status.label}
+        </span>
+      </div>
     </li>
   );
 }
@@ -691,32 +731,42 @@ function VenueMatrixRow({ venue, events, days, canCreate, createVenueId }: Venue
                 borderBottomWidth: 0
               }}
             >
-              {eventsByDay[index].map(({ event, displayStart, displayEnd, spansPrevious, spansNext }) => (
-                <div
-                  key={`${event.id}-${day.format("YYYY-MM-DD")}`}
-                  className="rounded-[var(--radius-sm)] border border-[rgba(39,54,64,0.12)] bg-white p-2 text-xs text-[var(--color-text)] shadow-soft"
-                >
-                  <div className="flex items-center justify-between gap-2">
+              {eventsByDay[index].map(({ event, displayStart, displayEnd, spansPrevious, spansNext }) => {
+                const status = statusConfig[event.status] ?? statusConfig.draft;
+                const accent = statusAccentStyles[event.status] ?? statusAccentStyles.draft;
+                const spaceDisplay = event.venue_space?.trim().length
+                  ? event.venue_space
+                  : "Space to be confirmed";
+                return (
+                  <div
+                    key={`${event.id}-${day.format("YYYY-MM-DD")}`}
+                    className="flex h-full flex-col rounded-[var(--radius-sm)] border border-[rgba(39,54,64,0.12)] bg-white p-2 text-xs text-[var(--color-text)] shadow-soft"
+                  >
                     <Link
                       href={`/events/${event.id}`}
-                      className="truncate font-semibold transition-colors hover:text-[var(--color-primary-700)]"
+                      className="truncate text-sm font-semibold text-[var(--color-text)] transition-colors hover:text-[var(--color-primary-700)]"
                     >
                       {event.title}
                     </Link>
-                    <Badge variant={statusConfig[event.status]?.tone ?? "neutral"} className="px-2 py-0.5 text-[0.65rem]">
-                      {(statusConfig[event.status] ?? statusConfig.draft).label}
-                    </Badge>
+                    <div className="mt-1 flex flex-col gap-1 text-[0.7rem] text-subtle">
+                      <span className="truncate">{spaceDisplay}</span>
+                      <span>
+                        {spansPrevious ? "from prev · " : ""}
+                        {displayStart.format("HH:mm")} → {displayEnd.format("HH:mm")}
+                        {spansNext ? " · continues" : ""}
+                      </span>
+                    </div>
+                    <div className="mt-auto border-t border-[rgba(39,54,64,0.12)] pt-2">
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.58rem] font-semibold uppercase tracking-[0.14em] ${accent.badge}`}
+                      >
+                        <span className={`h-1.5 w-1.5 rounded-full ${accent.dot}`} aria-hidden="true" />
+                        {status.label}
+                      </span>
+                    </div>
                   </div>
-                  <div className="mt-1 space-y-0.5 text-[0.7rem]">
-                    <p>{event.venue_space}</p>
-                    <p>
-                      {spansPrevious ? "from prev · " : ""}
-                      {displayStart.format("HH:mm")} → {displayEnd.format("HH:mm")}
-                      {spansNext ? " · continues" : ""}
-                    </p>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
               {canCreate ? (
                 (() => {
                   const startAt = day.hour(19).minute(0).second(0).millisecond(0);
