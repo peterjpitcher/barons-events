@@ -117,6 +117,7 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
   );
   const [monthCursor, setMonthCursor] = useState<dayjs.Dayjs>(dayjs().startOf("month"));
   const [venueSearch, setVenueSearch] = useState("");
+  const monthLabel = useMemo(() => monthCursor.format("MMMM YYYY"), [monthCursor]);
 
   useEffect(() => {
     if (!rawView) {
@@ -345,7 +346,7 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
             </Button>
           </div>
         ) : (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               type="button"
               variant="outline"
@@ -354,6 +355,7 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
             >
               <ChevronLeft className="mr-1 h-4 w-4" /> Previous month
             </Button>
+            <span className="px-2 text-sm font-semibold text-[var(--color-text)]">{monthLabel}</span>
             <Button type="button" variant="ghost" size="sm" onClick={() => setMonthCursor(dayjs().startOf("month"))}>
               Today
             </Button>
