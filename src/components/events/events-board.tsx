@@ -97,6 +97,19 @@ function normaliseEvents(events: EventSummary[]): EventWithDates[] {
     .sort((a, b) => a.start.valueOf() - b.start.valueOf());
 }
 
+function minutesAfterMidnight(value: dayjs.Dayjs): number {
+  return value.diff(value.startOf("day"), "minute");
+}
+
+function endsInEarlyHoursNextDay(event: EventWithDates): boolean {
+  const startDay = event.start.startOf("day");
+  const endDay = event.end.startOf("day");
+  if (endDay.diff(startDay, "day") !== 1) {
+    return false;
+  }
+  return minutesAfterMidnight(event.end) <= 300;
+}
+
 export function EventsBoard({ user, events, venues }: EventsBoardProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -437,7 +450,8 @@ function MonthCalendar({ events, monthCursor, onChangeMonth, canCreate, createVe
     const map = new Map<string, EventWithDates[]>();
     events.forEach((event) => {
       const cursor = event.start.startOf("day");
-      const lastDay = event.end.startOf("day");
+      const endsEarlyNextDay = endsInEarlyHoursNextDay(event);
+      const lastDay = endsEarlyNextDay ? cursor : event.end.startOf("day");
       const length = lastDay.diff(cursor, "day");
       for (let i = 0; i <= length; i += 1) {
         const dayKey = cursor.add(i, "day").format("YYYY-MM-DD");
@@ -702,15 +716,23 @@ function VenueMatrixRow({ venue, events, days, canCreate, createVenueId }: Venue
           (event.start.isBefore(dayEndEdge) || event.start.isSame(dayEndEdge)) &&
           (event.end.isAfter(dayStartEdge) || event.end.isSame(dayStartEdge))
       )
+      .filter((event) => {
+        if (!endsInEarlyHoursNextDay(event)) {
+          return true;
+        }
+        const nextDayStart = event.start.startOf("day").add(1, "day");
+        return !dayStartEdge.isSame(nextDayStart);
+      })
       .map((event) => {
+        const treatAsSameDay = endsInEarlyHoursNextDay(event) && dayStartEdge.isSame(event.start.startOf("day"));
         const displayStart = event.start.isBefore(dayStartEdge) ? dayStartEdge : event.start;
-        const displayEnd = event.end.isAfter(dayEndEdge) ? dayEndEdge : event.end;
+        let displayEnd = event.end.isAfter(dayEndEdge) ? dayEndEdge : event.end;
         return {
           event,
           displayStart,
-          displayEnd,
+          displayEnd: treatAsSameDay ? event.end : displayEnd,
           spansPrevious: event.start.isBefore(dayStartEdge),
-          spansNext: event.end.isAfter(dayEndEdge)
+          spansNext: treatAsSameDay ? false : event.end.isAfter(dayEndEdge)
         };
       });
   });
