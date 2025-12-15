@@ -559,3 +559,55 @@ export async function updateAssigneeAction(formData: FormData) {
     return { success: false, message: "Could not update assignee." };
   }
 }
+
+export async function deleteEventAction(_: ActionResult | undefined, formData: FormData): Promise<ActionResult> {
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect("/login");
+  }
+
+  const eventId = formData.get("eventId");
+  const parsedEvent = z.string().uuid().safeParse(eventId);
+
+  if (!parsedEvent.success) {
+    return { success: false, message: "Invalid event reference." };
+  }
+
+  const supabase = await createSupabaseActionClient();
+
+  try {
+    const { data: event, error: fetchError } = await supabase
+      .from("events")
+      .select("id, created_by, status")
+      .eq("id", parsedEvent.data)
+      .single();
+
+    if (fetchError || !event) {
+      return { success: false, message: "Event not found." };
+    }
+
+    const canDelete =
+      (user.role === "central_planner" || (user.role === "venue_manager" && event.created_by === user.id)) &&
+      ["draft", "submitted", "needs_revisions"].includes(event.status);
+
+    if (!canDelete) {
+      return { success: false, message: "You don't have permission to delete this event." };
+    }
+
+    const { error: deleteError } = await supabase.from("events").delete().eq("id", event.id);
+
+    if (deleteError) {
+      throw deleteError;
+    }
+
+    revalidatePath("/events");
+    revalidatePath("/reviews");
+    redirect("/events");
+  } catch (error) {
+    if (error instanceof Error && error.message === "NEXT_REDIRECT") {
+      throw error;
+    }
+    console.error(error);
+    return { success: false, message: "Could not delete the event." };
+  }
+}

@@ -367,6 +367,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
             />
           ) : null}
 
+
           {canSubmitDebrief ? (
             <Card>
               <CardHeader>
