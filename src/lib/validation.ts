@@ -19,6 +19,8 @@ export const eventFormSchema = z.object({
     .optional(),
   wetPromo: z.string().max(240).optional(),
   foodPromo: z.string().max(240).optional(),
+  costTotal: z.coerce.number().min(0).optional(),
+  costDetails: z.string().max(500).optional(),
   goalFocus: z.string().max(120).optional(),
   notes: z.string().max(1000).optional()
 });

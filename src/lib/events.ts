@@ -20,6 +20,8 @@ type TrackedEventField =
   | "expected_headcount"
   | "wet_promo"
   | "food_promo"
+  | "cost_total"
+  | "cost_details"
   | "goal_focus"
   | "notes";
 
@@ -33,6 +35,8 @@ const EVENT_FIELD_LABELS: Record<TrackedEventField, string> = {
   expected_headcount: "Headcount",
   wet_promo: "Wet promotion",
   food_promo: "Food promotion",
+  cost_total: "Total cost",
+  cost_details: "Cost details",
   goal_focus: "Goals",
   notes: "Notes"
 };
@@ -178,6 +182,8 @@ export async function createEventDraft(payload: {
   expectedHeadcount?: number | null;
   wetPromo?: string | null;
   foodPromo?: string | null;
+  costTotal?: number | null;
+  costDetails?: string | null;
   goalFocus?: string | null;
   notes?: string | null;
 }): Promise<EventRow> {
@@ -197,6 +203,8 @@ export async function createEventDraft(payload: {
       expected_headcount: payload.expectedHeadcount ?? null,
       wet_promo: payload.wetPromo ?? null,
       food_promo: payload.foodPromo ?? null,
+      cost_total: payload.costTotal ?? null,
+      cost_details: payload.costDetails ?? null,
       goal_focus: payload.goalFocus ?? null,
       notes: payload.notes ?? null,
       assignee_id: payload.createdBy
@@ -220,6 +228,8 @@ export async function createEventDraft(payload: {
       expected_headcount: data.expected_headcount,
       wet_promo: data.wet_promo,
       food_promo: data.food_promo,
+      cost_total: data.cost_total,
+      cost_details: data.cost_details,
       goal_focus: data.goal_focus,
       notes: data.notes
     },

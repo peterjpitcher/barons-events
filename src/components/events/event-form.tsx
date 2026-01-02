@@ -273,6 +273,34 @@ export function EventForm({
             <p className="text-xs text-subtle">List any paired food promotions or add-ons.</p>
           </div>
 
+          <div className="space-y-4 rounded-lg bg-[var(--color-surface-soft)] p-4">
+            <h3 className="font-semibold text-[var(--color-text)]">Financials</h3>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="costTotal">Total predicted cost (£)</Label>
+                <Input
+                  id="costTotal"
+                  name="costTotal"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  defaultValue={defaultValues?.cost_total ?? ""}
+                  placeholder="e.g. 500.00"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="costDetails">Cost details</Label>
+                <Textarea
+                  id="costDetails"
+                  name="costDetails"
+                  rows={2}
+                  defaultValue={defaultValues?.cost_details ?? ""}
+                  placeholder="Breakdown of expenses..."
+                />
+              </div>
+            </div>
+          </div>
+
           <div className="space-y-3">
             <Label>Goals</Label>
             <p className="text-xs text-subtle">Select the goals that matter for this event. Pick as many as apply.</p>

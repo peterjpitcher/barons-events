@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { EventForm } from "@/components/events/event-form";
+import { DeleteEventButton } from "@/components/events/delete-event-button";
 import { DecisionForm } from "@/components/reviews/decision-form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -302,6 +303,12 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
                     <span className="font-semibold text-[var(--color-text)]">Food promo:</span> {event.food_promo}
                   </p>
                 ) : null}
+                {event.cost_total != null ? (
+                  <p>
+                    <span className="font-semibold text-[var(--color-text)]">Cost:</span> £{event.cost_total.toFixed(2)}
+                    {event.cost_details ? <span className="block text-xs text-subtle mt-1">{event.cost_details}</span> : null}
+                  </p>
+                ) : null}
               </div>
               {hasGoalDetails ? (
                 <div className="space-y-2">
@@ -388,6 +395,18 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
                 <Button asChild variant="secondary">
                   <Link href={`/debriefs/${event.id}`}>{event.debrief ? "Update debrief" : "Add debrief"}</Link>
                 </Button>
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {!canEdit && (user.role === "central_planner" || (user.role === "venue_manager" && event.created_by === user.id && ["draft", "submitted", "needs_revisions"].includes(event.status))) ? (
+            <Card className="border-red-100 bg-red-50/50">
+              <CardHeader>
+                <CardTitle className="text-red-700">Danger zone</CardTitle>
+                <CardDescription>Irreversible actions for this event.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <DeleteEventButton eventId={event.id} />
               </CardContent>
             </Card>
           ) : null}

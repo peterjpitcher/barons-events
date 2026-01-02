@@ -66,6 +66,8 @@ export interface Database {
           created_by: string;
           assignee_id: string | null;
           submitted_at: string | null;
+          cost_total: number | null;
+          cost_details: string | null;
           created_at: string;
           updated_at: string;
         };

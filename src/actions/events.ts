@@ -124,6 +124,8 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
     goalFocus: formData.getAll("goalFocus").length
       ? formData.getAll("goalFocus").join(",")
       : formData.get("goalFocus") ?? undefined,
+    costTotal: formData.get("costTotal") ?? undefined,
+    costDetails: formData.get("costDetails") ?? undefined,
     notes: formData.get("notes") ?? undefined
   });
 
@@ -152,6 +154,8 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
         expected_headcount: values.expectedHeadcount ?? null,
         wet_promo: values.wetPromo ?? null,
         food_promo: values.foodPromo ?? null,
+        cost_total: values.costTotal ?? null,
+        cost_details: values.costDetails ?? null,
         goal_focus: values.goalFocus ?? null,
         notes: values.notes ?? null
       }, user.id);
@@ -174,6 +178,8 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
       expectedHeadcount: values.expectedHeadcount ?? null,
       wetPromo: values.wetPromo ?? null,
       foodPromo: values.foodPromo ?? null,
+      costTotal: values.costTotal ?? null,
+      costDetails: values.costDetails ?? null,
       goalFocus: values.goalFocus ?? null,
       notes: values.notes ?? null
     });
@@ -236,6 +242,8 @@ export async function submitEventForReviewAction(
           goalFocus: formData.getAll("goalFocus").length
             ? formData.getAll("goalFocus").join(",")
             : formData.get("goalFocus") ?? undefined,
+          costTotal: formData.get("costTotal") ?? undefined,
+          costDetails: formData.get("costDetails") ?? undefined,
           notes: formData.get("notes") ?? undefined
         });
 
@@ -262,6 +270,8 @@ export async function submitEventForReviewAction(
         expectedHeadcount: values.expectedHeadcount ?? null,
         wetPromo: values.wetPromo ?? null,
         foodPromo: values.foodPromo ?? null,
+        costTotal: values.costTotal ?? null,
+        costDetails: values.costDetails ?? null,
         goalFocus: values.goalFocus ?? null,
         notes: values.notes ?? null
       });
@@ -587,8 +597,9 @@ export async function deleteEventAction(_: ActionResult | undefined, formData: F
     }
 
     const canDelete =
-      (user.role === "central_planner" || (user.role === "venue_manager" && event.created_by === user.id)) &&
-      ["draft", "submitted", "needs_revisions"].includes(event.status);
+      user.role === "central_planner" ||
+      ((user.role === "venue_manager" && event.created_by === user.id) &&
+        ["draft", "submitted", "needs_revisions"].includes(event.status));
 
     if (!canDelete) {
       return { success: false, message: "You don't have permission to delete this event." };
