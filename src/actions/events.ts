@@ -144,7 +144,7 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
 
   try {
     if (values.eventId) {
-      await updateEventDraft(values.eventId, {
+      const updated = await updateEventDraft(values.eventId, {
         venue_id: values.venueId,
         title: values.title,
         event_type: values.eventType,
@@ -161,7 +161,7 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
       }, user.id);
       await appendEventVersion(values.eventId, user.id, {
         ...values,
-        status: "draft"
+        status: updated.status
       });
       revalidatePath(`/events/${values.eventId}`);
       return { success: true, message: "Draft updated." };

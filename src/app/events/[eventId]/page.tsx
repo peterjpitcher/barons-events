@@ -73,8 +73,8 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
   const venueSpaces = parseVenueSpaces(event.venue_space);
 
   const canEdit =
-    (user.role === "central_planner" || (user.role === "venue_manager" && event.created_by === user.id)) &&
-    ["draft", "submitted", "needs_revisions"].includes(event.status);
+    (user.role === "central_planner" && ["draft", "submitted", "needs_revisions", "approved"].includes(event.status)) ||
+    ((user.role === "venue_manager" && event.created_by === user.id) && ["draft", "submitted", "needs_revisions"].includes(event.status));
   const canReview =
     (user.role === "reviewer" && event.assignee_id === user.id && ["submitted", "needs_revisions"].includes(event.status)) ||
     (user.role === "central_planner" && ["submitted", "needs_revisions"].includes(event.status));
