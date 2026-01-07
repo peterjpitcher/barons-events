@@ -25,7 +25,7 @@ export function DeleteEventButton({ eventId }: { eventId: string }) {
   return (
     <form action={formAction} onSubmit={handleSubmit}>
       <input type="hidden" name="eventId" value={eventId} />
-      <Button variant="destructive" disabled={isPending}>
+      <Button type="submit" variant="destructive" disabled={isPending}>
         <Trash2Icon className="mr-2 h-4 w-4" />
         {isPending ? "Deleting..." : "Delete event"}
       </Button>

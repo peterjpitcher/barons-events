@@ -12,10 +12,12 @@ import {
   updateVenueArea,
   deleteVenueArea
 } from "@/lib/venues";
+import { getFieldErrors, type FieldErrors } from "@/lib/form-errors";
 
 type ActionResult = {
   success: boolean;
   message?: string;
+  fieldErrors?: FieldErrors;
 };
 
 const uuidOrUndefined = z.preprocess(
@@ -47,12 +49,16 @@ export async function createVenueAction(
   }
 
   const parsed = venueSchema.safeParse({
-    name: formData.get("name"),
-    defaultReviewerId: formData.get("defaultReviewerId")
+    name: typeof formData.get("name") === "string" ? formData.get("name") : "",
+    defaultReviewerId: typeof formData.get("defaultReviewerId") === "string" ? formData.get("defaultReviewerId") : ""
   });
 
   if (!parsed.success) {
-    return { success: false, message: parsed.error.issues[0]?.message ?? "Check the form and try again." };
+    return {
+      success: false,
+      message: "Check the highlighted fields.",
+      fieldErrors: getFieldErrors(parsed.error)
+    };
   }
 
   try {
@@ -83,12 +89,16 @@ export async function updateVenueAction(
 
   const parsed = venueSchema.safeParse({
     venueId: formData.get("venueId"),
-    name: formData.get("name"),
-    defaultReviewerId: formData.get("defaultReviewerId")
+    name: typeof formData.get("name") === "string" ? formData.get("name") : "",
+    defaultReviewerId: typeof formData.get("defaultReviewerId") === "string" ? formData.get("defaultReviewerId") : ""
   });
 
   if (!parsed.success) {
-    return { success: false, message: parsed.error.issues[0]?.message ?? "Check the form and try again." };
+    return {
+      success: false,
+      message: "Check the highlighted fields.",
+      fieldErrors: getFieldErrors(parsed.error)
+    };
   }
   if (!parsed.data.venueId) {
     return { success: false, message: "Missing venue reference." };
@@ -163,12 +173,16 @@ export async function createVenueAreaAction(
 
   const parsed = areaSchema.safeParse({
     venueId: formData.get("venueId"),
-    name: formData.get("name"),
+    name: typeof formData.get("name") === "string" ? formData.get("name") : "",
     capacity: formData.get("capacity")
   });
 
   if (!parsed.success) {
-    return { success: false, message: parsed.error.issues[0]?.message ?? "Check the details." };
+    return {
+      success: false,
+      message: "Check the highlighted fields.",
+      fieldErrors: getFieldErrors(parsed.error)
+    };
   }
 
   try {
@@ -200,12 +214,16 @@ export async function updateVenueAreaAction(
   const parsed = areaSchema.safeParse({
     areaId: formData.get("areaId"),
     venueId: formData.get("venueId"),
-    name: formData.get("name"),
+    name: typeof formData.get("name") === "string" ? formData.get("name") : "",
     capacity: formData.get("capacity")
   });
 
   if (!parsed.success || !parsed.data.areaId) {
-    return { success: false, message: parsed.success ? "Missing area reference." : parsed.error.issues[0]?.message ?? "Check the details." };
+    return {
+      success: false,
+      message: parsed.success ? "Missing area reference." : "Check the highlighted fields.",
+      fieldErrors: parsed.success ? undefined : getFieldErrors(parsed.error)
+    };
   }
 
   try {

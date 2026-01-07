@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { Button } from "@/components/ui/button";
+import { FieldError } from "@/components/ui/field-error";
 import { completePasswordResetAction, type ResetPasswordState } from "@/actions/auth";
 
 type ResetPasswordCardProps = {
@@ -17,6 +18,7 @@ type ResetPasswordCardProps = {
 };
 
 const INITIAL_STATE: ResetPasswordState = { status: "idle" };
+const errorInputClass = "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]";
 
 export function ResetPasswordCard({ initialQuery }: ResetPasswordCardProps) {
   const [state, formAction] = useFormState(completePasswordResetAction, INITIAL_STATE);
@@ -28,6 +30,7 @@ export function ResetPasswordCard({ initialQuery }: ResetPasswordCardProps) {
   const [accessToken, setAccessToken] = useState(initialQuery.access_token ?? "");
   const [refreshToken, setRefreshToken] = useState(initialQuery.refresh_token ?? "");
   const [localError, setLocalError] = useState<string | null>(null);
+  const [localFieldErrors, setLocalFieldErrors] = useState<Record<string, string>>({});
 
   const hasResetToken = useMemo(
     () => Boolean(token) || (Boolean(accessToken) && Boolean(refreshToken)),
@@ -58,6 +61,7 @@ export function ResetPasswordCard({ initialQuery }: ResetPasswordCardProps) {
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     setLocalError(null);
+    setLocalFieldErrors({});
 
     if (!hasResetToken) {
       event.preventDefault();
@@ -65,15 +69,21 @@ export function ResetPasswordCard({ initialQuery }: ResetPasswordCardProps) {
       return;
     }
 
-    if (password.length < 8) {
-      event.preventDefault();
-      setLocalError("Password must be at least 8 characters long.");
-      return;
+    const nextFieldErrors: Record<string, string> = {};
+
+    if (password.trim().length < 8) {
+      nextFieldErrors.password = "Password must be at least 8 characters long.";
     }
 
-    if (password !== confirmPassword) {
+    if (confirmPassword.trim().length < 8) {
+      nextFieldErrors.confirmPassword = "Confirm your password with at least 8 characters.";
+    } else if (password !== confirmPassword) {
+      nextFieldErrors.confirmPassword = "Passwords must match.";
+    }
+
+    if (Object.keys(nextFieldErrors).length) {
       event.preventDefault();
-      setLocalError("Passwords must match.");
+      setLocalFieldErrors(nextFieldErrors);
     }
   };
 
@@ -98,7 +108,9 @@ export function ResetPasswordCard({ initialQuery }: ResetPasswordCardProps) {
     );
   }
 
-  const errorMessage = localError ?? state.message;
+  const passwordError = localFieldErrors.password ?? state.fieldErrors?.password;
+  const confirmPasswordError = localFieldErrors.confirmPassword ?? state.fieldErrors?.confirmPassword;
+  const errorMessage = localError ?? (state.fieldErrors ? null : state.message);
 
   return (
     <Card className={AUTH_CARD_CLASS}>
@@ -120,7 +132,7 @@ export function ResetPasswordCard({ initialQuery }: ResetPasswordCardProps) {
             manually, open the password reset email again and use the latest link.
           </p>
         ) : null}
-        <form action={formAction} onSubmit={handleSubmit} className="space-y-6">
+        <form action={formAction} onSubmit={handleSubmit} className="space-y-6" noValidate>
           <input type="hidden" name="token" value={token} />
           <input type="hidden" name="accessToken" value={accessToken} />
           <input type="hidden" name="refreshToken" value={refreshToken} />
@@ -139,6 +151,9 @@ export function ResetPasswordCard({ initialQuery }: ResetPasswordCardProps) {
                 minLength={8}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
+                aria-invalid={Boolean(passwordError)}
+                aria-describedby={passwordError ? "password-error" : undefined}
+                className={passwordError ? errorInputClass : undefined}
               />
               <button
                 type="button"
@@ -149,6 +164,7 @@ export function ResetPasswordCard({ initialQuery }: ResetPasswordCardProps) {
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </div>
+            <FieldError id="password-error" message={passwordError} />
             <p className="text-xs text-muted">Must be at least 8 characters long.</p>
           </div>
 
@@ -166,6 +182,9 @@ export function ResetPasswordCard({ initialQuery }: ResetPasswordCardProps) {
                 minLength={8}
                 value={confirmPassword}
                 onChange={(event) => setConfirmPassword(event.target.value)}
+                aria-invalid={Boolean(confirmPasswordError)}
+                aria-describedby={confirmPasswordError ? "confirm-password-error" : undefined}
+                className={confirmPasswordError ? errorInputClass : undefined}
               />
               <button
                 type="button"
@@ -176,6 +195,7 @@ export function ResetPasswordCard({ initialQuery }: ResetPasswordCardProps) {
                 {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </div>
+            <FieldError id="confirm-password-error" message={confirmPasswordError} />
           </div>
 
           <SubmitButton

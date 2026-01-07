@@ -6,10 +6,12 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { updateUser } from "@/lib/users";
 import { createSupabaseActionClient, createSupabaseServiceRoleClient } from "@/lib/supabase/server";
+import { getFieldErrors, type FieldErrors } from "@/lib/form-errors";
 
 type ActionResult = {
   success: boolean;
   message?: string;
+  fieldErrors?: FieldErrors;
 };
 
 const userUpdateSchema = z.object({
@@ -33,13 +35,17 @@ export async function updateUserAction(
 
   const parsed = userUpdateSchema.safeParse({
     userId: formData.get("userId"),
-    fullName: formData.get("fullName"),
-    role: formData.get("role"),
+    fullName: typeof formData.get("fullName") === "string" ? formData.get("fullName") : undefined,
+    role: typeof formData.get("role") === "string" ? formData.get("role") : "",
     venueId: formData.get("venueId")
   });
 
   if (!parsed.success) {
-    return { success: false, message: parsed.error.issues[0]?.message ?? "Check the details." };
+    return {
+      success: false,
+      message: "Check the highlighted fields.",
+      fieldErrors: getFieldErrors(parsed.error)
+    };
   }
 
   try {
@@ -76,14 +82,18 @@ export async function inviteUserAction(
   }
 
   const parsed = inviteSchema.safeParse({
-    email: formData.get("email"),
-    fullName: formData.get("fullName"),
-    role: formData.get("role"),
+    email: typeof formData.get("email") === "string" ? formData.get("email") : "",
+    fullName: typeof formData.get("fullName") === "string" ? formData.get("fullName") : undefined,
+    role: typeof formData.get("role") === "string" ? formData.get("role") : "",
     venueId: formData.get("venueId")
   });
 
   if (!parsed.success) {
-    return { success: false, message: parsed.error.issues[0]?.message ?? "Check the details." };
+    return {
+      success: false,
+      message: "Check the highlighted fields.",
+      fieldErrors: getFieldErrors(parsed.error)
+    };
   }
 
   const adminClient = createSupabaseServiceRoleClient();

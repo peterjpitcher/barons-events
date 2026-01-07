@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { SubmitButton } from "@/components/ui/submit-button";
+import { FieldError } from "@/components/ui/field-error";
 import { useRouter } from "next/navigation";
 import { Send, Save } from "lucide-react";
 
@@ -26,6 +27,8 @@ const roleLabels: Record<AppUserRow["role"], string> = {
   reviewer: "Reviewer",
   executive: "Executive"
 };
+
+const errorInputClass = "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]";
 
 export function UsersManager({ users, venues }: UsersManagerProps) {
   return (
@@ -52,6 +55,8 @@ function InviteUserForm({ venues }: { venues: VenueRow[] }) {
   const [state, formAction] = useActionState(inviteUserAction, undefined);
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
+  const emailError = state?.fieldErrors?.email;
+  const roleError = state?.fieldErrors?.role;
 
   useEffect(() => {
     if (!state?.message) return;
@@ -59,7 +64,7 @@ function InviteUserForm({ venues }: { venues: VenueRow[] }) {
       toast.success(state.message);
       formRef.current?.reset();
       router.refresh();
-    } else {
+    } else if (!state.fieldErrors) {
       toast.error(state.message);
     }
   }, [state, router]);
@@ -71,10 +76,20 @@ function InviteUserForm({ venues }: { venues: VenueRow[] }) {
         <CardDescription>Send an email invite and set their initial role and venue link.</CardDescription>
       </CardHeader>
       <CardContent>
-        <form ref={formRef} action={formAction} className="grid gap-4 md:grid-cols-2">
+        <form ref={formRef} action={formAction} className="grid gap-4 md:grid-cols-2" noValidate>
           <div className="space-y-2">
             <Label htmlFor="invite-email">Email</Label>
-            <Input id="invite-email" name="email" type="email" placeholder="name@example.com" required />
+            <Input
+              id="invite-email"
+              name="email"
+              type="email"
+              placeholder="name@example.com"
+              required
+              aria-invalid={Boolean(emailError)}
+              aria-describedby={emailError ? "invite-email-error" : undefined}
+              className={emailError ? errorInputClass : undefined}
+            />
+            <FieldError id="invite-email-error" message={emailError} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="invite-name">Full name (optional)</Label>
@@ -82,13 +97,22 @@ function InviteUserForm({ venues }: { venues: VenueRow[] }) {
           </div>
           <div className="space-y-2">
             <Label htmlFor="invite-role">Role</Label>
-            <Select id="invite-role" name="role" defaultValue="venue_manager" required>
+            <Select
+              id="invite-role"
+              name="role"
+              defaultValue="venue_manager"
+              required
+              aria-invalid={Boolean(roleError)}
+              aria-describedby={roleError ? "invite-role-error" : undefined}
+              className={roleError ? errorInputClass : undefined}
+            >
               {Object.entries(roleLabels).map(([value, label]) => (
                 <option key={value} value={value}>
                   {label}
                 </option>
               ))}
             </Select>
+            <FieldError id="invite-role-error" message={roleError} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="invite-venue">Linked venue (optional)</Label>

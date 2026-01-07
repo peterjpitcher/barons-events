@@ -41,6 +41,33 @@ const EVENT_FIELD_LABELS: Record<TrackedEventField, string> = {
   notes: "Notes"
 };
 
+function extractMissingColumn(error: { code?: string; message?: string } | null | undefined): string | null {
+  if (!error) return null;
+  if (error.code && error.code !== "PGRST204") return null;
+  const message = error.message ?? "";
+  const match = message.match(/Could not find the '([^']+)' column/i);
+  return match?.[1] ?? null;
+}
+
+function normaliseOptionalText(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : null;
+}
+
+function normaliseOptionalNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed.length) return null;
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
 function labelsForInitialValues(record: EventRow): string[] {
   const labels: string[] = [];
   (Object.keys(EVENT_FIELD_LABELS) as TrackedEventField[]).forEach((field) => {
@@ -162,12 +189,42 @@ export async function getEventDetail(eventId: string): Promise<EventDetail | nul
 
   const record = data as any;
 
+  const versions: any[] = Array.isArray(record.versions) ? record.versions : [];
+
+  const latestVersion = versions.reduce((current: any | null, candidate: any) => {
+    if (!candidate) return current;
+    const candidateVersion = typeof candidate.version === "number" ? candidate.version : Number(candidate.version);
+    if (!Number.isFinite(candidateVersion)) return current;
+    if (!current) return candidate;
+    const currentVersion = typeof current.version === "number" ? current.version : Number(current.version);
+    if (!Number.isFinite(currentVersion)) return candidate;
+    return candidateVersion > currentVersion ? candidate : current;
+  }, null);
+
+  const latestPayload =
+    latestVersion && typeof latestVersion.payload === "object" && latestVersion.payload && !Array.isArray(latestVersion.payload)
+      ? (latestVersion.payload as Record<string, unknown>)
+      : null;
+
+  const hasCostTotal = Object.prototype.hasOwnProperty.call(record, "cost_total");
+  const hasCostDetails = Object.prototype.hasOwnProperty.call(record, "cost_details");
+
+  const costTotal = hasCostTotal
+    ? normaliseOptionalNumber(record.cost_total)
+    : normaliseOptionalNumber(latestPayload?.cost_total) ?? normaliseOptionalNumber(latestPayload?.costTotal);
+
+  const costDetails = hasCostDetails
+    ? normaliseOptionalText(record.cost_details)
+    : normaliseOptionalText(latestPayload?.cost_details as any) ?? normaliseOptionalText(latestPayload?.costDetails as any);
+
   return {
     ...record,
     venue: Array.isArray(record.venue) ? record.venue[0] : (record.venue as VenueRow),
-    versions: Array.isArray(record.versions) ? record.versions : [],
+    versions,
     approvals: Array.isArray(record.approvals) ? record.approvals : [],
-    debrief: Array.isArray(record.debrief) ? record.debrief[0] ?? null : (record.debrief as DebriefRow | null)
+    debrief: Array.isArray(record.debrief) ? record.debrief[0] ?? null : (record.debrief as DebriefRow | null),
+    cost_total: costTotal,
+    cost_details: costDetails
   };
 }
 
@@ -189,31 +246,55 @@ export async function createEventDraft(payload: {
 }): Promise<EventRow> {
   const supabase = await createSupabaseActionClient();
 
-  const { data, error } = await supabase
-    .from("events")
-    .insert({
-      venue_id: payload.venueId,
-      created_by: payload.createdBy,
-      title: payload.title,
-      event_type: payload.eventType,
-      status: "draft",
-      start_at: payload.startAt,
-      end_at: payload.endAt,
-      venue_space: payload.venueSpace,
-      expected_headcount: payload.expectedHeadcount ?? null,
-      wet_promo: payload.wetPromo ?? null,
-      food_promo: payload.foodPromo ?? null,
-      cost_total: payload.costTotal ?? null,
-      cost_details: payload.costDetails ?? null,
-      goal_focus: payload.goalFocus ?? null,
-      notes: payload.notes ?? null,
-      assignee_id: payload.createdBy
-    })
-    .select()
-    .single();
+  const costDetails = normaliseOptionalText(payload.costDetails);
 
-  if (error) {
-    throw new Error(`Could not create event: ${error.message}`);
+  const insertPayload: Record<string, unknown> = {
+    venue_id: payload.venueId,
+    created_by: payload.createdBy,
+    title: payload.title,
+    event_type: payload.eventType,
+    status: "draft",
+    start_at: payload.startAt,
+    end_at: payload.endAt,
+    venue_space: payload.venueSpace,
+    expected_headcount: payload.expectedHeadcount ?? null,
+    wet_promo: payload.wetPromo ?? null,
+    food_promo: payload.foodPromo ?? null,
+    goal_focus: payload.goalFocus ?? null,
+    notes: payload.notes ?? null,
+    assignee_id: payload.createdBy
+  };
+
+  if (payload.costTotal !== null && payload.costTotal !== undefined) {
+    insertPayload["cost_total"] = payload.costTotal;
+  }
+
+  if (costDetails) {
+    insertPayload["cost_details"] = costDetails;
+  }
+
+  let data: EventRow | null = null;
+  let insertError: { code?: string; message: string } | null = null;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const result = await supabase.from("events").insert(insertPayload as any).select().single();
+    if (!result.error) {
+      data = result.data as EventRow;
+      insertError = null;
+      break;
+    }
+
+    insertError = result.error;
+    const missingColumn = extractMissingColumn(result.error);
+    if (!missingColumn || !(missingColumn in insertPayload)) {
+      break;
+    }
+
+    delete insertPayload[missingColumn];
+  }
+
+  if (!data || insertError) {
+    throw new Error(`Could not create event: ${insertError?.message ?? "Unknown error"}`);
   }
 
   await supabase.from("event_versions").insert({
@@ -228,8 +309,8 @@ export async function createEventDraft(payload: {
       expected_headcount: data.expected_headcount,
       wet_promo: data.wet_promo,
       food_promo: data.food_promo,
-      cost_total: data.cost_total,
-      cost_details: data.cost_details,
+      cost_total: payload.costTotal ?? data.cost_total ?? null,
+      cost_details: costDetails ?? data.cost_details ?? null,
       goal_focus: data.goal_focus,
       notes: data.notes
     },
@@ -266,19 +347,45 @@ export async function updateEventDraft(eventId: string, updates: Partial<EventRo
 
   const previous = existing as EventRow;
 
-  const { data, error } = await supabase
-    .from("events")
-    .update(updates)
-    .eq("id", eventId)
-    .select()
-    .single();
+  const updatePayload: Record<string, unknown> = { ...updates };
 
-  if (error) {
-    throw new Error(`Could not update event: ${error.message}`);
+  if ("cost_details" in updatePayload) {
+    const normalised = normaliseOptionalText(updatePayload["cost_details"] as any);
+    updatePayload["cost_details"] = normalised;
+  }
+
+  let data: EventRow | null = null;
+  let updateError: { code?: string; message: string } | null = null;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const result = await supabase
+      .from("events")
+      .update(updatePayload as any)
+      .eq("id", eventId)
+      .select()
+      .single();
+
+    if (!result.error) {
+      data = result.data as EventRow;
+      updateError = null;
+      break;
+    }
+
+    updateError = result.error;
+    const missingColumn = extractMissingColumn(result.error);
+    if (!missingColumn || !(missingColumn in updatePayload)) {
+      break;
+    }
+
+    delete updatePayload[missingColumn];
+  }
+
+  if (!data || updateError) {
+    throw new Error(`Could not update event: ${updateError?.message ?? "Unknown error"}`);
   }
 
   if (actorId) {
-    const labels = labelsForUpdatedValues(previous, updates);
+    const labels = labelsForUpdatedValues(previous, updatePayload as Partial<EventRow>);
     if (labels.length) {
       await recordAuditLogEntry({
         entity: "event",

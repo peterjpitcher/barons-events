@@ -3,11 +3,8 @@ import Link from "next/link";
 import { AuthLayout } from "@/components/auth/auth-layout";
 import { AUTH_CARD_CLASS, AUTH_CARD_CONTENT_CLASS, AUTH_CARD_HEADER_CLASS } from "@/components/auth/styles";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { signInAction } from "@/actions/auth";
 import { getSession } from "@/lib/auth";
-import { SubmitButton } from "@/components/ui/submit-button";
+import { LoginForm } from "./login-form";
 
 export const metadata = {
   title: "Sign in · Barons Events",
@@ -32,11 +29,6 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
     (await searchParams?.catch(() => ({} as SearchParams))) ??
     ({} as SearchParams);
   const redirectTarget = sanitizeRedirect(query.redirectedFrom);
-  const errorMessage = query.error === "auth"
-    ? "Those details didn't match."
-    : query.error === "invalid"
-      ? "Please check your email and password."
-      : null;
 
   if (session) {
     redirect(redirectTarget);
@@ -58,23 +50,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           </CardDescription>
         </CardHeader>
         <CardContent className={AUTH_CARD_CONTENT_CLASS}>
-          <form action={signInAction} className="space-y-6">
-            <input type="hidden" name="redirectTo" value={redirectTarget} />
-            <div className="space-y-2">
-              <Label className="text-[var(--color-text-subtle)]" htmlFor="email">
-                Email
-              </Label>
-              <Input id="email" name="email" type="email" autoComplete="email" required />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-[var(--color-text-subtle)]" htmlFor="password">
-                Password
-              </Label>
-              <Input id="password" name="password" type="password" autoComplete="current-password" required />
-            </div>
-            {errorMessage ? <p className="text-sm text-[var(--color-danger)]">{errorMessage}</p> : null}
-            <SubmitButton label="Sign in" />
-          </form>
+          <LoginForm redirectTo={redirectTarget} />
           <div className="space-y-3 text-sm text-muted">
             <Link href="/forgot-password" className="font-medium text-[var(--color-primary-700)] underline">
               Reset your password

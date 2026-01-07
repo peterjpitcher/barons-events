@@ -5,10 +5,12 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { createEventType, updateEventType, deleteEventType } from "@/lib/event-types";
+import { getFieldErrors, type FieldErrors } from "@/lib/form-errors";
 
 type ActionResult = {
   success: boolean;
   message?: string;
+  fieldErrors?: FieldErrors;
 };
 
 const baseSchema = z.object({
@@ -26,11 +28,15 @@ export async function createEventTypeAction(
   }
 
   const parsed = baseSchema.safeParse({
-    label: formData.get("label")
+    label: typeof formData.get("label") === "string" ? formData.get("label") : ""
   });
 
   if (!parsed.success) {
-    return { success: false, message: parsed.error.issues[0]?.message ?? "Check the details." };
+    return {
+      success: false,
+      message: "Check the highlighted fields.",
+      fieldErrors: getFieldErrors(parsed.error)
+    };
   }
 
   try {
@@ -59,11 +65,15 @@ export async function updateEventTypeAction(
 
   const parsed = updateSchema.safeParse({
     typeId: formData.get("typeId"),
-    label: formData.get("label")
+    label: typeof formData.get("label") === "string" ? formData.get("label") : ""
   });
 
   if (!parsed.success) {
-    return { success: false, message: parsed.error.issues[0]?.message ?? "Check the details." };
+    return {
+      success: false,
+      message: "Check the highlighted fields.",
+      fieldErrors: getFieldErrors(parsed.error)
+    };
   }
 
   try {

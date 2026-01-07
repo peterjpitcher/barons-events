@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createSupabaseActionClient, createSupabaseServiceRoleClient } from "@/lib/supabase/server";
 import { sendPasswordResetEmail } from "@/lib/notifications";
+import { getFieldErrors, type FieldErrors } from "@/lib/form-errors";
 
 const credentialsSchema = z.object({
   email: z.string().email({ message: "Enter a valid email" }),
@@ -15,13 +16,22 @@ const emailOnlySchema = z.object({
 });
 
 export type ResetPasswordState =
-  | { status: "idle"; message?: undefined }
-  | { status: "success"; message?: undefined }
-  | { status: "invalid"; message?: string }
-  | { status: "mismatch"; message?: string }
-  | { status: "missing-token"; message?: string }
-  | { status: "expired"; message?: string }
-  | { status: "error"; message?: string };
+  | { status: "idle"; message?: undefined; fieldErrors?: FieldErrors }
+  | { status: "success"; message?: undefined; fieldErrors?: FieldErrors }
+  | { status: "invalid"; message?: string; fieldErrors?: FieldErrors }
+  | { status: "mismatch"; message?: string; fieldErrors?: FieldErrors }
+  | { status: "missing-token"; message?: string; fieldErrors?: FieldErrors }
+  | { status: "expired"; message?: string; fieldErrors?: FieldErrors }
+  | { status: "error"; message?: string; fieldErrors?: FieldErrors };
+
+type AuthFormState = {
+  success: boolean;
+  message?: string;
+  fieldErrors?: FieldErrors;
+};
+
+export type SignInState = AuthFormState;
+export type PasswordResetRequestState = AuthFormState;
 
 const passwordResetSchema = z
   .object({
@@ -57,7 +67,7 @@ function resolveAppUrl() {
   return siteUrl ?? appUrl ?? vercelUrl ?? "http://localhost:3000";
 }
 
-export async function signInAction(formData: FormData) {
+export async function signInAction(_: SignInState | undefined, formData: FormData): Promise<SignInState> {
   const redirectToRaw = formData.get("redirectTo");
   const redirectTarget =
     typeof redirectToRaw === "string" && redirectToRaw.startsWith("/") && !redirectToRaw.startsWith("//")
@@ -65,16 +75,16 @@ export async function signInAction(formData: FormData) {
       : "/";
 
   const parsed = credentialsSchema.safeParse({
-    email: formData.get("email"),
-    password: formData.get("password")
+    email: typeof formData.get("email") === "string" ? formData.get("email") : "",
+    password: typeof formData.get("password") === "string" ? formData.get("password") : ""
   });
 
   if (!parsed.success) {
-    const params = new URLSearchParams({ error: "invalid" });
-    if (redirectTarget !== "/") {
-      params.set("redirectedFrom", redirectTarget);
-    }
-    redirect(`/login?${params.toString()}`);
+    return {
+      success: false,
+      message: "Check the highlighted fields.",
+      fieldErrors: getFieldErrors(parsed.error)
+    };
   }
 
   const supabase = await createSupabaseActionClient();
@@ -82,11 +92,7 @@ export async function signInAction(formData: FormData) {
   const { error } = await supabase.auth.signInWithPassword(parsed.data);
 
   if (error) {
-    const params = new URLSearchParams({ error: "auth" });
-    if (redirectTarget !== "/") {
-      params.set("redirectedFrom", redirectTarget);
-    }
-    redirect(`/login?${params.toString()}`);
+    return { success: false, message: "Those details didn't match." };
   }
 
   redirect(redirectTarget);
@@ -98,14 +104,20 @@ export async function signOutAction() {
   redirect("/login");
 }
 
-export async function requestPasswordResetAction(formData: FormData) {
+export async function requestPasswordResetAction(
+  _: PasswordResetRequestState | undefined,
+  formData: FormData
+): Promise<PasswordResetRequestState> {
   const parsed = emailOnlySchema.safeParse({
-    email: formData.get("email")
+    email: typeof formData.get("email") === "string" ? formData.get("email") : ""
   });
 
   if (!parsed.success) {
-    const params = new URLSearchParams({ status: "invalid" });
-    redirect(`/forgot-password?${params.toString()}`);
+    return {
+      success: false,
+      message: "Check the highlighted fields.",
+      fieldErrors: getFieldErrors(parsed.error)
+    };
   }
 
   const redirectUrl = new URL("/reset-password", resolveAppUrl()).toString();
@@ -162,16 +174,28 @@ export async function completePasswordResetAction(
 
   if (!parsed.success) {
     const messages = parsed.error.issues.map((issue) => issue.message);
+    const fieldErrors = getFieldErrors(parsed.error);
     if (messages.includes("Passwords do not match.")) {
-      return { status: "mismatch", message: "Those passwords didn’t match. Try again with the same password twice." };
+      return {
+        status: "mismatch",
+        message: "Those passwords didn’t match. Try again with the same password twice.",
+        fieldErrors: {
+          ...fieldErrors,
+          confirmPassword: "Passwords do not match."
+        }
+      };
     }
     if (messages.includes("Missing reset token.")) {
       return {
         status: "missing-token",
-        message: "We couldn’t detect a valid reset token. Open the latest reset link from your email and try again."
+        message: "We couldn’t detect a valid reset token. Open the latest reset link from your email and try again.",
+        fieldErrors: {
+          ...fieldErrors,
+          token: "Missing reset token."
+        }
       };
     }
-    return { status: "invalid", message: "Passwords must be at least 8 characters." };
+    return { status: "invalid", message: "Check the highlighted fields.", fieldErrors };
   }
 
   const supabase = await createSupabaseActionClient();

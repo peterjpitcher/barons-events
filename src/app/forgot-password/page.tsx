@@ -1,12 +1,9 @@
 import Link from "next/link";
 import { AuthLayout } from "@/components/auth/auth-layout";
 import { AUTH_CARD_CLASS, AUTH_CARD_CONTENT_CLASS, AUTH_CARD_HEADER_CLASS } from "@/components/auth/styles";
-import { requestPasswordResetAction } from "@/actions/auth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { SubmitButton } from "@/components/ui/submit-button";
 import { Button } from "@/components/ui/button";
+import { ForgotPasswordForm } from "./forgot-password-form";
 
 export const metadata = {
   title: "Forgot password · Barons Events",
@@ -28,7 +25,6 @@ export default async function ForgotPasswordPage({ searchParams }: ForgotPasswor
   const email = query.email;
 
   const isSuccess = status === "sent";
-  const isInvalid = status === "invalid";
 
   return (
     <AuthLayout
@@ -69,27 +65,7 @@ export default async function ForgotPasswordPage({ searchParams }: ForgotPasswor
               </Button>
             </div>
           ) : (
-            <form action={requestPasswordResetAction} className="space-y-6">
-              <div className="space-y-2">
-                <Label className="text-[var(--color-text-subtle)]" htmlFor="email">
-                  Email
-                </Label>
-                <Input id="email" name="email" type="email" autoComplete="email" required />
-              </div>
-              {isInvalid ? (
-                <p className="text-sm text-[var(--color-danger)]">
-                  Please enter a valid Barons email address.
-                </p>
-              ) : null}
-              <SubmitButton label="Send reset link" pendingLabel="Sending link..." />
-              <p className="text-sm text-muted">
-                Remembered it?{" "}
-                <Link href="/login" className="underline">
-                  Head back to sign in
-                </Link>
-                .
-              </p>
-            </form>
+            <ForgotPasswordForm />
           )}
         </CardContent>
       </Card>

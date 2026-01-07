@@ -9,10 +9,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { SubmitButton } from "@/components/ui/submit-button";
+import { FieldError } from "@/components/ui/field-error";
 
 type ManagerProps = {
   eventTypes: EventTypeRow[];
 };
+
+const errorInputClass = "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]";
 
 export function EventTypesManager({ eventTypes }: ManagerProps) {
   return (
@@ -40,13 +43,14 @@ export function EventTypesManager({ eventTypes }: ManagerProps) {
 function CreateEventTypeForm() {
   const [state, formAction] = useActionState(createEventTypeAction, undefined);
   const formRef = useRef<HTMLFormElement>(null);
+  const labelError = state?.fieldErrors?.label;
 
   useEffect(() => {
     if (!state?.message) return;
     if (state.success) {
       toast.success(state.message);
       formRef.current?.reset();
-    } else {
+    } else if (!state.fieldErrors) {
       toast.error(state.message);
     }
   }, [state]);
@@ -58,10 +62,19 @@ function CreateEventTypeForm() {
         <CardDescription>Keep the picklist current so venues choose consistent labels.</CardDescription>
       </CardHeader>
       <CardContent>
-        <form ref={formRef} action={formAction} className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto]">
+        <form ref={formRef} action={formAction} className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto]" noValidate>
           <div className="space-y-2">
             <Label htmlFor="new-event-type">Event type name</Label>
-            <Input id="new-event-type" name="label" placeholder="Tap Takeover" required />
+            <Input
+              id="new-event-type"
+              name="label"
+              placeholder="Tap Takeover"
+              required
+              aria-invalid={Boolean(labelError)}
+              aria-describedby={labelError ? "new-event-type-error" : undefined}
+              className={labelError ? errorInputClass : undefined}
+            />
+            <FieldError id="new-event-type-error" message={labelError} />
             <p className="text-xs text-subtle">Make it short and specific (e.g., Quiz, Charity Night).</p>
           </div>
           <div className="flex items-end">
@@ -77,13 +90,15 @@ function EventTypeCardMobile({ type }: { type: EventTypeRow }) {
   const [updateState, updateAction] = useActionState(updateEventTypeAction, undefined);
   const [deleteState, deleteAction] = useActionState(deleteEventTypeAction, undefined);
   const router = useRouter();
+  const labelError = updateState?.fieldErrors?.label;
+  const labelErrorId = `event-type-${type.id}-error`;
 
   useEffect(() => {
     if (updateState?.message) {
       if (updateState.success) {
         toast.success(updateState.message);
         router.refresh();
-      } else {
+      } else if (!updateState.fieldErrors) {
         toast.error(updateState.message);
       }
     }
@@ -107,11 +122,20 @@ function EventTypeCardMobile({ type }: { type: EventTypeRow }) {
         <CardDescription>Last updated {new Date(type.created_at).toLocaleDateString("en-GB")}.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        <form action={updateAction} className="space-y-3">
+        <form action={updateAction} className="space-y-3" noValidate>
           <input type="hidden" name="typeId" value={type.id} />
           <div className="space-y-2">
             <Label htmlFor={`event-type-${type.id}`}>Event type name</Label>
-            <Input id={`event-type-${type.id}`} name="label" defaultValue={type.label} required />
+            <Input
+              id={`event-type-${type.id}`}
+              name="label"
+              defaultValue={type.label}
+              required
+              aria-invalid={Boolean(labelError)}
+              aria-describedby={labelError ? labelErrorId : undefined}
+              className={labelError ? errorInputClass : undefined}
+            />
+            <FieldError id={labelErrorId} message={labelError} />
           </div>
           <SubmitButton label="Save" pendingLabel="Saving..." />
         </form>
@@ -153,13 +177,15 @@ function EventTypeDesktopRow({ type, isFirst }: { type: EventTypeRow; isFirst: b
   const [updateState, updateAction] = useActionState(updateEventTypeAction, undefined);
   const [deleteState, deleteAction] = useActionState(deleteEventTypeAction, undefined);
   const router = useRouter();
+  const labelError = updateState?.fieldErrors?.label;
+  const labelErrorId = `event-type-desktop-${type.id}-error`;
 
   useEffect(() => {
     if (updateState?.message) {
       if (updateState.success) {
         toast.success(updateState.message);
         router.refresh();
-      } else {
+      } else if (!updateState.fieldErrors) {
         toast.error(updateState.message);
       }
     }
@@ -188,13 +214,23 @@ function EventTypeDesktopRow({ type, isFirst }: { type: EventTypeRow; isFirst: b
         <form
           action={updateAction}
           className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3"
+          noValidate
         >
           <input type="hidden" name="typeId" value={type.id} />
           <div className="flex flex-col gap-1">
             <label className="sr-only" htmlFor={`event-type-desktop-${type.id}`}>
               Event type name
             </label>
-            <Input id={`event-type-desktop-${type.id}`} name="label" defaultValue={type.label} required />
+            <Input
+              id={`event-type-desktop-${type.id}`}
+              name="label"
+              defaultValue={type.label}
+              required
+              aria-invalid={Boolean(labelError)}
+              aria-describedby={labelError ? labelErrorId : undefined}
+              className={labelError ? errorInputClass : undefined}
+            />
+            <FieldError id={labelErrorId} message={labelError} />
           </div>
           <SubmitButton label="Save" pendingLabel="Saving..." className="justify-self-end" />
         </form>

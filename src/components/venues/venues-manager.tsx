@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
 import { Loader2, Save, Trash2, Plus } from "lucide-react";
 import { Select } from "@/components/ui/select";
+import { FieldError } from "@/components/ui/field-error";
 
 type VenueArea = Database["public"]["Tables"]["venue_areas"]["Row"];
 
@@ -31,6 +32,8 @@ type VenuesManagerProps = {
   venues: VenueWithAreas[];
   reviewers: ReviewerOption[];
 };
+
+const errorInputClass = "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]";
 
 export function VenuesManager({ venues, reviewers }: VenuesManagerProps) {
   return (
@@ -59,6 +62,7 @@ function VenueCreateForm({ reviewers }: { reviewers: ReviewerOption[] }) {
   const [state, formAction] = useActionState(createVenueAction, undefined);
   const formRef = useRef<HTMLFormElement>(null);
   const router = useRouter();
+  const nameError = state?.fieldErrors?.name;
 
   useEffect(() => {
     if (!state?.message) return;
@@ -66,7 +70,7 @@ function VenueCreateForm({ reviewers }: { reviewers: ReviewerOption[] }) {
       toast.success(state.message);
       formRef.current?.reset();
       router.refresh();
-    } else {
+    } else if (!state.fieldErrors) {
       toast.error(state.message);
     }
   }, [state, router]);
@@ -78,10 +82,19 @@ function VenueCreateForm({ reviewers }: { reviewers: ReviewerOption[] }) {
         <CardDescription>Keep the basics tidy so planners and managers pick the right site.</CardDescription>
       </CardHeader>
       <CardContent>
-        <form ref={formRef} action={formAction} className="grid gap-4">
+        <form ref={formRef} action={formAction} className="grid gap-4" noValidate>
           <div className="space-y-2">
             <Label htmlFor="new-venue-name">Venue name</Label>
-            <Input id="new-venue-name" name="name" placeholder="Barons Riverside" required />
+            <Input
+              id="new-venue-name"
+              name="name"
+              placeholder="Barons Riverside"
+              required
+              aria-invalid={Boolean(nameError)}
+              aria-describedby={nameError ? "new-venue-name-error" : undefined}
+              className={nameError ? errorInputClass : undefined}
+            />
+            <FieldError id="new-venue-name-error" message={nameError} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="new-venue-default-reviewer">Default reviewer</Label>
@@ -113,13 +126,15 @@ function VenueCardMobile({ venue, reviewers }: { venue: VenueWithAreas; reviewer
   const [state, formAction] = useActionState(updateVenueAction, undefined);
   const [deleteState, deleteAction] = useActionState(deleteVenueAction, undefined);
   const router = useRouter();
+  const nameError = state?.fieldErrors?.name;
+  const nameErrorId = `venue-name-${venue.id}-error`;
 
   useEffect(() => {
     if (!state?.message) return;
     if (state.success) {
       toast.success(state.message);
       router.refresh();
-    } else {
+    } else if (!state.fieldErrors) {
       toast.error(state.message);
     }
   }, [state, router]);
@@ -141,11 +156,20 @@ function VenueCardMobile({ venue, reviewers }: { venue: VenueWithAreas; reviewer
         <CardDescription>Update details or remove the venue if it’s no longer in use.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-1 flex-col gap-4">
-        <form action={formAction} className="grid gap-4">
+        <form action={formAction} className="grid gap-4" noValidate>
           <input type="hidden" name="venueId" value={venue.id} />
           <div className="space-y-2">
             <Label htmlFor={`venue-name-${venue.id}`}>Venue name</Label>
-            <Input id={`venue-name-${venue.id}`} name="name" defaultValue={venue.name} required />
+            <Input
+              id={`venue-name-${venue.id}`}
+              name="name"
+              defaultValue={venue.name}
+              required
+              aria-invalid={Boolean(nameError)}
+              aria-describedby={nameError ? nameErrorId : undefined}
+              className={nameError ? errorInputClass : undefined}
+            />
+            <FieldError id={nameErrorId} message={nameError} />
           </div>
           <div className="space-y-2">
             <Label htmlFor={`venue-default-${venue.id}`}>Default reviewer</Label>
@@ -215,13 +239,15 @@ function VenueDesktopRow({ venue, reviewers, isFirst }: { venue: VenueWithAreas;
   const [state, formAction] = useActionState(updateVenueAction, undefined);
   const [deleteState, deleteAction] = useActionState(deleteVenueAction, undefined);
   const router = useRouter();
+  const nameError = state?.fieldErrors?.name;
+  const nameErrorId = `venue-name-desktop-${venue.id}-error`;
 
   useEffect(() => {
     if (!state?.message) return;
     if (state.success) {
       toast.success(state.message);
       router.refresh();
-    } else {
+    } else if (!state.fieldErrors) {
       toast.error(state.message);
     }
   }, [state, router]);
@@ -240,13 +266,22 @@ function VenueDesktopRow({ venue, reviewers, isFirst }: { venue: VenueWithAreas;
     <li
       className={`border-[var(--color-border)] px-6 py-5 ${isFirst ? "border-b" : "border-y"} hover:bg-[rgba(39,54,64,0.03)]`}
     >
-      <form action={formAction} className="grid grid-cols-[minmax(0,3fr)_minmax(0,2fr)_auto] items-start gap-4">
+      <form action={formAction} className="grid grid-cols-[minmax(0,3fr)_minmax(0,2fr)_auto] items-start gap-4" noValidate>
         <input type="hidden" name="venueId" value={venue.id} />
         <div className="flex flex-col gap-2">
           <label className="sr-only" htmlFor={`venue-name-desktop-${venue.id}`}>
             Venue name
           </label>
-          <Input id={`venue-name-desktop-${venue.id}`} name="name" defaultValue={venue.name} required />
+          <Input
+            id={`venue-name-desktop-${venue.id}`}
+            name="name"
+            defaultValue={venue.name}
+            required
+            aria-invalid={Boolean(nameError)}
+            aria-describedby={nameError ? nameErrorId : undefined}
+            className={nameError ? errorInputClass : undefined}
+          />
+          <FieldError id={nameErrorId} message={nameError} />
         </div>
         <div className="space-y-3 text-sm text-subtle">
           <div>
@@ -309,6 +344,8 @@ function VenueAreas({
   const [state, formAction] = useActionState(createVenueAreaAction, undefined);
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
+  const nameError = state?.fieldErrors?.name;
+  const nameErrorId = `new-area-name-${venueId}-error`;
 
   useEffect(() => {
     if (!state?.message) return;
@@ -316,7 +353,7 @@ function VenueAreas({
       toast.success(state.message);
       formRef.current?.reset();
       router.refresh();
-    } else {
+    } else if (!state.fieldErrors) {
       toast.error(state.message);
     }
   }, [state, router]);
@@ -334,11 +371,20 @@ function VenueAreas({
           Add every bookable space with its own capacity so planners can balance the load.
         </p>
       </div>
-      <form ref={formRef} action={formAction} className="flex flex-wrap items-end gap-3">
+      <form ref={formRef} action={formAction} className="flex flex-wrap items-end gap-3" noValidate>
         <input type="hidden" name="venueId" value={venueId} />
         <div className="flex-1 min-w-[160px] space-y-2">
           <Label htmlFor={`new-area-name-${venueId}`}>Area name</Label>
-          <Input id={`new-area-name-${venueId}`} name="name" placeholder="Main Bar" required />
+          <Input
+            id={`new-area-name-${venueId}`}
+            name="name"
+            placeholder="Main Bar"
+            required
+            aria-invalid={Boolean(nameError)}
+            aria-describedby={nameError ? nameErrorId : undefined}
+            className={nameError ? errorInputClass : undefined}
+          />
+          <FieldError id={nameErrorId} message={nameError} />
         </div>
         <div className="w-32 space-y-2">
           <Label htmlFor={`new-area-capacity-${venueId}`}>Capacity</Label>
@@ -374,13 +420,15 @@ function VenueAreaRow({
   const [state, formAction] = useActionState(updateVenueAreaAction, undefined);
   const [deleteState, deleteAction] = useActionState(deleteVenueAreaAction, undefined);
   const router = useRouter();
+  const nameError = state?.fieldErrors?.name;
+  const nameErrorId = `area-name-${area.id}-error`;
 
   useEffect(() => {
     if (!state?.message) return;
     if (state.success) {
       toast.success(state.message);
       router.refresh();
-    } else {
+    } else if (!state.fieldErrors) {
       toast.error(state.message);
     }
   }, [state, router]);
@@ -403,12 +451,21 @@ function VenueAreaRow({
   return (
     <div className={containerClass}>
       <div className="flex flex-wrap items-end gap-3">
-        <form action={formAction} className="flex flex-1 flex-wrap items-end gap-3">
+        <form action={formAction} className="flex flex-1 flex-wrap items-end gap-3" noValidate>
           <input type="hidden" name="areaId" value={area.id} />
           <input type="hidden" name="venueId" value={venueId} />
           <div className="flex-1 min-w-[160px] space-y-2">
             <Label htmlFor={`area-name-${area.id}`}>Area name</Label>
-            <Input id={`area-name-${area.id}`} name="name" defaultValue={area.name} required />
+            <Input
+              id={`area-name-${area.id}`}
+              name="name"
+              defaultValue={area.name}
+              required
+              aria-invalid={Boolean(nameError)}
+              aria-describedby={nameError ? nameErrorId : undefined}
+              className={nameError ? errorInputClass : undefined}
+            />
+            <FieldError id={nameErrorId} message={nameError} />
           </div>
           <div className="w-32 space-y-2">
             <Label htmlFor={`area-capacity-${area.id}`}>Capacity</Label>

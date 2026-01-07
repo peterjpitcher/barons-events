@@ -7,6 +7,7 @@ import { createSupabaseActionClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth";
 import { appendEventVersion, createEventDraft, recordApproval, updateEventDraft, updateEventAssignee } from "@/lib/events";
 import { eventFormSchema } from "@/lib/validation";
+import { getFieldErrors, type FieldErrors } from "@/lib/form-errors";
 import type { EventStatus } from "@/lib/types";
 import { sendEventSubmittedEmail, sendReviewDecisionEmail } from "@/lib/notifications";
 import { recordAuditLogEntry } from "@/lib/audit-log";
@@ -16,6 +17,7 @@ const reviewerFallback = z.string().uuid().optional();
 type ActionResult = {
   success: boolean;
   message?: string;
+  fieldErrors?: FieldErrors;
 };
 
 function normaliseVenueSpacesField(value: FormDataEntryValue | null): string {
@@ -109,14 +111,24 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
 
   const rawEventId = formData.get("eventId");
   const eventId = typeof rawEventId === "string" ? rawEventId.trim() || undefined : undefined;
+  const venueIdValue = formData.get("venueId");
+  const venueId = typeof venueIdValue === "string" ? venueIdValue : (user.venueId ?? "");
+  const titleValue = formData.get("title");
+  const title = typeof titleValue === "string" ? titleValue : "";
+  const eventTypeValue = formData.get("eventType");
+  const eventType = typeof eventTypeValue === "string" ? eventTypeValue : "";
+  const startAtValue = formData.get("startAt");
+  const startAt = typeof startAtValue === "string" ? startAtValue : "";
+  const endAtValue = formData.get("endAt");
+  const endAt = typeof endAtValue === "string" ? endAtValue : "";
 
   const parsed = eventFormSchema.safeParse({
     eventId,
-    venueId: formData.get("venueId") ?? user.venueId,
-    title: formData.get("title"),
-    eventType: formData.get("eventType"),
-    startAt: formData.get("startAt"),
-    endAt: formData.get("endAt"),
+    venueId,
+    title,
+    eventType,
+    startAt,
+    endAt,
     venueSpace: normaliseVenueSpacesField(formData.get("venueSpace")),
     expectedHeadcount: formData.get("expectedHeadcount") ?? undefined,
     wetPromo: formData.get("wetPromo") ?? undefined,
@@ -132,14 +144,19 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
   if (!parsed.success) {
     return {
       success: false,
-      message: parsed.error.issues[0]?.message ?? "Check the form and try again."
+      message: "Check the highlighted fields.",
+      fieldErrors: getFieldErrors(parsed.error)
     };
   }
 
   const values = parsed.data;
 
   if (!values.venueId) {
-    return { success: false, message: "Choose a venue before saving." };
+    return {
+      success: false,
+      message: "Choose a venue before saving.",
+      fieldErrors: { venueId: "Choose a venue" }
+    };
   }
 
   try {
@@ -227,14 +244,25 @@ export async function submitEventForReviewAction(
       }
       targetEventId = parsedId.data;
     } else {
+      const venueIdValue = formData.get("venueId");
+      const venueId = typeof venueIdValue === "string" ? venueIdValue : (user.venueId ?? "");
+      const titleValue = formData.get("title");
+      const title = typeof titleValue === "string" ? titleValue : "";
+      const eventTypeValue = formData.get("eventType");
+      const eventType = typeof eventTypeValue === "string" ? eventTypeValue : "";
+      const startAtValue = formData.get("startAt");
+      const startAt = typeof startAtValue === "string" ? startAtValue : "";
+      const endAtValue = formData.get("endAt");
+      const endAt = typeof endAtValue === "string" ? endAtValue : "";
+
       const parsed = eventFormSchema
         .omit({ eventId: true })
         .safeParse({
-          venueId: formData.get("venueId") ?? user.venueId,
-          title: formData.get("title"),
-          eventType: formData.get("eventType"),
-          startAt: formData.get("startAt"),
-          endAt: formData.get("endAt"),
+          venueId,
+          title,
+          eventType,
+          startAt,
+          endAt,
           venueSpace: normaliseVenueSpacesField(formData.get("venueSpace")),
           expectedHeadcount: formData.get("expectedHeadcount") ?? undefined,
           wetPromo: formData.get("wetPromo") ?? undefined,
@@ -250,13 +278,18 @@ export async function submitEventForReviewAction(
       if (!parsed.success) {
         return {
           success: false,
-          message: parsed.error.issues[0]?.message ?? "Check the form and try again."
+          message: "Check the highlighted fields.",
+          fieldErrors: getFieldErrors(parsed.error)
         };
       }
 
       const values = parsed.data;
       if (!values.venueId) {
-        return { success: false, message: "Choose a venue before submitting." };
+        return {
+          success: false,
+          message: "Choose a venue before submitting.",
+          fieldErrors: { venueId: "Choose a venue" }
+        };
       }
 
       const created = await createEventDraft({
@@ -421,11 +454,20 @@ export async function reviewerDecisionAction(
   const eventId = formData.get("eventId");
   const feedback = formData.get("feedback") ?? undefined;
 
-  const parsedDecision = z.enum(["approved", "needs_revisions", "rejected"]).safeParse(decision);
-  const parsedId = z.string().uuid().safeParse(eventId);
-
-  if (!parsedDecision.success || !parsedId.success) {
+  const parsedId = z.string().uuid().safeParse(typeof eventId === "string" ? eventId : "");
+  if (!parsedId.success) {
     return { success: false, message: "Decision could not be processed." };
+  }
+
+  const parsedDecision = z.enum(["approved", "needs_revisions", "rejected"]).safeParse(
+    typeof decision === "string" ? decision : ""
+  );
+  if (!parsedDecision.success) {
+    return {
+      success: false,
+      message: "Choose a decision before saving.",
+      fieldErrors: { decision: "Choose a decision" }
+    };
   }
 
   const newStatus = parsedDecision.data as EventStatus;

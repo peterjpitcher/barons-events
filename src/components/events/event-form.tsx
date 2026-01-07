@@ -10,7 +10,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
+import { FieldError } from "@/components/ui/field-error";
 import { EVENT_GOALS } from "@/lib/event-goals";
+import { cn } from "@/lib/utils";
 import type { EventSummary } from "@/lib/events";
 import type { UserRole } from "@/lib/types";
 
@@ -60,12 +62,13 @@ export function EventForm({
 }: EventFormProps) {
   const [draftState, draftAction] = useActionState(saveEventDraftAction, undefined);
   const [submitState, submitAction] = useActionState(submitEventForReviewAction, undefined);
+  const [intent, setIntent] = useState<"draft" | "submit">("draft");
 
   useEffect(() => {
     if (draftState?.message) {
       if (draftState.success) {
         toast.success(draftState.message);
-      } else {
+      } else if (!draftState.fieldErrors) {
         toast.error(draftState.message);
       }
     }
@@ -75,7 +78,7 @@ export function EventForm({
     if (submitState?.message) {
       if (submitState.success) {
         toast.success(submitState.message);
-      } else {
+      } else if (!submitState.fieldErrors) {
         toast.error(submitState.message);
       }
     }
@@ -124,8 +127,17 @@ export function EventForm({
     setEndValue(value);
   }
 
+  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    const submitter = (event.nativeEvent as unknown as { submitter?: HTMLElement | null }).submitter;
+    const actionIntent = submitter?.getAttribute?.("data-intent");
+    setIntent(actionIntent === "submit" ? "submit" : "draft");
+  }
+
+  const activeState = intent === "submit" ? submitState : draftState;
+  const fieldErrors = activeState?.fieldErrors ?? {};
+
   return (
-    <form action={draftAction} className="space-y-6">
+    <form action={draftAction} className="space-y-6" noValidate onSubmit={handleSubmit}>
       <input type="hidden" name="eventId" defaultValue={defaultValues?.id} />
 
       <Card>
@@ -139,7 +151,15 @@ export function EventForm({
                 defaultValue={defaultValues?.title ?? ""}
                 placeholder="e.g. Riverside Tap Takeover"
                 required
+                aria-invalid={Boolean(fieldErrors.title)}
+                aria-describedby={fieldErrors.title ? "title-error" : undefined}
+                className={cn(
+                  fieldErrors.title
+                    ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+                    : undefined
+                )}
               />
+              <FieldError id="title-error" message={fieldErrors.title} />
               <p className="text-xs text-subtle">This is the headline guests will see on the website and in reviewer dashboards.</p>
             </div>
             <div className="space-y-2">
@@ -151,6 +171,13 @@ export function EventForm({
                   defaultValue={defaultVenueId}
                   onChange={(event) => handleVenueChange(event.target.value)}
                   required
+                  aria-invalid={Boolean(fieldErrors.venueId)}
+                  aria-describedby={fieldErrors.venueId ? "venue-error" : undefined}
+                  className={cn(
+                    fieldErrors.venueId
+                      ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+                      : undefined
+                  )}
                 >
                   <option value="" disabled>
                     Choose venue
@@ -163,10 +190,21 @@ export function EventForm({
                 </Select>
               ) : (
                 <>
-                  <Input disabled value={selectedVenue?.name ?? ""} />
+                  <Input
+                    disabled
+                    value={selectedVenue?.name ?? ""}
+                    aria-invalid={Boolean(fieldErrors.venueId)}
+                    aria-describedby={fieldErrors.venueId ? "venue-error" : undefined}
+                    className={cn(
+                      fieldErrors.venueId
+                        ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+                        : undefined
+                    )}
+                  />
                   <input type="hidden" name="venueId" value={selectedVenueId} />
                 </>
               )}
+              <FieldError id="venue-error" message={fieldErrors.venueId} />
               <p className="text-xs text-subtle">Pick the host venue—this controls which spaces appear below.</p>
             </div>
           </div>
@@ -186,13 +224,26 @@ export function EventForm({
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="eventType">Event type</Label>
-              <Select id="eventType" name="eventType" defaultValue={defaultValues?.event_type ?? typeOptions[0]} required>
+              <Select
+                id="eventType"
+                name="eventType"
+                defaultValue={defaultValues?.event_type ?? typeOptions[0]}
+                required
+                aria-invalid={Boolean(fieldErrors.eventType)}
+                aria-describedby={fieldErrors.eventType ? "event-type-error" : undefined}
+                className={cn(
+                  fieldErrors.eventType
+                    ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+                    : undefined
+                )}
+              >
                 {typeOptions.map((type) => (
                   <option key={type} value={type}>
                     {type}
                   </option>
                 ))}
               </Select>
+              <FieldError id="event-type-error" message={fieldErrors.eventType} />
               <p className="text-xs text-subtle">Need a new option? Add it in Settings.</p>
             </div>
             <div className="space-y-2">
@@ -204,7 +255,15 @@ export function EventForm({
                   defaultValue={defaultValues?.venue_space ?? ""}
                   placeholder="e.g. Main Bar, Garden"
                   required
+                  aria-invalid={Boolean(fieldErrors.venueSpace)}
+                  aria-describedby={fieldErrors.venueSpace ? "venue-space-error" : undefined}
+                  className={cn(
+                    fieldErrors.venueSpace
+                      ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+                      : undefined
+                  )}
                 />
+                <FieldError id="venue-space-error" message={fieldErrors.venueSpace} />
                 <p className="text-xs text-subtle">Enter the specific areas or rooms being used.</p>
               </div>
             </div>
@@ -220,7 +279,15 @@ export function EventForm({
                 value={startValue}
                 onChange={(event) => handleStartChange(event.target.value)}
                 required
+                aria-invalid={Boolean(fieldErrors.startAt)}
+                aria-describedby={fieldErrors.startAt ? "start-at-error" : undefined}
+                className={cn(
+                  fieldErrors.startAt
+                    ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+                    : undefined
+                )}
               />
+              <FieldError id="start-at-error" message={fieldErrors.startAt} />
               <p className="text-xs text-subtle">When guests are expected to arrive or the activity begins.</p>
             </div>
             <div className="space-y-2">
@@ -232,7 +299,15 @@ export function EventForm({
                 value={endValue}
                 onChange={(event) => handleEndChange(event.target.value)}
                 required
+                aria-invalid={Boolean(fieldErrors.endAt)}
+                aria-describedby={fieldErrors.endAt ? "end-at-error" : undefined}
+                className={cn(
+                  fieldErrors.endAt
+                    ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+                    : undefined
+                )}
               />
+              <FieldError id="end-at-error" message={fieldErrors.endAt} />
               <p className="text-xs text-subtle">We’ll auto-fill three hours after the start—adjust if the event runs longer or shorter.</p>
             </div>
           </div>
@@ -327,12 +402,18 @@ export function EventForm({
       </Card>
 
       <div className="flex flex-wrap items-center gap-3">
-        <SubmitButton label={mode === "create" ? "Save draft" : "Save changes"} pendingLabel="Saving..." variant="primary" />
+        <SubmitButton
+          label={mode === "create" ? "Save draft" : "Save changes"}
+          pendingLabel="Saving..."
+          variant="primary"
+          data-intent="draft"
+        />
         <SubmitButton
           formAction={submitAction}
           label="Submit for review"
           pendingLabel="Sending..."
           variant="secondary"
+          data-intent="submit"
         />
         {mode === "edit" && defaultValues?.id ? <DeleteEventButton eventId={defaultValues.id} /> : null}
       </div>
