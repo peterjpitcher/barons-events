@@ -415,7 +415,7 @@ export function EventForm({
           variant="secondary"
           data-intent="submit"
         />
-        {mode === "edit" && defaultValues?.id ? <DeleteEventButton eventId={defaultValues.id} /> : null}
+        {mode === "edit" && defaultValues?.id ? <DeleteEventButton eventId={defaultValues.id} variant="button" /> : null}
       </div>
     </form>
   );
