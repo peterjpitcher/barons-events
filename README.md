@@ -50,6 +50,27 @@ This build is a slimmed-down reboot focused on the core flows for Sprint 1: ev
 - `npm run supabase:reset` – Resets and seeds the linked Supabase project
 - `npm run supabase:migrate` – Pushes migrations to the linked Supabase project
 
+## Website Publishing API (server-to-server)
+This app exposes a read-only API for the brand website to pull **public** events (status `approved` or `completed`).
+
+**Auth**
+- Set `EVENTHUB_WEBSITE_API_KEY` (and ensure `SUPABASE_SERVICE_ROLE_KEY` is present server-side).
+- Send `Authorization: Bearer <EVENTHUB_WEBSITE_API_KEY>`.
+
+**Endpoints**
+- `GET /api/v1/health`
+- `GET /api/v1/events` (supports `limit`, `cursor`, `from`, `to`, `updatedSince`, `venueId`, `eventType`)
+- `GET /api/v1/events/:eventId`
+- `GET /api/v1/events/by-slug/:slug`
+- `GET /api/v1/venues`
+- `GET /api/v1/event-types`
+- `GET /api/v1/openapi` (OpenAPI 3.1 JSON)
+
+Example:
+```bash
+curl -H "Authorization: Bearer $EVENTHUB_WEBSITE_API_KEY" "http://localhost:3000/api/v1/events?limit=25"
+```
+
 ## Deployment Notes
 - Vercel tracks the `main` branch; triggering a redeploy from the dashboard forces a fresh build when needed.
 - If auto-deploys are paused, resume them or manually redeploy the desired commit.
