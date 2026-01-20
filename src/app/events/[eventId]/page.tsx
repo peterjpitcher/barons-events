@@ -326,7 +326,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
             </CardContent>
           </Card>
 
-          <Card>
+          <Card id="marketing-metadata">
             <CardHeader>
               <CardTitle>Marketing metadata</CardTitle>
               <CardDescription>Auto-generated copy to help publish the event on the website.</CardDescription>

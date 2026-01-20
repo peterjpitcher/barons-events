@@ -216,9 +216,9 @@ export function EventForm({
               name="notes"
               rows={4}
               defaultValue={defaultValues?.notes ?? ""}
-              placeholder="Summarise the activation, key beats, partners, and any standout experiences."
+              placeholder="Add all the details about the event here — it doesn’t need to be structured."
             />
-            <p className="text-xs text-subtle">Share the overview that helps teams understand what's happening and why it matters.</p>
+            <p className="text-xs text-subtle">Include anything a guest would want to know (what’s happening, timings, promos, key moments).</p>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">

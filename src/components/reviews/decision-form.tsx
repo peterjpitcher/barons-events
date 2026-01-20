@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { reviewerDecisionAction } from "@/actions/events";
 import { SubmitButton } from "@/components/ui/submit-button";
@@ -20,6 +20,7 @@ type DecisionFormProps = {
 
 export function DecisionForm({ eventId }: DecisionFormProps) {
   const [state, formAction] = useActionState(reviewerDecisionAction, undefined);
+  const [selectedDecision, setSelectedDecision] = useState<string | null>(null);
   const decisionError = state?.fieldErrors?.decision;
 
   useEffect(() => {
@@ -31,6 +32,26 @@ export function DecisionForm({ eventId }: DecisionFormProps) {
       }
     }
   }, [state]);
+
+  useEffect(() => {
+    if (!state?.success) return;
+    if (selectedDecision !== "approved") return;
+
+    const confirmed = window.confirm("Event approved. Generate the AI marketing metadata now?");
+    if (!confirmed) return;
+
+    const marketingCard = document.getElementById("marketing-metadata");
+    if (marketingCard) {
+      marketingCard.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+
+    const url = `/events/${eventId}#marketing-metadata`;
+    const opened = window.open(url, "_blank", "noopener,noreferrer");
+    if (!opened) {
+      window.location.assign(url);
+    }
+  }, [eventId, selectedDecision, state?.success]);
 
   return (
     <form action={formAction} className="space-y-4" noValidate>
@@ -51,6 +72,7 @@ export function DecisionForm({ eventId }: DecisionFormProps) {
                 required
                 aria-invalid={Boolean(decisionError)}
                 aria-describedby={decisionError ? "decision-error" : undefined}
+                onChange={() => setSelectedDecision(option.value)}
               />
               {option.label}
             </label>
