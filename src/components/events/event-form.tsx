@@ -184,7 +184,7 @@ export function EventForm({
       <Card>
         <CardHeader>
           <CardTitle>1. Core details</CardTitle>
-          <CardDescription>Start with the venue, title, and the type of activation you’re planning.</CardDescription>
+          <CardDescription>Start with the venue, title, type, and the key details guests should know.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-6">
           <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_260px]">
@@ -280,35 +280,37 @@ export function EventForm({
               <p className="text-xs text-subtle">Need a new option? Add it in Settings.</p>
             </div>
           </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="eventDetails">Event details</Label>
+            <Textarea
+              id="eventDetails"
+              name="notes"
+              rows={5}
+              defaultValue={defaultValues?.notes ?? ""}
+              placeholder="Add all the details about the event here — it doesn’t need to be structured."
+              aria-invalid={Boolean(fieldErrors.notes)}
+              aria-describedby={fieldErrors.notes ? "event-details-error" : undefined}
+              className={cn(
+                fieldErrors.notes
+                  ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+                  : undefined
+              )}
+            />
+            <FieldError id="event-details-error" message={fieldErrors.notes} />
+            <p className="text-xs text-subtle">
+              Include anything a guest would want to know (what&apos;s happening, timings, promos, key moments).
+            </p>
+          </div>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
           <CardTitle>2. Timing & spaces</CardTitle>
-          <CardDescription>Set where the event takes place and when guests should arrive.</CardDescription>
+          <CardDescription>Set when the event runs, then list the spaces being used.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-6">
-          <div className="space-y-2">
-            <Label htmlFor="venueSpace">Spaces</Label>
-            <Input
-              id="venueSpace"
-              name="venueSpace"
-              defaultValue={defaultValues?.venue_space ?? ""}
-              placeholder="e.g. Main Bar, Garden"
-              required
-              aria-invalid={Boolean(fieldErrors.venueSpace)}
-              aria-describedby={fieldErrors.venueSpace ? "venue-space-error" : undefined}
-              className={cn(
-                fieldErrors.venueSpace
-                  ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
-                  : undefined
-              )}
-            />
-            <FieldError id="venue-space-error" message={fieldErrors.venueSpace} />
-            <p className="text-xs text-subtle">Enter the specific areas or rooms being used.</p>
-          </div>
-
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="startAt">Starts</Label>
@@ -351,6 +353,26 @@ export function EventForm({
               <p className="text-xs text-subtle">We’ll auto-fill three hours after the start—adjust if the event runs longer or shorter.</p>
             </div>
           </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="venueSpace">Spaces</Label>
+            <Input
+              id="venueSpace"
+              name="venueSpace"
+              defaultValue={defaultValues?.venue_space ?? ""}
+              placeholder="e.g. Main Bar, Garden"
+              required
+              aria-invalid={Boolean(fieldErrors.venueSpace)}
+              aria-describedby={fieldErrors.venueSpace ? "venue-space-error" : undefined}
+              className={cn(
+                fieldErrors.venueSpace
+                  ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+                  : undefined
+              )}
+            />
+            <FieldError id="venue-space-error" message={fieldErrors.venueSpace} />
+            <p className="text-xs text-subtle">Enter the specific areas or rooms being used.</p>
+          </div>
         </CardContent>
       </Card>
 
@@ -362,18 +384,6 @@ export function EventForm({
         <CardContent className="grid gap-6">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="expectedHeadcount">Expected headcount</Label>
-              <Input
-                id="expectedHeadcount"
-                name="expectedHeadcount"
-                type="number"
-                min={0}
-                defaultValue={defaultValues?.expected_headcount ?? ""}
-                placeholder="e.g. 120"
-              />
-              <p className="text-xs text-subtle">Rough numbers help planning for staffing, stock, and floor setup.</p>
-            </div>
-            <div className="space-y-2">
               <Label htmlFor="wetPromo">Wet promotion</Label>
               <Input
                 id="wetPromo"
@@ -383,17 +393,29 @@ export function EventForm({
               />
               <p className="text-xs text-subtle">Is this event expected to drive wet sales? Note any key drink offers.</p>
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="foodPromo">Food promotion</Label>
+              <Input
+                id="foodPromo"
+                name="foodPromo"
+                defaultValue={defaultValues?.food_promo ?? ""}
+                placeholder="Sharing boards, brunch specials"
+              />
+              <p className="text-xs text-subtle">List any paired food promotions or add-ons.</p>
+            </div>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="foodPromo">Food promotion</Label>
+            <Label htmlFor="expectedHeadcount">Expected headcount</Label>
             <Input
-              id="foodPromo"
-              name="foodPromo"
-              defaultValue={defaultValues?.food_promo ?? ""}
-              placeholder="Sharing boards, brunch specials"
+              id="expectedHeadcount"
+              name="expectedHeadcount"
+              type="number"
+              min={0}
+              defaultValue={defaultValues?.expected_headcount ?? ""}
+              placeholder="e.g. 120"
             />
-            <p className="text-xs text-subtle">List any paired food promotions or add-ons.</p>
+            <p className="text-xs text-subtle">Rough numbers help planning for staffing, stock, and floor setup.</p>
           </div>
 
           <div className="space-y-4 rounded-lg bg-[var(--color-surface-soft)] p-4">
@@ -428,30 +450,10 @@ export function EventForm({
 
       <Card>
         <CardHeader>
-          <CardTitle>4. Event details & goals</CardTitle>
-          <CardDescription>Capture the guest-facing details and any internal goals for the activation.</CardDescription>
+          <CardTitle>4. Goals</CardTitle>
+          <CardDescription>Select the goals that matter for this activation.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-6">
-          <div className="space-y-2">
-            <Label htmlFor="eventDetails">Event details</Label>
-            <Textarea
-              id="eventDetails"
-              name="notes"
-              rows={5}
-              defaultValue={defaultValues?.notes ?? ""}
-              placeholder="Add all the details about the event here — it doesn’t need to be structured."
-              aria-invalid={Boolean(fieldErrors.notes)}
-              aria-describedby={fieldErrors.notes ? "event-details-error" : undefined}
-              className={cn(
-                fieldErrors.notes
-                  ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
-                  : undefined
-              )}
-            />
-            <FieldError id="event-details-error" message={fieldErrors.notes} />
-            <p className="text-xs text-subtle">Include anything a guest would want to know (what’s happening, timings, promos, key moments).</p>
-          </div>
-
           <div className="space-y-3">
             <Label>Goals</Label>
             <p className="text-xs text-subtle">Select the goals that matter for this event. Pick as many as apply.</p>
@@ -574,7 +576,7 @@ export function EventForm({
                   name="seoTitle"
                   value={seoTitle}
                   onChange={(event) => setSeoTitle(event.target.value)}
-                  placeholder="≤ 60 characters"
+                  placeholder="e.g. Quiz Night | 6 Jan 2026"
                   aria-invalid={Boolean(fieldErrors.seoTitle)}
                   aria-describedby={fieldErrors.seoTitle ? "seo-title-error" : undefined}
                   className={cn(
@@ -592,7 +594,7 @@ export function EventForm({
                   name="seoSlug"
                   value={seoSlug}
                   onChange={(event) => setSeoSlug(event.target.value)}
-                  placeholder="lowercase-words-separated-by-hyphens"
+                  placeholder="quiz-night-2026-01-06"
                   aria-invalid={Boolean(fieldErrors.seoSlug)}
                   aria-describedby={fieldErrors.seoSlug ? "seo-slug-error" : undefined}
                   className={cn(
@@ -606,18 +608,18 @@ export function EventForm({
             </div>
             <div className="space-y-2">
               <Label htmlFor="seoDescription">SEO description</Label>
-              <Textarea
-                id="seoDescription"
-                name="seoDescription"
-                rows={3}
-                value={seoDescription}
-                onChange={(event) => setSeoDescription(event.target.value)}
-                placeholder="≤ 155 characters"
-                aria-invalid={Boolean(fieldErrors.seoDescription)}
-                aria-describedby={fieldErrors.seoDescription ? "seo-description-error" : undefined}
-                className={cn(
-                  fieldErrors.seoDescription
-                    ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+                <Textarea
+                  id="seoDescription"
+                  name="seoDescription"
+                  rows={3}
+                  value={seoDescription}
+                  onChange={(event) => setSeoDescription(event.target.value)}
+                  placeholder="Include the date, e.g. Join us at The Cricketers for Quiz Night on 6 Jan 2026."
+                  aria-invalid={Boolean(fieldErrors.seoDescription)}
+                  aria-describedby={fieldErrors.seoDescription ? "seo-description-error" : undefined}
+                  className={cn(
+                    fieldErrors.seoDescription
+                      ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
                     : undefined
                 )}
               />

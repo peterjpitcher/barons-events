@@ -68,6 +68,33 @@ function formatUkDate(startAt: string): string | null {
     .replace(",", "");
 }
 
+function formatUkShortDate(startAt: string): string | null {
+  const parsed = new Date(startAt);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/London",
+    day: "numeric",
+    month: "short",
+    year: "numeric"
+  }).format(parsed);
+}
+
+function formatUkIsoDate(startAt: string): string | null {
+  const parsed = new Date(startAt);
+  if (Number.isNaN(parsed.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/London",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(parsed);
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+  if (!year || !month || !day) return null;
+  return `${year}-${month}-${day}`;
+}
+
 function formatUkTime(value: string): string | null {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return null;
@@ -93,6 +120,8 @@ function buildWebsiteCopyPrompt(input: WebsiteCopyInput): string {
   const startIso = new Date(input.startAt).toISOString();
   const endIso = new Date(input.endAt).toISOString();
   const ukDate = formatUkDate(input.startAt);
+  const ukShortDate = formatUkShortDate(input.startAt);
+  const ukIsoDate = formatUkIsoDate(input.startAt);
   const ukTimeRange = formatUkTimeRange(input.startAt, input.endAt);
   const lines = [
     `Event title (internal): ${input.title}`,
@@ -101,10 +130,14 @@ function buildWebsiteCopyPrompt(input: WebsiteCopyInput): string {
     input.venueAddress ? `Venue address: ${input.venueAddress}` : `Venue address: Not provided`,
     input.venueSpaces.length ? `Venue spaces: ${input.venueSpaces.join(", ")}` : "Venue spaces: Not specified",
     ukDate ? `Date (UK): ${ukDate}` : "Date (UK): Not provided",
+    ukShortDate ? `Date (UK short): ${ukShortDate}` : "Date (UK short): Not provided",
+    ukIsoDate ? `Date (ISO): ${ukIsoDate}` : "Date (ISO): Not provided",
     ukTimeRange ? `Time (UK): ${ukTimeRange}` : "Time (UK): Not provided",
     `Start (UTC): ${startIso}`,
     `End (UTC): ${endIso}`,
-    typeof input.expectedHeadcount === "number" ? `Expected headcount: ${input.expectedHeadcount}` : "Expected headcount: Not provided",
+    typeof input.expectedHeadcount === "number"
+      ? `Expected headcount (planning estimate; do NOT frame as tickets/spots remaining): ${input.expectedHeadcount}`
+      : "Expected headcount: Not provided",
     input.wetPromo ? `Wet promotion (only mention if present): ${input.wetPromo}` : "Wet promotion: Not provided",
     input.foodPromo ? `Food promotion (only mention if present): ${input.foodPromo}` : "Food promotion: Not provided",
     input.details ? `Event details: ${input.details}` : "Event details: Not provided"
@@ -162,6 +195,38 @@ function stripUrls(value: string): string {
   return value.replace(/https?:\/\/\S+/gi, "").replace(/\s+/g, " ").trim();
 }
 
+function ensureSlugContainsDate(slug: string, isoDate: string | null): string {
+  const cleaned = sanitiseSeoSlug(slug);
+  if (!isoDate) return cleaned;
+  const dateToken = isoDate.trim().toLowerCase();
+  if (!dateToken.length) return cleaned;
+  if (cleaned.includes(dateToken)) return cleaned;
+  return sanitiseSeoSlug(`${cleaned}-${dateToken}`);
+}
+
+function ensureSeoTextContainsDate(value: string, dateToken: string | null, maxChars: number): string {
+  const cleaned = stripWrappingQuotes(value).replace(/\s+/g, " ").trim();
+  if (!dateToken) return clampChars(cleaned, maxChars);
+  const token = dateToken.trim();
+  if (!token.length) return clampChars(cleaned, maxChars);
+
+  const tokenLower = token.toLowerCase();
+  if (cleaned.toLowerCase().includes(tokenLower)) {
+    return clampChars(cleaned, maxChars);
+  }
+
+  const separator = " | ";
+  const suffix = `${separator}${token}`;
+  if (suffix.length >= maxChars) {
+    return clampChars(token, maxChars);
+  }
+
+  const available = maxChars - suffix.length;
+  const base = clampChars(cleaned, available);
+  const combined = `${base}${suffix}`.trim();
+  return combined.toLowerCase().includes(tokenLower) ? combined : clampChars(`${cleaned} ${token}`, maxChars);
+}
+
 export async function generateWebsiteCopy(input: WebsiteCopyInput): Promise<GeneratedWebsiteCopy | null> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -183,28 +248,29 @@ export async function generateWebsiteCopy(input: WebsiteCopyInput): Promise<Gene
             "- Use the venue name as the LOCATION (e.g. 'at The Cricketers'), not 'at <event name>'.",
             "- Do not put the event name in quotation marks.",
             "- Do not invent facts not present in the brief (no prizes, entertainers, ticketing info, offers, or menus unless explicitly provided).",
+            "- Do not claim 'only X spots/tickets left' unless a booking limit is explicitly provided (headcount is just an estimate).",
             "- Do not include any URLs (a booking link is handled separately).",
             "",
             "Always return valid JSON matching the requested schema."
           ].join("\n")
       },
-      {
-        role: "user",
-        content: [
-          "Create website copy for the following event.",
-          "",
-          "Requirements:",
-          "- publicTitle: catchy guest-facing event name (<= 80 chars).",
-          "- publicTeaser: short teaser for cards/social (<= 160 chars).",
-          "- publicDescription: 260–340 words, 2–4 short paragraphs, booking-focused; MUST include the venue name and the UK date + time range from the brief.",
-          "- seoTitle: <= 60 characters.",
-          "- seoDescription: <= 155 characters.",
-          "- seoSlug: lowercase words separated by hyphens; no dates unless necessary.",
-          "",
-          "Style rules:",
-          "- Open the description with a line like: 'Join us at <VENUE NAME> for <PUBLIC TITLE>…'",
-          "- Never write 'at <event name>' (the event is not the location). Use 'for <event name>' when needed.",
-          "- UK English spelling and date formatting.",
+	      {
+	        role: "user",
+	        content: [
+	          "Create website copy for the following event.",
+	          "",
+	          "Requirements:",
+	          "- publicTitle: catchy guest-facing event name (<= 80 chars).",
+	          "- publicTeaser: short teaser for cards/social (<= 160 chars).",
+	          "- publicDescription: 260–340 words, 2–4 short paragraphs, booking-focused; MUST include the venue name and the UK date + time range from the brief.",
+	          "- seoTitle: <= 60 characters and MUST include the event date.",
+	          "- seoDescription: <= 155 characters and MUST include the event date.",
+	          "- seoSlug: lowercase words separated by hyphens and MUST include the date (recommended: <base>-YYYY-MM-DD).",
+	          "",
+	          "Style rules:",
+	          "- Open the description with a line like: 'Join us at <VENUE NAME> for <PUBLIC TITLE>…'",
+	          "- Never write 'at <event name>' (the event is not the location). Use 'for <event name>' when needed.",
+	          "- UK English spelling and date formatting.",
           "",
           `Event brief:\n${buildWebsiteCopyPrompt(input)}`
         ].join("\n")
@@ -286,12 +352,14 @@ export async function generateWebsiteCopy(input: WebsiteCopyInput): Promise<Gene
 
     if (!parsed) return null;
 
-    const cleanedPublicTitle = stripWrappingQuotes(parsed.publicTitle);
-    const cleanedTeaser = stripWrappingQuotes(parsed.publicTeaser);
+	    const cleanedPublicTitle = stripWrappingQuotes(parsed.publicTitle);
+	    const cleanedTeaser = stripWrappingQuotes(parsed.publicTeaser);
+	    const eventDateForSeo = formatUkShortDate(input.startAt);
+	    const eventIsoDateForSeo = formatUkIsoDate(input.startAt);
 
-    const locationFixedDescription = (() => {
-      let value = stripUrls(parsed.publicDescription);
-      const candidates = [cleanedPublicTitle, input.title].map((v) => v.trim()).filter(Boolean);
+	    const locationFixedDescription = (() => {
+	      let value = stripUrls(parsed.publicDescription);
+	      const candidates = [cleanedPublicTitle, input.title].map((v) => v.trim()).filter(Boolean);
       for (const candidate of candidates) {
         const escaped = escapeRegExp(candidate);
         value = value.replace(new RegExp(`[\"“”'‘’]\\s*${escaped}\\s*[\"“”'‘’]`, "gi"), candidate);
@@ -309,19 +377,19 @@ export async function generateWebsiteCopy(input: WebsiteCopyInput): Promise<Gene
       return value;
     })();
 
-    const cleanedDescription = clampWords(locationFixedDescription, 340);
-    return {
-      ...parsed,
-      publicTitle: clampChars(cleanedPublicTitle, 80),
-      publicTeaser: clampChars(cleanedTeaser, 160),
-      publicDescription: cleanedDescription,
-      seoTitle: clampChars(stripWrappingQuotes(parsed.seoTitle), 60),
-      seoDescription: clampChars(stripWrappingQuotes(parsed.seoDescription), 155),
-      seoSlug: sanitiseSeoSlug(parsed.seoSlug)
-    };
-  } catch (error) {
-    console.error("Unexpected error generating AI website copy", error);
-  }
+	    const cleanedDescription = clampWords(locationFixedDescription, 340);
+	    return {
+	      ...parsed,
+	      publicTitle: clampChars(cleanedPublicTitle, 80),
+	      publicTeaser: clampChars(cleanedTeaser, 160),
+	      publicDescription: cleanedDescription,
+	      seoTitle: ensureSeoTextContainsDate(parsed.seoTitle, eventDateForSeo, 60),
+	      seoDescription: ensureSeoTextContainsDate(parsed.seoDescription, eventDateForSeo, 155),
+	      seoSlug: ensureSlugContainsDate(parsed.seoSlug, eventIsoDateForSeo)
+	    };
+	  } catch (error) {
+	    console.error("Unexpected error generating AI website copy", error);
+	  }
 
   return null;
 }
