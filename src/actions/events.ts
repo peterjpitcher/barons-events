@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { createSupabaseActionClient } from "@/lib/supabase/server";
+import { createSupabaseActionClient, createSupabaseServiceRoleClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth";
 import { appendEventVersion, createEventDraft, recordApproval, updateEventDraft, updateEventAssignee } from "@/lib/events";
 import { eventFormSchema } from "@/lib/validation";
@@ -11,6 +11,7 @@ import { getFieldErrors, type FieldErrors } from "@/lib/form-errors";
 import type { EventStatus } from "@/lib/types";
 import { sendEventSubmittedEmail, sendReviewDecisionEmail } from "@/lib/notifications";
 import { recordAuditLogEntry } from "@/lib/audit-log";
+import { generateWebsiteCopy } from "@/lib/ai";
 
 const reviewerFallback = z.string().uuid().optional();
 
@@ -18,6 +19,19 @@ type ActionResult = {
   success: boolean;
   message?: string;
   fieldErrors?: FieldErrors;
+};
+
+type WebsiteCopyValues = {
+  publicTitle: string | null;
+  publicTeaser: string | null;
+  publicDescription: string | null;
+  seoTitle: string | null;
+  seoDescription: string | null;
+  seoSlug: string | null;
+};
+
+type WebsiteCopyActionResult = ActionResult & {
+  values?: WebsiteCopyValues;
 };
 
 function normaliseVenueSpacesField(value: FormDataEntryValue | null): string {
@@ -138,7 +152,14 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
       : formData.get("goalFocus") ?? undefined,
     costTotal: formData.get("costTotal") ?? undefined,
     costDetails: formData.get("costDetails") ?? undefined,
-    notes: formData.get("notes") ?? undefined
+    notes: formData.get("notes") ?? undefined,
+    publicTitle: formData.get("publicTitle") ?? undefined,
+    publicTeaser: formData.get("publicTeaser") ?? undefined,
+    publicDescription: formData.get("publicDescription") ?? undefined,
+    bookingUrl: formData.get("bookingUrl") ?? undefined,
+    seoTitle: formData.get("seoTitle") ?? undefined,
+    seoDescription: formData.get("seoDescription") ?? undefined,
+    seoSlug: formData.get("seoSlug") ?? undefined
   });
 
   if (!parsed.success) {
@@ -174,7 +195,14 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
         cost_total: values.costTotal ?? null,
         cost_details: values.costDetails ?? null,
         goal_focus: values.goalFocus ?? null,
-        notes: values.notes ?? null
+        notes: values.notes ?? null,
+        public_title: values.publicTitle ?? null,
+        public_teaser: values.publicTeaser ?? null,
+        public_description: values.publicDescription ?? null,
+        booking_url: values.bookingUrl ?? null,
+        seo_title: values.seoTitle ?? null,
+        seo_description: values.seoDescription ?? null,
+        seo_slug: values.seoSlug ?? null
       }, user.id);
       await appendEventVersion(values.eventId, user.id, {
         ...values,
@@ -198,7 +226,14 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
       costTotal: values.costTotal ?? null,
       costDetails: values.costDetails ?? null,
       goalFocus: values.goalFocus ?? null,
-      notes: values.notes ?? null
+      notes: values.notes ?? null,
+      publicTitle: values.publicTitle ?? null,
+      publicTeaser: values.publicTeaser ?? null,
+      publicDescription: values.publicDescription ?? null,
+      bookingUrl: values.bookingUrl ?? null,
+      seoTitle: values.seoTitle ?? null,
+      seoDescription: values.seoDescription ?? null,
+      seoSlug: values.seoSlug ?? null
     });
 
     if (user.role === "central_planner") {
@@ -553,6 +588,139 @@ export async function reviewerDecisionAction(
   } catch (error) {
     console.error(error);
     return { success: false, message: "Could not save the decision." };
+  }
+}
+
+export async function generateWebsiteCopyAction(
+  _: WebsiteCopyActionResult | undefined,
+  formData: FormData
+): Promise<WebsiteCopyActionResult> {
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect("/login");
+  }
+
+  if (user.role !== "reviewer" && user.role !== "central_planner") {
+    return { success: false, message: "Only reviewers or planners can generate website copy." };
+  }
+
+  const eventIdValue = formData.get("eventId");
+  const parsedEventId = z.string().uuid().safeParse(typeof eventIdValue === "string" ? eventIdValue : "");
+  if (!parsedEventId.success) {
+    return { success: false, message: "Missing event reference." };
+  }
+
+  let supabase;
+  try {
+    supabase = createSupabaseServiceRoleClient();
+  } catch (error) {
+    console.error(error);
+    return { success: false, message: "Supabase service role is not configured." };
+  }
+
+  try {
+    const { data: record, error } = await supabase
+      .from("events")
+      .select(
+        `
+        id,
+        title,
+        event_type,
+        status,
+        start_at,
+        end_at,
+        venue_space,
+        expected_headcount,
+        wet_promo,
+        food_promo,
+        notes,
+        venue:venues(name,address)
+      `
+      )
+      .eq("id", parsedEventId.data)
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+    if (!record) {
+      return { success: false, message: "Event not found." };
+    }
+
+    if (record.status !== "approved" && record.status !== "completed") {
+      return { success: false, message: "Approve the event before generating website copy." };
+    }
+
+    const venueSpaces =
+      typeof record.venue_space === "string"
+        ? record.venue_space
+            .split(",")
+            .map((value) => value.trim())
+            .filter(Boolean)
+        : [];
+
+    const generated = await generateWebsiteCopy({
+      title: record.title,
+      eventType: record.event_type,
+      startAt: record.start_at,
+      endAt: record.end_at,
+      venueName: (record as any).venue?.name ?? null,
+      venueAddress: (record as any).venue?.address ?? null,
+      venueSpaces,
+      expectedHeadcount: typeof record.expected_headcount === "number" ? record.expected_headcount : null,
+      wetPromo: typeof record.wet_promo === "string" ? record.wet_promo : null,
+      foodPromo: typeof record.food_promo === "string" ? record.food_promo : null,
+      details: typeof record.notes === "string" ? record.notes : null
+    });
+
+    if (!generated) {
+      return { success: false, message: "Could not generate website copy. Check the AI service credentials and try again." };
+    }
+
+    const updatePayload = {
+      public_title: generated.publicTitle,
+      public_teaser: generated.publicTeaser,
+      public_description: generated.publicDescription,
+      seo_title: generated.seoTitle,
+      seo_description: generated.seoDescription,
+      seo_slug: generated.seoSlug
+    };
+
+    const { error: updateError } = await supabase
+      .from("events")
+      .update(updatePayload as any)
+      .eq("id", parsedEventId.data);
+
+    if (updateError) {
+      throw updateError;
+    }
+
+    await recordAuditLogEntry({
+      entity: "event",
+      entityId: parsedEventId.data,
+      action: "event.website_copy_generated",
+      actorId: user.id,
+      meta: {
+        changes: ["Public title", "Public teaser", "Public description", "SEO title", "SEO description", "SEO slug"]
+      }
+    });
+
+    revalidatePath(`/events/${parsedEventId.data}`);
+    return {
+      success: true,
+      message: "Website copy generated.",
+      values: {
+        publicTitle: generated.publicTitle,
+        publicTeaser: generated.publicTeaser,
+        publicDescription: generated.publicDescription,
+        seoTitle: generated.seoTitle,
+        seoDescription: generated.seoDescription,
+        seoSlug: generated.seoSlug
+      }
+    };
+  } catch (error) {
+    console.error(error);
+    return { success: false, message: "Could not generate website copy right now." };
   }
 }
 

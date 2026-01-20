@@ -55,6 +55,13 @@ export async function GET(request: Request) {
       `
       id,
       title,
+      public_title,
+      public_teaser,
+      public_description,
+      booking_url,
+      seo_title,
+      seo_description,
+      seo_slug,
       event_type,
       status,
       start_at,

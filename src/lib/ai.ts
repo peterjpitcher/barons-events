@@ -1,60 +1,99 @@
 import "server-only";
 
-import type { EventDetail } from "@/lib/events";
-import { formatSpacesLabel } from "@/lib/venue-spaces";
-
-export type GeneratedEventMeta = {
-  metaTitle: string;
-  metaDescription: string;
-  slug: string;
-  teaser: string;
+export type WebsiteCopyInput = {
+  title: string;
+  eventType: string;
+  startAt: string;
+  endAt: string;
+  venueName: string | null;
+  venueAddress: string | null;
+  venueSpaces: string[];
+  expectedHeadcount: number | null;
+  wetPromo: string | null;
+  foodPromo: string | null;
+  details: string | null;
 };
 
-function buildPrompt(event: EventDetail): string {
+export type GeneratedWebsiteCopy = {
+  publicTitle: string;
+  publicDescription: string;
+  publicTeaser: string;
+  seoTitle: string;
+  seoDescription: string;
+  seoSlug: string;
+};
+
+function buildWebsiteCopyPrompt(input: WebsiteCopyInput): string {
   const lines = [
-    `Title: ${event.title}`,
-    `Status: ${event.status}`,
-    `Venue: ${event.venue?.name ?? "Unknown venue"}`,
-    formatSpacesLabel(event.venue_space),
-    `Type: ${event.event_type}`,
-    `Start: ${new Date(event.start_at).toISOString()}`,
-    `End: ${new Date(event.end_at).toISOString()}`,
-    `Expected headcount: ${event.expected_headcount ?? "Not provided"}`,
-    `Wet promotion: ${event.wet_promo ?? "None"}`,
-    `Food promotion: ${event.food_promo ?? "None"}`,
-    `Goals: ${event.goal_focus ?? "None listed"}`,
-    `Notes: ${event.notes ?? "No additional notes"}`
+    `Title: ${input.title}`,
+    `Venue: ${input.venueName ?? "Unknown venue"}`,
+    input.venueAddress ? `Venue address: ${input.venueAddress}` : `Venue address: Not provided`,
+    input.venueSpaces.length ? `Spaces: ${input.venueSpaces.join(", ")}` : "Spaces: Not specified",
+    `Type: ${input.eventType}`,
+    `Start: ${new Date(input.startAt).toISOString()}`,
+    `End: ${new Date(input.endAt).toISOString()}`,
+    `Expected headcount: ${input.expectedHeadcount ?? "Not provided"}`,
+    `Wet promotion: ${input.wetPromo ?? "None"}`,
+    `Food promotion: ${input.foodPromo ?? "None"}`,
+    `Details: ${input.details ?? "Not provided"}`
   ];
   return lines.join("\n");
 }
 
-function parseContent(content: unknown): GeneratedEventMeta | null {
+function parseWebsiteCopy(content: unknown): GeneratedWebsiteCopy | null {
   if (typeof content !== "string") return null;
   try {
     const data = JSON.parse(content);
     if (
-      typeof data.metaTitle === "string" &&
-      typeof data.metaDescription === "string" &&
-      typeof data.slug === "string" &&
-      typeof data.teaser === "string"
+      typeof data.publicTitle === "string" &&
+      typeof data.publicDescription === "string" &&
+      typeof data.publicTeaser === "string" &&
+      typeof data.seoTitle === "string" &&
+      typeof data.seoDescription === "string" &&
+      typeof data.seoSlug === "string"
     ) {
       return {
-        metaTitle: data.metaTitle.trim(),
-        metaDescription: data.metaDescription.trim(),
-        slug: data.slug.trim(),
-        teaser: data.teaser.trim()
+        publicTitle: data.publicTitle.trim(),
+        publicDescription: data.publicDescription.trim(),
+        publicTeaser: data.publicTeaser.trim(),
+        seoTitle: data.seoTitle.trim(),
+        seoDescription: data.seoDescription.trim(),
+        seoSlug: data.seoSlug.trim()
       };
     }
   } catch (error) {
-    console.error("Failed to parse AI metadata response", error);
+    console.error("Failed to parse AI website copy response", error);
   }
   return null;
 }
 
-export async function generateEventMeta(event: EventDetail): Promise<GeneratedEventMeta | null> {
+function sanitiseSeoSlug(value: string): string {
+  const normalised = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+  return normalised.length ? normalised : "event";
+}
+
+function clampWords(value: string, maxWords: number): string {
+  const words = value
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .filter(Boolean);
+  if (words.length <= maxWords) return value.trim();
+  return words.slice(0, maxWords).join(" ").trim();
+}
+
+function stripUrls(value: string): string {
+  return value.replace(/https?:\/\/\S+/gi, "").replace(/\s+/g, " ").trim();
+}
+
+export async function generateWebsiteCopy(input: WebsiteCopyInput): Promise<GeneratedWebsiteCopy | null> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    console.warn("OPENAI_API_KEY is not set. Skipping AI metadata generation.");
+    console.warn("OPENAI_API_KEY is not set. Skipping AI website copy generation.");
     return null;
   }
 
@@ -64,37 +103,57 @@ export async function generateEventMeta(event: EventDetail): Promise<GeneratedEv
       {
         role: "system",
         content:
-          "You are a marketing copy assistant helping a hospitality brand promote events. Produce concise, high-converting metadata for the event landing page. Always return valid JSON matching the requested schema."
+          "You are a hospitality marketing copywriter. Write guest-facing event copy that is accurate, high-converting, and urgency-driven without being misleading. Do not invent details not present in the brief. Do not include any URLs. Always return valid JSON matching the requested schema."
       },
       {
         role: "user",
-        content: `Create metadata for the following event:\n${buildPrompt(event)}`
+        content: [
+          "Create website copy for the following event.",
+          "",
+          "Requirements:",
+          "- publicTitle: catchy public-facing event name (max ~80 chars).",
+          "- publicTeaser: short teaser for cards/social (max ~160 chars).",
+          "- publicDescription: ~300 words (aim 260–340), exciting and booking-focused; include date/time and venue; mention wet/food promos if present; drive urgency to secure a spot.",
+          "- seoTitle: SEO title <= 60 characters.",
+          "- seoDescription: SEO description <= 155 characters.",
+          "- seoSlug: lowercase words separated by hyphens; no dates unless necessary.",
+          "",
+          `Event brief:\n${buildWebsiteCopyPrompt(input)}`
+        ].join("\n")
       }
     ],
     response_format: {
       type: "json_schema",
       json_schema: {
-        name: "event_metadata",
+        name: "event_website_copy",
         schema: {
           type: "object",
           additionalProperties: false,
-          required: ["metaTitle", "metaDescription", "slug", "teaser"],
+          required: ["publicTitle", "publicTeaser", "publicDescription", "seoTitle", "seoDescription", "seoSlug"],
           properties: {
-            metaTitle: {
+            publicTitle: {
               type: "string",
-              description: "SEO-friendly meta title, maximum 60 characters, highlight the unique hook."
+              description: "Public-facing event name, catchy and guest-friendly, <= ~80 characters."
             },
-            metaDescription: {
+            publicTeaser: {
               type: "string",
-              description: "Meta description up to 150 characters inviting guests to attend."
+              description: "Short teaser for marketing cards/social, <= ~160 characters."
             },
-            slug: {
+            publicDescription: {
               type: "string",
-              description: "URL slug made of lowercase words separated by hyphens (5-7 words)."
+              description: "Guest-facing description (~300 words), urgency-driven, no URLs."
             },
-            teaser: {
+            seoTitle: {
               type: "string",
-              description: "Short teaser (max 140 characters) for marketing cards and social posts."
+              description: "SEO meta title <= 60 characters."
+            },
+            seoDescription: {
+              type: "string",
+              description: "SEO meta description <= 155 characters."
+            },
+            seoSlug: {
+              type: "string",
+              description: "URL slug made of lowercase words separated by hyphens."
             }
           }
         }
@@ -114,7 +173,7 @@ export async function generateEventMeta(event: EventDetail): Promise<GeneratedEv
 
     if (!response.ok) {
       const errorBody = await response.text();
-      console.error("AI metadata request failed", response.status, errorBody);
+      console.error("AI website copy request failed", response.status, errorBody);
       return null;
     }
 
@@ -123,18 +182,30 @@ export async function generateEventMeta(event: EventDetail): Promise<GeneratedEv
     };
 
     const content = data.choices?.[0]?.message?.content;
-    if (typeof content === "string") {
-      return parseContent(content);
-    }
-    if (Array.isArray(content)) {
-      const combined = content
-        .filter((part) => part.type === "text" && typeof part.text === "string")
-        .map((part) => part.text)
-        .join("");
-      return parseContent(combined);
-    }
+    const parsed = (() => {
+      if (typeof content === "string") {
+        return parseWebsiteCopy(content);
+      }
+      if (Array.isArray(content)) {
+        const combined = content
+          .filter((part) => part.type === "text" && typeof part.text === "string")
+          .map((part) => part.text)
+          .join("");
+        return parseWebsiteCopy(combined);
+      }
+      return null;
+    })();
+
+    if (!parsed) return null;
+
+    const cleanedDescription = clampWords(stripUrls(parsed.publicDescription), 340);
+    return {
+      ...parsed,
+      publicDescription: cleanedDescription,
+      seoSlug: sanitiseSeoSlug(parsed.seoSlug)
+    };
   } catch (error) {
-    console.error("Unexpected error generating AI metadata", error);
+    console.error("Unexpected error generating AI website copy", error);
   }
 
   return null;

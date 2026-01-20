@@ -243,6 +243,13 @@ export async function createEventDraft(payload: {
   costDetails?: string | null;
   goalFocus?: string | null;
   notes?: string | null;
+  publicTitle?: string | null;
+  publicTeaser?: string | null;
+  publicDescription?: string | null;
+  bookingUrl?: string | null;
+  seoTitle?: string | null;
+  seoDescription?: string | null;
+  seoSlug?: string | null;
 }): Promise<EventRow> {
   const supabase = await createSupabaseActionClient();
 
@@ -262,6 +269,13 @@ export async function createEventDraft(payload: {
     food_promo: payload.foodPromo ?? null,
     goal_focus: payload.goalFocus ?? null,
     notes: payload.notes ?? null,
+    public_title: payload.publicTitle ?? null,
+    public_teaser: payload.publicTeaser ?? null,
+    public_description: payload.publicDescription ?? null,
+    booking_url: payload.bookingUrl ?? null,
+    seo_title: payload.seoTitle ?? null,
+    seo_description: payload.seoDescription ?? null,
+    seo_slug: payload.seoSlug ?? null,
     assignee_id: payload.createdBy
   };
 
@@ -311,6 +325,13 @@ export async function createEventDraft(payload: {
       food_promo: data.food_promo,
       cost_total: payload.costTotal ?? data.cost_total ?? null,
       cost_details: costDetails ?? data.cost_details ?? null,
+      public_title: payload.publicTitle ?? data.public_title ?? null,
+      public_teaser: payload.publicTeaser ?? data.public_teaser ?? null,
+      public_description: payload.publicDescription ?? data.public_description ?? null,
+      booking_url: payload.bookingUrl ?? data.booking_url ?? null,
+      seo_title: payload.seoTitle ?? data.seo_title ?? null,
+      seo_description: payload.seoDescription ?? data.seo_description ?? null,
+      seo_slug: payload.seoSlug ?? data.seo_slug ?? null,
       goal_focus: data.goal_focus,
       notes: data.notes
     },

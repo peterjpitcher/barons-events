@@ -63,6 +63,13 @@ export interface Database {
           food_promo: string | null;
           goal_focus: string | null;
           notes: string | null;
+          public_title: string | null;
+          public_description: string | null;
+          public_teaser: string | null;
+          booking_url: string | null;
+          seo_title: string | null;
+          seo_description: string | null;
+          seo_slug: string | null;
           created_by: string;
           assignee_id: string | null;
           submitted_at: string | null;

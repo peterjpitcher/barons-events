@@ -10,7 +10,6 @@ import { Select } from "@/components/ui/select";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { getCurrentUser } from "@/lib/auth";
 import { getEventDetail } from "@/lib/events";
-import { generateEventMeta } from "@/lib/ai";
 import { EVENT_GOALS_BY_VALUE, humanizeGoalValue, parseGoalFocus } from "@/lib/event-goals";
 import { listAuditLogForEvent } from "@/lib/audit-log";
 import { listVenuesWithAreas } from "@/lib/venues";
@@ -224,7 +223,6 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
     };
   });
 
-  const aiMeta = event.status === "approved" ? await generateEventMeta(event) : null;
   const currentAssigneeName = resolveUserName(event.assignee_id);
 
   return (
@@ -323,43 +321,6 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
                   </div>
                 </div>
               ) : null}
-            </CardContent>
-          </Card>
-
-          <Card id="marketing-metadata">
-            <CardHeader>
-              <CardTitle>Marketing metadata</CardTitle>
-              <CardDescription>Auto-generated copy to help publish the event on the website.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {event.status !== "approved" ? (
-                <p className="text-sm text-subtle">
-                  We generate SEO copy once the event is approved. Approve the event to unlock the meta details.
-                </p>
-              ) : aiMeta ? (
-                <dl className="grid gap-3 md:grid-cols-2">
-                  <div>
-                    <dt className="text-xs font-semibold uppercase tracking-[0.15em] text-subtle">Meta title</dt>
-                    <dd className="mt-1 text-sm text-[var(--color-text)]">{aiMeta.metaTitle}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs font-semibold uppercase tracking-[0.15em] text-subtle">Meta description</dt>
-                    <dd className="mt-1 text-sm text-[var(--color-text)]">{aiMeta.metaDescription}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs font-semibold uppercase tracking-[0.15em] text-subtle">Slug</dt>
-                    <dd className="mt-1 font-mono text-sm text-[var(--color-primary-700)]">{aiMeta.slug}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs font-semibold uppercase tracking-[0.15em] text-subtle">Short teaser</dt>
-                    <dd className="mt-1 text-sm text-[var(--color-text)]">{aiMeta.teaser}</dd>
-                  </div>
-                </dl>
-              ) : (
-                <p className="text-sm text-danger">
-                  Couldn&apos;t generate metadata. Check the AI service credentials and try again.
-                </p>
-              )}
             </CardContent>
           </Card>
 

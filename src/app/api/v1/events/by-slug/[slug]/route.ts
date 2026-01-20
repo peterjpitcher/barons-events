@@ -46,6 +46,13 @@ export async function GET(request: NextRequest, context: { params: Promise<{ slu
       `
       id,
       title,
+      public_title,
+      public_teaser,
+      public_description,
+      booking_url,
+      seo_title,
+      seo_description,
+      seo_slug,
       event_type,
       status,
       start_at,
@@ -100,4 +107,3 @@ export async function GET(request: NextRequest, context: { params: Promise<{ slu
     }
   );
 }
-

@@ -16,12 +16,17 @@ export type PublicEvent = {
   id: string;
   slug: string;
   title: string;
+  teaser: string | null;
   eventType: string;
   status: PublicEventStatus;
   startAt: string;
   endAt: string;
   venueSpaces: string[];
   description: string | null;
+  bookingUrl: string | null;
+  seoTitle: string | null;
+  seoDescription: string | null;
+  seoSlug: string | null;
   wetPromo: string | null;
   foodPromo: string | null;
   venue: PublicVenue;
@@ -38,6 +43,13 @@ type RawVenue = {
 type RawEventRow = {
   id: string;
   title: string;
+  public_title: string | null;
+  public_teaser: string | null;
+  public_description: string | null;
+  booking_url: string | null;
+  seo_title: string | null;
+  seo_description: string | null;
+  seo_slug: string | null;
   event_type: string;
   status: string;
   start_at: string;
@@ -75,8 +87,9 @@ export function slugify(value: string): string {
     .replace(/(^-|-$)/g, "");
 }
 
-export function buildEventSlug(event: Pick<PublicEvent, "id" | "title">): string {
-  const base = slugify(event.title) || "event";
+export function buildEventSlug(event: { id: string; title: string; seoSlug?: string | null }): string {
+  const slugBase = typeof event.seoSlug === "string" && event.seoSlug.trim().length ? event.seoSlug : event.title;
+  const base = slugify(slugBase) || "event";
   return `${base}--${event.id}`;
 }
 
@@ -133,20 +146,30 @@ export function toPublicEvent(row: RawEventRow): PublicEvent {
     throw new Error(`Event ${row.id} is not public`);
   }
 
-  const title = row.title;
-  const safeTitle = typeof title === "string" ? title.trim() : "";
-  const description = normaliseOptionalText(row.notes);
+  const internalTitle = typeof row.title === "string" ? row.title.trim() : "";
+  const title = normaliseOptionalText(row.public_title) ?? internalTitle;
+  const teaser = normaliseOptionalText(row.public_teaser);
+  const description = normaliseOptionalText(row.public_description) ?? normaliseOptionalText(row.notes);
+  const bookingUrl = normaliseOptionalText(row.booking_url);
+  const seoTitle = normaliseOptionalText(row.seo_title);
+  const seoDescription = normaliseOptionalText(row.seo_description);
+  const seoSlug = normaliseOptionalText(row.seo_slug);
 
   return {
     id: row.id,
-    slug: buildEventSlug({ id: row.id, title: safeTitle }),
-    title: safeTitle,
+    slug: buildEventSlug({ id: row.id, title, seoSlug }),
+    title,
+    teaser,
     eventType: row.event_type,
     status,
     startAt: row.start_at,
     endAt: row.end_at,
     venueSpaces: parseVenueSpaces(row.venue_space),
     description,
+    bookingUrl,
+    seoTitle,
+    seoDescription,
+    seoSlug,
     wetPromo: normaliseOptionalText(row.wet_promo),
     foodPromo: normaliseOptionalText(row.food_promo),
     venue,

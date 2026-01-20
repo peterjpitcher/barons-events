@@ -2,13 +2,13 @@
 
 import { useActionState, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { saveEventDraftAction, submitEventForReviewAction } from "@/actions/events";
+import { generateWebsiteCopyAction, saveEventDraftAction, submitEventForReviewAction } from "@/actions/events";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { DeleteEventButton } from "@/components/events/delete-event-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
 import { FieldError } from "@/components/ui/field-error";
 import { EVENT_GOALS } from "@/lib/event-goals";
@@ -62,7 +62,8 @@ export function EventForm({
 }: EventFormProps) {
   const [draftState, draftAction] = useActionState(saveEventDraftAction, undefined);
   const [submitState, submitAction] = useActionState(submitEventForReviewAction, undefined);
-  const [intent, setIntent] = useState<"draft" | "submit">("draft");
+  const [websiteCopyState, websiteCopyAction] = useActionState(generateWebsiteCopyAction, undefined);
+  const [intent, setIntent] = useState<"draft" | "submit" | "generate">("draft");
 
   useEffect(() => {
     if (draftState?.message) {
@@ -84,6 +85,16 @@ export function EventForm({
     }
   }, [submitState]);
 
+  useEffect(() => {
+    if (websiteCopyState?.message) {
+      if (websiteCopyState.success) {
+        toast.success(websiteCopyState.message);
+      } else if (!websiteCopyState.fieldErrors) {
+        toast.error(websiteCopyState.message);
+      }
+    }
+  }, [websiteCopyState]);
+
   const canChooseVenue = role === "central_planner";
   const preferredVenueId = initialVenueId ?? defaultValues?.venue_id ?? userVenueId ?? venues[0]?.id ?? "";
   const defaultVenueId = venues.some((venue) => venue.id === preferredVenueId) ? preferredVenueId : venues[0]?.id ?? "";
@@ -91,6 +102,34 @@ export function EventForm({
   const [startValue, setStartValue] = useState(toLocalInputValue(defaultValues?.start_at ?? initialStartAt));
   const [endValue, setEndValue] = useState(toLocalInputValue(defaultValues?.end_at ?? initialEndAt));
   const [endDirty, setEndDirty] = useState(Boolean(defaultValues?.end_at ?? initialEndAt));
+
+  const [publicTitle, setPublicTitle] = useState(defaultValues?.public_title ?? "");
+  const [publicTeaser, setPublicTeaser] = useState(defaultValues?.public_teaser ?? "");
+  const [publicDescription, setPublicDescription] = useState(defaultValues?.public_description ?? "");
+  const [bookingUrl, setBookingUrl] = useState(defaultValues?.booking_url ?? "");
+  const [seoTitle, setSeoTitle] = useState(defaultValues?.seo_title ?? "");
+  const [seoDescription, setSeoDescription] = useState(defaultValues?.seo_description ?? "");
+  const [seoSlug, setSeoSlug] = useState(defaultValues?.seo_slug ?? "");
+
+  useEffect(() => {
+    setPublicTitle(defaultValues?.public_title ?? "");
+    setPublicTeaser(defaultValues?.public_teaser ?? "");
+    setPublicDescription(defaultValues?.public_description ?? "");
+    setBookingUrl(defaultValues?.booking_url ?? "");
+    setSeoTitle(defaultValues?.seo_title ?? "");
+    setSeoDescription(defaultValues?.seo_description ?? "");
+    setSeoSlug(defaultValues?.seo_slug ?? "");
+  }, [defaultValues?.id]);
+
+  useEffect(() => {
+    if (!websiteCopyState?.success || !websiteCopyState.values) return;
+    setPublicTitle(websiteCopyState.values.publicTitle ?? "");
+    setPublicTeaser(websiteCopyState.values.publicTeaser ?? "");
+    setPublicDescription(websiteCopyState.values.publicDescription ?? "");
+    setSeoTitle(websiteCopyState.values.seoTitle ?? "");
+    setSeoDescription(websiteCopyState.values.seoDescription ?? "");
+    setSeoSlug(websiteCopyState.values.seoSlug ?? "");
+  }, [websiteCopyState]);
 
   const defaultGoals = useMemo(
     () =>
@@ -109,6 +148,8 @@ export function EventForm({
   );
 
   const typeOptions = eventTypes.length ? eventTypes : ["General"];
+  const canGenerateWebsiteCopy =
+    mode === "edit" && Boolean(defaultValues?.id) && ["approved", "completed"].includes(defaultValues?.status ?? "");
 
   function handleVenueChange(value: string) {
     setSelectedVenueId(value);
@@ -130,7 +171,7 @@ export function EventForm({
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     const submitter = (event.nativeEvent as unknown as { submitter?: HTMLElement | null }).submitter;
     const actionIntent = submitter?.getAttribute?.("data-intent");
-    setIntent(actionIntent === "submit" ? "submit" : "draft");
+    setIntent(actionIntent === "submit" ? "submit" : actionIntent === "generate" ? "generate" : "draft");
   }
 
   const activeState = intent === "submit" ? submitState : draftState;
@@ -141,7 +182,11 @@ export function EventForm({
       <input type="hidden" name="eventId" defaultValue={defaultValues?.id} />
 
       <Card>
-        <CardContent className="grid gap-6 pt-6">
+        <CardHeader>
+          <CardTitle>1. Core details</CardTitle>
+          <CardDescription>Start with the venue, title, and the type of activation you’re planning.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-6">
           <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_260px]">
             <div className="space-y-2">
               <Label htmlFor="title">Event title</Label>
@@ -209,18 +254,6 @@ export function EventForm({
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="eventDetails">Event details</Label>
-            <Textarea
-              id="eventDetails"
-              name="notes"
-              rows={4}
-              defaultValue={defaultValues?.notes ?? ""}
-              placeholder="Add all the details about the event here — it doesn’t need to be structured."
-            />
-            <p className="text-xs text-subtle">Include anything a guest would want to know (what’s happening, timings, promos, key moments).</p>
-          </div>
-
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="eventType">Event type</Label>
@@ -246,27 +279,34 @@ export function EventForm({
               <FieldError id="event-type-error" message={fieldErrors.eventType} />
               <p className="text-xs text-subtle">Need a new option? Add it in Settings.</p>
             </div>
-            <div className="space-y-2">
-              <div className="space-y-2">
-                <Label htmlFor="venueSpace">Spaces</Label>
-                <Input
-                  id="venueSpace"
-                  name="venueSpace"
-                  defaultValue={defaultValues?.venue_space ?? ""}
-                  placeholder="e.g. Main Bar, Garden"
-                  required
-                  aria-invalid={Boolean(fieldErrors.venueSpace)}
-                  aria-describedby={fieldErrors.venueSpace ? "venue-space-error" : undefined}
-                  className={cn(
-                    fieldErrors.venueSpace
-                      ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
-                      : undefined
-                  )}
-                />
-                <FieldError id="venue-space-error" message={fieldErrors.venueSpace} />
-                <p className="text-xs text-subtle">Enter the specific areas or rooms being used.</p>
-              </div>
-            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>2. Timing & spaces</CardTitle>
+          <CardDescription>Set where the event takes place and when guests should arrive.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-6">
+          <div className="space-y-2">
+            <Label htmlFor="venueSpace">Spaces</Label>
+            <Input
+              id="venueSpace"
+              name="venueSpace"
+              defaultValue={defaultValues?.venue_space ?? ""}
+              placeholder="e.g. Main Bar, Garden"
+              required
+              aria-invalid={Boolean(fieldErrors.venueSpace)}
+              aria-describedby={fieldErrors.venueSpace ? "venue-space-error" : undefined}
+              className={cn(
+                fieldErrors.venueSpace
+                  ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+                  : undefined
+              )}
+            />
+            <FieldError id="venue-space-error" message={fieldErrors.venueSpace} />
+            <p className="text-xs text-subtle">Enter the specific areas or rooms being used.</p>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
@@ -311,7 +351,15 @@ export function EventForm({
               <p className="text-xs text-subtle">We’ll auto-fill three hours after the start—adjust if the event runs longer or shorter.</p>
             </div>
           </div>
+        </CardContent>
+      </Card>
 
+      <Card>
+        <CardHeader>
+          <CardTitle>3. Promos & planning</CardTitle>
+          <CardDescription>Provide headcount, promos, and any expected costs for planning.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-6">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="expectedHeadcount">Expected headcount</Label>
@@ -375,6 +423,34 @@ export function EventForm({
               </div>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>4. Event details & goals</CardTitle>
+          <CardDescription>Capture the guest-facing details and any internal goals for the activation.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-6">
+          <div className="space-y-2">
+            <Label htmlFor="eventDetails">Event details</Label>
+            <Textarea
+              id="eventDetails"
+              name="notes"
+              rows={5}
+              defaultValue={defaultValues?.notes ?? ""}
+              placeholder="Add all the details about the event here — it doesn’t need to be structured."
+              aria-invalid={Boolean(fieldErrors.notes)}
+              aria-describedby={fieldErrors.notes ? "event-details-error" : undefined}
+              className={cn(
+                fieldErrors.notes
+                  ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+                  : undefined
+              )}
+            />
+            <FieldError id="event-details-error" message={fieldErrors.notes} />
+            <p className="text-xs text-subtle">Include anything a guest would want to know (what’s happening, timings, promos, key moments).</p>
+          </div>
 
           <div className="space-y-3">
             <Label>Goals</Label>
@@ -401,22 +477,194 @@ export function EventForm({
         </CardContent>
       </Card>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <SubmitButton
-          label={mode === "create" ? "Save draft" : "Save changes"}
-          pendingLabel="Saving..."
-          variant="primary"
-          data-intent="draft"
-        />
-        <SubmitButton
-          formAction={submitAction}
-          label="Submit for review"
-          pendingLabel="Sending..."
-          variant="secondary"
-          data-intent="submit"
-        />
-        {mode === "edit" && defaultValues?.id ? <DeleteEventButton eventId={defaultValues.id} variant="button" /> : null}
-      </div>
+      <Card id="website-copy">
+        <CardHeader>
+          <CardTitle>5. Website listing (AI-assisted)</CardTitle>
+          <CardDescription>Generate and polish the guest-facing name, teaser, and description for the website.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-6">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="publicTitle">Public name</Label>
+              <Input
+                id="publicTitle"
+                name="publicTitle"
+                value={publicTitle}
+                onChange={(event) => setPublicTitle(event.target.value)}
+                placeholder="Guest-facing name for the website"
+                aria-invalid={Boolean(fieldErrors.publicTitle)}
+                aria-describedby={fieldErrors.publicTitle ? "public-title-error" : undefined}
+                className={cn(
+                  fieldErrors.publicTitle
+                    ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+                    : undefined
+                )}
+              />
+              <FieldError id="public-title-error" message={fieldErrors.publicTitle} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="bookingUrl">Booking link</Label>
+              <Input
+                id="bookingUrl"
+                name="bookingUrl"
+                type="url"
+                value={bookingUrl}
+                onChange={(event) => setBookingUrl(event.target.value)}
+                placeholder="https://…"
+                aria-invalid={Boolean(fieldErrors.bookingUrl)}
+                aria-describedby={fieldErrors.bookingUrl ? "booking-url-error" : undefined}
+                className={cn(
+                  fieldErrors.bookingUrl
+                    ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+                    : undefined
+                )}
+              />
+              <FieldError id="booking-url-error" message={fieldErrors.bookingUrl} />
+              <p className="text-xs text-subtle">Optional. If empty, the website can hide the booking CTA.</p>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="publicTeaser">Teaser</Label>
+            <Input
+              id="publicTeaser"
+              name="publicTeaser"
+              value={publicTeaser}
+              onChange={(event) => setPublicTeaser(event.target.value)}
+              placeholder="Short hook for cards (max ~160 chars)"
+              aria-invalid={Boolean(fieldErrors.publicTeaser)}
+              aria-describedby={fieldErrors.publicTeaser ? "public-teaser-error" : undefined}
+              className={cn(
+                fieldErrors.publicTeaser
+                  ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+                  : undefined
+              )}
+            />
+            <FieldError id="public-teaser-error" message={fieldErrors.publicTeaser} />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="publicDescription">Public description</Label>
+            <Textarea
+              id="publicDescription"
+              name="publicDescription"
+              rows={9}
+              value={publicDescription}
+              onChange={(event) => setPublicDescription(event.target.value)}
+              placeholder="~300 words designed to drive urgency and bookings."
+              aria-invalid={Boolean(fieldErrors.publicDescription)}
+              aria-describedby={fieldErrors.publicDescription ? "public-description-error" : undefined}
+              className={cn(
+                fieldErrors.publicDescription
+                  ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+                  : undefined
+              )}
+            />
+            <FieldError id="public-description-error" message={fieldErrors.publicDescription} />
+            <p className="text-xs text-subtle">Write as if a guest is reading this on the website.</p>
+          </div>
+
+          <div className="space-y-4 rounded-lg bg-[var(--color-surface-soft)] p-4">
+            <h3 className="font-semibold text-[var(--color-text)]">SEO metadata</h3>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="seoTitle">SEO title</Label>
+                <Input
+                  id="seoTitle"
+                  name="seoTitle"
+                  value={seoTitle}
+                  onChange={(event) => setSeoTitle(event.target.value)}
+                  placeholder="≤ 60 characters"
+                  aria-invalid={Boolean(fieldErrors.seoTitle)}
+                  aria-describedby={fieldErrors.seoTitle ? "seo-title-error" : undefined}
+                  className={cn(
+                    fieldErrors.seoTitle
+                      ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+                      : undefined
+                  )}
+                />
+                <FieldError id="seo-title-error" message={fieldErrors.seoTitle} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="seoSlug">SEO slug</Label>
+                <Input
+                  id="seoSlug"
+                  name="seoSlug"
+                  value={seoSlug}
+                  onChange={(event) => setSeoSlug(event.target.value)}
+                  placeholder="lowercase-words-separated-by-hyphens"
+                  aria-invalid={Boolean(fieldErrors.seoSlug)}
+                  aria-describedby={fieldErrors.seoSlug ? "seo-slug-error" : undefined}
+                  className={cn(
+                    fieldErrors.seoSlug
+                      ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+                      : undefined
+                  )}
+                />
+                <FieldError id="seo-slug-error" message={fieldErrors.seoSlug} />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="seoDescription">SEO description</Label>
+              <Textarea
+                id="seoDescription"
+                name="seoDescription"
+                rows={3}
+                value={seoDescription}
+                onChange={(event) => setSeoDescription(event.target.value)}
+                placeholder="≤ 155 characters"
+                aria-invalid={Boolean(fieldErrors.seoDescription)}
+                aria-describedby={fieldErrors.seoDescription ? "seo-description-error" : undefined}
+                className={cn(
+                  fieldErrors.seoDescription
+                    ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+                    : undefined
+                )}
+              />
+              <FieldError id="seo-description-error" message={fieldErrors.seoDescription} />
+            </div>
+          </div>
+
+          {!canGenerateWebsiteCopy ? (
+            <p className="text-xs text-subtle">
+              Save the draft and approve the event to enable AI generation.
+            </p>
+          ) : null}
+        </CardContent>
+        <CardFooter className="justify-end">
+          <SubmitButton
+            formAction={websiteCopyAction}
+            label="Generate with AI"
+            pendingLabel="Generating..."
+            variant="secondary"
+            data-intent="generate"
+            disabled={!canGenerateWebsiteCopy}
+          />
+        </CardFooter>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>6. Save & submit</CardTitle>
+          <CardDescription>Save a draft first, then submit for review when ready.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap items-center gap-3">
+          <SubmitButton
+            label={mode === "create" ? "Save draft" : "Save changes"}
+            pendingLabel="Saving..."
+            variant="primary"
+            data-intent="draft"
+          />
+          <SubmitButton
+            formAction={submitAction}
+            label="Submit for review"
+            pendingLabel="Sending..."
+            variant="secondary"
+            data-intent="submit"
+          />
+          {mode === "edit" && defaultValues?.id ? <DeleteEventButton eventId={defaultValues.id} variant="button" /> : null}
+        </CardContent>
+      </Card>
     </form>
   );
 }

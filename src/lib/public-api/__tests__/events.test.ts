@@ -15,6 +15,14 @@ describe("public-api events helpers", () => {
         title: "City Tap Jazz Brunch"
       })
     ).toBe("city-tap-jazz-brunch--aaaaaaa1-0000-4000-8000-000000000003");
+
+    expect(
+      buildEventSlug({
+        id: "aaaaaaa1-0000-4000-8000-000000000003",
+        title: "City Tap Jazz Brunch",
+        seoSlug: "jazz-brunch-special"
+      })
+    ).toBe("jazz-brunch-special--aaaaaaa1-0000-4000-8000-000000000003");
   });
 
   it("encodes and decodes cursors via base64url JSON", () => {
@@ -34,6 +42,13 @@ describe("public-api events helpers", () => {
     const event = toPublicEvent({
       id: "aaaaaaa1-0000-4000-8000-000000000001",
       title: "  Cask Ale Showcase  ",
+      public_title: "  The Ultimate Cask Ale Showcase  ",
+      public_teaser: "Limited tickets – one-night-only cask line-up.",
+      public_description: "A guest-facing description for the website.",
+      booking_url: "https://example.com/book",
+      seo_title: "Cask Ale Showcase",
+      seo_description: "Secure your spot for our cask showcase.",
+      seo_slug: "cask-ale-showcase",
       event_type: "Tap Takeover",
       status: "approved",
       start_at: "2025-04-18T18:00:00.000Z",
@@ -51,7 +66,11 @@ describe("public-api events helpers", () => {
       }
     });
 
-    expect(event.title).toBe("Cask Ale Showcase");
+    expect(event.title).toBe("The Ultimate Cask Ale Showcase");
+    expect(event.teaser).toBe("Limited tickets – one-night-only cask line-up.");
+    expect(event.description).toBe("A guest-facing description for the website.");
+    expect(event.bookingUrl).toBe("https://example.com/book");
+    expect(event.seoSlug).toBe("cask-ale-showcase");
     expect(event.venueSpaces).toEqual(["Main Bar", "Riverside Terrace"]);
     expect(event.foodPromo).toBeNull();
     expect(event.status).toBe("approved");
@@ -62,6 +81,13 @@ describe("public-api events helpers", () => {
       toPublicEvent({
         id: "aaaaaaa1-0000-4000-8000-000000000001",
         title: "Draft event",
+        public_title: null,
+        public_teaser: null,
+        public_description: null,
+        booking_url: null,
+        seo_title: null,
+        seo_description: null,
+        seo_slug: null,
         event_type: "Tap Takeover",
         status: "draft",
         start_at: "2025-04-18T18:00:00.000Z",

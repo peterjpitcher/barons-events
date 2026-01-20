@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { reviewerDecisionAction } from "@/actions/events";
+import { generateWebsiteCopyAction, reviewerDecisionAction } from "@/actions/events";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -20,6 +20,7 @@ type DecisionFormProps = {
 
 export function DecisionForm({ eventId }: DecisionFormProps) {
   const [state, formAction] = useActionState(reviewerDecisionAction, undefined);
+  const [websiteCopyState, websiteCopyAction] = useActionState(generateWebsiteCopyAction, undefined);
   const [selectedDecision, setSelectedDecision] = useState<string | null>(null);
   const decisionError = state?.fieldErrors?.decision;
 
@@ -34,24 +35,42 @@ export function DecisionForm({ eventId }: DecisionFormProps) {
   }, [state]);
 
   useEffect(() => {
+    if (websiteCopyState?.message) {
+      if (websiteCopyState.success) {
+        toast.success(websiteCopyState.message);
+      } else if (!websiteCopyState.fieldErrors) {
+        toast.error(websiteCopyState.message);
+      }
+    }
+  }, [websiteCopyState]);
+
+  useEffect(() => {
     if (!state?.success) return;
     if (selectedDecision !== "approved") return;
 
-    const confirmed = window.confirm("Event approved. Generate the AI marketing metadata now?");
+    const confirmed = window.confirm("Event approved. Generate the AI website listing copy now?");
     if (!confirmed) return;
 
-    const marketingCard = document.getElementById("marketing-metadata");
-    if (marketingCard) {
-      marketingCard.scrollIntoView({ behavior: "smooth", block: "start" });
+    const formData = new FormData();
+    formData.set("eventId", eventId);
+    websiteCopyAction(formData);
+  }, [eventId, selectedDecision, state?.success, websiteCopyAction]);
+
+  useEffect(() => {
+    if (!websiteCopyState?.success) return;
+
+    const websiteCopyCard = document.getElementById("website-copy");
+    if (websiteCopyCard) {
+      websiteCopyCard.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
 
-    const url = `/events/${eventId}#marketing-metadata`;
+    const url = `/events/${eventId}#website-copy`;
     const opened = window.open(url, "_blank", "noopener,noreferrer");
     if (!opened) {
       window.location.assign(url);
     }
-  }, [eventId, selectedDecision, state?.success]);
+  }, [eventId, websiteCopyState?.success]);
 
   return (
     <form action={formAction} className="space-y-4" noValidate>
