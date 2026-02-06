@@ -156,7 +156,19 @@ const areaSchema = z.object({
   areaId: z.string().uuid().optional(),
   venueId: z.string().uuid(),
   name: z.string().min(2, "Add an area name"),
-  capacity: z.union([z.coerce.number().int().min(0).max(10000), z.undefined(), z.null()]).optional()
+  capacity: z.preprocess(
+    (value) => {
+      if (value === null || value === undefined) return undefined;
+      if (typeof value === "string") {
+        const trimmed = value.trim();
+        if (!trimmed.length) return undefined;
+        const parsed = Number(trimmed);
+        return Number.isFinite(parsed) ? parsed : value;
+      }
+      return value;
+    },
+    z.number().int().min(0).max(10000).optional()
+  )
 });
 
 export async function createVenueAreaAction(

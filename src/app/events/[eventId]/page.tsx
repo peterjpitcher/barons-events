@@ -73,7 +73,8 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
 
   const canEdit =
     (user.role === "central_planner" && ["draft", "submitted", "needs_revisions", "approved"].includes(event.status)) ||
-    ((user.role === "venue_manager" && event.created_by === user.id) && ["draft", "submitted", "needs_revisions"].includes(event.status));
+    ((user.role === "venue_manager" && event.created_by === user.id) &&
+      ["draft", "needs_revisions"].includes(event.status));
   const canReview =
     (user.role === "reviewer" && event.assignee_id === user.id && ["submitted", "needs_revisions"].includes(event.status)) ||
     (user.role === "central_planner" && ["submitted", "needs_revisions"].includes(event.status));
@@ -360,7 +361,11 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
             </Card>
           ) : null}
 
-          {!canEdit && (user.role === "central_planner" || (user.role === "venue_manager" && event.created_by === user.id && ["draft", "submitted", "needs_revisions"].includes(event.status))) ? (
+          {!canEdit &&
+          (user.role === "central_planner" ||
+            (user.role === "venue_manager" &&
+              event.created_by === user.id &&
+              ["draft", "needs_revisions"].includes(event.status))) ? (
             <Card className="border-red-100 bg-red-50/50">
               <CardHeader>
                 <CardTitle className="text-red-700">Danger zone</CardTitle>

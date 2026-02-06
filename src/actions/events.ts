@@ -122,11 +122,27 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
   if (!user) {
     redirect("/login");
   }
+  if (user.role !== "central_planner" && user.role !== "venue_manager") {
+    return { success: false, message: "You don't have permission to save events." };
+  }
 
   const rawEventId = formData.get("eventId");
   const eventId = typeof rawEventId === "string" ? rawEventId.trim() || undefined : undefined;
   const venueIdValue = formData.get("venueId");
-  const venueId = typeof venueIdValue === "string" ? venueIdValue : (user.venueId ?? "");
+  const requestedVenueId = typeof venueIdValue === "string" ? venueIdValue : "";
+  const venueId = user.role === "venue_manager" ? (user.venueId ?? "") : requestedVenueId;
+
+  if (user.role === "venue_manager" && !user.venueId) {
+    return { success: false, message: "Your account is not linked to a venue." };
+  }
+
+  if (user.role === "venue_manager" && requestedVenueId && requestedVenueId !== user.venueId) {
+    return {
+      success: false,
+      message: "Venue managers can only create events for their linked venue.",
+      fieldErrors: { venueId: "Venue mismatch" }
+    };
+  }
   const titleValue = formData.get("title");
   const title = typeof titleValue === "string" ? titleValue : "";
   const eventTypeValue = formData.get("eventType");
@@ -263,6 +279,12 @@ export async function submitEventForReviewAction(
   if (!user) {
     redirect("/login");
   }
+  if (user.role !== "central_planner" && user.role !== "venue_manager") {
+    return { success: false, message: "You don't have permission to submit events." };
+  }
+  if (user.role === "venue_manager" && !user.venueId) {
+    return { success: false, message: "Your account is not linked to a venue." };
+  }
 
   const eventId = formData.get("eventId");
   const assigneeField = formData.get("assigneeId") ?? formData.get("assignedReviewerId") ?? undefined;
@@ -280,7 +302,17 @@ export async function submitEventForReviewAction(
       targetEventId = parsedId.data;
     } else {
       const venueIdValue = formData.get("venueId");
-      const venueId = typeof venueIdValue === "string" ? venueIdValue : (user.venueId ?? "");
+      const requestedVenueId = typeof venueIdValue === "string" ? venueIdValue : "";
+      const venueId = user.role === "venue_manager" ? (user.venueId ?? "") : requestedVenueId;
+
+      if (user.role === "venue_manager" && requestedVenueId && requestedVenueId !== user.venueId) {
+        return {
+          success: false,
+          message: "Venue managers can only submit events for their linked venue.",
+          fieldErrors: { venueId: "Venue mismatch" }
+        };
+      }
+
       const titleValue = formData.get("title");
       const title = typeof titleValue === "string" ? titleValue : "";
       const eventTypeValue = formData.get("eventType");
@@ -390,6 +422,10 @@ export async function submitEventForReviewAction(
       return { success: true, message: "Event approved instantly." };
     }
 
+    if (existingEvent?.created_by !== user.id) {
+      return { success: false, message: "You can only submit events you created." };
+    }
+
     async function resolveAssignee(): Promise<string | null> {
       const parsedAssignee = reviewerFallback.parse(assigneeOverride) ?? null;
       if (parsedAssignee) return parsedAssignee;
@@ -484,6 +520,9 @@ export async function reviewerDecisionAction(
   if (!user) {
     redirect("/login");
   }
+  if (user.role !== "reviewer" && user.role !== "central_planner") {
+    return { success: false, message: "Only reviewers or planners can record decisions." };
+  }
 
   const decision = formData.get("decision");
   const eventId = formData.get("eventId");
@@ -517,6 +556,18 @@ export async function reviewerDecisionAction(
 
     if (eventBeforeError) {
       throw eventBeforeError;
+    }
+    if (!eventBeforeDecision) {
+      return { success: false, message: "Event not found." };
+    }
+
+    if (user.role === "reviewer") {
+      if (eventBeforeDecision.assignee_id !== user.id) {
+        return { success: false, message: "This event is not assigned to you." };
+      }
+      if (!["submitted", "needs_revisions"].includes(eventBeforeDecision.status)) {
+        return { success: false, message: "This event is not currently awaiting review." };
+      }
     }
 
     const currentAssignee = eventBeforeDecision?.assignee_id ?? null;
@@ -785,6 +836,9 @@ export async function deleteEventAction(_: ActionResult | undefined, formData: F
   if (!user) {
     redirect("/login");
   }
+  if (user.role !== "central_planner" && user.role !== "venue_manager") {
+    return { success: false, message: "You don't have permission to delete events." };
+  }
 
   const eventId = formData.get("eventId");
   const parsedEvent = z.string().uuid().safeParse(eventId);
@@ -809,16 +863,34 @@ export async function deleteEventAction(_: ActionResult | undefined, formData: F
     const canDelete =
       user.role === "central_planner" ||
       ((user.role === "venue_manager" && event.created_by === user.id) &&
-        ["draft", "submitted", "needs_revisions"].includes(event.status));
+        ["draft", "needs_revisions"].includes(event.status));
 
     if (!canDelete) {
       return { success: false, message: "You don't have permission to delete this event." };
     }
 
-    const { error: deleteError } = await supabase.from("events").delete().eq("id", event.id);
+    let deleted = false;
+    try {
+      const admin = createSupabaseServiceRoleClient();
+      let deleteQuery = admin.from("events").delete().eq("id", event.id);
+      if (user.role === "venue_manager") {
+        deleteQuery = deleteQuery.eq("created_by", user.id);
+      }
+      const { error: adminDeleteError } = await deleteQuery;
+      if (!adminDeleteError) {
+        deleted = true;
+      } else {
+        console.warn("Service-role delete failed; retrying with user client", adminDeleteError);
+      }
+    } catch (error) {
+      console.warn("Service-role delete unavailable; retrying with user client", error);
+    }
 
-    if (deleteError) {
-      throw deleteError;
+    if (!deleted) {
+      const { error: deleteError } = await supabase.from("events").delete().eq("id", event.id);
+      if (deleteError) {
+        throw deleteError;
+      }
     }
 
     revalidatePath("/events");

@@ -194,6 +194,7 @@ function VenueCardMobile({ venue, reviewers }: { venue: VenueWithAreas; reviewer
               variant="destructive"
               icon={<Trash2 className="h-4 w-4" aria-hidden="true" />}
               formAction={deleteAction}
+              formNoValidate
               hideLabel
             />
             <SubmitButton
@@ -317,6 +318,7 @@ function VenueDesktopRow({ venue, reviewers, isFirst }: { venue: VenueWithAreas;
             variant="destructive"
             icon={<Trash2 className="h-4 w-4" aria-hidden="true" />}
             formAction={deleteAction}
+            formNoValidate
             hideLabel
           />
           <SubmitButton

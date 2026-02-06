@@ -10,6 +10,26 @@ const trimmedStringOrUndefined = z.preprocess(
 );
 
 const optionalText = (max: number) => trimmedStringOrUndefined.pipe(z.string().max(max).optional());
+const normaliseOptionalNumber = (value: unknown): unknown => {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed.length === 0) {
+      return undefined;
+    }
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : value;
+  }
+  return value;
+};
+
+const optionalInteger = (min: number, max: number) =>
+  z.preprocess(normaliseOptionalNumber, z.number().int().min(min).max(max).optional());
+
+const optionalNumberMin = (min: number) =>
+  z.preprocess(normaliseOptionalNumber, z.number().min(min).optional());
 
 const isoDateString = z
   .string()
@@ -25,12 +45,10 @@ export const eventFormSchema = z.object({
   startAt: isoDateString,
   endAt: isoDateString,
   venueSpace: z.string().min(2, "Add the area"),
-  expectedHeadcount: z
-    .union([z.coerce.number().int().min(0).max(10000), z.undefined(), z.null()])
-    .optional(),
+  expectedHeadcount: optionalInteger(0, 10000),
   wetPromo: optionalText(240),
   foodPromo: optionalText(240),
-  costTotal: z.coerce.number().min(0).optional(),
+  costTotal: optionalNumberMin(0),
   costDetails: optionalText(500),
   goalFocus: optionalText(120),
   notes: optionalText(3000),
@@ -69,10 +87,10 @@ export const decisionSchema = z.object({
 
 export const debriefSchema = z.object({
   eventId: z.string().uuid(),
-  attendance: z.union([z.coerce.number().int().min(0).max(100000), z.undefined(), z.null()]).optional(),
-  wetTakings: z.union([z.coerce.number().nonnegative(), z.undefined(), z.null()]).optional(),
-  foodTakings: z.union([z.coerce.number().nonnegative(), z.undefined(), z.null()]).optional(),
-  promoEffectiveness: z.union([z.coerce.number().int().min(1).max(5), z.undefined(), z.null()]).optional(),
-  highlights: z.string().max(1000).optional(),
-  issues: z.string().max(1000).optional()
+  attendance: optionalInteger(0, 100000),
+  wetTakings: optionalNumberMin(0),
+  foodTakings: optionalNumberMin(0),
+  promoEffectiveness: optionalInteger(1, 5),
+  highlights: optionalText(1000),
+  issues: optionalText(1000)
 });

@@ -2,12 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { upsertDebrief } from "@/lib/debriefs";
 import { debriefSchema } from "@/lib/validation";
-import { createSupabaseActionClient } from "@/lib/supabase/server";
-import type { Database } from "@/lib/supabase/types";
+import { createSupabaseActionClient, createSupabaseServiceRoleClient } from "@/lib/supabase/server";
 import { sendPostEventDigestEmail } from "@/lib/notifications";
 
 type ActionResult = {
@@ -22,6 +20,9 @@ export async function submitDebriefAction(
   const user = await getCurrentUser();
   if (!user) {
     redirect("/login");
+  }
+  if (user.role !== "central_planner" && user.role !== "venue_manager") {
+    return { success: false, message: "Only planners or venue managers can submit debriefs." };
   }
 
   const parsed = debriefSchema.safeParse({
@@ -41,6 +42,26 @@ export async function submitDebriefAction(
   try {
     const values = parsed.data;
     const supabase = await createSupabaseActionClient();
+    const { data: event, error: eventError } = await supabase
+      .from("events")
+      .select("id, created_by, status")
+      .eq("id", values.eventId)
+      .maybeSingle();
+
+    if (eventError) {
+      throw eventError;
+    }
+    if (!event) {
+      return { success: false, message: "Event not found." };
+    }
+
+    if (user.role === "venue_manager" && event.created_by !== user.id) {
+      return { success: false, message: "You can only submit debriefs for your own events." };
+    }
+
+    if (!["approved", "completed"].includes(event.status)) {
+      return { success: false, message: "Debriefs are available after an event is approved." };
+    }
 
     await upsertDebrief({
       eventId: values.eventId,
@@ -53,9 +74,34 @@ export async function submitDebriefAction(
       issues: values.issues ?? null
     });
 
-    await (supabase.from("events") as any)
-      .update({ status: "completed" })
-      .eq("id", values.eventId);
+    let statusUpdated = false;
+
+    try {
+      const admin = createSupabaseServiceRoleClient();
+      let updateQuery = admin.from("events").update({ status: "completed" }).eq("id", values.eventId);
+      if (user.role === "venue_manager") {
+        updateQuery = updateQuery.eq("created_by", user.id);
+      }
+      const { error: adminError } = await updateQuery;
+      if (!adminError) {
+        statusUpdated = true;
+      } else {
+        console.warn("Service-role status update failed; retrying with user client", adminError);
+      }
+    } catch (error) {
+      console.warn("Service-role status update unavailable; retrying with user client", error);
+    }
+
+    if (!statusUpdated) {
+      const { error: statusError } = await supabase
+        .from("events")
+        .update({ status: "completed" })
+        .eq("id", values.eventId);
+
+      if (statusError) {
+        throw statusError;
+      }
+    }
 
     await sendPostEventDigestEmail(values.eventId);
 
