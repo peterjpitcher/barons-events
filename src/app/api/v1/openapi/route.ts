@@ -57,13 +57,22 @@ const spec = {
           slug: { type: "string" },
           title: { type: "string" },
           teaser: { type: ["string", "null"] },
+          highlights: { type: "array", items: { type: "string" } },
           eventType: { type: "string" },
           status: { type: "string", enum: ["approved", "completed"] },
           startAt: { type: "string", format: "date-time" },
           endAt: { type: "string", format: "date-time" },
           venueSpaces: { type: "array", items: { type: "string" } },
           description: { type: ["string", "null"] },
+          bookingType: { type: ["string", "null"], enum: ["ticketed", "table_booking", "free_entry", "mixed", null] },
+          ticketPrice: { type: ["number", "null"] },
+          checkInCutoffMinutes: { type: ["integer", "null"] },
+          agePolicy: { type: ["string", "null"] },
+          accessibilityNotes: { type: ["string", "null"] },
+          cancellationWindowHours: { type: ["integer", "null"] },
+          termsAndConditions: { type: ["string", "null"] },
           bookingUrl: { type: ["string", "null"], format: "uri" },
+          eventImageUrl: { type: ["string", "null"], format: "uri" },
           seoTitle: { type: ["string", "null"] },
           seoDescription: { type: ["string", "null"] },
           seoSlug: { type: ["string", "null"] },
@@ -77,13 +86,22 @@ const spec = {
           "slug",
           "title",
           "teaser",
+          "highlights",
           "eventType",
           "status",
           "startAt",
           "endAt",
           "venueSpaces",
           "description",
+          "bookingType",
+          "ticketPrice",
+          "checkInCutoffMinutes",
+          "agePolicy",
+          "accessibilityNotes",
+          "cancellationWindowHours",
+          "termsAndConditions",
           "bookingUrl",
+          "eventImageUrl",
           "seoTitle",
           "seoDescription",
           "seoSlug",
@@ -221,7 +239,7 @@ const spec = {
     },
     "/api/v1/venues": {
       get: {
-        summary: "List venues (with areas)",
+        summary: "List venues",
         responses: {
           "200": {
             description: "OK",
@@ -239,22 +257,9 @@ const spec = {
                           id: { type: "string", format: "uuid" },
                           name: { type: "string" },
                           address: { type: ["string", "null"] },
-                          capacity: { type: ["integer", "null"] },
-                          areas: {
-                            type: "array",
-                            items: {
-                              type: "object",
-                              additionalProperties: false,
-                              properties: {
-                                id: { type: "string", format: "uuid" },
-                                name: { type: "string" },
-                                capacity: { type: ["integer", "null"] }
-                              },
-                              required: ["id", "name", "capacity"]
-                            }
-                          }
+                          capacity: { type: ["integer", "null"] }
                         },
-                        required: ["id", "name", "address", "capacity", "areas"]
+                        required: ["id", "name", "address", "capacity"]
                       }
                     }
                   },

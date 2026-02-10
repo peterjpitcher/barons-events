@@ -6,12 +6,13 @@ import { z } from "zod";
 import { createSupabaseActionClient, createSupabaseServiceRoleClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth";
 import { appendEventVersion, createEventDraft, recordApproval, updateEventDraft, updateEventAssignee } from "@/lib/events";
+import { cleanupOrphanArtists, parseArtistNames, syncEventArtists } from "@/lib/artists";
 import { eventFormSchema } from "@/lib/validation";
 import { getFieldErrors, type FieldErrors } from "@/lib/form-errors";
 import type { EventStatus } from "@/lib/types";
-import { sendEventSubmittedEmail, sendReviewDecisionEmail } from "@/lib/notifications";
+import { sendAssigneeReassignmentEmail, sendEventSubmittedEmail, sendReviewDecisionEmail } from "@/lib/notifications";
 import { recordAuditLogEntry } from "@/lib/audit-log";
-import { generateWebsiteCopy } from "@/lib/ai";
+import { generateTermsAndConditions, generateWebsiteCopy } from "@/lib/ai";
 
 const reviewerFallback = z.string().uuid().optional();
 
@@ -25,6 +26,7 @@ type WebsiteCopyValues = {
   publicTitle: string | null;
   publicTeaser: string | null;
   publicDescription: string | null;
+  publicHighlights: string[] | null;
   seoTitle: string | null;
   seoDescription: string | null;
   seoSlug: string | null;
@@ -33,6 +35,14 @@ type WebsiteCopyValues = {
 type WebsiteCopyActionResult = ActionResult & {
   values?: WebsiteCopyValues;
 };
+
+type TermsActionResult = ActionResult & {
+  terms?: string;
+};
+
+const EVENT_IMAGE_BUCKET = "event-images";
+const MAX_EVENT_IMAGE_BYTES = 10 * 1024 * 1024;
+const ARTIST_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function normaliseVenueSpacesField(value: FormDataEntryValue | null): string {
   if (typeof value !== "string") {
@@ -55,6 +65,144 @@ function normaliseVenueSpacesField(value: FormDataEntryValue | null): string {
     }
   });
   return unique.join(", ");
+}
+
+type BookingType = "ticketed" | "table_booking" | "free_entry" | "mixed";
+const BOOKING_TYPE_VALUES = new Set<BookingType>(["ticketed", "table_booking", "free_entry", "mixed"]);
+
+function normaliseOptionalTextField(value: FormDataEntryValue | null): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : null;
+}
+
+function normaliseOptionalNumberField(value: FormDataEntryValue | null): number | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed.length) return null;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normaliseOptionalIntegerField(value: FormDataEntryValue | null): number | null {
+  const parsed = normaliseOptionalNumberField(value);
+  if (parsed === null) return null;
+  return Number.isInteger(parsed) ? parsed : null;
+}
+
+function normaliseOptionalHighlightsField(value: FormDataEntryValue | null): string[] | null {
+  if (typeof value !== "string") return null;
+  const highlights = value
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^\s*[-*•]\s*/, "").trim())
+    .filter(Boolean);
+  return highlights.length ? highlights : null;
+}
+
+function normaliseOptionalBookingTypeField(value: FormDataEntryValue | null): BookingType | null {
+  if (typeof value !== "string") return null;
+  if (BOOKING_TYPE_VALUES.has(value as BookingType)) {
+    return value as BookingType;
+  }
+  return null;
+}
+
+function sanitiseFileName(value: string): string {
+  const cleaned = value
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/(^-|-$)/g, "");
+  return cleaned.length ? cleaned : "event-image";
+}
+
+function normaliseArtistNameList(value: FormDataEntryValue | null): string[] {
+  return parseArtistNames(typeof value === "string" ? value : null);
+}
+
+function normaliseArtistIdList(value: FormDataEntryValue | null): string[] {
+  if (typeof value !== "string") return [];
+  return Array.from(
+    new Set(
+      value
+        .split(",")
+        .map((item) => item.trim())
+        .filter((item): item is string => ARTIST_ID_PATTERN.test(item))
+    )
+  );
+}
+
+function artistListsDiffer(previous: string[], next: string[]): boolean {
+  if (previous.length !== next.length) return true;
+  for (let index = 0; index < previous.length; index += 1) {
+    if (previous[index].toLowerCase() !== next[index].toLowerCase()) {
+      return true;
+    }
+  }
+  return false;
+}
+
+async function uploadEventImage(params: {
+  eventId: string;
+  file: File;
+  existingPath?: string | null;
+}): Promise<{ path: string } | { error: string }> {
+  const file = params.file;
+  if (file.size > MAX_EVENT_IMAGE_BYTES) {
+    return { error: "Event image must be 10MB or smaller." };
+  }
+  if (typeof file.type === "string" && file.type.length > 0 && !file.type.startsWith("image/")) {
+    return { error: "Event image must be an image file." };
+  }
+
+  let admin;
+  try {
+    admin = createSupabaseServiceRoleClient();
+  } catch (error) {
+    console.error(error);
+    return { error: "Supabase service role is not configured for image upload." };
+  }
+
+  const fileExt = (() => {
+    const parsed = file.name.split(".");
+    if (parsed.length < 2) return "jpg";
+    return sanitiseFileName(parsed[parsed.length - 1]).slice(0, 10) || "jpg";
+  })();
+  const fileName = `${Date.now()}-${sanitiseFileName(file.name.replace(/\.[^.]+$/, ""))}.${fileExt}`;
+  const objectPath = `${params.eventId}/${fileName}`;
+
+  const bytes = Buffer.from(await file.arrayBuffer());
+  const { error: uploadError } = await admin.storage.from(EVENT_IMAGE_BUCKET).upload(objectPath, bytes, {
+    contentType: file.type || "application/octet-stream",
+    upsert: false
+  });
+
+  if (uploadError) {
+    console.error("Failed to upload event image", uploadError);
+    return { error: "Could not upload event image right now." };
+  }
+
+  if (params.existingPath && params.existingPath !== objectPath) {
+    const { error: removeError } = await admin.storage.from(EVENT_IMAGE_BUCKET).remove([params.existingPath]);
+    if (removeError) {
+      console.warn("Failed to remove previous event image", removeError);
+    }
+  }
+
+  return { path: objectPath };
+}
+
+async function removeEventImageObject(path: string | null | undefined): Promise<void> {
+  if (!path || !path.trim().length) return;
+  try {
+    const admin = createSupabaseServiceRoleClient();
+    const { error } = await admin.storage.from(EVENT_IMAGE_BUCKET).remove([path]);
+    if (error) {
+      console.warn("Failed to remove event image object", error);
+    }
+  } catch (error) {
+    console.warn("Could not initialise service role client for event image cleanup", error);
+  }
 }
 
 async function autoApproveEvent(params: {
@@ -151,6 +299,8 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
   const startAt = typeof startAtValue === "string" ? startAtValue : "";
   const endAtValue = formData.get("endAt");
   const endAt = typeof endAtValue === "string" ? endAtValue : "";
+  const eventImageEntry = formData.get("eventImage");
+  const eventImageFile = eventImageEntry instanceof File && eventImageEntry.size > 0 ? eventImageEntry : null;
 
   const parsed = eventFormSchema.safeParse({
     eventId,
@@ -163,6 +313,14 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
     expectedHeadcount: formData.get("expectedHeadcount") ?? undefined,
     wetPromo: formData.get("wetPromo") ?? undefined,
     foodPromo: formData.get("foodPromo") ?? undefined,
+    bookingType: formData.get("bookingType") ?? undefined,
+    ticketPrice: formData.get("ticketPrice") ?? undefined,
+    checkInCutoffMinutes: formData.get("checkInCutoffMinutes") ?? undefined,
+    agePolicy: formData.get("agePolicy") ?? undefined,
+    accessibilityNotes: formData.get("accessibilityNotes") ?? undefined,
+    cancellationWindowHours: formData.get("cancellationWindowHours") ?? undefined,
+    termsAndConditions: formData.get("termsAndConditions") ?? undefined,
+    artistNames: formData.get("artistNames") ?? undefined,
     goalFocus: formData.getAll("goalFocus").length
       ? formData.getAll("goalFocus").join(",")
       : formData.get("goalFocus") ?? undefined,
@@ -172,6 +330,7 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
     publicTitle: formData.get("publicTitle") ?? undefined,
     publicTeaser: formData.get("publicTeaser") ?? undefined,
     publicDescription: formData.get("publicDescription") ?? undefined,
+    publicHighlights: formData.get("publicHighlights") ?? undefined,
     bookingUrl: formData.get("bookingUrl") ?? undefined,
     seoTitle: formData.get("seoTitle") ?? undefined,
     seoDescription: formData.get("seoDescription") ?? undefined,
@@ -208,6 +367,13 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
         expected_headcount: values.expectedHeadcount ?? null,
         wet_promo: values.wetPromo ?? null,
         food_promo: values.foodPromo ?? null,
+        booking_type: values.bookingType ?? null,
+        ticket_price: values.ticketPrice ?? null,
+        check_in_cutoff_minutes: values.checkInCutoffMinutes ?? null,
+        age_policy: values.agePolicy ?? null,
+        accessibility_notes: values.accessibilityNotes ?? null,
+        cancellation_window_hours: values.cancellationWindowHours ?? null,
+        terms_and_conditions: values.termsAndConditions ?? null,
         cost_total: values.costTotal ?? null,
         cost_details: values.costDetails ?? null,
         goal_focus: values.goalFocus ?? null,
@@ -215,13 +381,58 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
         public_title: values.publicTitle ?? null,
         public_teaser: values.publicTeaser ?? null,
         public_description: values.publicDescription ?? null,
+        public_highlights: values.publicHighlights ?? null,
         booking_url: values.bookingUrl ?? null,
         seo_title: values.seoTitle ?? null,
         seo_description: values.seoDescription ?? null,
         seo_slug: values.seoSlug ?? null
       }, user.id);
+
+      const artistIds = normaliseArtistIdList(formData.get("artistIds"));
+      const artistNames = normaliseArtistNameList(values.artistNames ?? null);
+      const artistSync = await syncEventArtists({
+        eventId: values.eventId,
+        actorId: user.id,
+        artistIds,
+        artistNames
+      });
+      if (artistListsDiffer(artistSync.previousNames, artistSync.nextNames)) {
+        await recordAuditLogEntry({
+          entity: "event",
+          entityId: values.eventId,
+          action: "event.artists_updated",
+          actorId: user.id,
+          meta: {
+            previousArtists: artistSync.previousNames,
+            artists: artistSync.nextNames,
+            changes: ["Artists"]
+          }
+        });
+      }
+
+      if (eventImageFile) {
+        const uploadResult = await uploadEventImage({
+          eventId: values.eventId,
+          file: eventImageFile,
+          existingPath: updated.event_image_path
+        });
+        if ("error" in uploadResult) {
+          return { success: false, message: uploadResult.error };
+        }
+        if (uploadResult.path !== updated.event_image_path) {
+          await updateEventDraft(
+            values.eventId,
+            {
+              event_image_path: uploadResult.path
+            },
+            user.id
+          );
+        }
+      }
+
       await appendEventVersion(values.eventId, user.id, {
         ...values,
+        artistNames: artistSync.nextNames,
         status: updated.status
       });
       revalidatePath(`/events/${values.eventId}`);
@@ -239,6 +450,13 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
       expectedHeadcount: values.expectedHeadcount ?? null,
       wetPromo: values.wetPromo ?? null,
       foodPromo: values.foodPromo ?? null,
+      bookingType: values.bookingType ?? null,
+      ticketPrice: values.ticketPrice ?? null,
+      checkInCutoffMinutes: values.checkInCutoffMinutes ?? null,
+      agePolicy: values.agePolicy ?? null,
+      accessibilityNotes: values.accessibilityNotes ?? null,
+      cancellationWindowHours: values.cancellationWindowHours ?? null,
+      termsAndConditions: values.termsAndConditions ?? null,
       costTotal: values.costTotal ?? null,
       costDetails: values.costDetails ?? null,
       goalFocus: values.goalFocus ?? null,
@@ -246,11 +464,52 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
       publicTitle: values.publicTitle ?? null,
       publicTeaser: values.publicTeaser ?? null,
       publicDescription: values.publicDescription ?? null,
+      publicHighlights: values.publicHighlights ?? null,
       bookingUrl: values.bookingUrl ?? null,
       seoTitle: values.seoTitle ?? null,
       seoDescription: values.seoDescription ?? null,
       seoSlug: values.seoSlug ?? null
     });
+
+    const artistIds = normaliseArtistIdList(formData.get("artistIds"));
+    const artistNames = normaliseArtistNameList(values.artistNames ?? null);
+    const artistSync = await syncEventArtists({
+      eventId: created.id,
+      actorId: user.id,
+      artistIds,
+      artistNames
+    });
+    if (artistSync.nextNames.length > 0) {
+      await recordAuditLogEntry({
+        entity: "event",
+        entityId: created.id,
+        action: "event.artists_updated",
+        actorId: user.id,
+        meta: {
+          artists: artistSync.nextNames,
+          changes: ["Artists"]
+        }
+      });
+    }
+
+    if (eventImageFile) {
+      const uploadResult = await uploadEventImage({
+        eventId: created.id,
+        file: eventImageFile,
+        existingPath: null
+      });
+      if (!("error" in uploadResult)) {
+        await updateEventDraft(
+          created.id,
+          {
+            event_image_path: uploadResult.path
+          },
+          user.id
+        );
+      } else {
+        console.warn("Event image upload failed after draft create", uploadResult.error);
+      }
+    }
 
     if (user.role === "central_planner") {
       await autoApproveEvent({
@@ -266,6 +525,9 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
     revalidatePath("/events");
     redirect(`/events/${created.id}`);
   } catch (error) {
+    if (error instanceof Error && error.message === "NEXT_REDIRECT") {
+      throw error;
+    }
     console.error(error);
     return { success: false, message: "Could not save the draft just now." };
   }
@@ -289,6 +551,10 @@ export async function submitEventForReviewAction(
   const eventId = formData.get("eventId");
   const assigneeField = formData.get("assigneeId") ?? formData.get("assignedReviewerId") ?? undefined;
   const assigneeOverride = typeof assigneeField === "string" ? assigneeField : undefined;
+  const eventImageEntry = formData.get("eventImage");
+  const eventImageFile = eventImageEntry instanceof File && eventImageEntry.size > 0 ? eventImageEntry : null;
+  const requestedArtistIds = normaliseArtistIdList(formData.get("artistIds"));
+  const requestedArtistNames = normaliseArtistNameList(formData.get("artistNames"));
 
   const rawEventId = typeof eventId === "string" ? eventId.trim() : "";
   let targetEventId: string | null = null;
@@ -334,12 +600,28 @@ export async function submitEventForReviewAction(
           expectedHeadcount: formData.get("expectedHeadcount") ?? undefined,
           wetPromo: formData.get("wetPromo") ?? undefined,
           foodPromo: formData.get("foodPromo") ?? undefined,
+          bookingType: formData.get("bookingType") ?? undefined,
+          ticketPrice: formData.get("ticketPrice") ?? undefined,
+          checkInCutoffMinutes: formData.get("checkInCutoffMinutes") ?? undefined,
+          agePolicy: formData.get("agePolicy") ?? undefined,
+          accessibilityNotes: formData.get("accessibilityNotes") ?? undefined,
+          cancellationWindowHours: formData.get("cancellationWindowHours") ?? undefined,
+          termsAndConditions: formData.get("termsAndConditions") ?? undefined,
+          artistNames: formData.get("artistNames") ?? undefined,
           goalFocus: formData.getAll("goalFocus").length
             ? formData.getAll("goalFocus").join(",")
             : formData.get("goalFocus") ?? undefined,
           costTotal: formData.get("costTotal") ?? undefined,
           costDetails: formData.get("costDetails") ?? undefined,
-          notes: formData.get("notes") ?? undefined
+          notes: formData.get("notes") ?? undefined,
+          publicTitle: formData.get("publicTitle") ?? undefined,
+          publicTeaser: formData.get("publicTeaser") ?? undefined,
+          publicDescription: formData.get("publicDescription") ?? undefined,
+          publicHighlights: formData.get("publicHighlights") ?? undefined,
+          bookingUrl: formData.get("bookingUrl") ?? undefined,
+          seoTitle: formData.get("seoTitle") ?? undefined,
+          seoDescription: formData.get("seoDescription") ?? undefined,
+          seoSlug: formData.get("seoSlug") ?? undefined
         });
 
       if (!parsed.success) {
@@ -370,11 +652,64 @@ export async function submitEventForReviewAction(
         expectedHeadcount: values.expectedHeadcount ?? null,
         wetPromo: values.wetPromo ?? null,
         foodPromo: values.foodPromo ?? null,
+        bookingType: values.bookingType ?? null,
+        ticketPrice: values.ticketPrice ?? null,
+        checkInCutoffMinutes: values.checkInCutoffMinutes ?? null,
+        agePolicy: values.agePolicy ?? null,
+        accessibilityNotes: values.accessibilityNotes ?? null,
+        cancellationWindowHours: values.cancellationWindowHours ?? null,
+        termsAndConditions: values.termsAndConditions ?? null,
         costTotal: values.costTotal ?? null,
         costDetails: values.costDetails ?? null,
         goalFocus: values.goalFocus ?? null,
-        notes: values.notes ?? null
+        notes: values.notes ?? null,
+        publicTitle: values.publicTitle ?? null,
+        publicTeaser: values.publicTeaser ?? null,
+        publicDescription: values.publicDescription ?? null,
+        publicHighlights: values.publicHighlights ?? null,
+        bookingUrl: values.bookingUrl ?? null,
+        seoTitle: values.seoTitle ?? null,
+        seoDescription: values.seoDescription ?? null,
+        seoSlug: values.seoSlug ?? null
       });
+
+      const artistSync = await syncEventArtists({
+        eventId: created.id,
+        actorId: user.id,
+        artistIds: requestedArtistIds,
+        artistNames: normaliseArtistNameList(values.artistNames ?? null)
+      });
+      if (artistSync.nextNames.length > 0) {
+        await recordAuditLogEntry({
+          entity: "event",
+          entityId: created.id,
+          action: "event.artists_updated",
+          actorId: user.id,
+          meta: {
+            artists: artistSync.nextNames,
+            changes: ["Artists"]
+          }
+        });
+      }
+
+      if (eventImageFile) {
+        const uploadResult = await uploadEventImage({
+          eventId: created.id,
+          file: eventImageFile,
+          existingPath: null
+        });
+        if (!("error" in uploadResult)) {
+          await updateEventDraft(
+            created.id,
+            {
+              event_image_path: uploadResult.path
+            },
+            user.id
+          );
+        } else {
+          console.warn("Event image upload failed before submit", uploadResult.error);
+        }
+      }
 
       targetEventId = created.id;
     }
@@ -387,12 +722,59 @@ export async function submitEventForReviewAction(
 
     const { data: existingEvent, error: existingEventError } = await supabase
       .from("events")
-      .select("status, assignee_id, venue_id, created_by")
+      .select("status, assignee_id, venue_id, created_by, event_image_path")
       .eq("id", targetEventId)
       .single();
 
     if (existingEventError) {
       throw existingEventError;
+    }
+
+    if (user.role === "venue_manager" && existingEvent?.created_by !== user.id) {
+      return { success: false, message: "You can only submit events you created." };
+    }
+
+    if (rawEventId) {
+      const artistSync = await syncEventArtists({
+        eventId: targetEventId,
+        actorId: user.id,
+        artistIds: requestedArtistIds,
+        artistNames: requestedArtistNames
+      });
+      if (artistListsDiffer(artistSync.previousNames, artistSync.nextNames)) {
+        await recordAuditLogEntry({
+          entity: "event",
+          entityId: targetEventId,
+          action: "event.artists_updated",
+          actorId: user.id,
+          meta: {
+            previousArtists: artistSync.previousNames,
+            artists: artistSync.nextNames,
+            changes: ["Artists"]
+          }
+        });
+      }
+
+      if (eventImageFile) {
+        const uploadResult = await uploadEventImage({
+          eventId: targetEventId,
+          file: eventImageFile,
+          existingPath: existingEvent?.event_image_path ?? null
+        });
+        if ("error" in uploadResult) {
+          return { success: false, message: uploadResult.error };
+        }
+
+        if (uploadResult.path !== (existingEvent?.event_image_path ?? null)) {
+          await updateEventDraft(
+            targetEventId,
+            {
+              event_image_path: uploadResult.path
+            },
+            user.id
+          );
+        }
+      }
     }
 
     if (user.role === "central_planner") {
@@ -579,13 +961,36 @@ export async function reviewerDecisionAction(
       nextAssignee = null;
     }
 
-    const { error } = await supabase
-      .from("events")
-      .update({ status: newStatus, assignee_id: nextAssignee })
-      .eq("id", parsedId.data);
+    let updateError: { message: string } | null = null;
+    try {
+      const admin = createSupabaseServiceRoleClient();
+      let adminUpdate = admin
+        .from("events")
+        .update({ status: newStatus, assignee_id: nextAssignee })
+        .eq("id", parsedId.data);
+      if (user.role === "reviewer") {
+        adminUpdate = adminUpdate.eq("assignee_id", user.id);
+      }
+      const { error } = await adminUpdate;
+      updateError = error;
+    } catch (error) {
+      console.warn("Service-role decision update unavailable; retrying with user client", error);
+      updateError = { message: "service-role update unavailable" };
+    }
 
-    if (error) {
-      throw error;
+    if (updateError) {
+      console.warn("Service-role decision update failed; retrying with user client", updateError);
+      let fallbackUpdate = supabase
+        .from("events")
+        .update({ status: newStatus, assignee_id: nextAssignee })
+        .eq("id", parsedId.data);
+      if (user.role === "reviewer") {
+        fallbackUpdate = fallbackUpdate.eq("assignee_id", user.id);
+      }
+      const { error: fallbackError } = await fallbackUpdate;
+      if (fallbackError) {
+        throw fallbackError;
+      }
     }
 
     const statusBefore = eventBeforeDecision?.status ?? null;
@@ -660,14 +1065,7 @@ export async function generateWebsiteCopyAction(
   if (!parsedEventId.success) {
     return { success: false, message: "Missing event reference." };
   }
-
-  let supabase;
-  try {
-    supabase = createSupabaseServiceRoleClient();
-  } catch (error) {
-    console.error(error);
-    return { success: false, message: "Supabase service role is not configured." };
-  }
+  const supabase = await createSupabaseActionClient();
 
   try {
     const { data: record, error } = await supabase
@@ -675,6 +1073,8 @@ export async function generateWebsiteCopyAction(
       .select(
         `
         id,
+        created_by,
+        assignee_id,
         title,
         event_type,
         status,
@@ -684,8 +1084,27 @@ export async function generateWebsiteCopyAction(
         expected_headcount,
         wet_promo,
         food_promo,
+        goal_focus,
+        cost_total,
+        cost_details,
+        booking_type,
+        ticket_price,
+        check_in_cutoff_minutes,
+        age_policy,
+        accessibility_notes,
+        cancellation_window_hours,
+        terms_and_conditions,
+        public_title,
+        public_teaser,
+        public_description,
+        public_highlights,
+        booking_url,
         notes,
-        venue:venues(name,address)
+        venue:venues(name,address),
+        artists:event_artists(
+          billing_order,
+          artist:artists(name,description)
+        )
       `
       )
       .eq("id", parsedEventId.data)
@@ -696,6 +1115,9 @@ export async function generateWebsiteCopyAction(
     }
     if (!record) {
       return { success: false, message: "Event not found." };
+    }
+    if (user.role === "reviewer" && record.assignee_id !== user.id) {
+      return { success: false, message: "You can only generate website copy for events assigned to you." };
     }
 
     if (record.status !== "approved" && record.status !== "completed") {
@@ -710,18 +1132,99 @@ export async function generateWebsiteCopyAction(
             .filter(Boolean)
         : [];
 
+    const formVenueSpaces = normaliseVenueSpacesField(formData.get("venueSpace"))
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+    const mergedVenueSpaces = formVenueSpaces.length ? formVenueSpaces : venueSpaces;
+
+    const formGoalFocus = formData
+      .getAll("goalFocus")
+      .filter((value): value is string => typeof value === "string")
+      .map((value) => value.trim())
+      .filter(Boolean);
+    const recordGoalFocus =
+      typeof record.goal_focus === "string"
+        ? record.goal_focus
+            .split(",")
+            .map((value) => value.trim())
+            .filter(Boolean)
+        : [];
+    const goalFocus = formGoalFocus.length ? formGoalFocus : recordGoalFocus;
+
+    const venueValue = Array.isArray((record as any).venue) ? (record as any).venue[0] : (record as any).venue;
+    const venueName = typeof venueValue?.name === "string" ? venueValue.name : null;
+    const venueAddress = typeof venueValue?.address === "string" ? venueValue.address : null;
+    const formArtistNames = normaliseArtistNameList(formData.get("artistNames"));
+    const recordArtistNames = Array.isArray((record as any).artists)
+      ? ((record as any).artists as any[])
+          .map((entry) => {
+            const artistValue = Array.isArray(entry?.artist) ? entry.artist[0] : entry?.artist;
+            return typeof artistValue?.name === "string" ? artistValue.name.trim() : null;
+          })
+          .filter((name): name is string => Boolean(name))
+      : [];
+    const artistNames = formArtistNames.length ? formArtistNames : recordArtistNames;
+
+    const formBookingType = normaliseOptionalBookingTypeField(formData.get("bookingType"));
+    const recordBookingType = BOOKING_TYPE_VALUES.has(record.booking_type as BookingType)
+      ? (record.booking_type as BookingType)
+      : null;
+    const bookingType = formBookingType ?? recordBookingType;
+
+    const formPublicHighlights = normaliseOptionalHighlightsField(formData.get("publicHighlights"));
+    const recordPublicHighlights = Array.isArray(record.public_highlights)
+      ? record.public_highlights.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean)
+      : null;
+    const inputHighlights = formPublicHighlights ?? recordPublicHighlights;
+
     const generated = await generateWebsiteCopy({
-      title: record.title,
-      eventType: record.event_type,
-      startAt: record.start_at,
-      endAt: record.end_at,
-      venueName: (record as any).venue?.name ?? null,
-      venueAddress: (record as any).venue?.address ?? null,
-      venueSpaces,
-      expectedHeadcount: typeof record.expected_headcount === "number" ? record.expected_headcount : null,
-      wetPromo: typeof record.wet_promo === "string" ? record.wet_promo : null,
-      foodPromo: typeof record.food_promo === "string" ? record.food_promo : null,
-      details: typeof record.notes === "string" ? record.notes : null
+      title: normaliseOptionalTextField(formData.get("title")) ?? record.title,
+      eventType: normaliseOptionalTextField(formData.get("eventType")) ?? record.event_type,
+      startAt: normaliseOptionalTextField(formData.get("startAt")) ?? record.start_at,
+      endAt: normaliseOptionalTextField(formData.get("endAt")) ?? record.end_at,
+      artistNames,
+      venueName,
+      venueAddress,
+      venueSpaces: mergedVenueSpaces,
+      goalFocus,
+      expectedHeadcount:
+        normaliseOptionalNumberField(formData.get("expectedHeadcount")) ??
+        (typeof record.expected_headcount === "number" ? record.expected_headcount : null),
+      wetPromo: normaliseOptionalTextField(formData.get("wetPromo")) ?? (typeof record.wet_promo === "string" ? record.wet_promo : null),
+      foodPromo:
+        normaliseOptionalTextField(formData.get("foodPromo")) ?? (typeof record.food_promo === "string" ? record.food_promo : null),
+      costTotal: normaliseOptionalNumberField(formData.get("costTotal")) ?? (typeof record.cost_total === "number" ? record.cost_total : null),
+      costDetails:
+        normaliseOptionalTextField(formData.get("costDetails")) ?? (typeof record.cost_details === "string" ? record.cost_details : null),
+      bookingType,
+      ticketPrice:
+        normaliseOptionalNumberField(formData.get("ticketPrice")) ?? (typeof record.ticket_price === "number" ? record.ticket_price : null),
+      checkInCutoffMinutes:
+        normaliseOptionalIntegerField(formData.get("checkInCutoffMinutes")) ??
+        (typeof record.check_in_cutoff_minutes === "number" ? record.check_in_cutoff_minutes : null),
+      agePolicy:
+        normaliseOptionalTextField(formData.get("agePolicy")) ?? (typeof record.age_policy === "string" ? record.age_policy : null),
+      accessibilityNotes:
+        normaliseOptionalTextField(formData.get("accessibilityNotes")) ??
+        (typeof record.accessibility_notes === "string" ? record.accessibility_notes : null),
+      cancellationWindowHours:
+        normaliseOptionalIntegerField(formData.get("cancellationWindowHours")) ??
+        (typeof record.cancellation_window_hours === "number" ? record.cancellation_window_hours : null),
+      termsAndConditions:
+        normaliseOptionalTextField(formData.get("termsAndConditions")) ??
+        (typeof record.terms_and_conditions === "string" ? record.terms_and_conditions : null),
+      bookingUrl:
+        normaliseOptionalTextField(formData.get("bookingUrl")) ?? (typeof record.booking_url === "string" ? record.booking_url : null),
+      details: normaliseOptionalTextField(formData.get("notes")) ?? (typeof record.notes === "string" ? record.notes : null),
+      existingPublicTitle:
+        normaliseOptionalTextField(formData.get("publicTitle")) ?? (typeof record.public_title === "string" ? record.public_title : null),
+      existingPublicTeaser:
+        normaliseOptionalTextField(formData.get("publicTeaser")) ?? (typeof record.public_teaser === "string" ? record.public_teaser : null),
+      existingPublicDescription:
+        normaliseOptionalTextField(formData.get("publicDescription")) ??
+        (typeof record.public_description === "string" ? record.public_description : null),
+      existingPublicHighlights: inputHighlights
     });
 
     if (!generated) {
@@ -732,18 +1235,38 @@ export async function generateWebsiteCopyAction(
       public_title: generated.publicTitle,
       public_teaser: generated.publicTeaser,
       public_description: generated.publicDescription,
+      public_highlights: generated.publicHighlights,
       seo_title: generated.seoTitle,
       seo_description: generated.seoDescription,
       seo_slug: generated.seoSlug
     };
 
-    const { error: updateError } = await supabase
-      .from("events")
-      .update(updatePayload as any)
-      .eq("id", parsedEventId.data);
+    let updateError: { message: string } | null = null;
+    try {
+      const admin = createSupabaseServiceRoleClient();
+      const { error } = await admin
+        .from("events")
+        .update(updatePayload as any)
+        .eq("id", parsedEventId.data);
+      updateError = error;
+    } catch (error) {
+      console.warn("Service-role website copy update unavailable; retrying with user client", error);
+      updateError = { message: "service-role update unavailable" };
+    }
 
     if (updateError) {
-      throw updateError;
+      console.warn("Service-role website copy update failed; retrying with user client", updateError);
+    }
+
+    if (updateError || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      const { error: fallbackError } = await supabase
+        .from("events")
+        .update(updatePayload as any)
+        .eq("id", parsedEventId.data);
+
+      if (fallbackError) {
+        throw fallbackError;
+      }
     }
 
     await recordAuditLogEntry({
@@ -752,7 +1275,15 @@ export async function generateWebsiteCopyAction(
       action: "event.website_copy_generated",
       actorId: user.id,
       meta: {
-        changes: ["Public title", "Public teaser", "Public description", "SEO title", "SEO description", "SEO slug"]
+        changes: [
+          "Public title",
+          "Public teaser",
+          "Public description",
+          "Public highlights",
+          "SEO title",
+          "SEO description",
+          "SEO slug"
+        ]
       }
     });
 
@@ -764,6 +1295,7 @@ export async function generateWebsiteCopyAction(
         publicTitle: generated.publicTitle,
         publicTeaser: generated.publicTeaser,
         publicDescription: generated.publicDescription,
+        publicHighlights: generated.publicHighlights,
         seoTitle: generated.seoTitle,
         seoDescription: generated.seoDescription,
         seoSlug: generated.seoSlug
@@ -772,6 +1304,65 @@ export async function generateWebsiteCopyAction(
   } catch (error) {
     console.error(error);
     return { success: false, message: "Could not generate website copy right now." };
+  }
+}
+
+export async function generateTermsAndConditionsAction(
+  _: TermsActionResult | undefined,
+  formData: FormData
+): Promise<TermsActionResult> {
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect("/login");
+  }
+
+  if (user.role !== "central_planner" && user.role !== "venue_manager") {
+    return { success: false, message: "Only planners or venue managers can generate terms." };
+  }
+
+  const bookingType = normaliseOptionalBookingTypeField(formData.get("bookingType"));
+  const ticketPrice = normaliseOptionalNumberField(formData.get("ticketPrice"));
+  const checkInCutoffMinutes = normaliseOptionalIntegerField(formData.get("checkInCutoffMinutes"));
+  const cancellationWindowHours = normaliseOptionalIntegerField(formData.get("cancellationWindowHours"));
+  const agePolicy = normaliseOptionalTextField(formData.get("agePolicy"));
+  const accessibilityNotes = normaliseOptionalTextField(formData.get("accessibilityNotes"));
+  const extraNotes = normaliseOptionalTextField(formData.get("extraNotes"));
+  const allowsWalkInsValue = formData.get("allowsWalkIns");
+  const refundAllowedValue = formData.get("refundAllowed");
+  const rescheduleAllowedValue = formData.get("rescheduleAllowed");
+
+  const toNullableBoolean = (value: FormDataEntryValue | null): boolean | null => {
+    if (value === "yes") return true;
+    if (value === "no") return false;
+    return null;
+  };
+
+  try {
+    const terms = await generateTermsAndConditions({
+      bookingType,
+      ticketPrice,
+      checkInCutoffMinutes,
+      cancellationWindowHours,
+      agePolicy,
+      accessibilityNotes,
+      allowsWalkIns: toNullableBoolean(allowsWalkInsValue),
+      refundAllowed: toNullableBoolean(refundAllowedValue),
+      rescheduleAllowed: toNullableBoolean(rescheduleAllowedValue),
+      extraNotes
+    });
+
+    if (!terms) {
+      return { success: false, message: "Could not generate terms right now." };
+    }
+
+    return {
+      success: true,
+      message: "Terms generated.",
+      terms
+    };
+  } catch (error) {
+    console.error(error);
+    return { success: false, message: "Could not generate terms right now." };
   }
 }
 
@@ -811,6 +1402,7 @@ export async function updateAssigneeAction(formData: FormData) {
     }
 
     await updateEventAssignee(parsedEvent.data, nextAssigneeId);
+    await sendAssigneeReassignmentEmail(parsedEvent.data, nextAssigneeId, previousAssigneeId);
     await recordAuditLogEntry({
       entity: "event",
       entityId: parsedEvent.data,
@@ -852,7 +1444,7 @@ export async function deleteEventAction(_: ActionResult | undefined, formData: F
   try {
     const { data: event, error: fetchError } = await supabase
       .from("events")
-      .select("id, created_by, status")
+      .select("id, created_by, status, event_image_path")
       .eq("id", parsedEvent.data)
       .single();
 
@@ -868,6 +1460,32 @@ export async function deleteEventAction(_: ActionResult | undefined, formData: F
     if (!canDelete) {
       return { success: false, message: "You don't have permission to delete this event." };
     }
+
+    const { data: artistLinkRows, error: artistLinkError } = await supabase
+      .from("event_artists")
+      .select("artist_id")
+      .eq("event_id", event.id);
+    if (artistLinkError) {
+      throw artistLinkError;
+    }
+    const linkedArtistIds = Array.from(
+      new Set(
+        ((artistLinkRows ?? []) as Array<{ artist_id: string | null }>)
+          .map((row) => row.artist_id)
+          .filter((artistId): artistId is string => Boolean(artistId))
+      )
+    );
+
+    await recordAuditLogEntry({
+      entity: "event",
+      entityId: event.id,
+      action: "event.deleted",
+      actorId: user.id,
+      meta: {
+        status: event.status,
+        changes: ["Event"]
+      }
+    });
 
     let deleted = false;
     try {
@@ -890,6 +1508,33 @@ export async function deleteEventAction(_: ActionResult | undefined, formData: F
       const { error: deleteError } = await supabase.from("events").delete().eq("id", event.id);
       if (deleteError) {
         throw deleteError;
+      }
+    }
+
+    await removeEventImageObject(event.event_image_path);
+
+    if (linkedArtistIds.length > 0) {
+      try {
+        const cleanupResult = await cleanupOrphanArtists({
+          candidateArtistIds: linkedArtistIds,
+          maxDeletes: 25
+        });
+        if (cleanupResult.deletedCount > 0) {
+          await recordAuditLogEntry({
+            entity: "event",
+            entityId: event.id,
+            action: "event.orphan_artists_cleaned",
+            actorId: user.id,
+            meta: {
+              deletedArtistCount: cleanupResult.deletedCount,
+              deletedArtists: cleanupResult.deletedArtistNames,
+              changes: ["Artists"]
+            }
+          });
+          revalidatePath("/artists");
+        }
+      } catch (cleanupError) {
+        console.warn("Orphan artist cleanup failed after event delete", cleanupError);
       }
     }
 

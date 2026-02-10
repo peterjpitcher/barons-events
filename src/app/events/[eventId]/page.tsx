@@ -12,8 +12,9 @@ import { getCurrentUser } from "@/lib/auth";
 import { getEventDetail } from "@/lib/events";
 import { EVENT_GOALS_BY_VALUE, humanizeGoalValue, parseGoalFocus } from "@/lib/event-goals";
 import { listAuditLogForEvent } from "@/lib/audit-log";
-import { listVenuesWithAreas } from "@/lib/venues";
+import { listVenues } from "@/lib/venues";
 import { listEventTypes } from "@/lib/event-types";
+import { listArtists } from "@/lib/artists";
 import { listAssignableUsers, getUsersByIds } from "@/lib/users";
 import { updateAssigneeAction } from "@/actions/events";
 import { parseVenueSpaces } from "@/lib/venue-spaces";
@@ -40,11 +41,63 @@ const auditTimestampFormatter = new Intl.DateTimeFormat("en-GB", {
   timeStyle: "short"
 });
 
+const cutoffTimeFormatter = new Intl.DateTimeFormat("en-GB", {
+  hour: "2-digit",
+  minute: "2-digit"
+});
+
+const currencyFormatter = new Intl.NumberFormat("en-GB", {
+  style: "currency",
+  currency: "GBP",
+  minimumFractionDigits: 2
+});
+
+const bookingTypeLabel: Record<string, string> = {
+  ticketed: "Ticketed event",
+  table_booking: "Table booking event",
+  free_entry: "Free entry",
+  mixed: "Mixed booking model"
+};
+
 const toMetaRecord = (value: unknown): Record<string, unknown> =>
   value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 
 const toStringArray = (value: unknown): string[] =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+
+function formatCheckInCutoffLabel(startAt: string, cutoffMinutes: number | null): string | null {
+  if (cutoffMinutes === null || cutoffMinutes === undefined || cutoffMinutes < 0) return null;
+  const start = new Date(startAt);
+  if (Number.isNaN(start.getTime())) {
+    return `${cutoffMinutes} minute${cutoffMinutes === 1 ? "" : "s"} before start`;
+  }
+  const cutoff = new Date(start.getTime() - cutoffMinutes * 60 * 1000);
+  return `${cutoffMinutes} minute${cutoffMinutes === 1 ? "" : "s"} before start (${cutoffTimeFormatter.format(cutoff)})`;
+}
+
+function formatCurrency(value: number | null | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  return currencyFormatter.format(value);
+}
+
+function formatPercent(value: number | null | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  return `${value.toFixed(2)}%`;
+}
+
+function buildEventImageUrl(path: string | null | undefined): string | null {
+  if (!path || !path.trim().length) return null;
+  const base =
+    typeof process.env.NEXT_PUBLIC_SUPABASE_URL === "string"
+      ? process.env.NEXT_PUBLIC_SUPABASE_URL.trim().replace(/\/+$/g, "")
+      : "";
+  if (!base.length) return null;
+  const encodedPath = path
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+  return `${base}/storage/v1/object/public/event-images/${encodedPath}`;
+}
 
 export default async function EventDetailPage({ params }: { params: Promise<{ eventId: string }> }) {
   const { eventId } = await params;
@@ -70,6 +123,17 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
   });
   const hasGoalDetails = goalDetails.length > 0;
   const venueSpaces = parseVenueSpaces(event.venue_space);
+  const publicHighlights = Array.isArray(event.public_highlights)
+    ? event.public_highlights
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.replace(/^\s*[-*•]\s*/, "").trim())
+        .filter(Boolean)
+    : [];
+  const artistNames = event.artists
+    .map((entry) => entry.artist?.name?.trim())
+    .filter((name): name is string => Boolean(name && name.length));
+  const eventImageUrl = buildEventImageUrl(event.event_image_path);
+  const checkInCutoffLabel = formatCheckInCutoffLabel(event.start_at, event.check_in_cutoff_minutes);
 
   const canEdit =
     (user.role === "central_planner" && ["draft", "submitted", "needs_revisions", "approved"].includes(event.status)) ||
@@ -88,11 +152,12 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
     await updateAssigneeAction(formData);
   };
 
-  const [venues, assignableUsers, eventTypes, auditLog] = await Promise.all([
-    listVenuesWithAreas(),
+  const [venues, assignableUsers, eventTypes, auditLog, artists] = await Promise.all([
+    listVenues(),
     listAssignableUsers(),
     listEventTypes(),
-    listAuditLogForEvent(event.id)
+    listAuditLogForEvent(event.id),
+    listArtists()
   ]);
 
   const actorIds = new Set<string>();
@@ -262,6 +327,16 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
               <CardDescription>Core context for planners, reviewers, and venue teams.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 text-sm text-muted">
+              {eventImageUrl ? (
+                <div className="space-y-2">
+                  <p className="font-semibold text-[var(--color-text)]">Event image</p>
+                  <img
+                    src={eventImageUrl}
+                    alt={`${event.title} event image`}
+                    className="max-h-80 w-full rounded-[var(--radius)] border border-[var(--color-border)] object-cover"
+                  />
+                </div>
+              ) : null}
               {event.notes ? (
                 <div className="space-y-1 text-[var(--color-text)]">
                   <p className="font-semibold">Notes</p>
@@ -302,6 +377,43 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
                     <span className="font-semibold text-[var(--color-text)]">Food promo:</span> {event.food_promo}
                   </p>
                 ) : null}
+                {event.booking_type ? (
+                  <p>
+                    <span className="font-semibold text-[var(--color-text)]">Booking format:</span>{" "}
+                    {bookingTypeLabel[event.booking_type] ?? event.booking_type}
+                  </p>
+                ) : null}
+                {event.ticket_price != null ? (
+                  <p>
+                    <span className="font-semibold text-[var(--color-text)]">Ticket price:</span> £
+                    {event.ticket_price.toFixed(2)}
+                  </p>
+                ) : null}
+                {checkInCutoffLabel ? (
+                  <p>
+                    <span className="font-semibold text-[var(--color-text)]">Last admission/check-in:</span>{" "}
+                    {checkInCutoffLabel}
+                  </p>
+                ) : null}
+                {event.cancellation_window_hours != null ? (
+                  <p>
+                    <span className="font-semibold text-[var(--color-text)]">Cancellation/refund window:</span>{" "}
+                    {event.cancellation_window_hours} hour{event.cancellation_window_hours === 1 ? "" : "s"}
+                  </p>
+                ) : null}
+                {event.age_policy ? (
+                  <p>
+                    <span className="font-semibold text-[var(--color-text)]">Age policy:</span> {event.age_policy}
+                  </p>
+                ) : null}
+                {artistNames.length ? (
+                  <p>
+                    <span className="font-semibold text-[var(--color-text)]">
+                      {artistNames.length > 1 ? "Artists / hosts" : "Artist / host"}:
+                    </span>{" "}
+                    {artistNames.join(", ")}
+                  </p>
+                ) : null}
                 {event.cost_total != null ? (
                   <p>
                     <span className="font-semibold text-[var(--color-text)]">Cost:</span> £{event.cost_total.toFixed(2)}
@@ -309,6 +421,34 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
                   </p>
                 ) : null}
               </div>
+              {event.accessibility_notes ? (
+                <div className="space-y-1 text-[var(--color-text)]">
+                  <p className="font-semibold">Accessibility notes</p>
+                  <p className="whitespace-pre-wrap text-sm text-subtle">{event.accessibility_notes}</p>
+                </div>
+              ) : null}
+              {event.terms_and_conditions ? (
+                <div className="space-y-1 text-[var(--color-text)]">
+                  <p className="font-semibold">Terms & conditions</p>
+                  <p className="whitespace-pre-wrap text-sm text-subtle">{event.terms_and_conditions}</p>
+                </div>
+              ) : null}
+              {publicHighlights.length ? (
+                <div className="space-y-2 text-[var(--color-text)]">
+                  <p className="font-semibold">Event highlights</p>
+                  <ul className="space-y-1 text-sm text-subtle">
+                    {publicHighlights.map((highlight, index) => (
+                      <li key={`${event.id}-highlight-${index}`} className="flex items-start gap-2">
+                        <span
+                          className="mt-[0.35rem] h-1.5 w-1.5 flex-none rounded-full bg-[var(--color-primary-400)]"
+                          aria-hidden="true"
+                        />
+                        <span>{highlight}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
               {hasGoalDetails ? (
                 <div className="space-y-2">
                   <p className="font-semibold text-[var(--color-text)]">Goals</p>
@@ -330,6 +470,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
               mode="edit"
               defaultValues={event}
               venues={venues}
+              artists={artists}
               eventTypes={eventTypes.map((type) => type.label)}
               role={user.role}
               userVenueId={user.venueId}
@@ -357,6 +498,56 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
                 <Button asChild variant="secondary">
                   <Link href={`/debriefs/${event.id}`}>{event.debrief ? "Update debrief" : "Add debrief"}</Link>
                 </Button>
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {event.debrief ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Debrief snapshot</CardTitle>
+                <CardDescription>Commercial outcome and guest sentiment for this event.</CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-3 text-sm text-muted md:grid-cols-2">
+                <p>
+                  <span className="font-semibold text-[var(--color-text)]">Attendance:</span>{" "}
+                  {event.debrief.attendance ?? "—"}
+                  {event.debrief.baseline_attendance != null
+                    ? ` (baseline ${event.debrief.baseline_attendance})`
+                    : ""}
+                </p>
+                <p>
+                  <span className="font-semibold text-[var(--color-text)]">Event takings:</span>{" "}
+                  {formatCurrency(event.debrief.actual_total_takings)}
+                </p>
+                <p>
+                  <span className="font-semibold text-[var(--color-text)]">Baseline takings:</span>{" "}
+                  {formatCurrency(event.debrief.baseline_total_takings)}
+                </p>
+                <p>
+                  <span className="font-semibold text-[var(--color-text)]">Sales uplift:</span>{" "}
+                  {formatCurrency(event.debrief.sales_uplift_value)} ({formatPercent(event.debrief.sales_uplift_percent)})
+                </p>
+                <p>
+                  <span className="font-semibold text-[var(--color-text)]">Would book again:</span>{" "}
+                  {event.debrief.would_book_again == null ? "Not answered" : event.debrief.would_book_again ? "Yes" : "No"}
+                </p>
+                <p>
+                  <span className="font-semibold text-[var(--color-text)]">Promo score:</span>{" "}
+                  {event.debrief.promo_effectiveness ?? "—"} / 5
+                </p>
+                {event.debrief.guest_sentiment_notes ? (
+                  <p className="md:col-span-2">
+                    <span className="font-semibold text-[var(--color-text)]">Guest sentiment:</span>{" "}
+                    {event.debrief.guest_sentiment_notes}
+                  </p>
+                ) : null}
+                {event.debrief.next_time_actions ? (
+                  <p className="md:col-span-2">
+                    <span className="font-semibold text-[var(--color-text)]">Next time actions:</span>{" "}
+                    {event.debrief.next_time_actions}
+                  </p>
+                ) : null}
               </CardContent>
             </Card>
           ) : null}

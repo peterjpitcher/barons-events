@@ -64,7 +64,7 @@ function resolveAppUrl() {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? null;
   const vercelUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null;
 
-  return siteUrl ?? appUrl ?? vercelUrl ?? "http://localhost:3000";
+  return siteUrl ?? appUrl ?? vercelUrl ?? "https://eventhub.orangejelly.co.uk";
 }
 
 export async function signInAction(_: SignInState | undefined, formData: FormData): Promise<SignInState> {

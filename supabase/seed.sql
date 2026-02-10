@@ -28,19 +28,6 @@ on conflict (id) do update set
   address = excluded.address,
   default_reviewer_id = excluded.default_reviewer_id;
 
--- Venue areas
-insert into public.venue_areas (id, venue_id, name, capacity)
-values
-  ('af111111-aaaa-4000-8000-000000000001', '9f9c5da2-8a6e-4db0-84b7-8ae0b25177e7', 'Main Bar', 150),
-  ('af111111-aaaa-4000-8000-000000000002', '9f9c5da2-8a6e-4db0-84b7-8ae0b25177e7', 'Riverside Terrace', 80),
-  ('af111111-aaaa-4000-8000-000000000003', 'c04ef2b5-2741-430b-9148-6a51fdd5dcd2', 'Dining Hall', 120),
-  ('af111111-aaaa-4000-8000-000000000004', 'c04ef2b5-2741-430b-9148-6a51fdd5dcd2', 'Cellar Bar', 90),
-  ('af111111-aaaa-4000-8000-000000000005', '0a077fe4-513b-438a-a60d-608c516d6b32', 'Garden Pavilion', 110)
-on conflict (id) do update set
-  venue_id = excluded.venue_id,
-  name = excluded.name,
-  capacity = excluded.capacity;
-
 insert into public.event_types (label)
 values
   ('Tap Takeover'),

@@ -31,14 +31,30 @@ export interface Database {
           updated_at: string;
         };
       };
-      venue_areas: {
+      artists: {
         Row: {
           id: string;
-          venue_id: string;
           name: string;
-          capacity: number | null;
+          email: string | null;
+          phone: string | null;
+          artist_type: string;
+          description: string | null;
+          is_curated: boolean;
+          is_archived: boolean;
+          created_by: string | null;
           created_at: string;
           updated_at: string;
+        };
+      };
+      event_artists: {
+        Row: {
+          id: string;
+          event_id: string;
+          artist_id: string;
+          billing_order: number;
+          role_label: string | null;
+          created_by: string | null;
+          created_at: string;
         };
       };
       event_types: {
@@ -63,9 +79,18 @@ export interface Database {
           food_promo: string | null;
           goal_focus: string | null;
           notes: string | null;
+          event_image_path: string | null;
+          booking_type: string | null;
+          ticket_price: number | null;
+          check_in_cutoff_minutes: number | null;
+          age_policy: string | null;
+          accessibility_notes: string | null;
+          cancellation_window_hours: number | null;
+          terms_and_conditions: string | null;
           public_title: string | null;
           public_description: string | null;
           public_teaser: string | null;
+          public_highlights: string[] | null;
           booking_url: string | null;
           seo_title: string | null;
           seo_description: string | null;
@@ -106,9 +131,20 @@ export interface Database {
           attendance: number | null;
           wet_takings: number | null;
           food_takings: number | null;
+          baseline_attendance: number | null;
+          baseline_wet_takings: number | null;
+          baseline_food_takings: number | null;
+          actual_total_takings: number | null;
+          baseline_total_takings: number | null;
+          sales_uplift_value: number | null;
+          sales_uplift_percent: number | null;
           promo_effectiveness: number | null;
           highlights: string | null;
           issues: string | null;
+          guest_sentiment_notes: string | null;
+          operational_notes: string | null;
+          would_book_again: boolean | null;
+          next_time_actions: string | null;
           submitted_by: string;
           submitted_at: string;
         };

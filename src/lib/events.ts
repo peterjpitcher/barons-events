@@ -1,4 +1,4 @@
-import { createSupabaseActionClient, createSupabaseReadonlyClient } from "@/lib/supabase/server";
+import { createSupabaseActionClient, createSupabaseReadonlyClient, createSupabaseServiceRoleClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
 import type { AppUser, EventStatus } from "@/lib/types";
 import { recordAuditLogEntry } from "@/lib/audit-log";
@@ -9,6 +9,8 @@ type VenueRow = Database["public"]["Tables"]["venues"]["Row"];
 type VersionRow = Database["public"]["Tables"]["event_versions"]["Row"];
 type ApprovalRow = Database["public"]["Tables"]["approvals"]["Row"];
 type DebriefRow = Database["public"]["Tables"]["debriefs"]["Row"];
+type ArtistRow = Database["public"]["Tables"]["artists"]["Row"];
+type EventArtistRow = Database["public"]["Tables"]["event_artists"]["Row"];
 
 type TrackedEventField =
   | "title"
@@ -22,8 +24,17 @@ type TrackedEventField =
   | "food_promo"
   | "cost_total"
   | "cost_details"
+  | "event_image_path"
+  | "booking_type"
+  | "ticket_price"
+  | "check_in_cutoff_minutes"
+  | "age_policy"
+  | "accessibility_notes"
+  | "cancellation_window_hours"
+  | "terms_and_conditions"
   | "goal_focus"
-  | "notes";
+  | "notes"
+  | "public_highlights";
 
 const EVENT_FIELD_LABELS: Record<TrackedEventField, string> = {
   title: "Title",
@@ -37,8 +48,17 @@ const EVENT_FIELD_LABELS: Record<TrackedEventField, string> = {
   food_promo: "Food promotion",
   cost_total: "Total cost",
   cost_details: "Cost details",
+  event_image_path: "Event image",
+  booking_type: "Booking type",
+  ticket_price: "Ticket price",
+  check_in_cutoff_minutes: "Check-in cutoff",
+  age_policy: "Age policy",
+  accessibility_notes: "Accessibility notes",
+  cancellation_window_hours: "Cancellation window",
+  terms_and_conditions: "Terms and conditions",
   goal_focus: "Goals",
-  notes: "Notes"
+  notes: "Notes",
+  public_highlights: "Event highlights"
 };
 
 function extractMissingColumn(error: { code?: string; message?: string } | null | undefined): string | null {
@@ -64,6 +84,30 @@ function normaliseOptionalNumber(value: unknown): number | null {
     if (!trimmed.length) return null;
     const parsed = Number(trimmed);
     return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function normaliseOptionalInteger(value: unknown): number | null {
+  const parsed = normaliseOptionalNumber(value);
+  if (parsed === null) return null;
+  return Number.isInteger(parsed) ? parsed : null;
+}
+
+function normaliseOptionalHighlights(value: unknown): string[] | null {
+  if (Array.isArray(value)) {
+    const items = value
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.replace(/^\s*[-*•]\s*/, "").trim())
+      .filter(Boolean);
+    return items.length ? items : null;
+  }
+  if (typeof value === "string") {
+    const items = value
+      .split(/\r?\n/)
+      .map((item) => item.replace(/^\s*[-*•]\s*/, "").trim())
+      .filter(Boolean);
+    return items.length ? items : null;
   }
   return null;
 }
@@ -95,6 +139,11 @@ function labelsForUpdatedValues(previous: EventRow, updates: Partial<EventRow>):
 
 export type EventSummary = EventRow & {
   venue: Pick<VenueRow, "id" | "name">;
+  artists?: Array<
+    Pick<EventArtistRow, "id" | "artist_id" | "billing_order"> & {
+      artist: Pick<ArtistRow, "id" | "name"> | null;
+    }
+  >;
 };
 
 export type EventDetail = EventRow & {
@@ -102,6 +151,7 @@ export type EventDetail = EventRow & {
   versions: VersionRow[];
   approvals: ApprovalRow[];
   debrief: DebriefRow | null;
+  artists: Array<EventArtistRow & { artist: ArtistRow | null }>;
 };
 
 export async function listReviewQueue(user: AppUser): Promise<EventSummary[]> {
@@ -136,7 +186,7 @@ export async function listEventsForUser(user: AppUser): Promise<EventSummary[]> 
 
   let query = supabase
     .from("events")
-    .select("*, venue:venues(id,name)")
+    .select("*, venue:venues(id,name), artists:event_artists(id,artist_id,billing_order,artist:artists(id,name))")
     .order("start_at", { ascending: true });
 
   if (user.role === "central_planner") {
@@ -159,7 +209,28 @@ export async function listEventsForUser(user: AppUser): Promise<EventSummary[]> 
 
   return rows.map((item) => ({
     ...item,
-    venue: Array.isArray(item.venue) ? item.venue[0] : (item.venue as EventSummary["venue"])
+    venue: Array.isArray(item.venue) ? item.venue[0] : (item.venue as EventSummary["venue"]),
+    artists: Array.isArray(item.artists)
+      ? item.artists
+          .map((entry: any) => {
+            const artistValue = Array.isArray(entry?.artist) ? entry.artist[0] : entry?.artist;
+            return {
+              ...(entry as Pick<EventArtistRow, "id" | "artist_id" | "billing_order">),
+              artist:
+                artistValue && typeof artistValue === "object"
+                  ? ({ id: artistValue.id, name: artistValue.name } as Pick<ArtistRow, "id" | "name">)
+                  : null
+            };
+          })
+          .sort((left: any, right: any) => {
+            const leftOrder = typeof left.billing_order === "number" ? left.billing_order : 9999;
+            const rightOrder = typeof right.billing_order === "number" ? right.billing_order : 9999;
+            if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+            const leftName = left.artist?.name ?? "";
+            const rightName = right.artist?.name ?? "";
+            return leftName.localeCompare(rightName);
+          })
+      : []
   }));
 }
 
@@ -173,7 +244,8 @@ export async function getEventDetail(eventId: string): Promise<EventDetail | nul
       venue:venues(*),
       versions:event_versions(*),
       approvals(*),
-      debrief:debriefs(*)
+      debrief:debriefs(*),
+      artists:event_artists(*, artist:artists(*))
     `
     )
     .eq("id", eventId)
@@ -208,6 +280,14 @@ export async function getEventDetail(eventId: string): Promise<EventDetail | nul
 
   const hasCostTotal = Object.prototype.hasOwnProperty.call(record, "cost_total");
   const hasCostDetails = Object.prototype.hasOwnProperty.call(record, "cost_details");
+  const hasBookingType = Object.prototype.hasOwnProperty.call(record, "booking_type");
+  const hasTicketPrice = Object.prototype.hasOwnProperty.call(record, "ticket_price");
+  const hasCheckInCutoffMinutes = Object.prototype.hasOwnProperty.call(record, "check_in_cutoff_minutes");
+  const hasAgePolicy = Object.prototype.hasOwnProperty.call(record, "age_policy");
+  const hasAccessibilityNotes = Object.prototype.hasOwnProperty.call(record, "accessibility_notes");
+  const hasCancellationWindowHours = Object.prototype.hasOwnProperty.call(record, "cancellation_window_hours");
+  const hasTermsAndConditions = Object.prototype.hasOwnProperty.call(record, "terms_and_conditions");
+  const hasPublicHighlights = Object.prototype.hasOwnProperty.call(record, "public_highlights");
 
   const costTotal = hasCostTotal
     ? normaliseOptionalNumber(record.cost_total)
@@ -217,14 +297,77 @@ export async function getEventDetail(eventId: string): Promise<EventDetail | nul
     ? normaliseOptionalText(record.cost_details)
     : normaliseOptionalText(latestPayload?.cost_details as any) ?? normaliseOptionalText(latestPayload?.costDetails as any);
 
+  const bookingType = hasBookingType
+    ? normaliseOptionalText(record.booking_type)
+    : normaliseOptionalText(latestPayload?.booking_type as any) ?? normaliseOptionalText(latestPayload?.bookingType as any);
+
+  const ticketPrice = hasTicketPrice
+    ? normaliseOptionalNumber(record.ticket_price)
+    : normaliseOptionalNumber(latestPayload?.ticket_price) ?? normaliseOptionalNumber(latestPayload?.ticketPrice);
+
+  const checkInCutoffMinutes = hasCheckInCutoffMinutes
+    ? normaliseOptionalInteger(record.check_in_cutoff_minutes)
+    : normaliseOptionalInteger(latestPayload?.check_in_cutoff_minutes) ??
+      normaliseOptionalInteger(latestPayload?.checkInCutoffMinutes);
+
+  const agePolicy = hasAgePolicy
+    ? normaliseOptionalText(record.age_policy)
+    : normaliseOptionalText(latestPayload?.age_policy as any) ?? normaliseOptionalText(latestPayload?.agePolicy as any);
+
+  const accessibilityNotes = hasAccessibilityNotes
+    ? normaliseOptionalText(record.accessibility_notes)
+    : normaliseOptionalText(latestPayload?.accessibility_notes as any) ??
+      normaliseOptionalText(latestPayload?.accessibilityNotes as any);
+
+  const cancellationWindowHours = hasCancellationWindowHours
+    ? normaliseOptionalInteger(record.cancellation_window_hours)
+    : normaliseOptionalInteger(latestPayload?.cancellation_window_hours) ??
+      normaliseOptionalInteger(latestPayload?.cancellationWindowHours);
+
+  const termsAndConditions = hasTermsAndConditions
+    ? normaliseOptionalText(record.terms_and_conditions)
+    : normaliseOptionalText(latestPayload?.terms_and_conditions as any) ??
+      normaliseOptionalText(latestPayload?.termsAndConditions as any);
+
+  const publicHighlights = hasPublicHighlights
+    ? normaliseOptionalHighlights(record.public_highlights)
+    : normaliseOptionalHighlights(latestPayload?.public_highlights as any) ??
+      normaliseOptionalHighlights(latestPayload?.publicHighlights as any);
+
   return {
     ...record,
     venue: Array.isArray(record.venue) ? record.venue[0] : (record.venue as VenueRow),
     versions,
     approvals: Array.isArray(record.approvals) ? record.approvals : [],
     debrief: Array.isArray(record.debrief) ? record.debrief[0] ?? null : (record.debrief as DebriefRow | null),
+    artists: Array.isArray(record.artists)
+      ? record.artists
+          .map((entry: any) => {
+            const artistValue = Array.isArray(entry?.artist) ? entry.artist[0] : entry?.artist;
+            return {
+              ...(entry as EventArtistRow),
+              artist: artistValue && typeof artistValue === "object" ? (artistValue as ArtistRow) : null
+            };
+          })
+          .sort((a: any, b: any) => {
+            const left = typeof a.billing_order === "number" ? a.billing_order : 9999;
+            const right = typeof b.billing_order === "number" ? b.billing_order : 9999;
+            if (left !== right) return left - right;
+            const leftName = a.artist?.name ?? "";
+            const rightName = b.artist?.name ?? "";
+            return leftName.localeCompare(rightName);
+          })
+      : [],
     cost_total: costTotal,
-    cost_details: costDetails
+    cost_details: costDetails,
+    booking_type: bookingType,
+    ticket_price: ticketPrice,
+    check_in_cutoff_minutes: checkInCutoffMinutes,
+    age_policy: agePolicy,
+    accessibility_notes: accessibilityNotes,
+    cancellation_window_hours: cancellationWindowHours,
+    terms_and_conditions: termsAndConditions,
+    public_highlights: publicHighlights
   };
 }
 
@@ -241,11 +384,20 @@ export async function createEventDraft(payload: {
   foodPromo?: string | null;
   costTotal?: number | null;
   costDetails?: string | null;
+  eventImagePath?: string | null;
+  bookingType?: string | null;
+  ticketPrice?: number | null;
+  checkInCutoffMinutes?: number | null;
+  agePolicy?: string | null;
+  accessibilityNotes?: string | null;
+  cancellationWindowHours?: number | null;
+  termsAndConditions?: string | null;
   goalFocus?: string | null;
   notes?: string | null;
   publicTitle?: string | null;
   publicTeaser?: string | null;
   publicDescription?: string | null;
+  publicHighlights?: string[] | null;
   bookingUrl?: string | null;
   seoTitle?: string | null;
   seoDescription?: string | null;
@@ -254,6 +406,10 @@ export async function createEventDraft(payload: {
   const supabase = await createSupabaseActionClient();
 
   const costDetails = normaliseOptionalText(payload.costDetails);
+  const agePolicy = normaliseOptionalText(payload.agePolicy);
+  const accessibilityNotes = normaliseOptionalText(payload.accessibilityNotes);
+  const termsAndConditions = normaliseOptionalText(payload.termsAndConditions);
+  const publicHighlights = normaliseOptionalHighlights(payload.publicHighlights);
 
   const insertPayload: Record<string, unknown> = {
     venue_id: payload.venueId,
@@ -267,11 +423,20 @@ export async function createEventDraft(payload: {
     expected_headcount: payload.expectedHeadcount ?? null,
     wet_promo: payload.wetPromo ?? null,
     food_promo: payload.foodPromo ?? null,
+    event_image_path: payload.eventImagePath ?? null,
+    booking_type: payload.bookingType ?? null,
+    ticket_price: payload.ticketPrice ?? null,
+    check_in_cutoff_minutes: payload.checkInCutoffMinutes ?? null,
+    age_policy: agePolicy,
+    accessibility_notes: accessibilityNotes,
+    cancellation_window_hours: payload.cancellationWindowHours ?? null,
+    terms_and_conditions: termsAndConditions,
     goal_focus: payload.goalFocus ?? null,
     notes: payload.notes ?? null,
     public_title: payload.publicTitle ?? null,
     public_teaser: payload.publicTeaser ?? null,
     public_description: payload.publicDescription ?? null,
+    public_highlights: publicHighlights,
     booking_url: payload.bookingUrl ?? null,
     seo_title: payload.seoTitle ?? null,
     seo_description: payload.seoDescription ?? null,
@@ -290,7 +455,7 @@ export async function createEventDraft(payload: {
   let data: EventRow | null = null;
   let insertError: { code?: string; message: string } | null = null;
 
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  for (let attempt = 0; attempt < 24; attempt += 1) {
     const result = await supabase.from("events").insert(insertPayload as any).select().single();
     if (!result.error) {
       data = result.data as EventRow;
@@ -323,11 +488,20 @@ export async function createEventDraft(payload: {
       expected_headcount: data.expected_headcount,
       wet_promo: data.wet_promo,
       food_promo: data.food_promo,
+      event_image_path: payload.eventImagePath ?? data.event_image_path ?? null,
       cost_total: payload.costTotal ?? data.cost_total ?? null,
       cost_details: costDetails ?? data.cost_details ?? null,
+      booking_type: payload.bookingType ?? data.booking_type ?? null,
+      ticket_price: payload.ticketPrice ?? data.ticket_price ?? null,
+      check_in_cutoff_minutes: payload.checkInCutoffMinutes ?? data.check_in_cutoff_minutes ?? null,
+      age_policy: agePolicy ?? data.age_policy ?? null,
+      accessibility_notes: accessibilityNotes ?? data.accessibility_notes ?? null,
+      cancellation_window_hours: payload.cancellationWindowHours ?? data.cancellation_window_hours ?? null,
+      terms_and_conditions: termsAndConditions ?? data.terms_and_conditions ?? null,
       public_title: payload.publicTitle ?? data.public_title ?? null,
       public_teaser: payload.publicTeaser ?? data.public_teaser ?? null,
       public_description: payload.publicDescription ?? data.public_description ?? null,
+      public_highlights: publicHighlights ?? data.public_highlights ?? null,
       booking_url: payload.bookingUrl ?? data.booking_url ?? null,
       seo_title: payload.seoTitle ?? data.seo_title ?? null,
       seo_description: payload.seoDescription ?? data.seo_description ?? null,
@@ -374,11 +548,39 @@ export async function updateEventDraft(eventId: string, updates: Partial<EventRo
     const normalised = normaliseOptionalText(updatePayload["cost_details"] as any);
     updatePayload["cost_details"] = normalised;
   }
+  if ("age_policy" in updatePayload) {
+    const normalised = normaliseOptionalText(updatePayload["age_policy"] as any);
+    updatePayload["age_policy"] = normalised;
+  }
+  if ("accessibility_notes" in updatePayload) {
+    const normalised = normaliseOptionalText(updatePayload["accessibility_notes"] as any);
+    updatePayload["accessibility_notes"] = normalised;
+  }
+  if ("check_in_cutoff_minutes" in updatePayload) {
+    const normalised = normaliseOptionalInteger(updatePayload["check_in_cutoff_minutes"]);
+    updatePayload["check_in_cutoff_minutes"] = normalised;
+  }
+  if ("cancellation_window_hours" in updatePayload) {
+    const normalised = normaliseOptionalInteger(updatePayload["cancellation_window_hours"]);
+    updatePayload["cancellation_window_hours"] = normalised;
+  }
+  if ("terms_and_conditions" in updatePayload) {
+    const normalised = normaliseOptionalText(updatePayload["terms_and_conditions"] as any);
+    updatePayload["terms_and_conditions"] = normalised;
+  }
+  if ("event_image_path" in updatePayload) {
+    const normalised = normaliseOptionalText(updatePayload["event_image_path"] as any);
+    updatePayload["event_image_path"] = normalised;
+  }
+  if ("public_highlights" in updatePayload) {
+    const normalised = normaliseOptionalHighlights(updatePayload["public_highlights"]);
+    updatePayload["public_highlights"] = normalised;
+  }
 
   let data: EventRow | null = null;
   let updateError: { code?: string; message: string } | null = null;
 
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  for (let attempt = 0; attempt < 24; attempt += 1) {
     const result = await supabase
       .from("events")
       .update(updatePayload as any)
@@ -424,7 +626,7 @@ export async function updateEventDraft(eventId: string, updates: Partial<EventRo
 export async function appendEventVersion(eventId: string, actorId: string, versionData: Record<string, unknown>) {
   const supabase = await createSupabaseActionClient();
 
-  const { data: latest } = await supabase
+  const { data: latest, error: latestError } = await supabase
     .from("event_versions")
     .select("version")
     .eq("event_id", eventId)
@@ -432,21 +634,63 @@ export async function appendEventVersion(eventId: string, actorId: string, versi
     .limit(1)
     .maybeSingle();
 
-  const nextVersion = (latest?.version ?? 0) + 1;
+  let nextVersion = (latest?.version ?? 0) + 1;
+  if (latestError) {
+    try {
+      const admin = createSupabaseServiceRoleClient();
+      const { data: adminLatest, error: adminLatestError } = await admin
+        .from("event_versions")
+        .select("version")
+        .eq("event_id", eventId)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!adminLatestError) {
+        nextVersion = (adminLatest?.version ?? 0) + 1;
+      }
+    } catch (error) {
+      console.warn("Service-role version lookup unavailable while appending event version", error);
+    }
+  }
 
   const statusValue = typeof versionData["status"] === "string" ? (versionData["status"] as string) : null;
 
-  const { error } = await supabase.from("event_versions").insert({
+  const payload = {
     event_id: eventId,
     version: nextVersion,
     payload: versionData,
     submitted_at: statusValue === "submitted" ? new Date().toISOString() : null,
     submitted_by: actorId
-  });
+  };
 
-  if (error) {
-    throw new Error(`Could not log event version: ${error.message}`);
+  const { error } = await supabase.from("event_versions").insert(payload);
+  if (!error) {
+    return;
   }
+
+  try {
+    const admin = createSupabaseServiceRoleClient();
+    const { data: adminLatest } = await admin
+      .from("event_versions")
+      .select("version")
+      .eq("event_id", eventId)
+      .order("version", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const adminNextVersion = (adminLatest?.version ?? 0) + 1;
+    const { error: adminInsertError } = await admin.from("event_versions").insert({
+      ...payload,
+      version: adminNextVersion
+    });
+    if (adminInsertError) {
+      throw adminInsertError;
+    }
+    return;
+  } catch (adminError) {
+    console.warn("Service-role version insert unavailable while appending event version", adminError);
+  }
+
+  throw new Error(`Could not log event version: ${error.message}`);
 }
 
 export async function recordApproval(params: {

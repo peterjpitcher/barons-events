@@ -3,8 +3,11 @@ import { createSupabaseReadonlyClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
 import { formatSpacesLabel } from "@/lib/venue-spaces";
 
-const RESEND_FROM_ADDRESS = process.env.RESEND_FROM_EMAIL ?? "Barons Events <events@barons.example>";
-const APP_BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://events.barons.example";
+const RESEND_FROM_ADDRESS = process.env.RESEND_FROM_EMAIL ?? "EventHub <no-reply@eventhub.orangejelly.co.uk>";
+const APP_BASE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL ??
+  process.env.NEXT_PUBLIC_APP_URL ??
+  "https://eventhub.orangejelly.co.uk";
 
 type EventRow = Database["public"]["Tables"]["events"]["Row"];
 type UserRow = Database["public"]["Tables"]["users"]["Row"];
@@ -595,6 +598,9 @@ export async function sendPostEventDigestEmail(eventId: string) {
     if (debrief.attendance != null) {
       body.push(`Attendance reported at ${debrief.attendance}.`);
     }
+    if (debrief.baseline_attendance != null) {
+      body.push(`Baseline attendance for a normal day: ${debrief.baseline_attendance}.`);
+    }
     if (debrief.wet_takings != null || debrief.food_takings != null) {
       const takingsParts = [];
       if (debrief.wet_takings != null) takingsParts.push(`Wet £${Number(debrief.wet_takings).toFixed(2)}`);
@@ -604,11 +610,34 @@ export async function sendPostEventDigestEmail(eventId: string) {
     if (debrief.promo_effectiveness != null) {
       body.push(`Promo effectiveness scored ${debrief.promo_effectiveness}/5.`);
     }
+    if (debrief.baseline_wet_takings != null || debrief.baseline_food_takings != null) {
+      const baselineParts = [];
+      if (debrief.baseline_wet_takings != null) baselineParts.push(`Baseline wet £${Number(debrief.baseline_wet_takings).toFixed(2)}`);
+      if (debrief.baseline_food_takings != null) baselineParts.push(`Baseline food £${Number(debrief.baseline_food_takings).toFixed(2)}`);
+      body.push(`Baseline day takings: ${baselineParts.join(" · ")}.`);
+    }
+    if (debrief.sales_uplift_value != null) {
+      const upliftPercent =
+        typeof debrief.sales_uplift_percent === "number" ? ` (${Number(debrief.sales_uplift_percent).toFixed(2)}%)` : "";
+      body.push(`Sales uplift from event: £${Number(debrief.sales_uplift_value).toFixed(2)}${upliftPercent}.`);
+    }
     if (debrief.highlights) {
       body.push(`Highlights: ${debrief.highlights}`);
     }
     if (debrief.issues) {
       body.push(`Issues: ${debrief.issues}`);
+    }
+    if (debrief.guest_sentiment_notes) {
+      body.push(`Guest sentiment: ${debrief.guest_sentiment_notes}`);
+    }
+    if (debrief.operational_notes) {
+      body.push(`Operational notes: ${debrief.operational_notes}`);
+    }
+    if (debrief.next_time_actions) {
+      body.push(`Next-time actions: ${debrief.next_time_actions}`);
+    }
+    if (debrief.would_book_again != null) {
+      body.push(`Would book again: ${debrief.would_book_again ? "Yes" : "No"}.`);
     }
 
     const { html, text } = renderEmailTemplate({

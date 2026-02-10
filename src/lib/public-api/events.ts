@@ -17,13 +17,22 @@ export type PublicEvent = {
   slug: string;
   title: string;
   teaser: string | null;
+  highlights: string[];
   eventType: string;
   status: PublicEventStatus;
   startAt: string;
   endAt: string;
   venueSpaces: string[];
   description: string | null;
+  bookingType: "ticketed" | "table_booking" | "free_entry" | "mixed" | null;
+  ticketPrice: number | null;
+  checkInCutoffMinutes: number | null;
+  agePolicy: string | null;
+  accessibilityNotes: string | null;
+  cancellationWindowHours: number | null;
+  termsAndConditions: string | null;
   bookingUrl: string | null;
+  eventImageUrl: string | null;
   seoTitle: string | null;
   seoDescription: string | null;
   seoSlug: string | null;
@@ -46,7 +55,16 @@ type RawEventRow = {
   public_title: string | null;
   public_teaser: string | null;
   public_description: string | null;
+  public_highlights: string[] | null;
+  booking_type: string | null;
+  ticket_price: number | null;
+  check_in_cutoff_minutes: number | null;
+  age_policy: string | null;
+  accessibility_notes: string | null;
+  cancellation_window_hours: number | null;
+  terms_and_conditions: string | null;
   booking_url: string | null;
+  event_image_path: string | null;
   seo_title: string | null;
   seo_description: string | null;
   seo_slug: string | null;
@@ -72,6 +90,33 @@ function normaliseOptionalText(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed.length ? trimmed : null;
+}
+
+function normaliseHighlights(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.replace(/^\s*[-*•]\s*/, "").trim())
+    .filter(Boolean);
+}
+
+function normaliseOptionalInteger(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && Number.isInteger(value) ? value : null;
+}
+
+function buildEventImageUrl(path: unknown): string | null {
+  const cleanedPath = normaliseOptionalText(path);
+  if (!cleanedPath) return null;
+  const baseUrl =
+    typeof process.env.NEXT_PUBLIC_SUPABASE_URL === "string"
+      ? process.env.NEXT_PUBLIC_SUPABASE_URL.trim().replace(/\/+$/g, "")
+      : "";
+  if (!baseUrl.length) return null;
+  const encodedPath = cleanedPath
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+  return `${baseUrl}/storage/v1/object/public/event-images/${encodedPath}`;
 }
 
 export function isValidIsoDate(value: string): boolean {
@@ -150,7 +195,21 @@ export function toPublicEvent(row: RawEventRow): PublicEvent {
   const title = normaliseOptionalText(row.public_title) ?? internalTitle;
   const teaser = normaliseOptionalText(row.public_teaser);
   const description = normaliseOptionalText(row.public_description) ?? normaliseOptionalText(row.notes);
+  const highlights = normaliseHighlights(row.public_highlights);
   const bookingUrl = normaliseOptionalText(row.booking_url);
+  const bookingType =
+    row.booking_type === "ticketed" ||
+    row.booking_type === "table_booking" ||
+    row.booking_type === "free_entry" ||
+    row.booking_type === "mixed"
+      ? row.booking_type
+      : null;
+  const ticketPrice = typeof row.ticket_price === "number" && Number.isFinite(row.ticket_price) ? row.ticket_price : null;
+  const checkInCutoffMinutes = normaliseOptionalInteger(row.check_in_cutoff_minutes);
+  const agePolicy = normaliseOptionalText(row.age_policy);
+  const accessibilityNotes = normaliseOptionalText(row.accessibility_notes);
+  const cancellationWindowHours = normaliseOptionalInteger(row.cancellation_window_hours);
+  const termsAndConditions = normaliseOptionalText(row.terms_and_conditions);
   const seoTitle = normaliseOptionalText(row.seo_title);
   const seoDescription = normaliseOptionalText(row.seo_description);
   const seoSlug = normaliseOptionalText(row.seo_slug);
@@ -160,13 +219,22 @@ export function toPublicEvent(row: RawEventRow): PublicEvent {
     slug: buildEventSlug({ id: row.id, title, seoSlug }),
     title,
     teaser,
+    highlights,
     eventType: row.event_type,
     status,
     startAt: row.start_at,
     endAt: row.end_at,
     venueSpaces: parseVenueSpaces(row.venue_space),
     description,
+    bookingType,
+    ticketPrice,
+    checkInCutoffMinutes,
+    agePolicy,
+    accessibilityNotes,
+    cancellationWindowHours,
+    termsAndConditions,
     bookingUrl,
+    eventImageUrl: buildEventImageUrl(row.event_image_path),
     seoTitle,
     seoDescription,
     seoSlug,

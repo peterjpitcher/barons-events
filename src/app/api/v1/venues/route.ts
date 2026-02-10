@@ -24,16 +24,10 @@ export async function GET(request: Request) {
       id,
       name,
       address,
-      capacity,
-      areas:venue_areas(
-        id,
-        name,
-        capacity
-      )
+      capacity
     `
     )
-    .order("name", { ascending: true })
-    .order("name", { referencedTable: "venue_areas", ascending: true });
+    .order("name", { ascending: true });
 
   if (error) {
     console.error("Public API: failed to list venues", error);
@@ -44,14 +38,7 @@ export async function GET(request: Request) {
     id: venue.id,
     name: venue.name,
     address: venue.address ?? null,
-    capacity: venue.capacity ?? null,
-    areas: Array.isArray(venue.areas)
-      ? venue.areas.map((area: any) => ({
-          id: area.id,
-          name: area.name,
-          capacity: area.capacity ?? null
-        }))
-      : []
+    capacity: venue.capacity ?? null
   }));
 
   return NextResponse.json(

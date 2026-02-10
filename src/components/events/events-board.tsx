@@ -1,12 +1,24 @@
 /** @jsxImportSource react */
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import dayjs from "dayjs";
 import advancedFormat from "dayjs/plugin/advancedFormat";
-import { ChevronLeft, ChevronRight, CalendarDays, Rows3, Search } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  CalendarDays,
+  Rows3,
+  Search,
+  List,
+  SlidersHorizontal,
+  X,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown
+} from "lucide-react";
 import type { EventSummary } from "@/lib/events";
 import type { AppUser } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -16,7 +28,9 @@ import { Select } from "@/components/ui/select";
 
 dayjs.extend(advancedFormat);
 
-type ViewMode = "month" | "matrix";
+type ViewMode = "month" | "matrix" | "list";
+type ListSortKey = "date" | "time" | "event" | "venue" | "artist" | "space" | "status";
+type ListSortDirection = "asc" | "desc";
 type EventWithDates = EventSummary & {
   start: dayjs.Dayjs;
   end: dayjs.Dayjs;
@@ -50,29 +64,38 @@ const statusAccentStyles: Record<
   { badge: string; dot: string }
 > = {
   draft: {
-    badge: "bg-[rgba(39,54,64,0.08)] text-[var(--color-text-subtle)] border border-[rgba(39,54,64,0.18)]",
-    dot: "bg-[rgba(39,54,64,0.45)]"
+    badge: "bg-[var(--color-primary-100)] text-[var(--color-primary-900)] border border-[var(--color-primary-400)]",
+    dot: "bg-[var(--color-primary-700)]"
   },
   submitted: {
-    badge: "bg-[rgba(95,124,145,0.22)] text-[var(--color-info)] border border-[rgba(95,124,145,0.4)]",
-    dot: "bg-[var(--color-info)]"
+    badge: "bg-[var(--color-info)] text-white border border-[var(--color-accent-cool-dark)]",
+    dot: "bg-white"
   },
   needs_revisions: {
-    badge: "bg-[rgba(192,139,60,0.2)] text-[var(--color-warning)] border border-[rgba(192,139,60,0.45)]",
-    dot: "bg-[var(--color-warning)]"
+    badge: "bg-[var(--color-warning)] text-[#2f230d] border border-[#9a6d2b]",
+    dot: "bg-[#2f230d]"
   },
   approved: {
-    badge: "bg-[rgba(79,122,105,0.22)] text-[var(--color-success)] border border-[rgba(79,122,105,0.45)]",
-    dot: "bg-[var(--color-success)]"
+    badge: "bg-[var(--color-success)] text-white border border-[#355849]",
+    dot: "bg-white"
   },
   rejected: {
-    badge: "bg-[rgba(177,91,96,0.24)] text-[var(--color-danger)] border border-[rgba(177,91,96,0.45)]",
-    dot: "bg-[var(--color-danger)]"
+    badge: "bg-[var(--color-danger)] text-white border border-[#6e3032]",
+    dot: "bg-white"
   },
   completed: {
-    badge: "bg-[rgba(79,122,105,0.28)] text-[var(--color-success)] border border-[rgba(79,122,105,0.5)]",
-    dot: "bg-[var(--color-success)]"
+    badge: "bg-[#355849] text-white border border-[#284338]",
+    dot: "bg-white"
   }
+};
+
+const statusSortOrder: Record<EventSummary["status"], number> = {
+  draft: 0,
+  submitted: 1,
+  needs_revisions: 2,
+  approved: 3,
+  completed: 4,
+  rejected: 5
 };
 
 const localStorageKey = "events-board-view";
@@ -110,6 +133,36 @@ function endsInEarlyHoursNextDay(event: EventWithDates): boolean {
   return minutesAfterMidnight(event.end) <= 300;
 }
 
+function getEventArtistNames(event: EventSummary): string[] {
+  if (!Array.isArray(event.artists)) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const names: string[] = [];
+  event.artists.forEach((entry) => {
+    const raw = entry?.artist?.name;
+    if (typeof raw !== "string") return;
+    const trimmed = raw.trim();
+    if (!trimmed) return;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    names.push(trimmed);
+  });
+
+  return names;
+}
+
+function getEventArtistLabel(event: EventSummary): string {
+  const names = getEventArtistNames(event);
+  return names.length ? names.join(", ") : "No artist";
+}
+
+function compareText(left: string, right: string): number {
+  return left.localeCompare(right, undefined, { sensitivity: "base" });
+}
+
 export function EventsBoard({ user, events, venues }: EventsBoardProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -123,19 +176,29 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
   const canCreate =
     user.role === "central_planner" || (user.role === "venue_manager" && typeof createScopeVenueId === "string");
 
-  const [view, setView] = useState<ViewMode>(rawView === "matrix" ? "matrix" : "month");
+  const [view, setView] = useState<ViewMode>(
+    rawView === "matrix" || rawView === "list" ? rawView : "month"
+  );
   const [selectedVenueId, setSelectedVenueId] = useState<string>(rawVenue);
   const [matrixStart, setMatrixStart] = useState<dayjs.Dayjs>(
     rawMatrixStart ? dayjs(rawMatrixStart) : dayjs().startOf("day")
   );
   const [monthCursor, setMonthCursor] = useState<dayjs.Dayjs>(dayjs().startOf("month"));
   const [venueSearch, setVenueSearch] = useState("");
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [eventSearch, setEventSearch] = useState("");
+  const [artistSearch, setArtistSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [eventTypeFilter, setEventTypeFilter] = useState<string>("all");
+  const [startDateFilter, setStartDateFilter] = useState("");
+  const [endDateFilter, setEndDateFilter] = useState("");
+  const pendingVenueIdRef = useRef<string | null>(null);
   const monthLabel = useMemo(() => monthCursor.format("MMMM YYYY"), [monthCursor]);
 
   useEffect(() => {
     if (!rawView) {
       const stored = typeof window !== "undefined" ? window.localStorage.getItem(localStorageKey) : null;
-      if (stored === "month" || stored === "matrix") {
+      if (stored === "month" || stored === "matrix" || stored === "list") {
         setView(stored);
       }
     }
@@ -151,6 +214,14 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
   }, [rawMatrixStart, view]);
 
   useEffect(() => {
+    const pendingVenueId = pendingVenueIdRef.current;
+    if (pendingVenueId !== null) {
+      if (rawVenue === pendingVenueId) {
+        pendingVenueIdRef.current = null;
+      }
+      return;
+    }
+
     if (rawVenue !== selectedVenueId) {
       setSelectedVenueId(rawVenue);
     }
@@ -206,10 +277,79 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
   const filteredVenueId =
     selectedVenueId === "my" ? myVenueId ?? undefined : selectedVenueId === "all" ? undefined : selectedVenueId;
 
-  const filteredEvents = useMemo(() => {
+  const venueFilteredEvents = useMemo(() => {
     if (!filteredVenueId) return eventDataset;
     return eventDataset.filter((event) => event.venue?.id === filteredVenueId);
   }, [eventDataset, filteredVenueId]);
+
+  const startDateBoundary = useMemo(() => {
+    if (!startDateFilter) return null;
+    const parsed = dayjs(startDateFilter);
+    return parsed.isValid() ? parsed.startOf("day") : null;
+  }, [startDateFilter]);
+
+  const endDateBoundary = useMemo(() => {
+    if (!endDateFilter) return null;
+    const parsed = dayjs(endDateFilter);
+    return parsed.isValid() ? parsed.endOf("day") : null;
+  }, [endDateFilter]);
+
+  const filteredEvents = useMemo(() => {
+    const textNeedle = eventSearch.trim().toLowerCase();
+    const artistNeedle = artistSearch.trim().toLowerCase();
+
+    return venueFilteredEvents.filter((event) => {
+      if (statusFilter !== "all" && event.status !== statusFilter) {
+        return false;
+      }
+
+      if (eventTypeFilter !== "all" && event.event_type !== eventTypeFilter) {
+        return false;
+      }
+
+      if (startDateBoundary && event.end.isBefore(startDateBoundary)) {
+        return false;
+      }
+
+      if (endDateBoundary && event.start.isAfter(endDateBoundary)) {
+        return false;
+      }
+
+      if (textNeedle) {
+        const statusLabel = (statusConfig[event.status] ?? statusConfig.draft).label;
+        const haystack = [
+          event.title,
+          event.event_type,
+          event.venue?.name ?? "",
+          event.venue_space ?? "",
+          event.notes ?? "",
+          statusLabel
+        ]
+          .join(" ")
+          .toLowerCase();
+        if (!haystack.includes(textNeedle)) {
+          return false;
+        }
+      }
+
+      if (artistNeedle) {
+        const artistValue = getEventArtistLabel(event).toLowerCase();
+        if (!artistValue.includes(artistNeedle)) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [
+    venueFilteredEvents,
+    eventSearch,
+    artistSearch,
+    statusFilter,
+    eventTypeFilter,
+    startDateBoundary,
+    endDateBoundary
+  ]);
 
   const filteredVenuesForMatrix = useMemo(() => {
     if (!filteredVenueId) {
@@ -221,13 +361,40 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
 
   const viewOptions: { mode: ViewMode; icon: typeof CalendarDays; label: string }[] = [
     { mode: "month", icon: CalendarDays, label: "Month" },
-    { mode: "matrix", icon: Rows3, label: "7-day" }
+    { mode: "matrix", icon: Rows3, label: "7-day" },
+    { mode: "list", icon: List, label: "List" }
   ];
 
   const legendItems = (Object.keys(statusConfig) as EventSummary["status"][]).map((status) => ({
     status,
     ...statusConfig[status]
   }));
+
+  const eventTypeOptions = useMemo(() => {
+    const unique = Array.from(
+      new Set(eventDataset.map((event) => event.event_type).filter((value): value is string => Boolean(value)))
+    );
+    unique.sort((left, right) => compareText(left, right));
+    return unique;
+  }, [eventDataset]);
+
+  const hasAdvancedFilters = Boolean(
+    eventSearch.trim() ||
+      artistSearch.trim() ||
+      statusFilter !== "all" ||
+      eventTypeFilter !== "all" ||
+      startDateFilter ||
+      endDateFilter
+  );
+
+  const clearAdvancedFilters = useCallback(() => {
+    setEventSearch("");
+    setArtistSearch("");
+    setStatusFilter("all");
+    setEventTypeFilter("all");
+    setStartDateFilter("");
+    setEndDateFilter("");
+  }, []);
 
   const venueOptions = useMemo(() => {
     const baseOptions: { value: string; label: string }[] = [
@@ -268,6 +435,7 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
   );
 
   const handleVenueChange = useCallback((value: string) => {
+    pendingVenueIdRef.current = value;
     setSelectedVenueId(value);
   }, []);
 
@@ -279,7 +447,7 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
         <div>
           <h1 className="font-brand-serif text-3xl text-[var(--color-primary-700)]">{heading}</h1>
           <p className="mt-1 text-subtle">
-            Track programming across venues, pivot between month and week views, and jump straight into new drafts.
+            Track programming across venues, pivot between month, week, and list views, and jump straight into new drafts.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -304,84 +472,197 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
         </div>
       </header>
 
-      <section className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 rounded-full border border-[var(--color-border)] bg-white px-3 py-1.5">
-            <Search className="h-4 w-4 text-subtle" aria-hidden="true" />
-            <Input
-              aria-label="Search venues"
-              value={venueSearch}
-              onChange={(event) => setVenueSearch(event.target.value)}
-              placeholder="Search venues"
-              className="h-8 w-40 border-0 bg-transparent p-0 text-sm focus-visible:ring-0"
-            />
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 rounded-full border border-[var(--color-border)] bg-white px-3 py-1.5">
+              <Search className="h-4 w-4 text-subtle" aria-hidden="true" />
+              <Input
+                aria-label="Search venues"
+                value={venueSearch}
+                onChange={(event) => setVenueSearch(event.target.value)}
+                placeholder="Search venues"
+                className="h-8 w-40 border-0 bg-transparent p-0 text-sm focus-visible:ring-0"
+              />
+            </div>
+            <Select
+              value={selectedVenueId}
+              onChange={(event) => handleVenueChange(event.target.value)}
+              aria-label="Filter events by venue"
+              className="h-10 w-48"
+            >
+              {venueOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
+            <Button
+              type="button"
+              variant={showAdvancedFilters || hasAdvancedFilters ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setShowAdvancedFilters((current) => !current)}
+            >
+              <SlidersHorizontal className="mr-1 h-4 w-4" />
+              Advanced filters
+            </Button>
+            {hasAdvancedFilters ? (
+              <Button type="button" variant="ghost" size="sm" onClick={clearAdvancedFilters}>
+                <X className="mr-1 h-4 w-4" />
+                Clear
+              </Button>
+            ) : null}
           </div>
-          <Select
-            value={selectedVenueId}
-            onChange={(event) => handleVenueChange(event.target.value)}
-            aria-label="Filter events by venue"
-            className="h-10 w-48"
-          >
-            {venueOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </Select>
+
+          {view === "matrix" ? (
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setMatrixStart(matrixStart.subtract(7, "day"))}
+              >
+                Previous 7 days
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setMatrixStart(dayjs().startOf("day"))}
+                disabled={matrixStart.startOf("day").isSame(dayjs().startOf("day"))}
+              >
+                Today
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setMatrixStart(matrixStart.add(7, "day"))}
+              >
+                Next 7 days
+              </Button>
+            </div>
+          ) : view === "month" ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setMonthCursor(monthCursor.subtract(1, "month"))}
+              >
+                <ChevronLeft className="mr-1 h-4 w-4" /> Previous month
+              </Button>
+              <span className="px-2 text-sm font-semibold text-[var(--color-text)]">{monthLabel}</span>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setMonthCursor(dayjs().startOf("month"))}>
+                Today
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setMonthCursor(monthCursor.add(1, "month"))}
+              >
+                Next month <ChevronRight className="ml-1 h-4 w-4" />
+              </Button>
+            </div>
+          ) : (
+            <div className="rounded-full border border-[var(--color-border)] bg-white px-3 py-2 text-sm text-subtle">
+              {filteredEvents.length} event{filteredEvents.length === 1 ? "" : "s"}
+            </div>
+          )}
         </div>
 
-        {view === "matrix" ? (
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setMatrixStart(matrixStart.subtract(7, "day"))}
-            >
-              Previous 7 days
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setMatrixStart(dayjs().startOf("day"))}
-              disabled={matrixStart.startOf("day").isSame(dayjs().startOf("day"))}
-            >
-              Today
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setMatrixStart(matrixStart.add(7, "day"))}
-            >
-              Next 7 days
-            </Button>
+        {showAdvancedFilters || hasAdvancedFilters ? (
+          <div className="grid gap-3 rounded-[var(--radius)] border border-[var(--color-border)] bg-white p-4 md:grid-cols-3">
+            <div className="space-y-1">
+              <label htmlFor="events-filter-search" className="text-xs font-semibold uppercase tracking-[0.1em] text-subtle">
+                Event search
+              </label>
+              <Input
+                id="events-filter-search"
+                value={eventSearch}
+                onChange={(event) => setEventSearch(event.target.value)}
+                placeholder="Title, type, notes..."
+                className="h-10"
+              />
+            </div>
+            <div className="space-y-1">
+              <label htmlFor="events-filter-artist" className="text-xs font-semibold uppercase tracking-[0.1em] text-subtle">
+                Artist
+              </label>
+              <Input
+                id="events-filter-artist"
+                value={artistSearch}
+                onChange={(event) => setArtistSearch(event.target.value)}
+                placeholder="Artist name"
+                className="h-10"
+              />
+            </div>
+            <div className="space-y-1">
+              <label htmlFor="events-filter-status" className="text-xs font-semibold uppercase tracking-[0.1em] text-subtle">
+                Status
+              </label>
+              <Select
+                id="events-filter-status"
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value)}
+                className="h-10"
+              >
+                <option value="all">All statuses</option>
+                {(Object.keys(statusConfig) as EventSummary["status"][]).map((status) => (
+                  <option key={status} value={status}>
+                    {statusConfig[status].label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <label htmlFor="events-filter-type" className="text-xs font-semibold uppercase tracking-[0.1em] text-subtle">
+                Event type
+              </label>
+              <Select
+                id="events-filter-type"
+                value={eventTypeFilter}
+                onChange={(event) => setEventTypeFilter(event.target.value)}
+                className="h-10"
+              >
+                <option value="all">All types</option>
+                {eventTypeOptions.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <label
+                htmlFor="events-filter-start-date"
+                className="text-xs font-semibold uppercase tracking-[0.1em] text-subtle"
+              >
+                From date
+              </label>
+              <Input
+                id="events-filter-start-date"
+                type="date"
+                value={startDateFilter}
+                onChange={(event) => setStartDateFilter(event.target.value)}
+                className="h-10"
+              />
+            </div>
+            <div className="space-y-1">
+              <label htmlFor="events-filter-end-date" className="text-xs font-semibold uppercase tracking-[0.1em] text-subtle">
+                To date
+              </label>
+              <Input
+                id="events-filter-end-date"
+                type="date"
+                value={endDateFilter}
+                onChange={(event) => setEndDateFilter(event.target.value)}
+                className="h-10"
+              />
+            </div>
           </div>
-        ) : (
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setMonthCursor(monthCursor.subtract(1, "month"))}
-            >
-              <ChevronLeft className="mr-1 h-4 w-4" /> Previous month
-            </Button>
-            <span className="px-2 text-sm font-semibold text-[var(--color-text)]">{monthLabel}</span>
-            <Button type="button" variant="ghost" size="sm" onClick={() => setMonthCursor(dayjs().startOf("month"))}>
-              Today
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setMonthCursor(monthCursor.add(1, "month"))}
-            >
-              Next month <ChevronRight className="ml-1 h-4 w-4" />
-            </Button>
-          </div>
-        )}
+        ) : null}
       </section>
 
       <StatusLegend legendItems={legendItems} />
@@ -393,12 +674,14 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
           onChangeMonth={setMonthCursor}
           canCreate={
             canCreate &&
-            Boolean(filteredVenueId) &&
-            (createScopeVenueId === undefined || filteredVenueId === createScopeVenueId)
+            (createScopeVenueId === undefined ||
+              createScopeVenueId === null ||
+              !filteredVenueId ||
+              filteredVenueId === createScopeVenueId)
           }
-          createVenueId={filteredVenueId}
+          createVenueId={filteredVenueId ?? (typeof createScopeVenueId === "string" ? createScopeVenueId : undefined)}
         />
-      ) : (
+      ) : view === "matrix" ? (
         <SevenDayMatrix
           events={filteredEvents}
           venues={filteredVenuesForMatrix}
@@ -407,6 +690,8 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
           canCreate={canCreate}
           createScopeVenueId={createScopeVenueId}
         />
+      ) : (
+        <EventsListTable events={filteredEvents} />
       )}
     </div>
   );
@@ -491,7 +776,18 @@ function MonthCalendar({ events, monthCursor, onChangeMonth, canCreate, createVe
           const isCurrentMonth = day.month() === monthCursor.month();
           const isToday = key === todayKey;
           const dayEvents = eventsByDate.get(key) ?? [];
-          const allowQuickCreate = canCreate && dayEvents.length === 0;
+          const quickCreateHref = (() => {
+            if (!canCreate) return null;
+            const startAt = day.hour(19).minute(0).second(0).millisecond(0);
+            const endAt = startAt.add(3, "hour");
+            const params = new URLSearchParams();
+            params.set("startAt", startAt.format("YYYY-MM-DDTHH:mm"));
+            params.set("endAt", endAt.format("YYYY-MM-DDTHH:mm"));
+            if (createVenueId) {
+              params.set("venueId", createVenueId);
+            }
+            return `/events/new?${params.toString()}`;
+          })();
           return (
             <div
               key={key}
@@ -499,35 +795,33 @@ function MonthCalendar({ events, monthCursor, onChangeMonth, canCreate, createVe
               aria-label={`${day.format("dddd D MMMM")}, ${dayEvents.length} events`}
             >
               <div className="flex items-center justify-between">
-                <span
-                  className={`text-sm font-semibold ${
-                    isCurrentMonth ? "text-[var(--color-text)]" : "text-subtle"
-                  } ${isToday ? "rounded-full bg-[var(--color-primary-700)] px-2 py-1 text-white" : ""}`}
-                >
-                  {day.format("D")}
-                </span>
-                {allowQuickCreate ? (
-                  (() => {
-                    const startAt = day.hour(19).minute(0).second(0).millisecond(0);
-                    const endAt = startAt.add(3, "hour");
-                    const params = new URLSearchParams();
-                    params.set("startAt", startAt.format("YYYY-MM-DDTHH:mm"));
-                    params.set("endAt", endAt.format("YYYY-MM-DDTHH:mm"));
-                    if (createVenueId) {
-                      params.set("venueId", createVenueId);
-                    }
-                    const href = `/events/new?${params.toString()}`;
-                    return (
-                      <Button
-                        asChild
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2 text-xs text-[var(--color-primary-700)]"
-                      >
-                        <Link href={href}>Add event</Link>
-                      </Button>
-                    );
-                  })()
+                {quickCreateHref ? (
+                  <Link
+                    href={quickCreateHref}
+                    className={`rounded-full px-2 py-1 text-sm font-semibold transition ${
+                      isCurrentMonth ? "text-[var(--color-text)] hover:bg-[var(--color-muted-surface)]" : "text-subtle"
+                    } ${isToday ? "bg-[var(--color-primary-700)] text-white hover:bg-[var(--color-primary-800)]" : ""}`}
+                  >
+                    {day.format("D")}
+                  </Link>
+                ) : (
+                  <span
+                    className={`text-sm font-semibold ${
+                      isCurrentMonth ? "text-[var(--color-text)]" : "text-subtle"
+                    } ${isToday ? "rounded-full bg-[var(--color-primary-700)] px-2 py-1 text-white" : ""}`}
+                  >
+                    {day.format("D")}
+                  </span>
+                )}
+                {quickCreateHref ? (
+                  <Button
+                    asChild
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs text-[var(--color-primary-700)]"
+                  >
+                    <Link href={quickCreateHref}>Add event</Link>
+                  </Button>
                 ) : null}
               </div>
               <ul className="mt-2 space-y-1 md:space-y-0 md:divide-y md:divide-[var(--color-border)]">
@@ -538,7 +832,7 @@ function MonthCalendar({ events, monthCursor, onChangeMonth, canCreate, createVe
                   <OverflowList events={dayEvents.slice(3)} />
                 ) : null}
               </ul>
-              {dayEvents.length === 0 && !canCreate ? (
+              {dayEvents.length === 0 ? (
                 <p className="mt-2 text-xs text-subtle">No events</p>
               ) : null}
             </div>
@@ -580,7 +874,7 @@ function EventListItem({ event }: { event: EventWithDates }) {
       </div>
       <div className="mt-auto border-t border-[rgba(39,54,64,0.12)] pt-2">
         <span
-          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.58rem] font-semibold uppercase tracking-[0.14em] ${accent.badge}`}
+          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.64rem] font-semibold uppercase tracking-[0.08em] ${accent.badge}`}
         >
           <span className={`h-1.5 w-1.5 rounded-full ${accent.dot}`} aria-hidden="true" />
           {status.label}
@@ -610,6 +904,175 @@ function OverflowList({ events }: { events: EventWithDates[] }) {
       ) : null}
       {expanded ? events.map((event) => <EventListItem key={event.id} event={event} />) : null}
     </li>
+  );
+}
+
+function EventsListTable({ events }: { events: EventWithDates[] }) {
+  const [sortBy, setSortBy] = useState<{ key: ListSortKey; direction: ListSortDirection }>({
+    key: "date",
+    direction: "asc"
+  });
+
+  const toggleSort = useCallback((key: ListSortKey) => {
+    setSortBy((current) => {
+      if (current.key !== key) {
+        return { key, direction: "asc" };
+      }
+      return { key, direction: current.direction === "asc" ? "desc" : "asc" };
+    });
+  }, []);
+
+  const sortedEvents = useMemo(() => {
+    const sorted = [...events];
+    sorted.sort((left, right) => {
+      const leftArtistLabel = getEventArtistLabel(left);
+      const rightArtistLabel = getEventArtistLabel(right);
+      const result = (() => {
+        switch (sortBy.key) {
+          case "date":
+            return left.start.startOf("day").valueOf() - right.start.startOf("day").valueOf();
+          case "time":
+            return minutesAfterMidnight(left.start) - minutesAfterMidnight(right.start);
+          case "event":
+            return compareText(left.title, right.title);
+          case "venue":
+            return compareText(left.venue?.name ?? "", right.venue?.name ?? "");
+          case "artist":
+            return compareText(leftArtistLabel, rightArtistLabel);
+          case "space":
+            return compareText(left.venue_space ?? "", right.venue_space ?? "");
+          case "status":
+            return (statusSortOrder[left.status] ?? 999) - (statusSortOrder[right.status] ?? 999);
+          default:
+            return 0;
+        }
+      })();
+
+      if (result !== 0) {
+        return sortBy.direction === "asc" ? result : -result;
+      }
+
+      const startTieBreaker = left.start.valueOf() - right.start.valueOf();
+      if (startTieBreaker !== 0) {
+        return sortBy.direction === "asc" ? startTieBreaker : -startTieBreaker;
+      }
+
+      return compareText(left.title, right.title);
+    });
+    return sorted;
+  }, [events, sortBy]);
+
+  const sortIcon = useCallback(
+    (key: ListSortKey) => {
+      if (sortBy.key !== key) {
+        return <ArrowUpDown className="h-3.5 w-3.5 text-subtle" aria-hidden="true" />;
+      }
+      return sortBy.direction === "asc" ? (
+        <ArrowUp className="h-3.5 w-3.5" aria-hidden="true" />
+      ) : (
+        <ArrowDown className="h-3.5 w-3.5" aria-hidden="true" />
+      );
+    },
+    [sortBy]
+  );
+
+  const sortAriaValue = useCallback(
+    (key: ListSortKey): "none" | "ascending" | "descending" => {
+      if (sortBy.key !== key) return "none";
+      return sortBy.direction === "asc" ? "ascending" : "descending";
+    },
+    [sortBy]
+  );
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full border-collapse rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-white shadow-soft">
+        <thead>
+          <tr className="bg-[var(--color-muted-surface)] text-left text-xs font-semibold uppercase tracking-[0.12em] text-subtle">
+            <th className="px-4 py-3" aria-sort={sortAriaValue("date")}>
+              <button type="button" className="inline-flex items-center gap-1 hover:text-[var(--color-text)]" onClick={() => toggleSort("date")}>
+                Date {sortIcon("date")}
+              </button>
+            </th>
+            <th className="px-4 py-3" aria-sort={sortAriaValue("time")}>
+              <button type="button" className="inline-flex items-center gap-1 hover:text-[var(--color-text)]" onClick={() => toggleSort("time")}>
+                Time {sortIcon("time")}
+              </button>
+            </th>
+            <th className="px-4 py-3" aria-sort={sortAriaValue("event")}>
+              <button type="button" className="inline-flex items-center gap-1 hover:text-[var(--color-text)]" onClick={() => toggleSort("event")}>
+                Event {sortIcon("event")}
+              </button>
+            </th>
+            <th className="px-4 py-3" aria-sort={sortAriaValue("venue")}>
+              <button type="button" className="inline-flex items-center gap-1 hover:text-[var(--color-text)]" onClick={() => toggleSort("venue")}>
+                Venue {sortIcon("venue")}
+              </button>
+            </th>
+            <th className="px-4 py-3" aria-sort={sortAriaValue("artist")}>
+              <button type="button" className="inline-flex items-center gap-1 hover:text-[var(--color-text)]" onClick={() => toggleSort("artist")}>
+                Artist {sortIcon("artist")}
+              </button>
+            </th>
+            <th className="px-4 py-3" aria-sort={sortAriaValue("space")}>
+              <button type="button" className="inline-flex items-center gap-1 hover:text-[var(--color-text)]" onClick={() => toggleSort("space")}>
+                Space {sortIcon("space")}
+              </button>
+            </th>
+            <th className="px-4 py-3" aria-sort={sortAriaValue("status")}>
+              <button type="button" className="inline-flex items-center gap-1 hover:text-[var(--color-text)]" onClick={() => toggleSort("status")}>
+                Status {sortIcon("status")}
+              </button>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {events.length === 0 ? (
+            <tr>
+              <td colSpan={7} className="px-6 py-10 text-center text-sm text-subtle">
+                No events match this filter.
+              </td>
+            </tr>
+          ) : (
+            sortedEvents.map((event) => {
+              const status = statusConfig[event.status] ?? statusConfig.draft;
+              const venueName = event.venue?.name ?? "Unknown venue";
+              const artistLabel = getEventArtistLabel(event);
+              const spaceName = event.venue_space?.trim().length ? event.venue_space : "Space to be confirmed";
+              return (
+                <tr key={event.id} className="border-t border-[var(--color-border)] text-sm text-[var(--color-text)]">
+                  <td className="px-4 py-3 whitespace-nowrap">{event.start.format("ddd D MMM YYYY")}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    {event.start.format("HH:mm")} - {event.end.format("HH:mm")}
+                  </td>
+                  <td className="px-4 py-3">
+                    <Link
+                      href={`/events/${event.id}`}
+                      className="font-semibold text-[var(--color-text)] transition-colors hover:text-[var(--color-primary-700)]"
+                    >
+                      {event.title}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3">{venueName}</td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`block max-w-[18rem] truncate ${artistLabel === "No artist" ? "text-subtle" : ""}`}
+                      title={artistLabel}
+                    >
+                      {artistLabel}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">{spaceName}</td>
+                  <td className="px-4 py-3">
+                    <Badge variant={status.tone}>{status.label}</Badge>
+                  </td>
+                </tr>
+              );
+            })
+          )}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -782,7 +1245,7 @@ function VenueMatrixRow({ venue, events, days, canCreate, createVenueId }: Venue
                     </div>
                     <div className="mt-auto border-t border-[rgba(39,54,64,0.12)] pt-2">
                       <span
-                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.58rem] font-semibold uppercase tracking-[0.14em] ${accent.badge}`}
+                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.64rem] font-semibold uppercase tracking-[0.08em] ${accent.badge}`}
                       >
                         <span className={`h-1.5 w-1.5 rounded-full ${accent.dot}`} aria-hidden="true" />
                         {status.label}

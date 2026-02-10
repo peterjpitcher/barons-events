@@ -50,7 +50,7 @@ Response (200):
 
 Returns an OpenAPI 3.1 JSON spec (importable into Postman / Insomnia / Swagger tooling).
 
-### Venues (with areas)
+### Venues
 `GET /api/v1/venues`
 
 Response (200):
@@ -61,10 +61,7 @@ Response (200):
       "id": "uuid",
       "name": "Barons Riverside",
       "address": "12 River Walk, Guildford",
-      "capacity": 180,
-      "areas": [
-        { "id": "uuid", "name": "Main Bar", "capacity": 150 }
-      ]
+      "capacity": 180
     }
   ]
 }
@@ -152,13 +149,22 @@ type PublicEvent = {
   slug: string; // "<slugBase>--<eventId>" (slugBase is `seoSlug` if present, else `title`)
   title: string; // guest-facing title (prefers `events.public_title`, falls back to `events.title`)
   teaser: string | null; // short hook for cards/tiles
+  highlights: string[]; // short USP lines for quick scanning
   eventType: string;
   status: "approved" | "completed";
   startAt: string; // ISO date-time (UTC)
   endAt: string; // ISO date-time (UTC)
   venueSpaces: string[]; // parsed from the internal comma-separated venue_space field
   description: string | null; // guest-facing description (prefers `events.public_description`, falls back to `events.notes`); treat as plain text
+  bookingType: "ticketed" | "table_booking" | "free_entry" | "mixed" | null;
+  ticketPrice: number | null;
+  checkInCutoffMinutes: number | null;
+  agePolicy: string | null;
+  accessibilityNotes: string | null;
+  cancellationWindowHours: number | null;
+  termsAndConditions: string | null;
   bookingUrl: string | null; // optional booking link (full URL)
+  eventImageUrl: string | null; // public storage URL if an event image exists
   seoTitle: string | null; // optional SEO title (<= 60 chars); in EventHub UI we include the event date to disambiguate repeats
   seoDescription: string | null; // optional SEO description (<= 155 chars); in EventHub UI we include the event date to disambiguate repeats
   seoSlug: string | null; // optional base slug; in EventHub UI we include the date (recommended pattern: <base>-YYYY-MM-DD)
@@ -181,13 +187,22 @@ type PublicEvent = {
   "slug": "quiz-night-2026-01-06--aaaaaaa1-0000-4000-8000-000000000001",
   "title": "Quiz Night with Elliott",
   "teaser": "Get your team together and book in early.",
+  "highlights": ["Hosted by Elliott", "Prizes for top teams", "Book early to secure a table"],
   "eventType": "Quiz Night",
   "status": "approved",
   "startAt": "2026-01-06T19:30:00.000Z",
   "endAt": "2026-01-06T21:30:00.000Z",
   "venueSpaces": ["Main Bar"],
   "description": "Guest-facing description text…",
+  "bookingType": "table_booking",
+  "ticketPrice": null,
+  "checkInCutoffMinutes": 30,
+  "agePolicy": "18+ only (ID required)",
+  "accessibilityNotes": "Step-free access available. Contact venue for support.",
+  "cancellationWindowHours": 24,
+  "termsAndConditions": "Please arrive on time. Late entry may be refused.",
   "bookingUrl": "https://example.com/book",
+  "eventImageUrl": "https://<supabase>/storage/v1/object/public/event-images/<event-id>/hero.jpg",
   "seoTitle": "Quiz Night with Elliott | 6 Jan 2026",
   "seoDescription": "Join us for Quiz Night with Elliott on 6 Jan 2026 at The Cricketers. Book now.",
   "seoSlug": "quiz-night-with-elliott-2026-01-06",

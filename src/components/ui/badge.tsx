@@ -4,11 +4,11 @@ import { cn } from "@/lib/utils";
 type BadgeVariant = "neutral" | "info" | "success" | "warning" | "danger";
 
 const variantClass: Record<BadgeVariant, string> = {
-  neutral: "bg-[var(--color-muted-surface)] text-[var(--color-text)]",
-  info: "bg-[rgba(156,163,166,0.25)] text-[var(--color-primary-700)]",
-  success: "bg-[rgba(108,113,86,0.2)] text-[var(--color-olive-smoke)]",
-  warning: "bg-[rgba(180,154,103,0.22)] text-[var(--color-aged-brass)]",
-  danger: "bg-[rgba(110,60,61,0.25)] text-[var(--color-antique-burgundy)]"
+  neutral: "border border-[var(--color-primary-400)] bg-[var(--color-primary-100)] text-[var(--color-primary-900)]",
+  info: "border border-[var(--color-accent-cool-dark)] bg-[var(--color-info)] text-white",
+  success: "border border-[#355849] bg-[var(--color-success)] text-white",
+  warning: "border border-[#9a6d2b] bg-[var(--color-warning)] text-[#2f230d]",
+  danger: "border border-[#6e3032] bg-[var(--color-danger)] text-white"
 };
 
 type BadgeProps = HTMLAttributes<HTMLSpanElement> & {
