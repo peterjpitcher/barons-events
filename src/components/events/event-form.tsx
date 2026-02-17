@@ -395,7 +395,21 @@ export function EventForm({
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     const submitter = (event.nativeEvent as unknown as { submitter?: HTMLElement | null }).submitter;
     const actionIntent = submitter?.getAttribute?.("data-intent");
-    setIntent(actionIntent === "submit" ? "submit" : actionIntent === "generate" ? "generate" : "draft");
+    const nextIntent = actionIntent === "submit" ? "submit" : actionIntent === "generate" ? "generate" : "draft";
+
+    const willAutoApprove =
+      role === "central_planner" && (nextIntent === "submit" || (nextIntent === "draft" && mode === "create"));
+    if (willAutoApprove) {
+      const confirmed = window.confirm(
+        "This action will approve the event and generate AI website copy now. Continue?"
+      );
+      if (!confirmed) {
+        event.preventDefault();
+        return;
+      }
+    }
+
+    setIntent(nextIntent);
   }
 
   const completionPercent = (checks: boolean[]): number => {

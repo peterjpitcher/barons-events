@@ -1,8 +1,8 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { generateWebsiteCopyAction, reviewerDecisionAction } from "@/actions/events";
+import { reviewerDecisionAction } from "@/actions/events";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -20,8 +20,8 @@ type DecisionFormProps = {
 
 export function DecisionForm({ eventId }: DecisionFormProps) {
   const [state, formAction] = useActionState(reviewerDecisionAction, undefined);
-  const [websiteCopyState, websiteCopyAction] = useActionState(generateWebsiteCopyAction, undefined);
   const [selectedDecision, setSelectedDecision] = useState<string | null>(null);
+  const generateWebsiteCopyInputRef = useRef<HTMLInputElement | null>(null);
   const decisionError = state?.fieldErrors?.decision;
 
   useEffect(() => {
@@ -34,47 +34,30 @@ export function DecisionForm({ eventId }: DecisionFormProps) {
     }
   }, [state]);
 
-  useEffect(() => {
-    if (websiteCopyState?.message) {
-      if (websiteCopyState.success) {
-        toast.success(websiteCopyState.message);
-      } else if (!websiteCopyState.fieldErrors) {
-        toast.error(websiteCopyState.message);
-      }
+  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    if (generateWebsiteCopyInputRef.current) {
+      generateWebsiteCopyInputRef.current.value = "false";
     }
-  }, [websiteCopyState]);
 
-  useEffect(() => {
-    if (!state?.success) return;
     if (selectedDecision !== "approved") return;
 
-    const confirmed = window.confirm("Event approved. Generate the AI website listing copy now?");
-    if (!confirmed) return;
-
-    const formData = new FormData();
-    formData.set("eventId", eventId);
-    websiteCopyAction(formData);
-  }, [eventId, selectedDecision, state?.success, websiteCopyAction]);
-
-  useEffect(() => {
-    if (!websiteCopyState?.success) return;
-
-    const websiteCopyCard = document.getElementById("website-copy");
-    if (websiteCopyCard) {
-      websiteCopyCard.scrollIntoView({ behavior: "smooth", block: "start" });
+    const confirmed = window.confirm(
+      "Approving this event requires generating AI website listing copy now. Continue?"
+    );
+    if (!confirmed) {
+      event.preventDefault();
       return;
     }
 
-    const url = `/events/${eventId}#website-copy`;
-    const opened = window.open(url, "_blank", "noopener,noreferrer");
-    if (!opened) {
-      window.location.assign(url);
+    if (generateWebsiteCopyInputRef.current) {
+      generateWebsiteCopyInputRef.current.value = "true";
     }
-  }, [eventId, websiteCopyState?.success]);
+  }
 
   return (
-    <form action={formAction} className="space-y-4" noValidate>
+    <form action={formAction} className="space-y-4" noValidate onSubmit={handleSubmit}>
       <input type="hidden" name="eventId" value={eventId} />
+      <input ref={generateWebsiteCopyInputRef} type="hidden" name="generateWebsiteCopy" value="false" />
       <fieldset className="space-y-2" aria-describedby={decisionError ? "decision-error" : undefined}>
         <Label className="text-sm font-semibold text-[var(--color-text)]">Decision</Label>
         <div className="flex flex-wrap gap-3">

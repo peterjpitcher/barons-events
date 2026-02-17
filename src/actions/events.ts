@@ -12,7 +12,7 @@ import { getFieldErrors, type FieldErrors } from "@/lib/form-errors";
 import type { EventStatus } from "@/lib/types";
 import { sendAssigneeReassignmentEmail, sendEventSubmittedEmail, sendReviewDecisionEmail } from "@/lib/notifications";
 import { recordAuditLogEntry } from "@/lib/audit-log";
-import { generateTermsAndConditions, generateWebsiteCopy } from "@/lib/ai";
+import { generateTermsAndConditions, generateWebsiteCopy, type GeneratedWebsiteCopy } from "@/lib/ai";
 
 const reviewerFallback = z.string().uuid().optional();
 
@@ -43,6 +43,84 @@ type TermsActionResult = ActionResult & {
 const EVENT_IMAGE_BUCKET = "event-images";
 const MAX_EVENT_IMAGE_BYTES = 10 * 1024 * 1024;
 const ARTIST_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const WEBSITE_COPY_AUDIT_CHANGES = [
+  "Public title",
+  "Public teaser",
+  "Public description",
+  "Public highlights",
+  "SEO title",
+  "SEO description",
+  "SEO slug"
+] as const;
+const WEBSITE_COPY_EVENT_SELECT = `
+  id,
+  created_by,
+  assignee_id,
+  title,
+  event_type,
+  status,
+  start_at,
+  end_at,
+  venue_space,
+  expected_headcount,
+  wet_promo,
+  food_promo,
+  goal_focus,
+  cost_total,
+  cost_details,
+  booking_type,
+  ticket_price,
+  check_in_cutoff_minutes,
+  age_policy,
+  accessibility_notes,
+  cancellation_window_hours,
+  terms_and_conditions,
+  public_title,
+  public_teaser,
+  public_description,
+  public_highlights,
+  booking_url,
+  notes,
+  venue:venues(name,address),
+  artists:event_artists(
+    billing_order,
+    artist:artists(name,description)
+  )
+`;
+
+type ActionSupabaseClient = Awaited<ReturnType<typeof createSupabaseActionClient>>;
+type WebsiteCopyEventRecord = {
+  id: string;
+  created_by: string | null;
+  assignee_id: string | null;
+  title: string | null;
+  event_type: string | null;
+  status: string | null;
+  start_at: string | null;
+  end_at: string | null;
+  venue_space: string | null;
+  expected_headcount: number | null;
+  wet_promo: string | null;
+  food_promo: string | null;
+  goal_focus: string | null;
+  cost_total: number | null;
+  cost_details: string | null;
+  booking_type: string | null;
+  ticket_price: number | null;
+  check_in_cutoff_minutes: number | null;
+  age_policy: string | null;
+  accessibility_notes: string | null;
+  cancellation_window_hours: number | null;
+  terms_and_conditions: string | null;
+  public_title: string | null;
+  public_teaser: string | null;
+  public_description: string | null;
+  public_highlights: unknown;
+  booking_url: string | null;
+  notes: string | null;
+  venue: unknown;
+  artists: unknown;
+};
 
 function normaliseVenueSpacesField(value: FormDataEntryValue | null): string {
   if (typeof value !== "string") {
@@ -142,6 +220,238 @@ function artistListsDiffer(previous: string[], next: string[]): boolean {
   return false;
 }
 
+function getFormValue(formData: FormData | undefined, key: string): FormDataEntryValue | null {
+  if (!formData) return null;
+  return formData.get(key);
+}
+
+function getFormValues(formData: FormData | undefined, key: string): FormDataEntryValue[] {
+  if (!formData) return [];
+  return formData.getAll(key);
+}
+
+function toWebsiteCopyValues(generated: GeneratedWebsiteCopy): WebsiteCopyValues {
+  return {
+    publicTitle: generated.publicTitle,
+    publicTeaser: generated.publicTeaser,
+    publicDescription: generated.publicDescription,
+    publicHighlights: generated.publicHighlights,
+    seoTitle: generated.seoTitle,
+    seoDescription: generated.seoDescription,
+    seoSlug: generated.seoSlug
+  };
+}
+
+function buildWebsiteCopyUpdatePayload(generated: GeneratedWebsiteCopy): Record<string, unknown> {
+  return {
+    public_title: generated.publicTitle,
+    public_teaser: generated.publicTeaser,
+    public_description: generated.publicDescription,
+    public_highlights: generated.publicHighlights,
+    seo_title: generated.seoTitle,
+    seo_description: generated.seoDescription,
+    seo_slug: generated.seoSlug
+  };
+}
+
+function buildWebsiteCopyInput(record: WebsiteCopyEventRecord, formData?: FormData) {
+  const venueSpaces =
+    typeof record.venue_space === "string"
+      ? record.venue_space
+          .split(",")
+          .map((value) => value.trim())
+          .filter(Boolean)
+      : [];
+
+  const formVenueSpaces = normaliseVenueSpacesField(getFormValue(formData, "venueSpace"))
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const mergedVenueSpaces = formVenueSpaces.length ? formVenueSpaces : venueSpaces;
+
+  const formGoalFocus = getFormValues(formData, "goalFocus")
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const recordGoalFocus =
+    typeof record.goal_focus === "string"
+      ? record.goal_focus
+          .split(",")
+          .map((value) => value.trim())
+          .filter(Boolean)
+      : [];
+  const goalFocus = formGoalFocus.length ? formGoalFocus : recordGoalFocus;
+
+  const venueValue = Array.isArray(record.venue) ? record.venue[0] : record.venue;
+  const venueName = typeof (venueValue as any)?.name === "string" ? (venueValue as any).name : null;
+  const venueAddress = typeof (venueValue as any)?.address === "string" ? (venueValue as any).address : null;
+
+  const formArtistNames = normaliseArtistNameList(getFormValue(formData, "artistNames"));
+  const recordArtistNames = Array.isArray(record.artists)
+    ? (record.artists as any[])
+        .map((entry) => {
+          const artistValue = Array.isArray(entry?.artist) ? entry.artist[0] : entry?.artist;
+          return typeof artistValue?.name === "string" ? artistValue.name.trim() : null;
+        })
+        .filter((name): name is string => Boolean(name))
+    : [];
+  const artistNames = formArtistNames.length ? formArtistNames : recordArtistNames;
+
+  const formBookingType = normaliseOptionalBookingTypeField(getFormValue(formData, "bookingType"));
+  const recordBookingType = BOOKING_TYPE_VALUES.has(record.booking_type as BookingType)
+    ? (record.booking_type as BookingType)
+    : null;
+  const bookingType = formBookingType ?? recordBookingType;
+
+  const formPublicHighlights = normaliseOptionalHighlightsField(getFormValue(formData, "publicHighlights"));
+  const recordPublicHighlights = Array.isArray(record.public_highlights)
+    ? record.public_highlights
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.trim())
+        .filter(Boolean)
+    : null;
+  const inputHighlights = formPublicHighlights ?? recordPublicHighlights;
+
+  return {
+    title: normaliseOptionalTextField(getFormValue(formData, "title")) ?? record.title ?? "",
+    eventType: normaliseOptionalTextField(getFormValue(formData, "eventType")) ?? record.event_type ?? "",
+    startAt: normaliseOptionalTextField(getFormValue(formData, "startAt")) ?? record.start_at ?? "",
+    endAt: normaliseOptionalTextField(getFormValue(formData, "endAt")) ?? record.end_at ?? "",
+    artistNames,
+    venueName,
+    venueAddress,
+    venueSpaces: mergedVenueSpaces,
+    goalFocus,
+    expectedHeadcount:
+      normaliseOptionalNumberField(getFormValue(formData, "expectedHeadcount")) ??
+      (typeof record.expected_headcount === "number" ? record.expected_headcount : null),
+    wetPromo:
+      normaliseOptionalTextField(getFormValue(formData, "wetPromo")) ??
+      (typeof record.wet_promo === "string" ? record.wet_promo : null),
+    foodPromo:
+      normaliseOptionalTextField(getFormValue(formData, "foodPromo")) ??
+      (typeof record.food_promo === "string" ? record.food_promo : null),
+    costTotal:
+      normaliseOptionalNumberField(getFormValue(formData, "costTotal")) ??
+      (typeof record.cost_total === "number" ? record.cost_total : null),
+    costDetails:
+      normaliseOptionalTextField(getFormValue(formData, "costDetails")) ??
+      (typeof record.cost_details === "string" ? record.cost_details : null),
+    bookingType,
+    ticketPrice:
+      normaliseOptionalNumberField(getFormValue(formData, "ticketPrice")) ??
+      (typeof record.ticket_price === "number" ? record.ticket_price : null),
+    checkInCutoffMinutes:
+      normaliseOptionalIntegerField(getFormValue(formData, "checkInCutoffMinutes")) ??
+      (typeof record.check_in_cutoff_minutes === "number" ? record.check_in_cutoff_minutes : null),
+    agePolicy:
+      normaliseOptionalTextField(getFormValue(formData, "agePolicy")) ??
+      (typeof record.age_policy === "string" ? record.age_policy : null),
+    accessibilityNotes:
+      normaliseOptionalTextField(getFormValue(formData, "accessibilityNotes")) ??
+      (typeof record.accessibility_notes === "string" ? record.accessibility_notes : null),
+    cancellationWindowHours:
+      normaliseOptionalIntegerField(getFormValue(formData, "cancellationWindowHours")) ??
+      (typeof record.cancellation_window_hours === "number" ? record.cancellation_window_hours : null),
+    termsAndConditions:
+      normaliseOptionalTextField(getFormValue(formData, "termsAndConditions")) ??
+      (typeof record.terms_and_conditions === "string" ? record.terms_and_conditions : null),
+    bookingUrl:
+      normaliseOptionalTextField(getFormValue(formData, "bookingUrl")) ??
+      (typeof record.booking_url === "string" ? record.booking_url : null),
+    details:
+      normaliseOptionalTextField(getFormValue(formData, "notes")) ??
+      (typeof record.notes === "string" ? record.notes : null),
+    existingPublicTitle:
+      normaliseOptionalTextField(getFormValue(formData, "publicTitle")) ??
+      (typeof record.public_title === "string" ? record.public_title : null),
+    existingPublicTeaser:
+      normaliseOptionalTextField(getFormValue(formData, "publicTeaser")) ??
+      (typeof record.public_teaser === "string" ? record.public_teaser : null),
+    existingPublicDescription:
+      normaliseOptionalTextField(getFormValue(formData, "publicDescription")) ??
+      (typeof record.public_description === "string" ? record.public_description : null),
+    existingPublicHighlights: inputHighlights
+  };
+}
+
+async function fetchWebsiteCopyEventRecord(
+  supabase: ActionSupabaseClient,
+  eventId: string
+): Promise<WebsiteCopyEventRecord | null> {
+  const { data, error } = await supabase.from("events").select(WEBSITE_COPY_EVENT_SELECT).eq("id", eventId).maybeSingle();
+  if (error) {
+    throw error;
+  }
+  return data as WebsiteCopyEventRecord | null;
+}
+
+async function generateWebsiteCopyFromEventRecord(
+  record: WebsiteCopyEventRecord,
+  formData?: FormData
+): Promise<GeneratedWebsiteCopy | null> {
+  return generateWebsiteCopy(buildWebsiteCopyInput(record, formData));
+}
+
+async function updateEventWithFallback(params: {
+  supabase: ActionSupabaseClient;
+  eventId: string;
+  payload: Record<string, unknown>;
+  contextLabel: string;
+  reviewerAssigneeId?: string | null;
+}) {
+  let updateError: { message: string } | null = null;
+  try {
+    const admin = createSupabaseServiceRoleClient();
+    let adminUpdate = admin.from("events").update(params.payload as any).eq("id", params.eventId);
+    if (params.reviewerAssigneeId) {
+      adminUpdate = adminUpdate.eq("assignee_id", params.reviewerAssigneeId);
+    }
+    const { error } = await adminUpdate;
+    updateError = error;
+  } catch (error) {
+    console.warn(`Service-role ${params.contextLabel} update unavailable; retrying with user client`, error);
+    updateError = { message: "service-role update unavailable" };
+  }
+
+  if (updateError) {
+    console.warn(`Service-role ${params.contextLabel} update failed; retrying with user client`, updateError);
+    let fallbackUpdate = params.supabase.from("events").update(params.payload as any).eq("id", params.eventId);
+    if (params.reviewerAssigneeId) {
+      fallbackUpdate = fallbackUpdate.eq("assignee_id", params.reviewerAssigneeId);
+    }
+    const { error: fallbackError } = await fallbackUpdate;
+    if (fallbackError) {
+      throw fallbackError;
+    }
+  }
+}
+
+async function recordWebsiteCopyGeneratedAudit(params: {
+  eventId: string;
+  actorId: string;
+  triggeredByApproval?: boolean;
+  autoApproved?: boolean;
+}) {
+  const meta: Record<string, unknown> = {
+    changes: [...WEBSITE_COPY_AUDIT_CHANGES]
+  };
+  if (params.triggeredByApproval) {
+    meta["triggeredByApproval"] = true;
+  }
+  if (params.autoApproved) {
+    meta["autoApproved"] = true;
+  }
+
+  await recordAuditLogEntry({
+    entity: "event",
+    entityId: params.eventId,
+    action: "event.website_copy_generated",
+    actorId: params.actorId,
+    meta
+  });
+}
+
 async function uploadEventImage(params: {
   eventId: string;
   file: File;
@@ -214,18 +524,27 @@ async function autoApproveEvent(params: {
   const supabase = await createSupabaseActionClient();
   const nowIso = new Date().toISOString();
 
-  const { error: updateError } = await supabase
-    .from("events")
-    .update({
+  const eventBeforeApproval = await fetchWebsiteCopyEventRecord(supabase, params.eventId);
+  if (!eventBeforeApproval) {
+    throw new Error("Event not found.");
+  }
+  const generatedWebsiteCopy = await generateWebsiteCopyFromEventRecord(eventBeforeApproval);
+  if (!generatedWebsiteCopy) {
+    throw new Error("Could not generate website copy for approval.");
+  }
+  const websiteCopyPayload = buildWebsiteCopyUpdatePayload(generatedWebsiteCopy);
+
+  await updateEventWithFallback({
+    supabase,
+    eventId: params.eventId,
+    payload: {
       status: "approved",
       assignee_id: null,
-      submitted_at: nowIso
-    })
-    .eq("id", params.eventId);
-
-  if (updateError) {
-    throw updateError;
-  }
+      submitted_at: nowIso,
+      ...websiteCopyPayload
+    },
+    contextLabel: "auto-approval"
+  });
 
   await recordApproval({
     eventId: params.eventId,
@@ -258,10 +577,19 @@ async function autoApproveEvent(params: {
     });
   }
 
+  await recordWebsiteCopyGeneratedAudit({
+    eventId: params.eventId,
+    actorId: params.actorId,
+    triggeredByApproval: true,
+    autoApproved: true
+  });
+
   await appendEventVersion(params.eventId, params.actorId, {
     status: "approved",
     submitted_at: nowIso,
-    autoApproved: true
+    autoApproved: true,
+    websiteCopyGenerated: true,
+    ...websiteCopyPayload
   });
 }
 
@@ -909,6 +1237,7 @@ export async function reviewerDecisionAction(
   const decision = formData.get("decision");
   const eventId = formData.get("eventId");
   const feedback = formData.get("feedback") ?? undefined;
+  const generateWebsiteCopyConfirmed = formData.get("generateWebsiteCopy") === "true";
 
   const parsedId = z.string().uuid().safeParse(typeof eventId === "string" ? eventId : "");
   if (!parsedId.success) {
@@ -930,15 +1259,7 @@ export async function reviewerDecisionAction(
   const supabase = await createSupabaseActionClient();
 
   try {
-    const { data: eventBeforeDecision, error: eventBeforeError } = await supabase
-      .from("events")
-      .select("status, assignee_id, created_by")
-      .eq("id", parsedId.data)
-      .single();
-
-    if (eventBeforeError) {
-      throw eventBeforeError;
-    }
+    const eventBeforeDecision = await fetchWebsiteCopyEventRecord(supabase, parsedId.data);
     if (!eventBeforeDecision) {
       return { success: false, message: "Event not found." };
     }
@@ -947,7 +1268,7 @@ export async function reviewerDecisionAction(
       if (eventBeforeDecision.assignee_id !== user.id) {
         return { success: false, message: "This event is not assigned to you." };
       }
-      if (!["submitted", "needs_revisions"].includes(eventBeforeDecision.status)) {
+      if (!["submitted", "needs_revisions"].includes(eventBeforeDecision.status ?? "")) {
         return { success: false, message: "This event is not currently awaiting review." };
       }
     }
@@ -961,37 +1282,37 @@ export async function reviewerDecisionAction(
       nextAssignee = null;
     }
 
-    let updateError: { message: string } | null = null;
-    try {
-      const admin = createSupabaseServiceRoleClient();
-      let adminUpdate = admin
-        .from("events")
-        .update({ status: newStatus, assignee_id: nextAssignee })
-        .eq("id", parsedId.data);
-      if (user.role === "reviewer") {
-        adminUpdate = adminUpdate.eq("assignee_id", user.id);
+    let websiteCopyPayload: Record<string, unknown> | null = null;
+    if (newStatus === "approved") {
+      if (!generateWebsiteCopyConfirmed) {
+        return {
+          success: false,
+          message: "Approving an event requires AI website copy generation.",
+          fieldErrors: { decision: "Confirm AI website copy generation" }
+        };
       }
-      const { error } = await adminUpdate;
-      updateError = error;
-    } catch (error) {
-      console.warn("Service-role decision update unavailable; retrying with user client", error);
-      updateError = { message: "service-role update unavailable" };
+
+      const generatedWebsiteCopy = await generateWebsiteCopyFromEventRecord(eventBeforeDecision, formData);
+      if (!generatedWebsiteCopy) {
+        return {
+          success: false,
+          message: "Could not generate website copy. Approval was not saved. Check the AI service credentials and try again."
+        };
+      }
+      websiteCopyPayload = buildWebsiteCopyUpdatePayload(generatedWebsiteCopy);
     }
 
-    if (updateError) {
-      console.warn("Service-role decision update failed; retrying with user client", updateError);
-      let fallbackUpdate = supabase
-        .from("events")
-        .update({ status: newStatus, assignee_id: nextAssignee })
-        .eq("id", parsedId.data);
-      if (user.role === "reviewer") {
-        fallbackUpdate = fallbackUpdate.eq("assignee_id", user.id);
-      }
-      const { error: fallbackError } = await fallbackUpdate;
-      if (fallbackError) {
-        throw fallbackError;
-      }
-    }
+    await updateEventWithFallback({
+      supabase,
+      eventId: parsedId.data,
+      payload: {
+        status: newStatus,
+        assignee_id: nextAssignee,
+        ...(websiteCopyPayload ?? {})
+      },
+      contextLabel: "decision",
+      reviewerAssigneeId: user.role === "reviewer" ? user.id : null
+    });
 
     const statusBefore = eventBeforeDecision?.status ?? null;
     const trimmedFeedback =
@@ -1031,16 +1352,29 @@ export async function reviewerDecisionAction(
       });
     }
 
+    if (websiteCopyPayload) {
+      await recordWebsiteCopyGeneratedAudit({
+        eventId: parsedId.data,
+        actorId: user.id,
+        triggeredByApproval: true
+      });
+    }
+
     await appendEventVersion(parsedId.data, user.id, {
       status: newStatus,
-      feedback: trimmedFeedback
+      feedback: trimmedFeedback,
+      ...(websiteCopyPayload ?? {}),
+      websiteCopyGenerated: Boolean(websiteCopyPayload)
     });
 
     await sendReviewDecisionEmail(parsedId.data, newStatus);
 
     revalidatePath(`/events/${parsedId.data}`);
     revalidatePath("/reviews");
-    return { success: true, message: "Decision recorded." };
+    return {
+      success: true,
+      message: websiteCopyPayload ? "Decision recorded and website copy generated." : "Decision recorded."
+    };
   } catch (error) {
     console.error(error);
     return { success: false, message: "Could not save the decision." };
@@ -1068,51 +1402,7 @@ export async function generateWebsiteCopyAction(
   const supabase = await createSupabaseActionClient();
 
   try {
-    const { data: record, error } = await supabase
-      .from("events")
-      .select(
-        `
-        id,
-        created_by,
-        assignee_id,
-        title,
-        event_type,
-        status,
-        start_at,
-        end_at,
-        venue_space,
-        expected_headcount,
-        wet_promo,
-        food_promo,
-        goal_focus,
-        cost_total,
-        cost_details,
-        booking_type,
-        ticket_price,
-        check_in_cutoff_minutes,
-        age_policy,
-        accessibility_notes,
-        cancellation_window_hours,
-        terms_and_conditions,
-        public_title,
-        public_teaser,
-        public_description,
-        public_highlights,
-        booking_url,
-        notes,
-        venue:venues(name,address),
-        artists:event_artists(
-          billing_order,
-          artist:artists(name,description)
-        )
-      `
-      )
-      .eq("id", parsedEventId.data)
-      .maybeSingle();
-
-    if (error) {
-      throw error;
-    }
+    const record = await fetchWebsiteCopyEventRecord(supabase, parsedEventId.data);
     if (!record) {
       return { success: false, message: "Event not found." };
     }
@@ -1124,182 +1414,25 @@ export async function generateWebsiteCopyAction(
       return { success: false, message: "Approve the event before generating website copy." };
     }
 
-    const venueSpaces =
-      typeof record.venue_space === "string"
-        ? record.venue_space
-            .split(",")
-            .map((value) => value.trim())
-            .filter(Boolean)
-        : [];
-
-    const formVenueSpaces = normaliseVenueSpacesField(formData.get("venueSpace"))
-      .split(",")
-      .map((value) => value.trim())
-      .filter(Boolean);
-    const mergedVenueSpaces = formVenueSpaces.length ? formVenueSpaces : venueSpaces;
-
-    const formGoalFocus = formData
-      .getAll("goalFocus")
-      .filter((value): value is string => typeof value === "string")
-      .map((value) => value.trim())
-      .filter(Boolean);
-    const recordGoalFocus =
-      typeof record.goal_focus === "string"
-        ? record.goal_focus
-            .split(",")
-            .map((value) => value.trim())
-            .filter(Boolean)
-        : [];
-    const goalFocus = formGoalFocus.length ? formGoalFocus : recordGoalFocus;
-
-    const venueValue = Array.isArray((record as any).venue) ? (record as any).venue[0] : (record as any).venue;
-    const venueName = typeof venueValue?.name === "string" ? venueValue.name : null;
-    const venueAddress = typeof venueValue?.address === "string" ? venueValue.address : null;
-    const formArtistNames = normaliseArtistNameList(formData.get("artistNames"));
-    const recordArtistNames = Array.isArray((record as any).artists)
-      ? ((record as any).artists as any[])
-          .map((entry) => {
-            const artistValue = Array.isArray(entry?.artist) ? entry.artist[0] : entry?.artist;
-            return typeof artistValue?.name === "string" ? artistValue.name.trim() : null;
-          })
-          .filter((name): name is string => Boolean(name))
-      : [];
-    const artistNames = formArtistNames.length ? formArtistNames : recordArtistNames;
-
-    const formBookingType = normaliseOptionalBookingTypeField(formData.get("bookingType"));
-    const recordBookingType = BOOKING_TYPE_VALUES.has(record.booking_type as BookingType)
-      ? (record.booking_type as BookingType)
-      : null;
-    const bookingType = formBookingType ?? recordBookingType;
-
-    const formPublicHighlights = normaliseOptionalHighlightsField(formData.get("publicHighlights"));
-    const recordPublicHighlights = Array.isArray(record.public_highlights)
-      ? record.public_highlights.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean)
-      : null;
-    const inputHighlights = formPublicHighlights ?? recordPublicHighlights;
-
-    const generated = await generateWebsiteCopy({
-      title: normaliseOptionalTextField(formData.get("title")) ?? record.title,
-      eventType: normaliseOptionalTextField(formData.get("eventType")) ?? record.event_type,
-      startAt: normaliseOptionalTextField(formData.get("startAt")) ?? record.start_at,
-      endAt: normaliseOptionalTextField(formData.get("endAt")) ?? record.end_at,
-      artistNames,
-      venueName,
-      venueAddress,
-      venueSpaces: mergedVenueSpaces,
-      goalFocus,
-      expectedHeadcount:
-        normaliseOptionalNumberField(formData.get("expectedHeadcount")) ??
-        (typeof record.expected_headcount === "number" ? record.expected_headcount : null),
-      wetPromo: normaliseOptionalTextField(formData.get("wetPromo")) ?? (typeof record.wet_promo === "string" ? record.wet_promo : null),
-      foodPromo:
-        normaliseOptionalTextField(formData.get("foodPromo")) ?? (typeof record.food_promo === "string" ? record.food_promo : null),
-      costTotal: normaliseOptionalNumberField(formData.get("costTotal")) ?? (typeof record.cost_total === "number" ? record.cost_total : null),
-      costDetails:
-        normaliseOptionalTextField(formData.get("costDetails")) ?? (typeof record.cost_details === "string" ? record.cost_details : null),
-      bookingType,
-      ticketPrice:
-        normaliseOptionalNumberField(formData.get("ticketPrice")) ?? (typeof record.ticket_price === "number" ? record.ticket_price : null),
-      checkInCutoffMinutes:
-        normaliseOptionalIntegerField(formData.get("checkInCutoffMinutes")) ??
-        (typeof record.check_in_cutoff_minutes === "number" ? record.check_in_cutoff_minutes : null),
-      agePolicy:
-        normaliseOptionalTextField(formData.get("agePolicy")) ?? (typeof record.age_policy === "string" ? record.age_policy : null),
-      accessibilityNotes:
-        normaliseOptionalTextField(formData.get("accessibilityNotes")) ??
-        (typeof record.accessibility_notes === "string" ? record.accessibility_notes : null),
-      cancellationWindowHours:
-        normaliseOptionalIntegerField(formData.get("cancellationWindowHours")) ??
-        (typeof record.cancellation_window_hours === "number" ? record.cancellation_window_hours : null),
-      termsAndConditions:
-        normaliseOptionalTextField(formData.get("termsAndConditions")) ??
-        (typeof record.terms_and_conditions === "string" ? record.terms_and_conditions : null),
-      bookingUrl:
-        normaliseOptionalTextField(formData.get("bookingUrl")) ?? (typeof record.booking_url === "string" ? record.booking_url : null),
-      details: normaliseOptionalTextField(formData.get("notes")) ?? (typeof record.notes === "string" ? record.notes : null),
-      existingPublicTitle:
-        normaliseOptionalTextField(formData.get("publicTitle")) ?? (typeof record.public_title === "string" ? record.public_title : null),
-      existingPublicTeaser:
-        normaliseOptionalTextField(formData.get("publicTeaser")) ?? (typeof record.public_teaser === "string" ? record.public_teaser : null),
-      existingPublicDescription:
-        normaliseOptionalTextField(formData.get("publicDescription")) ??
-        (typeof record.public_description === "string" ? record.public_description : null),
-      existingPublicHighlights: inputHighlights
-    });
+    const generated = await generateWebsiteCopyFromEventRecord(record, formData);
 
     if (!generated) {
       return { success: false, message: "Could not generate website copy. Check the AI service credentials and try again." };
     }
 
-    const updatePayload = {
-      public_title: generated.publicTitle,
-      public_teaser: generated.publicTeaser,
-      public_description: generated.publicDescription,
-      public_highlights: generated.publicHighlights,
-      seo_title: generated.seoTitle,
-      seo_description: generated.seoDescription,
-      seo_slug: generated.seoSlug
-    };
-
-    let updateError: { message: string } | null = null;
-    try {
-      const admin = createSupabaseServiceRoleClient();
-      const { error } = await admin
-        .from("events")
-        .update(updatePayload as any)
-        .eq("id", parsedEventId.data);
-      updateError = error;
-    } catch (error) {
-      console.warn("Service-role website copy update unavailable; retrying with user client", error);
-      updateError = { message: "service-role update unavailable" };
-    }
-
-    if (updateError) {
-      console.warn("Service-role website copy update failed; retrying with user client", updateError);
-    }
-
-    if (updateError || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      const { error: fallbackError } = await supabase
-        .from("events")
-        .update(updatePayload as any)
-        .eq("id", parsedEventId.data);
-
-      if (fallbackError) {
-        throw fallbackError;
-      }
-    }
-
-    await recordAuditLogEntry({
-      entity: "event",
-      entityId: parsedEventId.data,
-      action: "event.website_copy_generated",
-      actorId: user.id,
-      meta: {
-        changes: [
-          "Public title",
-          "Public teaser",
-          "Public description",
-          "Public highlights",
-          "SEO title",
-          "SEO description",
-          "SEO slug"
-        ]
-      }
+    await updateEventWithFallback({
+      supabase,
+      eventId: parsedEventId.data,
+      payload: buildWebsiteCopyUpdatePayload(generated),
+      contextLabel: "website copy"
     });
+    await recordWebsiteCopyGeneratedAudit({ eventId: parsedEventId.data, actorId: user.id });
 
     revalidatePath(`/events/${parsedEventId.data}`);
     return {
       success: true,
       message: "Website copy generated.",
-      values: {
-        publicTitle: generated.publicTitle,
-        publicTeaser: generated.publicTeaser,
-        publicDescription: generated.publicDescription,
-        publicHighlights: generated.publicHighlights,
-        seoTitle: generated.seoTitle,
-        seoDescription: generated.seoDescription,
-        seoSlug: generated.seoSlug
-      }
+      values: toWebsiteCopyValues(generated)
     };
   } catch (error) {
     console.error(error);
