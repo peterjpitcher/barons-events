@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest watch",
     "typecheck": "tsc --noEmit",
+    "backfill:website-copy": "node scripts/backfill-website-copy.mjs",
     "supabase:migrate": "supabase db push",
     "supabase:reset": "supabase db reset --linked --yes"
   },
