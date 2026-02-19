@@ -839,17 +839,7 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
       }
     }
 
-    if (user.role === "central_planner") {
-      await autoApproveEvent({
-        eventId: created.id,
-        actorId: user.id,
-        previousStatus: (created.status as string | null) ?? null,
-        previousAssignee: (created.assignee_id as string | null) ?? null
-      });
-      revalidatePath(`/events/${created.id}`);
-      revalidatePath("/reviews");
-    }
-
+    revalidatePath(`/events/${created.id}`);
     revalidatePath("/events");
     redirect(`/events/${created.id}`);
   } catch (error) {

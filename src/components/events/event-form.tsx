@@ -397,11 +397,10 @@ export function EventForm({
     const actionIntent = submitter?.getAttribute?.("data-intent");
     const nextIntent = actionIntent === "submit" ? "submit" : actionIntent === "generate" ? "generate" : "draft";
 
-    const willAutoApprove =
-      role === "central_planner" && (nextIntent === "submit" || (nextIntent === "draft" && mode === "create"));
+    const willAutoApprove = role === "central_planner" && nextIntent === "submit";
     if (willAutoApprove) {
       const confirmed = window.confirm(
-        "This action will approve the event and generate AI website copy now. Continue?"
+        "Submitting as a central planner will approve this event and generate AI website copy now. Continue?"
       );
       if (!confirmed) {
         event.preventDefault();
