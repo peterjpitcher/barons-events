@@ -7,7 +7,7 @@ import { createSupabaseActionClient, createSupabaseServiceRoleClient } from "@/l
 import { getCurrentUser } from "@/lib/auth";
 import { appendEventVersion, createEventDraft, recordApproval, updateEventDraft, updateEventAssignee } from "@/lib/events";
 import { cleanupOrphanArtists, parseArtistNames, syncEventArtists } from "@/lib/artists";
-import { eventFormSchema } from "@/lib/validation";
+import { eventDraftSchema, eventFormSchema } from "@/lib/validation";
 import { getFieldErrors, type FieldErrors } from "@/lib/form-errors";
 import type { EventStatus } from "@/lib/types";
 import { sendAssigneeReassignmentEmail, sendEventSubmittedEmail, sendReviewDecisionEmail } from "@/lib/notifications";
@@ -630,7 +630,7 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
   const eventImageEntry = formData.get("eventImage");
   const eventImageFile = eventImageEntry instanceof File && eventImageEntry.size > 0 ? eventImageEntry : null;
 
-  const parsed = eventFormSchema.safeParse({
+  const parsed = eventDraftSchema.safeParse({
     eventId,
     venueId,
     title,
@@ -718,26 +718,37 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
 
       const artistIds = normaliseArtistIdList(formData.get("artistIds"));
       const artistNames = normaliseArtistNameList(values.artistNames ?? null);
-      const artistSync = await syncEventArtists({
-        eventId: values.eventId,
-        actorId: user.id,
-        artistIds,
-        artistNames
-      });
-      if (artistListsDiffer(artistSync.previousNames, artistSync.nextNames)) {
-        await recordAuditLogEntry({
-          entity: "event",
-          entityId: values.eventId,
-          action: "event.artists_updated",
-          actorId: user.id,
-          meta: {
-            previousArtists: artistSync.previousNames,
-            artists: artistSync.nextNames,
-            changes: ["Artists"]
+      let artistVersionNames = artistNames;
+      let artistSyncWarning = false;
+      try {
+        if (artistIds.length || artistNames.length) {
+          const artistSync = await syncEventArtists({
+            eventId: values.eventId,
+            actorId: user.id,
+            artistIds,
+            artistNames
+          });
+          artistVersionNames = artistSync.nextNames;
+          if (artistListsDiffer(artistSync.previousNames, artistSync.nextNames)) {
+            await recordAuditLogEntry({
+              entity: "event",
+              entityId: values.eventId,
+              action: "event.artists_updated",
+              actorId: user.id,
+              meta: {
+                previousArtists: artistSync.previousNames,
+                artists: artistSync.nextNames,
+                changes: ["Artists"]
+              }
+            });
           }
-        });
+        }
+      } catch (error) {
+        artistSyncWarning = true;
+        console.error("Draft saved but artist sync failed", error);
       }
 
+      let imageWarning = false;
       if (eventImageFile) {
         const uploadResult = await uploadEventImage({
           eventId: values.eventId,
@@ -748,22 +759,37 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
           return { success: false, message: uploadResult.error };
         }
         if (uploadResult.path !== updated.event_image_path) {
-          await updateEventDraft(
-            values.eventId,
-            {
-              event_image_path: uploadResult.path
-            },
-            user.id
-          );
+          try {
+            await updateEventDraft(
+              values.eventId,
+              {
+                event_image_path: uploadResult.path
+              },
+              user.id
+            );
+          } catch (error) {
+            imageWarning = true;
+            console.error("Draft saved but event image path update failed", error);
+          }
         }
       }
 
-      await appendEventVersion(values.eventId, user.id, {
-        ...values,
-        artistNames: artistSync.nextNames,
-        status: updated.status
-      });
+      try {
+        await appendEventVersion(values.eventId, user.id, {
+          ...values,
+          artistNames: artistVersionNames,
+          status: updated.status
+        });
+      } catch (error) {
+        console.error("Draft saved but event version append failed", error);
+      }
       revalidatePath(`/events/${values.eventId}`);
+      if (artistSyncWarning || imageWarning) {
+        return {
+          success: true,
+          message: "Draft updated, but some optional linked data could not be synced."
+        };
+      }
       return { success: true, message: "Draft updated." };
     }
 
@@ -801,23 +827,29 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
 
     const artistIds = normaliseArtistIdList(formData.get("artistIds"));
     const artistNames = normaliseArtistNameList(values.artistNames ?? null);
-    const artistSync = await syncEventArtists({
-      eventId: created.id,
-      actorId: user.id,
-      artistIds,
-      artistNames
-    });
-    if (artistSync.nextNames.length > 0) {
-      await recordAuditLogEntry({
-        entity: "event",
-        entityId: created.id,
-        action: "event.artists_updated",
-        actorId: user.id,
-        meta: {
-          artists: artistSync.nextNames,
-          changes: ["Artists"]
+    if (artistIds.length || artistNames.length) {
+      try {
+        const artistSync = await syncEventArtists({
+          eventId: created.id,
+          actorId: user.id,
+          artistIds,
+          artistNames
+        });
+        if (artistSync.nextNames.length > 0) {
+          await recordAuditLogEntry({
+            entity: "event",
+            entityId: created.id,
+            action: "event.artists_updated",
+            actorId: user.id,
+            meta: {
+              artists: artistSync.nextNames,
+              changes: ["Artists"]
+            }
+          });
         }
-      });
+      } catch (error) {
+        console.error("Draft created but artist sync failed", error);
+      }
     }
 
     if (eventImageFile) {
@@ -827,13 +859,17 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
         existingPath: null
       });
       if (!("error" in uploadResult)) {
-        await updateEventDraft(
-          created.id,
-          {
-            event_image_path: uploadResult.path
-          },
-          user.id
-        );
+        try {
+          await updateEventDraft(
+            created.id,
+            {
+              event_image_path: uploadResult.path
+            },
+            user.id
+          );
+        } catch (error) {
+          console.error("Draft created but event image path update failed", error);
+        }
       } else {
         console.warn("Event image upload failed after draft create", uploadResult.error);
       }

@@ -63,58 +63,78 @@ const isoDateString = z
     message: "Use a valid date and time"
   });
 
-export const eventFormSchema = z
-  .object({
-    eventId: z.string().uuid().optional(),
-    venueId: z.string().uuid({ message: "Choose a venue" }),
-    title: z.string().min(3, "Add a short title"),
-    eventType: z.string().min(3, "Pick an event type"),
-    startAt: isoDateString,
-    endAt: isoDateString,
-    venueSpace: z.string().min(2, "Add the area"),
-    expectedHeadcount: optionalInteger(0, 10000),
-    wetPromo: optionalText(240),
-    foodPromo: optionalText(240),
-    costTotal: optionalNumberMin(0),
-    costDetails: optionalText(500),
-    bookingType: z.enum(["ticketed", "table_booking", "free_entry", "mixed"], {
-      message: "Choose a booking format"
-    }),
-    ticketPrice: optionalNumberMin(0),
-    checkInCutoffMinutes: optionalInteger(0, 1440),
-    agePolicy: requiredText(2, 120, "Add an age policy"),
-    accessibilityNotes: optionalText(1000),
-    cancellationWindowHours: optionalInteger(0, 720),
-    termsAndConditions: optionalText(3000),
-    artistNames: optionalText(1000),
-    goalFocus: optionalText(120),
-    notes: optionalText(3000),
-    publicTitle: optionalText(120),
-    publicTeaser: optionalText(200),
-    publicDescription: optionalText(6000),
-    publicHighlights: optionalHighlights,
-    bookingUrl: z.preprocess(
-      (value) => {
-        if (typeof value !== "string") return value;
-        const trimmed = value.trim();
-        return trimmed.length ? trimmed : undefined;
-      },
-      z.string().url("Use a full URL (including https://)").optional()
-    ),
-    seoTitle: optionalText(80),
-    seoDescription: optionalText(200),
-    seoSlug: z.preprocess(
-      (value) => {
-        if (typeof value !== "string") return value;
-        const trimmed = value.trim();
-        return trimmed.length ? trimmed : undefined;
-      },
-      z
-        .string()
-        .max(140)
-        .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase words separated by hyphens")
-        .optional()
-    )
+const bookingTypeValues = ["ticketed", "table_booking", "free_entry", "mixed"] as const;
+
+const optionalBookingType = z.preprocess(
+  (value) => {
+    if (typeof value !== "string") return value;
+    const trimmed = value.trim();
+    return trimmed.length ? trimmed : undefined;
+  },
+  z.enum(bookingTypeValues).optional()
+);
+
+const bookingUrlSchema = z.preprocess(
+  (value) => {
+    if (typeof value !== "string") return value;
+    const trimmed = value.trim();
+    return trimmed.length ? trimmed : undefined;
+  },
+  z.string().url("Use a full URL (including https://)").optional()
+);
+
+const seoSlugSchema = z.preprocess(
+  (value) => {
+    if (typeof value !== "string") return value;
+    const trimmed = value.trim();
+    return trimmed.length ? trimmed : undefined;
+  },
+  z
+    .string()
+    .max(140)
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase words separated by hyphens")
+    .optional()
+);
+
+const eventDraftBaseSchema = z.object({
+  eventId: z.string().uuid().optional(),
+  venueId: z.string().uuid({ message: "Choose a venue" }),
+  title: z.string().min(3, "Add a short title"),
+  eventType: z.string().min(3, "Pick an event type"),
+  startAt: isoDateString,
+  endAt: isoDateString,
+  venueSpace: z.string().min(2, "Add the area"),
+  expectedHeadcount: optionalInteger(0, 10000),
+  wetPromo: optionalText(240),
+  foodPromo: optionalText(240),
+  costTotal: optionalNumberMin(0),
+  costDetails: optionalText(500),
+  bookingType: optionalBookingType,
+  ticketPrice: optionalNumberMin(0),
+  checkInCutoffMinutes: optionalInteger(0, 1440),
+  agePolicy: optionalText(120),
+  accessibilityNotes: optionalText(1000),
+  cancellationWindowHours: optionalInteger(0, 720),
+  termsAndConditions: optionalText(3000),
+  artistNames: optionalText(1000),
+  goalFocus: optionalText(120),
+  notes: optionalText(3000),
+  publicTitle: optionalText(120),
+  publicTeaser: optionalText(200),
+  publicDescription: optionalText(6000),
+  publicHighlights: optionalHighlights,
+  bookingUrl: bookingUrlSchema,
+  seoTitle: optionalText(80),
+  seoDescription: optionalText(200),
+  seoSlug: seoSlugSchema
+});
+
+export const eventDraftSchema = eventDraftBaseSchema;
+
+export const eventFormSchema = eventDraftBaseSchema
+  .extend({
+    bookingType: z.enum(bookingTypeValues, { message: "Choose a booking format" }),
+    agePolicy: requiredText(2, 120, "Add an age policy")
   })
   .superRefine((values, ctx) => {
     if (values.bookingType === "ticketed" && values.ticketPrice === undefined) {
