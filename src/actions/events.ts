@@ -13,6 +13,7 @@ import type { EventStatus } from "@/lib/types";
 import { sendAssigneeReassignmentEmail, sendEventSubmittedEmail, sendReviewDecisionEmail } from "@/lib/notifications";
 import { recordAuditLogEntry } from "@/lib/audit-log";
 import { generateTermsAndConditions, generateWebsiteCopy, type GeneratedWebsiteCopy } from "@/lib/ai";
+import { normaliseEventDateTimeForStorage } from "@/lib/datetime";
 
 const reviewerFallback = z.string().uuid().optional();
 
@@ -311,12 +312,14 @@ function buildWebsiteCopyInput(record: WebsiteCopyEventRecord, formData?: FormDa
         .filter(Boolean)
     : null;
   const inputHighlights = formPublicHighlights ?? recordPublicHighlights;
+  const startAtRaw = normaliseOptionalTextField(getFormValue(formData, "startAt")) ?? record.start_at ?? "";
+  const endAtRaw = normaliseOptionalTextField(getFormValue(formData, "endAt")) ?? record.end_at ?? "";
 
   return {
     title: normaliseOptionalTextField(getFormValue(formData, "title")) ?? record.title ?? "",
     eventType: normaliseOptionalTextField(getFormValue(formData, "eventType")) ?? record.event_type ?? "",
-    startAt: normaliseOptionalTextField(getFormValue(formData, "startAt")) ?? record.start_at ?? "",
-    endAt: normaliseOptionalTextField(getFormValue(formData, "endAt")) ?? record.end_at ?? "",
+    startAt: startAtRaw ? normaliseEventDateTimeForStorage(startAtRaw) : "",
+    endAt: endAtRaw ? normaliseEventDateTimeForStorage(endAtRaw) : "",
     artistNames,
     venueName,
     venueAddress,
@@ -680,6 +683,8 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
   }
 
   const values = parsed.data;
+  const startAtIso = normaliseEventDateTimeForStorage(values.startAt);
+  const endAtIso = normaliseEventDateTimeForStorage(values.endAt);
 
   if (!values.venueId) {
     return {
@@ -695,8 +700,8 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
         venue_id: values.venueId,
         title: values.title,
         event_type: values.eventType,
-        start_at: values.startAt,
-        end_at: values.endAt,
+        start_at: startAtIso,
+        end_at: endAtIso,
         venue_space: values.venueSpace,
         expected_headcount: values.expectedHeadcount ?? null,
         wet_promo: values.wetPromo ?? null,
@@ -804,8 +809,8 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
       createdBy: user.id,
       title: values.title,
       eventType: values.eventType,
-      startAt: values.startAt,
-      endAt: values.endAt,
+      startAt: startAtIso,
+      endAt: endAtIso,
       venueSpace: values.venueSpace,
       expectedHeadcount: values.expectedHeadcount ?? null,
       wetPromo: values.wetPromo ?? null,
@@ -993,6 +998,8 @@ export async function submitEventForReviewAction(
       }
 
       const values = parsed.data;
+      const startAtIso = normaliseEventDateTimeForStorage(values.startAt);
+      const endAtIso = normaliseEventDateTimeForStorage(values.endAt);
       if (!values.venueId) {
         return {
           success: false,
@@ -1006,8 +1013,8 @@ export async function submitEventForReviewAction(
         createdBy: user.id,
         title: values.title,
         eventType: values.eventType,
-        startAt: values.startAt,
-        endAt: values.endAt,
+        startAt: startAtIso,
+        endAt: endAtIso,
         venueSpace: values.venueSpace,
         expectedHeadcount: values.expectedHeadcount ?? null,
         wetPromo: values.wetPromo ?? null,

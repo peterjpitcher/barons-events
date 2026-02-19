@@ -20,6 +20,7 @@ import { Select } from "@/components/ui/select";
 import { FieldError } from "@/components/ui/field-error";
 import { EVENT_GOALS } from "@/lib/event-goals";
 import { cn } from "@/lib/utils";
+import { toLondonDateTimeInputValue } from "@/lib/datetime";
 import type { EventSummary } from "@/lib/events";
 import type { UserRole } from "@/lib/types";
 import type { ArtistOption } from "@/lib/artists";
@@ -39,22 +40,29 @@ export type EventFormProps = {
 };
 
 function toLocalInputValue(date?: string | null) {
-  if (!date) return "";
-  const parsed = new Date(date);
-  if (Number.isNaN(parsed.getTime())) return "";
-  const offset = parsed.getTimezoneOffset();
-  const local = new Date(parsed.getTime() - offset * 60000);
-  return local.toISOString().slice(0, 16);
+  return toLondonDateTimeInputValue(date);
 }
 
 function addHours(localIso: string, hours: number) {
   if (!localIso) return "";
-  const parsed = new Date(localIso);
-  if (Number.isNaN(parsed.getTime())) return "";
-  parsed.setHours(parsed.getHours() + hours);
-  const offset = parsed.getTimezoneOffset();
-  const adjusted = new Date(parsed.getTime() - offset * 60000);
-  return adjusted.toISOString().slice(0, 16);
+  const parsed = localIso.trim().match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+  if (!parsed) return "";
+
+  const year = Number(parsed[1]);
+  const month = Number(parsed[2]);
+  const day = Number(parsed[3]);
+  const hour = Number(parsed[4]);
+  const minute = Number(parsed[5]);
+  const base = new Date(Date.UTC(year, month - 1, day, hour, minute, 0, 0));
+  if (Number.isNaN(base.getTime())) return "";
+
+  base.setUTCHours(base.getUTCHours() + hours);
+  const y = base.getUTCFullYear();
+  const m = String(base.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(base.getUTCDate()).padStart(2, "0");
+  const h = String(base.getUTCHours()).padStart(2, "0");
+  const min = String(base.getUTCMinutes()).padStart(2, "0");
+  return `${y}-${m}-${d}T${h}:${min}`;
 }
 
 const ARTIST_TYPE_OPTIONS = [
