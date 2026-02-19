@@ -529,10 +529,10 @@ async function autoApproveEvent(params: {
     throw new Error("Event not found.");
   }
   const generatedWebsiteCopy = await generateWebsiteCopyFromEventRecord(eventBeforeApproval);
+  const websiteCopyPayload = generatedWebsiteCopy ? buildWebsiteCopyUpdatePayload(generatedWebsiteCopy) : null;
   if (!generatedWebsiteCopy) {
-    throw new Error("Could not generate website copy for approval.");
+    console.warn("Auto-approval continuing without AI website copy.");
   }
-  const websiteCopyPayload = buildWebsiteCopyUpdatePayload(generatedWebsiteCopy);
 
   await updateEventWithFallback({
     supabase,
@@ -541,7 +541,7 @@ async function autoApproveEvent(params: {
       status: "approved",
       assignee_id: null,
       submitted_at: nowIso,
-      ...websiteCopyPayload
+      ...(websiteCopyPayload ?? {})
     },
     contextLabel: "auto-approval"
   });
@@ -577,20 +577,26 @@ async function autoApproveEvent(params: {
     });
   }
 
-  await recordWebsiteCopyGeneratedAudit({
-    eventId: params.eventId,
-    actorId: params.actorId,
-    triggeredByApproval: true,
-    autoApproved: true
-  });
+  if (websiteCopyPayload) {
+    await recordWebsiteCopyGeneratedAudit({
+      eventId: params.eventId,
+      actorId: params.actorId,
+      triggeredByApproval: true,
+      autoApproved: true
+    });
+  }
 
-  await appendEventVersion(params.eventId, params.actorId, {
+  const versionPayload: Record<string, unknown> = {
     status: "approved",
     submitted_at: nowIso,
-    autoApproved: true,
-    websiteCopyGenerated: true,
-    ...websiteCopyPayload
-  });
+    autoApproved: true
+  };
+  if (websiteCopyPayload) {
+    versionPayload["websiteCopyGenerated"] = true;
+    Object.assign(versionPayload, websiteCopyPayload);
+  }
+
+  await appendEventVersion(params.eventId, params.actorId, versionPayload);
 }
 
 export async function saveEventDraftAction(_: ActionResult | undefined, formData: FormData): Promise<ActionResult> {

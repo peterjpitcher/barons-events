@@ -400,7 +400,7 @@ export function EventForm({
     const willAutoApprove = role === "central_planner" && nextIntent === "submit";
     if (willAutoApprove) {
       const confirmed = window.confirm(
-        "Submitting as a central planner will approve this event and generate AI website copy now. Continue?"
+        "Submitting as a central planner will approve this event instantly. Continue?"
       );
       if (!confirmed) {
         event.preventDefault();
