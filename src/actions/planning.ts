@@ -1,0 +1,498 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+import { getCurrentUser } from "@/lib/auth";
+import {
+  createPlanningItem,
+  createPlanningSeries,
+  createPlanningTask,
+  deletePlanningItem,
+  deletePlanningTask,
+  movePlanningItemDate,
+  pausePlanningSeries,
+  updatePlanningItem,
+  updatePlanningSeries,
+  updatePlanningTask
+} from "@/lib/planning";
+import type { PlanningItemStatus, PlanningTaskStatus, RecurrenceFrequency } from "@/lib/planning/types";
+
+export type PlanningActionResult = {
+  success: boolean;
+  message?: string;
+  fieldErrors?: Record<string, string>;
+};
+
+const uuidSchema = z.string().uuid();
+const optionalUuidSchema = z.union([z.string().uuid(), z.literal(""), z.null(), z.undefined()]);
+const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD");
+const planningStatusSchema = z.enum(["planned", "in_progress", "blocked", "done", "cancelled"]);
+const taskStatusSchema = z.enum(["open", "done"]);
+const frequencySchema = z.enum(["daily", "weekly", "monthly"]);
+
+function zodFieldErrors(error: z.ZodError): Record<string, string> {
+  const result: Record<string, string> = {};
+  error.issues.forEach((issue) => {
+    const key = issue.path.join(".") || "form";
+    if (!result[key]) {
+      result[key] = issue.message;
+    }
+  });
+  return result;
+}
+
+async function ensureUser() {
+  const user = await getCurrentUser();
+  if (!user) {
+    throw new Error("You must be signed in.");
+  }
+  return user;
+}
+
+const createItemSchema = z.object({
+  title: z.string().min(2, "Add a title").max(160),
+  description: z.string().max(2000).optional().nullable(),
+  typeLabel: z.string().min(2, "Add a planning type").max(120),
+  venueId: optionalUuidSchema,
+  ownerId: optionalUuidSchema,
+  targetDate: dateSchema,
+  status: planningStatusSchema.optional()
+});
+
+export async function createPlanningItemAction(input: unknown): Promise<PlanningActionResult> {
+  try {
+    const user = await ensureUser();
+    const parsed = createItemSchema.safeParse(input);
+    if (!parsed.success) {
+      return {
+        success: false,
+        message: "Check the highlighted fields.",
+        fieldErrors: zodFieldErrors(parsed.error)
+      };
+    }
+
+    await createPlanningItem({
+      title: parsed.data.title,
+      description: parsed.data.description ?? null,
+      typeLabel: parsed.data.typeLabel,
+      venueId: parsed.data.venueId ? parsed.data.venueId : null,
+      ownerId: parsed.data.ownerId ? parsed.data.ownerId : null,
+      targetDate: parsed.data.targetDate,
+      status: (parsed.data.status ?? "planned") as PlanningItemStatus,
+      createdBy: user.id
+    });
+
+    revalidatePath("/planning");
+    return { success: true, message: "Planning item created." };
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : "Could not create planning item."
+    };
+  }
+}
+
+const updateItemSchema = z.object({
+  itemId: uuidSchema,
+  title: z.string().min(2).max(160).optional(),
+  description: z.string().max(2000).optional().nullable(),
+  typeLabel: z.string().min(2).max(120).optional(),
+  venueId: optionalUuidSchema,
+  ownerId: optionalUuidSchema,
+  targetDate: dateSchema.optional(),
+  status: planningStatusSchema.optional()
+});
+
+export async function updatePlanningItemAction(input: unknown): Promise<PlanningActionResult> {
+  try {
+    await ensureUser();
+    const parsed = updateItemSchema.safeParse(input);
+    if (!parsed.success) {
+      return {
+        success: false,
+        message: "Check the highlighted fields.",
+        fieldErrors: zodFieldErrors(parsed.error)
+      };
+    }
+
+    await updatePlanningItem(parsed.data.itemId, {
+      title: parsed.data.title,
+      description: parsed.data.description,
+      typeLabel: parsed.data.typeLabel,
+      venueId: parsed.data.venueId ? parsed.data.venueId : null,
+      ownerId: parsed.data.ownerId ? parsed.data.ownerId : null,
+      targetDate: parsed.data.targetDate,
+      status: parsed.data.status as PlanningItemStatus | undefined
+    });
+
+    revalidatePath("/planning");
+    return { success: true, message: "Planning item updated." };
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : "Could not update planning item."
+    };
+  }
+}
+
+const moveItemSchema = z.object({
+  itemId: uuidSchema,
+  targetDate: dateSchema
+});
+
+export async function movePlanningItemDateAction(input: unknown): Promise<PlanningActionResult> {
+  try {
+    await ensureUser();
+    const parsed = moveItemSchema.safeParse(input);
+    if (!parsed.success) {
+      return {
+        success: false,
+        message: "Move payload is invalid.",
+        fieldErrors: zodFieldErrors(parsed.error)
+      };
+    }
+
+    await movePlanningItemDate(parsed.data.itemId, parsed.data.targetDate);
+
+    revalidatePath("/planning");
+    return { success: true, message: "Planning date moved." };
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : "Could not move planning item."
+    };
+  }
+}
+
+const deleteItemSchema = z.object({
+  itemId: uuidSchema
+});
+
+export async function deletePlanningItemAction(input: unknown): Promise<PlanningActionResult> {
+  try {
+    await ensureUser();
+    const parsed = deleteItemSchema.safeParse(input);
+    if (!parsed.success) {
+      return {
+        success: false,
+        message: "Planning item reference is invalid.",
+        fieldErrors: zodFieldErrors(parsed.error)
+      };
+    }
+
+    await deletePlanningItem(parsed.data.itemId);
+
+    revalidatePath("/planning");
+    return { success: true, message: "Planning item deleted." };
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : "Could not delete planning item."
+    };
+  }
+}
+
+const taskTemplateSchema = z.object({
+  title: z.string().min(2).max(160),
+  defaultAssigneeId: optionalUuidSchema,
+  dueOffsetDays: z.number().int().min(-365).max(365).optional(),
+  sortOrder: z.number().int().min(0).max(999).optional()
+});
+
+const createSeriesSchema = z
+  .object({
+    title: z.string().min(2, "Add a title").max(160),
+    description: z.string().max(2000).optional().nullable(),
+    typeLabel: z.string().min(2, "Add a planning type").max(120),
+    venueId: optionalUuidSchema,
+    ownerId: optionalUuidSchema,
+    recurrenceFrequency: frequencySchema,
+    recurrenceInterval: z.number().int().min(1).max(365),
+    recurrenceWeekdays: z.array(z.number().int().min(0).max(6)).optional().nullable(),
+    recurrenceMonthday: z.number().int().min(1).max(31).optional().nullable(),
+    startsOn: dateSchema,
+    endsOn: dateSchema.optional().nullable(),
+    taskTemplates: z.array(taskTemplateSchema).optional()
+  })
+  .superRefine((values, ctx) => {
+    if (values.recurrenceFrequency === "weekly") {
+      const weekdays = values.recurrenceWeekdays ?? [];
+      if (weekdays.length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Choose at least one weekday",
+          path: ["recurrenceWeekdays"]
+        });
+      }
+    }
+
+    if (values.recurrenceFrequency === "monthly" && !values.recurrenceMonthday) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Choose a day of month",
+        path: ["recurrenceMonthday"]
+      });
+    }
+
+    if (values.endsOn && values.endsOn < values.startsOn) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "End date must be after start date",
+        path: ["endsOn"]
+      });
+    }
+  });
+
+export async function createPlanningSeriesAction(input: unknown): Promise<PlanningActionResult> {
+  try {
+    const user = await ensureUser();
+    const parsed = createSeriesSchema.safeParse(input);
+    if (!parsed.success) {
+      return {
+        success: false,
+        message: "Check the highlighted fields.",
+        fieldErrors: zodFieldErrors(parsed.error)
+      };
+    }
+
+    await createPlanningSeries({
+      title: parsed.data.title,
+      description: parsed.data.description ?? null,
+      typeLabel: parsed.data.typeLabel,
+      venueId: parsed.data.venueId ? parsed.data.venueId : null,
+      ownerId: parsed.data.ownerId ? parsed.data.ownerId : null,
+      createdBy: user.id,
+      recurrenceFrequency: parsed.data.recurrenceFrequency as RecurrenceFrequency,
+      recurrenceInterval: parsed.data.recurrenceInterval,
+      recurrenceWeekdays: parsed.data.recurrenceWeekdays ?? null,
+      recurrenceMonthday: parsed.data.recurrenceMonthday ?? null,
+      startsOn: parsed.data.startsOn,
+      endsOn: parsed.data.endsOn ?? null,
+      taskTemplates: parsed.data.taskTemplates?.map((template) => ({
+        title: template.title,
+        defaultAssigneeId: template.defaultAssigneeId ? template.defaultAssigneeId : null,
+        dueOffsetDays: template.dueOffsetDays ?? 0,
+        sortOrder: template.sortOrder ?? 0
+      }))
+    });
+
+    revalidatePath("/planning");
+    return { success: true, message: "Recurring planning series created." };
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : "Could not create recurring series."
+    };
+  }
+}
+
+const updateSeriesSchema = createSeriesSchema.partial().extend({
+  seriesId: uuidSchema
+});
+
+export async function updatePlanningSeriesAction(input: unknown): Promise<PlanningActionResult> {
+  try {
+    await ensureUser();
+    const parsed = updateSeriesSchema.safeParse(input);
+    if (!parsed.success) {
+      return {
+        success: false,
+        message: "Check the highlighted fields.",
+        fieldErrors: zodFieldErrors(parsed.error)
+      };
+    }
+
+    await updatePlanningSeries(parsed.data.seriesId, {
+      title: parsed.data.title,
+      description: parsed.data.description,
+      typeLabel: parsed.data.typeLabel,
+      venueId: parsed.data.venueId ? parsed.data.venueId : null,
+      ownerId: parsed.data.ownerId ? parsed.data.ownerId : null,
+      recurrenceFrequency: parsed.data.recurrenceFrequency as RecurrenceFrequency | undefined,
+      recurrenceInterval: parsed.data.recurrenceInterval,
+      recurrenceWeekdays: parsed.data.recurrenceWeekdays ?? undefined,
+      recurrenceMonthday: parsed.data.recurrenceMonthday ?? undefined,
+      startsOn: parsed.data.startsOn,
+      endsOn: parsed.data.endsOn ?? undefined,
+      taskTemplates: parsed.data.taskTemplates?.map((template) => ({
+        title: template.title,
+        defaultAssigneeId: template.defaultAssigneeId ? template.defaultAssigneeId : null,
+        dueOffsetDays: template.dueOffsetDays ?? 0,
+        sortOrder: template.sortOrder ?? 0
+      }))
+    });
+
+    revalidatePath("/planning");
+    return { success: true, message: "Recurring series updated." };
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : "Could not update recurring series."
+    };
+  }
+}
+
+const pauseSeriesSchema = z.object({ seriesId: uuidSchema });
+
+export async function pausePlanningSeriesAction(input: unknown): Promise<PlanningActionResult> {
+  try {
+    await ensureUser();
+    const parsed = pauseSeriesSchema.safeParse(input);
+    if (!parsed.success) {
+      return {
+        success: false,
+        message: "Series reference is invalid.",
+        fieldErrors: zodFieldErrors(parsed.error)
+      };
+    }
+
+    await pausePlanningSeries(parsed.data.seriesId);
+
+    revalidatePath("/planning");
+    return { success: true, message: "Recurring series paused." };
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : "Could not pause recurring series."
+    };
+  }
+}
+
+const createTaskSchema = z.object({
+  planningItemId: uuidSchema,
+  title: z.string().min(2, "Add a task title").max(160),
+  assigneeId: optionalUuidSchema,
+  dueDate: dateSchema,
+  sortOrder: z.number().int().min(0).max(999).optional()
+});
+
+export async function createPlanningTaskAction(input: unknown): Promise<PlanningActionResult> {
+  try {
+    const user = await ensureUser();
+    const parsed = createTaskSchema.safeParse(input);
+    if (!parsed.success) {
+      return {
+        success: false,
+        message: "Check the highlighted fields.",
+        fieldErrors: zodFieldErrors(parsed.error)
+      };
+    }
+
+    await createPlanningTask({
+      planningItemId: parsed.data.planningItemId,
+      title: parsed.data.title,
+      assigneeId: parsed.data.assigneeId ? parsed.data.assigneeId : null,
+      dueDate: parsed.data.dueDate,
+      sortOrder: parsed.data.sortOrder,
+      createdBy: user.id
+    });
+
+    revalidatePath("/planning");
+    return { success: true, message: "Task added." };
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : "Could not add task."
+    };
+  }
+}
+
+const updateTaskSchema = z.object({
+  taskId: uuidSchema,
+  title: z.string().min(2).max(160).optional(),
+  assigneeId: optionalUuidSchema,
+  dueDate: dateSchema.optional(),
+  status: taskStatusSchema.optional(),
+  sortOrder: z.number().int().min(0).max(999).optional()
+});
+
+export async function updatePlanningTaskAction(input: unknown): Promise<PlanningActionResult> {
+  try {
+    await ensureUser();
+    const parsed = updateTaskSchema.safeParse(input);
+    if (!parsed.success) {
+      return {
+        success: false,
+        message: "Check the highlighted fields.",
+        fieldErrors: zodFieldErrors(parsed.error)
+      };
+    }
+
+    await updatePlanningTask(parsed.data.taskId, {
+      title: parsed.data.title,
+      assigneeId: Object.prototype.hasOwnProperty.call(parsed.data, "assigneeId")
+        ? parsed.data.assigneeId
+          ? parsed.data.assigneeId
+          : null
+        : undefined,
+      dueDate: parsed.data.dueDate,
+      status: parsed.data.status as PlanningTaskStatus | undefined,
+      sortOrder: parsed.data.sortOrder
+    });
+
+    revalidatePath("/planning");
+    return { success: true, message: "Task updated." };
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : "Could not update task."
+    };
+  }
+}
+
+const toggleTaskSchema = z.object({
+  taskId: uuidSchema,
+  done: z.boolean()
+});
+
+export async function togglePlanningTaskStatusAction(input: unknown): Promise<PlanningActionResult> {
+  try {
+    await ensureUser();
+    const parsed = toggleTaskSchema.safeParse(input);
+    if (!parsed.success) {
+      return {
+        success: false,
+        message: "Task toggle payload is invalid.",
+        fieldErrors: zodFieldErrors(parsed.error)
+      };
+    }
+
+    await updatePlanningTask(parsed.data.taskId, {
+      status: (parsed.data.done ? "done" : "open") as PlanningTaskStatus
+    });
+
+    revalidatePath("/planning");
+    return { success: true, message: "Task status updated." };
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : "Could not toggle task status."
+    };
+  }
+}
+
+const deleteTaskSchema = z.object({ taskId: uuidSchema });
+
+export async function deletePlanningTaskAction(input: unknown): Promise<PlanningActionResult> {
+  try {
+    await ensureUser();
+    const parsed = deleteTaskSchema.safeParse(input);
+    if (!parsed.success) {
+      return {
+        success: false,
+        message: "Task reference is invalid.",
+        fieldErrors: zodFieldErrors(parsed.error)
+      };
+    }
+
+    await deletePlanningTask(parsed.data.taskId);
+
+    revalidatePath("/planning");
+    return { success: true, message: "Task deleted." };
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : "Could not delete task."
+    };
+  }
+}

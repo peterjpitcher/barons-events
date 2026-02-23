@@ -274,3 +274,186 @@ on conflict (id) do update set
   decision = excluded.decision,
   feedback_text = excluded.feedback_text,
   decided_at = excluded.decided_at;
+
+-- Sample planning workspace data
+insert into public.planning_series (
+  id,
+  title,
+  description,
+  type_label,
+  venue_id,
+  owner_id,
+  created_by,
+  recurrence_frequency,
+  recurrence_interval,
+  recurrence_weekdays,
+  recurrence_monthday,
+  starts_on,
+  ends_on,
+  is_active,
+  generated_through
+)
+values (
+  'ddddddd1-0000-4000-8000-000000000001',
+  'Weekly menu launch readiness',
+  'Recurring checklist to prep all teams before weekly menu pushes.',
+  'Menu launch',
+  '9f9c5da2-8a6e-4db0-84b7-8ae0b25177e7',
+  '11111111-1111-1111-1111-111111111111',
+  '11111111-1111-1111-1111-111111111111',
+  'weekly',
+  1,
+  array[1]::smallint[],
+  null,
+  '2026-03-02',
+  null,
+  true,
+  null
+)
+on conflict (id) do update set
+  title = excluded.title,
+  description = excluded.description,
+  type_label = excluded.type_label,
+  venue_id = excluded.venue_id,
+  owner_id = excluded.owner_id,
+  created_by = excluded.created_by,
+  recurrence_frequency = excluded.recurrence_frequency,
+  recurrence_interval = excluded.recurrence_interval,
+  recurrence_weekdays = excluded.recurrence_weekdays,
+  recurrence_monthday = excluded.recurrence_monthday,
+  starts_on = excluded.starts_on,
+  ends_on = excluded.ends_on,
+  is_active = excluded.is_active,
+  generated_through = excluded.generated_through;
+
+insert into public.planning_series_task_templates (
+  id,
+  series_id,
+  title,
+  default_assignee_id,
+  due_offset_days,
+  sort_order
+)
+values
+  (
+    'eeeeeee1-0000-4000-8000-000000000001',
+    'ddddddd1-0000-4000-8000-000000000001',
+    'Confirm menu brief with kitchen team',
+    '33333333-3333-3333-3333-333333333333',
+    -7,
+    0
+  ),
+  (
+    'eeeeeee1-0000-4000-8000-000000000002',
+    'ddddddd1-0000-4000-8000-000000000001',
+    'Publish launch briefing in operations chat',
+    '11111111-1111-1111-1111-111111111111',
+    -2,
+    1
+  )
+on conflict (id) do update set
+  series_id = excluded.series_id,
+  title = excluded.title,
+  default_assignee_id = excluded.default_assignee_id,
+  due_offset_days = excluded.due_offset_days,
+  sort_order = excluded.sort_order;
+
+insert into public.planning_items (
+  id,
+  series_id,
+  occurrence_on,
+  is_exception,
+  title,
+  description,
+  type_label,
+  venue_id,
+  owner_id,
+  target_date,
+  status,
+  created_by
+)
+values
+  (
+    'fffffff1-0000-4000-8000-000000000001',
+    null,
+    null,
+    false,
+    'Replace till roll printer in Lakeside',
+    'Operational maintenance ticket to avoid checkout delays.',
+    'Operational change',
+    '0a077fe4-513b-438a-a60d-608c516d6b32',
+    '33333333-3333-3333-3333-333333333333',
+    '2026-03-15',
+    'planned',
+    '11111111-1111-1111-1111-111111111111'
+  ),
+  (
+    'fffffff1-0000-4000-8000-000000000002',
+    'ddddddd1-0000-4000-8000-000000000001',
+    '2026-03-02',
+    false,
+    'Weekly menu launch readiness',
+    'Recurring prep work generated from template.',
+    'Menu launch',
+    '9f9c5da2-8a6e-4db0-84b7-8ae0b25177e7',
+    '11111111-1111-1111-1111-111111111111',
+    '2026-03-02',
+    'planned',
+    '11111111-1111-1111-1111-111111111111'
+  )
+on conflict (id) do update set
+  series_id = excluded.series_id,
+  occurrence_on = excluded.occurrence_on,
+  is_exception = excluded.is_exception,
+  title = excluded.title,
+  description = excluded.description,
+  type_label = excluded.type_label,
+  venue_id = excluded.venue_id,
+  owner_id = excluded.owner_id,
+  target_date = excluded.target_date,
+  status = excluded.status,
+  created_by = excluded.created_by;
+
+insert into public.planning_tasks (
+  id,
+  planning_item_id,
+  title,
+  assignee_id,
+  due_date,
+  status,
+  completed_at,
+  sort_order,
+  created_by
+)
+values
+  (
+    '99999991-0000-4000-8000-000000000001',
+    'fffffff1-0000-4000-8000-000000000001',
+    'Order replacement printer and backup rolls',
+    '33333333-3333-3333-3333-333333333333',
+    '2026-03-10',
+    'open',
+    null,
+    0,
+    '11111111-1111-1111-1111-111111111111'
+  ),
+  (
+    '99999991-0000-4000-8000-000000000002',
+    'fffffff1-0000-4000-8000-000000000002',
+    'Confirm menu brief with kitchen team',
+    '33333333-3333-3333-3333-333333333333',
+    '2026-02-23',
+    'open',
+    null,
+    0,
+    '11111111-1111-1111-1111-111111111111'
+  )
+on conflict (id) do update set
+  planning_item_id = excluded.planning_item_id,
+  title = excluded.title,
+  assignee_id = excluded.assignee_id,
+  due_date = excluded.due_date,
+  status = excluded.status,
+  completed_at = excluded.completed_at,
+  sort_order = excluded.sort_order,
+  created_by = excluded.created_by;

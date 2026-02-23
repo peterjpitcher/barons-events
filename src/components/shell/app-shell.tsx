@@ -10,14 +10,33 @@ type NavItem = {
   roles: UserRole[];
 };
 
-const NAV_ITEMS: NavItem[] = [
-  { label: "Dashboard", href: "/", roles: ["central_planner", "reviewer", "venue_manager", "executive"] },
-  { label: "Events", href: "/events", roles: ["central_planner", "venue_manager"] },
-  { label: "Artists", href: "/artists", roles: ["central_planner", "venue_manager"] },
-  { label: "Approvals", href: "/reviews", roles: ["central_planner", "reviewer"] },
-  { label: "Venues", href: "/venues", roles: ["central_planner"] },
-  { label: "Users", href: "/users", roles: ["central_planner"] },
-  { label: "Settings", href: "/settings", roles: ["central_planner"] }
+type NavSection = {
+  label: string;
+  items: NavItem[];
+};
+
+const NAV_SECTIONS: NavSection[] = [
+  {
+    label: "Core Workspace",
+    items: [
+      { label: "Dashboard", href: "/", roles: ["central_planner", "reviewer", "venue_manager", "executive"] },
+      { label: "Events", href: "/events", roles: ["central_planner", "venue_manager"] },
+      { label: "Artists", href: "/artists", roles: ["central_planner", "venue_manager"] },
+      { label: "Approvals", href: "/reviews", roles: ["central_planner", "reviewer"] }
+    ]
+  },
+  {
+    label: "Strategic Planning",
+    items: [{ label: "30/60/90 Planning", href: "/planning", roles: ["central_planner", "reviewer", "venue_manager", "executive"] }]
+  },
+  {
+    label: "Administration",
+    items: [
+      { label: "Venues", href: "/venues", roles: ["central_planner"] },
+      { label: "Users", href: "/users", roles: ["central_planner"] },
+      { label: "Settings", href: "/settings", roles: ["central_planner"] }
+    ]
+  }
 ];
 
 type AppShellProps = {
@@ -26,7 +45,10 @@ type AppShellProps = {
 };
 
 export function AppShell({ user, children }: AppShellProps) {
-  const items = NAV_ITEMS.filter((item) => item.roles.includes(user.role));
+  const sections = NAV_SECTIONS.map((section) => ({
+    ...section,
+    items: section.items.filter((item) => item.roles.includes(user.role))
+  })).filter((section) => section.items.length > 0);
 
   return (
     <div className="flex h-screen bg-[var(--color-canvas)] text-[var(--color-text)]">
@@ -37,9 +59,16 @@ export function AppShell({ user, children }: AppShellProps) {
             A Barons Innovation
           </p>
         </div>
-        <nav className="flex flex-col gap-1">
-          {items.map((item) => (
-            <NavLink key={item.href} href={item.href} label={item.label} />
+        <nav className="flex flex-col gap-4">
+          {sections.map((section) => (
+            <div key={section.label} className="space-y-1">
+              <p className="px-3 text-[0.65rem] uppercase tracking-[0.2em] text-[rgba(255,255,255,0.55)]">{section.label}</p>
+              <div className="flex flex-col gap-1">
+                {section.items.map((item) => (
+                  <NavLink key={item.href} href={item.href} label={item.label} />
+                ))}
+              </div>
+            </div>
           ))}
         </nav>
         <div className="mt-auto space-y-4">
@@ -67,14 +96,21 @@ export function AppShell({ user, children }: AppShellProps) {
               </Button>
             </form>
           </div>
-          <nav className="flex flex-wrap items-center gap-2 md:hidden">
-            {items.map((item) => (
-              <NavLink
-                key={item.href}
-                href={item.href}
-                label={item.label}
-                className="rounded-full px-3 py-1 text-[var(--color-primary-700)] hover:bg-[rgba(39,54,64,0.08)] hover:text-[var(--color-primary-900)]"
-              />
+          <nav className="space-y-2 md:hidden">
+            {sections.map((section) => (
+              <div key={section.label} className="space-y-1">
+                <p className="text-[0.65rem] uppercase tracking-[0.2em] text-subtle">{section.label}</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  {section.items.map((item) => (
+                    <NavLink
+                      key={item.href}
+                      href={item.href}
+                      label={item.label}
+                      className="rounded-full px-3 py-1 text-[var(--color-primary-700)] hover:bg-[rgba(39,54,64,0.08)] hover:text-[var(--color-primary-900)]"
+                    />
+                  ))}
+                </div>
+              </div>
             ))}
           </nav>
           <form action={signOutAction} className="hidden md:block">

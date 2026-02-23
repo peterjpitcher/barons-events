@@ -149,6 +149,72 @@ export interface Database {
           submitted_at: string;
         };
       };
+      planning_series: {
+        Row: {
+          id: string;
+          title: string;
+          description: string | null;
+          type_label: string;
+          venue_id: string | null;
+          owner_id: string | null;
+          created_by: string;
+          recurrence_frequency: string;
+          recurrence_interval: number;
+          recurrence_weekdays: number[] | null;
+          recurrence_monthday: number | null;
+          starts_on: string;
+          ends_on: string | null;
+          is_active: boolean;
+          generated_through: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+      };
+      planning_items: {
+        Row: {
+          id: string;
+          series_id: string | null;
+          occurrence_on: string | null;
+          is_exception: boolean;
+          title: string;
+          description: string | null;
+          type_label: string;
+          venue_id: string | null;
+          owner_id: string | null;
+          target_date: string;
+          status: string;
+          created_by: string;
+          created_at: string;
+          updated_at: string;
+        };
+      };
+      planning_series_task_templates: {
+        Row: {
+          id: string;
+          series_id: string;
+          title: string;
+          default_assignee_id: string | null;
+          due_offset_days: number;
+          sort_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+      };
+      planning_tasks: {
+        Row: {
+          id: string;
+          planning_item_id: string;
+          title: string;
+          assignee_id: string | null;
+          due_date: string;
+          status: string;
+          completed_at: string | null;
+          sort_order: number;
+          created_by: string;
+          created_at: string;
+          updated_at: string;
+        };
+      };
       audit_log: {
         Row: {
           id: string;

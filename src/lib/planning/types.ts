@@ -1,0 +1,159 @@
+export type PlanningItemStatus = "planned" | "in_progress" | "blocked" | "done" | "cancelled";
+
+export type PlanningTaskStatus = "open" | "done";
+
+export type RecurrenceFrequency = "daily" | "weekly" | "monthly";
+
+export type PlannerCardSource = "planning" | "event";
+
+export type PlanningBucketKey = "0_30" | "31_60" | "61_90" | "later";
+
+export type PlanningPerson = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+};
+
+export type PlanningVenueOption = {
+  id: string;
+  name: string;
+};
+
+export type PlanningTask = {
+  id: string;
+  planningItemId: string;
+  title: string;
+  assigneeId: string | null;
+  assigneeName: string;
+  dueDate: string;
+  status: PlanningTaskStatus;
+  completedAt: string | null;
+  sortOrder: number;
+};
+
+export type PlanningItem = {
+  id: string;
+  source: "planning";
+  seriesId: string | null;
+  occurrenceOn: string | null;
+  isException: boolean;
+  title: string;
+  description: string | null;
+  typeLabel: string;
+  venueId: string | null;
+  venueName: string | null;
+  ownerId: string | null;
+  ownerName: string | null;
+  targetDate: string;
+  status: PlanningItemStatus;
+  createdBy: string;
+  tasks: PlanningTask[];
+};
+
+export type PlanningEventOverlay = {
+  id: string;
+  source: "event";
+  eventId: string;
+  title: string;
+  status: string;
+  startAt: string;
+  endAt: string;
+  targetDate: string;
+  venueId: string | null;
+  venueName: string | null;
+  venueSpace: string | null;
+};
+
+export type PlanningAlertCounts = {
+  overdueItems: number;
+  overdueTasks: number;
+  dueSoonItems: number;
+  dueSoonTasks: number;
+};
+
+export type PlanningBoardData = {
+  today: string;
+  alerts: PlanningAlertCounts;
+  planningItems: PlanningItem[];
+  events: PlanningEventOverlay[];
+  users: PlanningPerson[];
+};
+
+export type SeriesTaskTemplateInput = {
+  title: string;
+  defaultAssigneeId?: string | null;
+  dueOffsetDays?: number;
+  sortOrder?: number;
+};
+
+export type CreatePlanningSeriesInput = {
+  title: string;
+  description?: string | null;
+  typeLabel: string;
+  venueId?: string | null;
+  ownerId?: string | null;
+  createdBy: string;
+  recurrenceFrequency: RecurrenceFrequency;
+  recurrenceInterval: number;
+  recurrenceWeekdays?: number[] | null;
+  recurrenceMonthday?: number | null;
+  startsOn: string;
+  endsOn?: string | null;
+  taskTemplates?: SeriesTaskTemplateInput[];
+};
+
+export type UpdatePlanningSeriesInput = {
+  title?: string;
+  description?: string | null;
+  typeLabel?: string;
+  venueId?: string | null;
+  ownerId?: string | null;
+  recurrenceFrequency?: RecurrenceFrequency;
+  recurrenceInterval?: number;
+  recurrenceWeekdays?: number[] | null;
+  recurrenceMonthday?: number | null;
+  startsOn?: string;
+  endsOn?: string | null;
+  isActive?: boolean;
+  generatedThrough?: string | null;
+  taskTemplates?: SeriesTaskTemplateInput[];
+};
+
+export type CreatePlanningItemInput = {
+  title: string;
+  description?: string | null;
+  typeLabel: string;
+  venueId?: string | null;
+  ownerId?: string | null;
+  targetDate: string;
+  status?: PlanningItemStatus;
+  createdBy: string;
+};
+
+export type UpdatePlanningItemInput = {
+  title?: string;
+  description?: string | null;
+  typeLabel?: string;
+  venueId?: string | null;
+  ownerId?: string | null;
+  targetDate?: string;
+  status?: PlanningItemStatus;
+};
+
+export type CreatePlanningTaskInput = {
+  planningItemId: string;
+  title: string;
+  assigneeId?: string | null;
+  dueDate: string;
+  sortOrder?: number;
+  createdBy: string;
+};
+
+export type UpdatePlanningTaskInput = {
+  title?: string;
+  assigneeId?: string | null;
+  dueDate?: string;
+  status?: PlanningTaskStatus;
+  sortOrder?: number;
+};
