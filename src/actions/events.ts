@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createSupabaseActionClient, createSupabaseServiceRoleClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth";
-import { appendEventVersion, createEventDraft, recordApproval, updateEventDraft, updateEventAssignee } from "@/lib/events";
+import { appendEventVersion, createEventDraft, recordApproval, softDeleteEvent, updateEventDraft, updateEventAssignee } from "@/lib/events";
 import { cleanupOrphanArtists, parseArtistNames, syncEventArtists } from "@/lib/artists";
 import { eventDraftSchema, eventFormSchema } from "@/lib/validation";
 import { getFieldErrors, type FieldErrors } from "@/lib/form-errors";
@@ -785,6 +785,7 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
         }
       }
 
+      let versionWarning = false;
       try {
         await appendEventVersion(values.eventId, user.id, {
           ...values,
@@ -792,10 +793,11 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
           status: updated.status
         });
       } catch (error) {
+        versionWarning = true;
         console.error("Draft saved but event version append failed", error);
       }
       revalidatePath(`/events/${values.eventId}`);
-      if (artistSyncWarning || imageWarning) {
+      if (artistSyncWarning || imageWarning || versionWarning) {
         return {
           success: true,
           message: "Draft updated, but some optional linked data could not be synced."
@@ -1633,21 +1635,6 @@ export async function deleteEventAction(_: ActionResult | undefined, formData: F
       return { success: false, message: "You don't have permission to delete this event." };
     }
 
-    const { data: artistLinkRows, error: artistLinkError } = await supabase
-      .from("event_artists")
-      .select("artist_id")
-      .eq("event_id", event.id);
-    if (artistLinkError) {
-      throw artistLinkError;
-    }
-    const linkedArtistIds = Array.from(
-      new Set(
-        ((artistLinkRows ?? []) as Array<{ artist_id: string | null }>)
-          .map((row) => row.artist_id)
-          .filter((artistId): artistId is string => Boolean(artistId))
-      )
-    );
-
     await recordAuditLogEntry({
       entity: "event",
       entityId: event.id,
@@ -1659,56 +1646,9 @@ export async function deleteEventAction(_: ActionResult | undefined, formData: F
       }
     });
 
-    let deleted = false;
-    try {
-      const admin = createSupabaseServiceRoleClient();
-      let deleteQuery = admin.from("events").delete().eq("id", event.id);
-      if (user.role === "venue_manager") {
-        deleteQuery = deleteQuery.eq("created_by", user.id);
-      }
-      const { error: adminDeleteError } = await deleteQuery;
-      if (!adminDeleteError) {
-        deleted = true;
-      } else {
-        console.warn("Service-role delete failed; retrying with user client", adminDeleteError);
-      }
-    } catch (error) {
-      console.warn("Service-role delete unavailable; retrying with user client", error);
-    }
-
-    if (!deleted) {
-      const { error: deleteError } = await supabase.from("events").delete().eq("id", event.id);
-      if (deleteError) {
-        throw deleteError;
-      }
-    }
-
-    await removeEventImageObject(event.event_image_path);
-
-    if (linkedArtistIds.length > 0) {
-      try {
-        const cleanupResult = await cleanupOrphanArtists({
-          candidateArtistIds: linkedArtistIds,
-          maxDeletes: 25
-        });
-        if (cleanupResult.deletedCount > 0) {
-          await recordAuditLogEntry({
-            entity: "event",
-            entityId: event.id,
-            action: "event.orphan_artists_cleaned",
-            actorId: user.id,
-            meta: {
-              deletedArtistCount: cleanupResult.deletedCount,
-              deletedArtists: cleanupResult.deletedArtistNames,
-              changes: ["Artists"]
-            }
-          });
-          revalidatePath("/artists");
-        }
-      } catch (cleanupError) {
-        console.warn("Orphan artist cleanup failed after event delete", cleanupError);
-      }
-    }
+    // Soft delete: sets deleted_at and deleted_by; the event is preserved for audit purposes
+    // and can be recovered by an admin. Artist links and images are retained.
+    await softDeleteEvent(event.id, user.id);
 
     revalidatePath("/events");
     revalidatePath("/reviews");

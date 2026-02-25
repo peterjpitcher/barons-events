@@ -2,6 +2,7 @@ import "server-only";
 
 import { timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
+import { checkRateLimit, getClientIp } from "./rate-limit";
 
 const API_KEY_ENV = "EVENTHUB_WEBSITE_API_KEY";
 
@@ -35,6 +36,46 @@ export function jsonError(status: number, code: string, message: string, details
       }
     }
   );
+}
+
+export function methodNotAllowed(allowed: string[] = ["GET"]): Response {
+  return NextResponse.json(
+    { error: { code: "method_not_allowed", message: `Only ${allowed.join(", ")} requests are accepted` } },
+    {
+      status: 405,
+      headers: {
+        allow: allowed.join(", "),
+        "cache-control": "no-store"
+      }
+    }
+  );
+}
+
+/**
+ * Check the rate limit for the request. Returns a 429 response if exceeded, otherwise null.
+ * Should be called before requireWebsiteApiKey so unauthenticated probing is also rate-limited.
+ */
+export function checkApiRateLimit(request: Request): Response | null {
+  const ip = getClientIp(request);
+  const result = checkRateLimit(ip);
+
+  if (!result.allowed) {
+    return NextResponse.json(
+      { error: { code: "rate_limited", message: "Too many requests. Please slow down." } },
+      {
+        status: 429,
+        headers: {
+          "retry-after": String(Math.ceil((result.resetAt - Date.now()) / 1000)),
+          "x-ratelimit-limit": "120",
+          "x-ratelimit-remaining": "0",
+          "x-ratelimit-reset": String(Math.ceil(result.resetAt / 1000)),
+          "cache-control": "no-store"
+        }
+      }
+    );
+  }
+
+  return null;
 }
 
 export function requireWebsiteApiKey(request: Request): Response | null {

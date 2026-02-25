@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
-import { jsonError, requireWebsiteApiKey } from "@/lib/public-api/auth";
+import { checkApiRateLimit, jsonError, methodNotAllowed, requireWebsiteApiKey } from "@/lib/public-api/auth";
 import { PUBLIC_EVENT_STATUSES, decodeCursor, encodeCursor, toPublicEvent, type RawEventRow } from "@/lib/public-api/events";
 
 export const runtime = "nodejs";
@@ -24,6 +24,9 @@ const querySchema = z.object({
 });
 
 export async function GET(request: Request) {
+  const rateLimitResponse = checkApiRateLimit(request);
+  if (rateLimitResponse) return rateLimitResponse;
+
   const authResponse = requireWebsiteApiKey(request);
   if (authResponse) return authResponse;
 
@@ -89,6 +92,7 @@ export async function GET(request: Request) {
     `
     )
     .in("status", [...PUBLIC_EVENT_STATUSES])
+    .is("deleted_at", null)
     .order("start_at", { ascending: true })
     .order("id", { ascending: true })
     .limit(limit + 1);
@@ -147,8 +151,15 @@ export async function GET(request: Request) {
     },
     {
       headers: {
+        // max-age=30: responses are valid for 30 s; stale-while-revalidate=300: serve stale for up to 5 min while refreshing in background.
+        // Keep the window short because event status changes are time-sensitive.
         "cache-control": "private, max-age=30, stale-while-revalidate=300"
       }
     }
   );
 }
+
+export function POST() { return methodNotAllowed(); }
+export function PUT() { return methodNotAllowed(); }
+export function PATCH() { return methodNotAllowed(); }
+export function DELETE() { return methodNotAllowed(); }

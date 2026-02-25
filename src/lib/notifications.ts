@@ -541,7 +541,7 @@ export async function sendAssigneeReassignmentEmail(
       recipients.push({ user: previousAssignee, isNew: false });
     }
 
-    await Promise.all(
+    const results = await Promise.allSettled(
       recipients.map(async ({ user, isNew }) => {
         const headline = isNew ? "New event assignment" : "Event reassignment";
         const intro = isNew
@@ -575,6 +575,11 @@ export async function sendAssigneeReassignmentEmail(
         });
       })
     );
+    results.forEach((result, index) => {
+      if (result.status === "rejected") {
+        console.warn(`Failed to send reassignment email to recipient ${index}`, result.reason);
+      }
+    });
   } catch (error) {
     console.warn("Failed to send assignee reassignment email", error);
   }
@@ -677,15 +682,23 @@ export async function sendWeeklyPipelineSummaryEmail() {
     const statuses = ["submitted", "needs_revisions", "approved"];
 
     const summary: Record<string, number> = {};
-    await Promise.all(
+    const countResults = await Promise.allSettled(
       statuses.map(async (status) => {
-        const { count } = await supabase
+        const { count, error } = await supabase
           .from("events")
           .select("id", { count: "exact", head: true })
           .eq("status", status);
-        summary[status] = count ?? 0;
+        if (error) throw new Error(`Count query failed for status "${status}": ${error.message}`);
+        return { status, count: count ?? 0 };
       })
     );
+    countResults.forEach((result) => {
+      if (result.status === "fulfilled") {
+        summary[result.value.status] = result.value.count;
+      } else {
+        console.warn("Weekly pipeline summary: status count query failed", result.reason);
+      }
+    });
 
     const { data: eventsWithDebriefs, error: missingError } = await supabase
       .from("events")

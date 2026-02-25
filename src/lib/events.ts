@@ -624,73 +624,31 @@ export async function updateEventDraft(eventId: string, updates: Partial<EventRo
 }
 
 export async function appendEventVersion(eventId: string, actorId: string, versionData: Record<string, unknown>) {
-  const supabase = await createSupabaseActionClient();
+  // Use the service role client so it can call the next_event_version RPC which is
+  // restricted to service_role and provides an atomic, race-free version number.
+  const admin = createSupabaseServiceRoleClient();
 
-  const { data: latest, error: latestError } = await supabase
-    .from("event_versions")
-    .select("version")
-    .eq("event_id", eventId)
-    .order("version", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const { data: nextVersion, error: versionError } = await admin.rpc("next_event_version", {
+    p_event_id: eventId
+  });
 
-  let nextVersion = (latest?.version ?? 0) + 1;
-  if (latestError) {
-    try {
-      const admin = createSupabaseServiceRoleClient();
-      const { data: adminLatest, error: adminLatestError } = await admin
-        .from("event_versions")
-        .select("version")
-        .eq("event_id", eventId)
-        .order("version", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (!adminLatestError) {
-        nextVersion = (adminLatest?.version ?? 0) + 1;
-      }
-    } catch (error) {
-      console.warn("Service-role version lookup unavailable while appending event version", error);
-    }
+  if (versionError) {
+    throw new Error(`Could not determine next event version: ${versionError.message}`);
   }
 
   const statusValue = typeof versionData["status"] === "string" ? (versionData["status"] as string) : null;
 
-  const payload = {
+  const { error } = await admin.from("event_versions").insert({
     event_id: eventId,
-    version: nextVersion,
+    version: nextVersion as number,
     payload: versionData,
     submitted_at: statusValue === "submitted" ? new Date().toISOString() : null,
     submitted_by: actorId
-  };
+  });
 
-  const { error } = await supabase.from("event_versions").insert(payload);
-  if (!error) {
-    return;
+  if (error) {
+    throw new Error(`Could not log event version: ${error.message}`);
   }
-
-  try {
-    const admin = createSupabaseServiceRoleClient();
-    const { data: adminLatest } = await admin
-      .from("event_versions")
-      .select("version")
-      .eq("event_id", eventId)
-      .order("version", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    const adminNextVersion = (adminLatest?.version ?? 0) + 1;
-    const { error: adminInsertError } = await admin.from("event_versions").insert({
-      ...payload,
-      version: adminNextVersion
-    });
-    if (adminInsertError) {
-      throw adminInsertError;
-    }
-    return;
-  } catch (adminError) {
-    console.warn("Service-role version insert unavailable while appending event version", adminError);
-  }
-
-  throw new Error(`Could not log event version: ${error.message}`);
 }
 
 export async function recordApproval(params: {
@@ -742,6 +700,23 @@ export async function getStatusCounts(): Promise<Record<EventStatus, number>> {
   }
 
   return base;
+}
+
+/**
+ * Soft-delete an event by setting deleted_at and deleted_by.
+ * The event remains in the database for audit purposes and can be recovered by an admin.
+ * RLS policies and public API queries filter out soft-deleted events automatically.
+ */
+export async function softDeleteEvent(eventId: string, actorId: string): Promise<void> {
+  const supabase = await createSupabaseActionClient();
+  const { error } = await supabase
+    .from("events")
+    .update({ deleted_at: new Date().toISOString(), deleted_by: actorId })
+    .eq("id", eventId);
+
+  if (error) {
+    throw new Error(`Could not delete event: ${error.message}`);
+  }
 }
 
 export async function findConflicts(): Promise<Array<{ event: EventSummary; conflictingWith: EventSummary }>> {

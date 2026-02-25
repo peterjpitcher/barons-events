@@ -1,4 +1,4 @@
-import { createSupabaseActionClient, createSupabaseReadonlyClient } from "@/lib/supabase/server";
+import { createSupabaseActionClient, createSupabaseReadonlyClient, createSupabaseServiceRoleClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
 
 type ArtistRow = Database["public"]["Tables"]["artists"]["Row"];
@@ -264,44 +264,84 @@ export async function listArchivedArtists(): Promise<ArtistOption[]> {
 
 export async function listArtistsWithPerformance(): Promise<ArtistPerformanceSummary[]> {
   const supabase = await createSupabaseReadonlyClient();
-  const { data, error } = await supabase
+
+  // Query 1: load curated artists (core fields only — no nested joins).
+  const { data: artistRows, error: artistError } = await supabase
     .from("artists")
-    .select(
-      `
-      *,
-      event_links:event_artists(
-        event_id,
-        event:events(
-          id,
-          debrief:debriefs(*)
-        )
-      )
-    `
-    )
+    .select("id,name,artist_type,email,phone,description,is_archived")
     .eq("is_curated", true)
     .eq("is_archived", false)
     .order("name");
 
-  if (error) {
-    throw new Error(`Could not load artist performance: ${error.message}`);
+  if (artistError) {
+    throw new Error(`Could not load artists: ${artistError.message}`);
   }
 
-  return ((data ?? []) as any[]).map((row) => {
-    const links = Array.isArray(row.event_links) ? row.event_links : [];
-    const debriefEntries: Array<DebriefRow | null> = links.map((link: any): DebriefRow | null => {
-        const eventValue = Array.isArray(link?.event) ? link.event[0] : link?.event;
-        const debriefValue = Array.isArray(eventValue?.debrief) ? eventValue.debrief[0] : eventValue?.debrief;
-        return debriefValue && typeof debriefValue === "object" ? (debriefValue as DebriefRow) : null;
-      });
-    const debriefs = debriefEntries.filter((entry): entry is DebriefRow => Boolean(entry));
+  const artists = (artistRows ?? []) as any[];
+  if (artists.length === 0) return [];
 
+  const artistIds = artists.map((a) => a.id as string);
+
+  // Query 2: load artist→event→debrief links using only the debrief columns needed
+  // for performance calculations. Avoids loading full debrief rows for every event.
+  const { data: linkRows, error: linkError } = await supabase
+    .from("event_artists")
+    .select(
+      `
+      artist_id,
+      event:events(
+        id,
+        debrief:debriefs(
+          sales_uplift_percent,
+          wet_takings,
+          food_takings,
+          baseline_wet_takings,
+          baseline_food_takings,
+          promo_effectiveness,
+          highlights,
+          issues,
+          guest_sentiment_notes,
+          operational_notes,
+          next_time_actions,
+          would_book_again
+        )
+      )
+    `
+    )
+    .in("artist_id", artistIds);
+
+  if (linkError) {
+    throw new Error(`Could not load artist event links: ${linkError.message}`);
+  }
+
+  // Group event IDs and debriefs by artist ID in a single pass.
+  type DebriefLike = Partial<DebriefRow>;
+  const eventIdsByArtist = new Map<string, Set<string>>();
+  const debriefsByArtist = new Map<string, DebriefLike[]>();
+
+  ((linkRows ?? []) as any[]).forEach((link) => {
+    const artistId = link.artist_id as string;
+    const eventValue = Array.isArray(link?.event) ? link.event[0] : link?.event;
+    if (!eventValue) return;
+
+    if (!eventIdsByArtist.has(artistId)) {
+      eventIdsByArtist.set(artistId, new Set());
+      debriefsByArtist.set(artistId, []);
+    }
+
+    if (typeof eventValue.id === "string") {
+      eventIdsByArtist.get(artistId)!.add(eventValue.id);
+    }
+
+    const debriefValue = Array.isArray(eventValue?.debrief) ? eventValue.debrief[0] : eventValue?.debrief;
+    if (debriefValue && typeof debriefValue === "object") {
+      debriefsByArtist.get(artistId)!.push(debriefValue as DebriefLike);
+    }
+  });
+
+  return artists.map((row) => {
+    const debriefs = (debriefsByArtist.get(row.id) ?? []) as DebriefRow[];
     const performance = buildPerformanceFromDebriefs(debriefs);
-    const eventIds = new Set<string>();
-    links.forEach((link: any) => {
-      const eventValue = Array.isArray(link?.event) ? link.event[0] : link?.event;
-      if (typeof eventValue?.id === "string") eventIds.add(eventValue.id);
-    });
-
     return {
       id: row.id,
       name: row.name,
@@ -310,7 +350,7 @@ export async function listArtistsWithPerformance(): Promise<ArtistPerformanceSum
       phone: row.phone,
       description: row.description,
       isArchived: row.is_archived,
-      eventCount: eventIds.size,
+      eventCount: eventIdsByArtist.get(row.id)?.size ?? 0,
       debriefCount: debriefs.length,
       ...performance
     };
@@ -619,22 +659,16 @@ export async function syncEventArtists(params: SyncEventArtistsParams): Promise<
     })
     .filter((name): name is string => Boolean(name));
 
-  const { error: clearError } = await supabase.from("event_artists").delete().eq("event_id", params.eventId);
-  if (clearError) {
-    throw new Error(`Could not replace event artists: ${clearError.message}`);
-  }
-
-  if (resolvedIds.length > 0) {
-    const rows = resolvedIds.map((artistId, index) => ({
-      event_id: params.eventId,
-      artist_id: artistId,
-      billing_order: index + 1,
-      created_by: params.actorId
-    }));
-    const { error: insertLinksError } = await supabase.from("event_artists").insert(rows);
-    if (insertLinksError) {
-      throw new Error(`Could not save event artists: ${insertLinksError.message}`);
-    }
+  // Use the atomic RPC to replace artist links in a single transaction,
+  // preventing the event from ending up with no artists if the insert fails after a delete.
+  const admin = createSupabaseServiceRoleClient();
+  const { error: syncError } = await admin.rpc("sync_event_artists", {
+    p_event_id: params.eventId,
+    p_artist_ids: resolvedIds,
+    p_actor_id: params.actorId
+  });
+  if (syncError) {
+    throw new Error(`Could not replace event artists: ${syncError.message}`);
   }
 
   const nextNames = resolvedIds.map((artistId) => byId.get(artistId)?.name).filter((name): name is string => Boolean(name));

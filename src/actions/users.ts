@@ -111,7 +111,11 @@ export async function inviteUserAction(
   let userId = data?.user?.id ?? null;
 
   if (!userId) {
-    const { data: existingList } = await adminClient.auth.admin.listUsers({ page: 1, perPage: 200 });
+    const { data: existingList, error: listError } = await adminClient.auth.admin.listUsers({ page: 1, perPage: 200 });
+    if (listError) {
+      console.error("Could not list users to find existing account", listError);
+      return { success: false, message: "Invitation failed. Could not verify existing accounts." };
+    }
     const match = existingList?.users?.find(
       (candidate) => candidate.email?.toLowerCase() === parsed.data.email.toLowerCase()
     );

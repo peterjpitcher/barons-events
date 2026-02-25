@@ -1,12 +1,15 @@
 import { NextResponse } from "next/server";
 
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
-import { jsonError, requireWebsiteApiKey } from "@/lib/public-api/auth";
+import { checkApiRateLimit, jsonError, methodNotAllowed, requireWebsiteApiKey } from "@/lib/public-api/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
+  const rateLimitResponse = checkApiRateLimit(request);
+  if (rateLimitResponse) return rateLimitResponse;
+
   const authResponse = requireWebsiteApiKey(request);
   if (authResponse) return authResponse;
 
@@ -50,3 +53,8 @@ export async function GET(request: Request) {
     }
   );
 }
+
+export function POST() { return methodNotAllowed(); }
+export function PUT() { return methodNotAllowed(); }
+export function PATCH() { return methodNotAllowed(); }
+export function DELETE() { return methodNotAllowed(); }

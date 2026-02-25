@@ -13,6 +13,15 @@ function normalizeRole(role: string | null | undefined): UserRole {
   }
 }
 
+/**
+ * Returns the current session from the local cookie/cache.
+ *
+ * WARNING: `getSession()` reads from the local cache and can return stale or revoked sessions.
+ * It must NOT be used for authorization decisions. Use `getCurrentUser()` instead, which calls
+ * `getUser()` and validates the session with the Supabase server on every request.
+ *
+ * Safe uses: checking whether any session cookie exists (e.g. to skip the login page).
+ */
 export async function getSession() {
   const supabase = await createSupabaseReadonlyClient();
   const {

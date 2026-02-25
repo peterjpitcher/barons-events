@@ -6,6 +6,7 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { createArtist, setArtistArchived, updateArtist } from "@/lib/artists";
 import { getFieldErrors, type FieldErrors } from "@/lib/form-errors";
+import { canManageArtists } from "@/lib/roles";
 
 type ActionResult = {
   success: boolean;
@@ -48,9 +49,6 @@ const artistSchema = z.object({
   )
 });
 
-function canManageArtists(role: string) {
-  return role === "central_planner" || role === "venue_manager";
-}
 
 export async function createArtistAction(
   _: ActionResult | undefined,

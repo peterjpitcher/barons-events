@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
-import { jsonError, requireWebsiteApiKey } from "@/lib/public-api/auth";
+import { checkApiRateLimit, jsonError, methodNotAllowed, requireWebsiteApiKey } from "@/lib/public-api/auth";
 import { PUBLIC_EVENT_STATUSES, toPublicEvent, type RawEventRow } from "@/lib/public-api/events";
 
 export const runtime = "nodejs";
@@ -13,6 +13,9 @@ const paramsSchema = z.object({
 });
 
 export async function GET(request: NextRequest, context: { params: Promise<{ eventId: string }> }) {
+  const rateLimitResponse = checkApiRateLimit(request);
+  if (rateLimitResponse) return rateLimitResponse;
+
   const authResponse = requireWebsiteApiKey(request);
   if (authResponse) return authResponse;
 
@@ -71,6 +74,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ eve
     )
     .eq("id", eventId)
     .in("status", [...PUBLIC_EVENT_STATUSES])
+    .is("deleted_at", null)
     .maybeSingle();
 
   if (error) {
@@ -99,3 +103,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ eve
     }
   );
 }
+
+export function POST() { return methodNotAllowed(); }
+export function PUT() { return methodNotAllowed(); }
+export function PATCH() { return methodNotAllowed(); }
+export function DELETE() { return methodNotAllowed(); }

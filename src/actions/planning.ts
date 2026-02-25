@@ -85,10 +85,8 @@ export async function createPlanningItemAction(input: unknown): Promise<Planning
     revalidatePath("/planning");
     return { success: true, message: "Planning item created." };
   } catch (error) {
-    return {
-      success: false,
-      message: error instanceof Error ? error.message : "Could not create planning item."
-    };
+    console.error("Failed to create planning item", error);
+    return { success: false, message: "Could not create planning item." };
   }
 }
 
@@ -128,10 +126,8 @@ export async function updatePlanningItemAction(input: unknown): Promise<Planning
     revalidatePath("/planning");
     return { success: true, message: "Planning item updated." };
   } catch (error) {
-    return {
-      success: false,
-      message: error instanceof Error ? error.message : "Could not update planning item."
-    };
+    console.error("Failed to update planning item", error);
+    return { success: false, message: "Could not update planning item." };
   }
 }
 
@@ -157,10 +153,8 @@ export async function movePlanningItemDateAction(input: unknown): Promise<Planni
     revalidatePath("/planning");
     return { success: true, message: "Planning date moved." };
   } catch (error) {
-    return {
-      success: false,
-      message: error instanceof Error ? error.message : "Could not move planning item."
-    };
+    console.error("Failed to move planning item date", error);
+    return { success: false, message: "Could not move planning item." };
   }
 }
 
@@ -185,10 +179,8 @@ export async function deletePlanningItemAction(input: unknown): Promise<Planning
     revalidatePath("/planning");
     return { success: true, message: "Planning item deleted." };
   } catch (error) {
-    return {
-      success: false,
-      message: error instanceof Error ? error.message : "Could not delete planning item."
-    };
+    console.error("Failed to delete planning item", error);
+    return { success: false, message: "Could not delete planning item." };
   }
 }
 
@@ -279,10 +271,8 @@ export async function createPlanningSeriesAction(input: unknown): Promise<Planni
     revalidatePath("/planning");
     return { success: true, message: "Recurring planning series created." };
   } catch (error) {
-    return {
-      success: false,
-      message: error instanceof Error ? error.message : "Could not create recurring series."
-    };
+    console.error("Failed to create planning series", error);
+    return { success: false, message: "Could not create recurring series." };
   }
 }
 
@@ -325,10 +315,8 @@ export async function updatePlanningSeriesAction(input: unknown): Promise<Planni
     revalidatePath("/planning");
     return { success: true, message: "Recurring series updated." };
   } catch (error) {
-    return {
-      success: false,
-      message: error instanceof Error ? error.message : "Could not update recurring series."
-    };
+    console.error("Failed to update planning series", error);
+    return { success: false, message: "Could not update recurring series." };
   }
 }
 
@@ -351,10 +339,8 @@ export async function pausePlanningSeriesAction(input: unknown): Promise<Plannin
     revalidatePath("/planning");
     return { success: true, message: "Recurring series paused." };
   } catch (error) {
-    return {
-      success: false,
-      message: error instanceof Error ? error.message : "Could not pause recurring series."
-    };
+    console.error("Failed to pause planning series", error);
+    return { success: false, message: "Could not pause recurring series." };
   }
 }
 
@@ -390,10 +376,8 @@ export async function createPlanningTaskAction(input: unknown): Promise<Planning
     revalidatePath("/planning");
     return { success: true, message: "Task added." };
   } catch (error) {
-    return {
-      success: false,
-      message: error instanceof Error ? error.message : "Could not add task."
-    };
+    console.error("Failed to create planning task", error);
+    return { success: false, message: "Could not add task." };
   }
 }
 
@@ -433,10 +417,8 @@ export async function updatePlanningTaskAction(input: unknown): Promise<Planning
     revalidatePath("/planning");
     return { success: true, message: "Task updated." };
   } catch (error) {
-    return {
-      success: false,
-      message: error instanceof Error ? error.message : "Could not update task."
-    };
+    console.error("Failed to update planning task", error);
+    return { success: false, message: "Could not update task." };
   }
 }
 
@@ -464,10 +446,8 @@ export async function togglePlanningTaskStatusAction(input: unknown): Promise<Pl
     revalidatePath("/planning");
     return { success: true, message: "Task status updated." };
   } catch (error) {
-    return {
-      success: false,
-      message: error instanceof Error ? error.message : "Could not toggle task status."
-    };
+    console.error("Failed to toggle planning task status", error);
+    return { success: false, message: "Could not toggle task status." };
   }
 }
 
@@ -490,9 +470,7 @@ export async function deletePlanningTaskAction(input: unknown): Promise<Planning
     revalidatePath("/planning");
     return { success: true, message: "Task deleted." };
   } catch (error) {
-    return {
-      success: false,
-      message: error instanceof Error ? error.message : "Could not delete task."
-    };
+    console.error("Failed to delete planning task", error);
+    return { success: false, message: "Could not delete task." };
   }
 }

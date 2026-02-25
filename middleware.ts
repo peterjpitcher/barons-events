@@ -11,7 +11,8 @@ export async function middleware(req: NextRequest) {
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseAnonKey) {
-    return res;
+    // Authentication service is not configured — deny all traffic rather than pass it through unprotected.
+    return new NextResponse("Service unavailable: authentication service is not configured.", { status: 503 });
   }
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
@@ -62,5 +63,8 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
+  // NOTE: /api/* routes are intentionally excluded from this session-based middleware.
+  // They use their own bearer-token authentication via requireWebsiteApiKey().
+  // Any new /api/* route that requires session auth must implement its own auth check.
   matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"]
 };
