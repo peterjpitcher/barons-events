@@ -7,6 +7,13 @@
 -- 5. Update events RLS to hide soft-deleted rows from regular clients
 
 -- ── 1. Event temporal constraint ─────────────────────────────────────────────
+--
+-- Fix any existing rows where end_at <= start_at before adding the constraint.
+-- These are data entry errors; bump end_at to start_at + 1 hour as a safe default.
+
+update public.events
+  set end_at = start_at + interval '1 hour'
+  where end_at <= start_at;
 
 alter table public.events
   add constraint events_end_after_start check (end_at > start_at);
@@ -19,10 +26,14 @@ create index if not exists artists_curated_active_name_idx
   where is_curated = true and is_archived = false;
 
 -- ── 3. Audit log CHECK constraints ───────────────────────────────────────────
+--
+-- NOT VALID skips scanning existing rows so historical data with legacy action
+-- values (e.g. event.orphan_artists_cleaned) does not block the migration.
+-- New rows written after this migration must conform to the constraint.
 
 alter table public.audit_log
   add constraint audit_log_entity_check
-    check (entity in ('event'));
+    check (entity in ('event')) not valid;
 
 -- Action values used in the codebase (extend this list as new actions are added)
 alter table public.audit_log
@@ -38,7 +49,7 @@ alter table public.audit_log
       'event.completed',
       'event.assignee_changed',
       'event.deleted'
-    ));
+    )) not valid;
 
 -- ── 4. Soft-delete columns on events ─────────────────────────────────────────
 
@@ -52,9 +63,6 @@ create index if not exists events_deleted_at_idx on public.events (deleted_at) w
 --
 -- Add a filter to existing read policies so deleted events are invisible.
 -- The service role bypasses RLS and can still see them for admin/audit purposes.
-
--- Drop and recreate the main events read policy to exclude deleted rows.
--- (Policy names are from the initial MVP migration; adjust if they differ in your schema.)
 
 drop policy if exists "events readable by role" on public.events;
 
