@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { EventForm } from "@/components/events/event-form";
+import { EventFormActions } from "@/components/events/event-form-actions";
+import { EventDetailSummary } from "@/components/events/event-detail-summary";
 import { DeleteEventButton } from "@/components/events/delete-event-button";
 import { DecisionForm } from "@/components/reviews/decision-form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -41,11 +43,6 @@ const auditTimestampFormatter = new Intl.DateTimeFormat("en-GB", {
   timeStyle: "short"
 });
 
-const cutoffTimeFormatter = new Intl.DateTimeFormat("en-GB", {
-  hour: "2-digit",
-  minute: "2-digit"
-});
-
 const currencyFormatter = new Intl.NumberFormat("en-GB", {
   style: "currency",
   currency: "GBP",
@@ -65,16 +62,6 @@ const toMetaRecord = (value: unknown): Record<string, unknown> =>
 const toStringArray = (value: unknown): string[] =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 
-function formatCheckInCutoffLabel(startAt: string, cutoffMinutes: number | null): string | null {
-  if (cutoffMinutes === null || cutoffMinutes === undefined || cutoffMinutes < 0) return null;
-  const start = new Date(startAt);
-  if (Number.isNaN(start.getTime())) {
-    return `${cutoffMinutes} minute${cutoffMinutes === 1 ? "" : "s"} before start`;
-  }
-  const cutoff = new Date(start.getTime() - cutoffMinutes * 60 * 1000);
-  return `${cutoffMinutes} minute${cutoffMinutes === 1 ? "" : "s"} before start (${cutoffTimeFormatter.format(cutoff)})`;
-}
-
 function formatCurrency(value: number | null | undefined): string {
   if (typeof value !== "number" || !Number.isFinite(value)) return "—";
   return currencyFormatter.format(value);
@@ -83,20 +70,6 @@ function formatCurrency(value: number | null | undefined): string {
 function formatPercent(value: number | null | undefined): string {
   if (typeof value !== "number" || !Number.isFinite(value)) return "—";
   return `${value.toFixed(2)}%`;
-}
-
-function buildEventImageUrl(path: string | null | undefined): string | null {
-  if (!path || !path.trim().length) return null;
-  const base =
-    typeof process.env.NEXT_PUBLIC_SUPABASE_URL === "string"
-      ? process.env.NEXT_PUBLIC_SUPABASE_URL.trim().replace(/\/+$/g, "")
-      : "";
-  if (!base.length) return null;
-  const encodedPath = path
-    .split("/")
-    .map((segment) => encodeURIComponent(segment))
-    .join("/");
-  return `${base}/storage/v1/object/public/event-images/${encodedPath}`;
 }
 
 export default async function EventDetailPage({ params }: { params: Promise<{ eventId: string }> }) {
@@ -112,28 +85,6 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
   }
 
   const status = statusCopy[event.status] ?? statusCopy.draft;
-  const goalValues = parseGoalFocus(event.goal_focus);
-  const goalDetails = Array.from(new Set(goalValues)).map((value) => {
-    const config = EVENT_GOALS_BY_VALUE[value];
-    return {
-      value,
-      label: config?.label ?? humanizeGoalValue(value),
-      helper: config?.helper ?? null
-    };
-  });
-  const hasGoalDetails = goalDetails.length > 0;
-  const venueSpaces = parseVenueSpaces(event.venue_space);
-  const publicHighlights = Array.isArray(event.public_highlights)
-    ? event.public_highlights
-        .filter((item): item is string => typeof item === "string")
-        .map((item) => item.replace(/^\s*[-*•]\s*/, "").trim())
-        .filter(Boolean)
-    : [];
-  const artistNames = event.artists
-    .map((entry) => entry.artist?.name?.trim())
-    .filter((name): name is string => Boolean(name && name.length));
-  const eventImageUrl = buildEventImageUrl(event.event_image_path);
-  const checkInCutoffLabel = formatCheckInCutoffLabel(event.start_at, event.check_in_cutoff_minutes);
 
   const canEdit =
     (user.role === "central_planner" && ["draft", "submitted", "needs_revisions", "approved"].includes(event.status)) ||
@@ -146,6 +97,11 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
     (user.role === "venue_manager" && event.created_by === user.id && ["approved", "completed"].includes(event.status)) ||
     (user.role === "central_planner" && ["approved", "completed"].includes(event.status));
   const canUpdateAssignee = user.role === "central_planner";
+  const canDelete =
+    user.role === "central_planner" ||
+    (user.role === "venue_manager" &&
+      event.created_by === user.id &&
+      ["draft", "needs_revisions"].includes(event.status));
 
   const reassignAssignee = async (formData: FormData) => {
     "use server";
@@ -291,8 +247,217 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
 
   const currentAssigneeName = resolveUserName(event.assignee_id);
 
+  // ─── Shared right-column cards ────────────────────────────────────────────
+
+  const assignmentCard = (
+    <Card>
+      <CardHeader>
+        <CardTitle>Assignment</CardTitle>
+        <CardDescription>Send the next action to the right teammate.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {canUpdateAssignee ? (
+          <form className="space-y-3 text-sm" action={reassignAssignee}>
+            <div className="space-y-2">
+              <label htmlFor="assigneeId" className="font-semibold text-[var(--color-text)]">
+                Assignee
+              </label>
+              <Select
+                id="assigneeId"
+                name="assigneeId"
+                defaultValue={event.assignee_id ?? ""}
+                aria-label="Choose assignee"
+              >
+                <option value="">Unassigned</option>
+                {assignableUsers.map((person) => (
+                  <option key={person.id} value={person.id}>
+                    {person.name} · {person.role.replace("_", " ")}
+                  </option>
+                ))}
+              </Select>
+              <p className="text-xs text-subtle">
+                Assign the next action to a reviewer, planner, or the submitting venue manager.
+              </p>
+            </div>
+            <input type="hidden" name="eventId" value={event.id} />
+            <div className="flex justify-end">
+              <SubmitButton label="Update" pendingLabel="Updating..." variant="secondary" className="px-4 py-1" />
+            </div>
+          </form>
+        ) : (
+          <p className="text-sm text-muted">
+            <span className="font-semibold text-[var(--color-text)]">Assignee:</span> {currentAssigneeName}
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+
+  const reviewDecisionCard = canReview ? (
+    <Card>
+      <CardHeader>
+        <CardTitle>Review decision</CardTitle>
+        <CardDescription>Share a clear decision so the venue knows what to do next.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <DecisionForm eventId={event.id} />
+      </CardContent>
+    </Card>
+  ) : null;
+
+  const reviewerTimelineCard = (
+    <Card>
+      <CardHeader>
+        <CardTitle>Reviewer timeline</CardTitle>
+        <CardDescription>Quick view of submissions and reviewer notes.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {event.approvals.length === 0 ? (
+          <p className="text-sm text-subtle">No reviewer decisions recorded yet.</p>
+        ) : (
+          event.approvals.map((entry) => (
+            <div
+              key={entry.id}
+              className="rounded-[var(--radius)] border border-[rgba(39,54,64,0.1)] bg-white/80 px-4 py-3 text-sm shadow-soft"
+            >
+              <p className="font-semibold text-[var(--color-text)] capitalize">{entry.decision.replace("_", " ")}</p>
+              <p className="text-xs text-subtle">
+                {resolveUserName(entry.reviewer_id)} · {new Date(entry.decided_at).toLocaleString("en-GB")}
+              </p>
+              {entry.feedback_text ? (
+                <p className="mt-2 text-[var(--color-text)]">{entry.feedback_text}</p>
+              ) : null}
+            </div>
+          ))
+        )}
+      </CardContent>
+    </Card>
+  );
+
+  const auditTrailCard = (
+    <Card>
+      <CardHeader>
+        <CardTitle>Audit trail</CardTitle>
+        <CardDescription>Track status changes, assignments, and reviewer feedback.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {auditEntries.length === 0 ? (
+          <p className="text-sm text-subtle">No activity recorded yet.</p>
+        ) : (
+          auditEntries.map((entry) => (
+            <div
+              key={entry.id}
+              className="rounded-[var(--radius)] border border-[rgba(39,54,64,0.1)] bg-white/80 px-4 py-3 text-sm text-[var(--color-text)] shadow-soft"
+            >
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <p className="font-semibold text-[var(--color-text)]">{entry.summary}</p>
+                <time dateTime={entry.createdAtIso ?? undefined} className="text-xs text-subtle">
+                  {entry.timestampLabel}
+                </time>
+              </div>
+              <p className="mt-1 text-xs text-subtle">By {entry.actorName}</p>
+              {entry.details.length ? (
+                <ul className="mt-2 space-y-1 text-xs">
+                  {entry.details.map((detail, index) => (
+                    <li key={`${entry.id}-detail-${index}`} className="flex items-start gap-2">
+                      <span
+                        className="mt-[0.35rem] h-1.5 w-1.5 flex-none rounded-full bg-[var(--color-primary-400)]"
+                        aria-hidden="true"
+                      />
+                      <span>{detail}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {entry.feedback ? (
+                <p className="mt-3 rounded-[var(--radius)] bg-[rgba(39,54,64,0.06)] p-3 text-sm leading-relaxed text-[var(--color-text)]">
+                  {entry.feedback}
+                </p>
+              ) : null}
+            </div>
+          ))
+        )}
+      </CardContent>
+    </Card>
+  );
+
+  const debriefSubmitCard = canSubmitDebrief ? (
+    <Card>
+      <CardHeader>
+        <CardTitle>Post-event debrief</CardTitle>
+        <CardDescription>Capture attendance and takings as soon as possible.</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="text-sm text-muted">
+          {event.debrief ? (
+            <p>
+              Debrief submitted {new Date(event.debrief.submitted_at).toLocaleDateString("en-GB")}. You can update
+              it if figures change.
+            </p>
+          ) : (
+            <p>No debrief yet. Please add it after the event.</p>
+          )}
+        </div>
+        <Button asChild variant="secondary">
+          <Link href={`/debriefs/${event.id}`}>{event.debrief ? "Update debrief" : "Add debrief"}</Link>
+        </Button>
+      </CardContent>
+    </Card>
+  ) : null;
+
+  const debriefSnapshotCard = event.debrief ? (
+    <Card>
+      <CardHeader>
+        <CardTitle>Debrief snapshot</CardTitle>
+        <CardDescription>Commercial outcome and guest sentiment for this event.</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-3 text-sm text-muted md:grid-cols-2">
+        <p>
+          <span className="font-semibold text-[var(--color-text)]">Attendance:</span>{" "}
+          {event.debrief.attendance ?? "—"}
+          {event.debrief.baseline_attendance != null
+            ? ` (baseline ${event.debrief.baseline_attendance})`
+            : ""}
+        </p>
+        <p>
+          <span className="font-semibold text-[var(--color-text)]">Event takings:</span>{" "}
+          {formatCurrency(event.debrief.actual_total_takings)}
+        </p>
+        <p>
+          <span className="font-semibold text-[var(--color-text)]">Baseline takings:</span>{" "}
+          {formatCurrency(event.debrief.baseline_total_takings)}
+        </p>
+        <p>
+          <span className="font-semibold text-[var(--color-text)]">Sales uplift:</span>{" "}
+          {formatCurrency(event.debrief.sales_uplift_value)} ({formatPercent(event.debrief.sales_uplift_percent)})
+        </p>
+        <p>
+          <span className="font-semibold text-[var(--color-text)]">Would book again:</span>{" "}
+          {event.debrief.would_book_again == null ? "Not answered" : event.debrief.would_book_again ? "Yes" : "No"}
+        </p>
+        <p>
+          <span className="font-semibold text-[var(--color-text)]">Promo score:</span>{" "}
+          {event.debrief.promo_effectiveness ?? "—"} / 5
+        </p>
+        {event.debrief.guest_sentiment_notes ? (
+          <p className="md:col-span-2">
+            <span className="font-semibold text-[var(--color-text)]">Guest sentiment:</span>{" "}
+            {event.debrief.guest_sentiment_notes}
+          </p>
+        ) : null}
+        {event.debrief.next_time_actions ? (
+          <p className="md:col-span-2">
+            <span className="font-semibold text-[var(--color-text)]">Next time actions:</span>{" "}
+            {event.debrief.next_time_actions}
+          </p>
+        ) : null}
+      </CardContent>
+    </Card>
+  ) : null;
+
   return (
     <div className="space-y-6">
+      {/* Header card — always visible */}
       <Card>
         <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-2">
@@ -319,384 +484,69 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
         </CardHeader>
       </Card>
 
-      <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start">
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Event details</CardTitle>
-              <CardDescription>Core context for planners, reviewers, and venue teams.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4 text-sm text-muted">
-              {eventImageUrl ? (
-                <div className="space-y-2">
-                  <p className="font-semibold text-[var(--color-text)]">Event image</p>
-                  <img
-                    src={eventImageUrl}
-                    alt={`${event.title} event image`}
-                    className="max-h-80 w-full rounded-[var(--radius)] border border-[var(--color-border)] object-cover"
-                  />
-                </div>
-              ) : null}
-              {event.notes ? (
-                <div className="space-y-1 text-[var(--color-text)]">
-                  <p className="font-semibold">Notes</p>
-                  <p className="whitespace-pre-wrap text-sm text-subtle">{event.notes}</p>
-                </div>
-              ) : null}
-              <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
-                <p>
-                  <span className="font-semibold text-[var(--color-text)]">Type:</span> {event.event_type}
-                </p>
-                <p>
-                  <span className="font-semibold text-[var(--color-text)]">
-                    {venueSpaces.length > 1 ? "Spaces" : "Space"}:
-                  </span>{" "}
-                  {venueSpaces.length ? venueSpaces.join(", ") : "Not specified"}
-                </p>
-                <p>
-                  <span className="font-semibold text-[var(--color-text)]">Start:</span>{" "}
-                  {formatter.format(new Date(event.start_at))}
-                </p>
-                <p>
-                  <span className="font-semibold text-[var(--color-text)]">End:</span>{" "}
-                  {formatter.format(new Date(event.end_at))}
-                </p>
-                {event.expected_headcount ? (
-                  <p>
-                    <span className="font-semibold text-[var(--color-text)]">Headcount:</span>{" "}
-                    {event.expected_headcount}
-                  </p>
-                ) : null}
-                {event.wet_promo ? (
-                  <p>
-                    <span className="font-semibold text-[var(--color-text)]">Wet promo:</span> {event.wet_promo}
-                  </p>
-                ) : null}
-                {event.food_promo ? (
-                  <p>
-                    <span className="font-semibold text-[var(--color-text)]">Food promo:</span> {event.food_promo}
-                  </p>
-                ) : null}
-                {event.booking_type ? (
-                  <p>
-                    <span className="font-semibold text-[var(--color-text)]">Booking format:</span>{" "}
-                    {bookingTypeLabel[event.booking_type] ?? event.booking_type}
-                  </p>
-                ) : null}
-                {event.ticket_price != null ? (
-                  <p>
-                    <span className="font-semibold text-[var(--color-text)]">Ticket price:</span> £
-                    {event.ticket_price.toFixed(2)}
-                  </p>
-                ) : null}
-                {checkInCutoffLabel ? (
-                  <p>
-                    <span className="font-semibold text-[var(--color-text)]">Last admission/check-in:</span>{" "}
-                    {checkInCutoffLabel}
-                  </p>
-                ) : null}
-                {event.cancellation_window_hours != null ? (
-                  <p>
-                    <span className="font-semibold text-[var(--color-text)]">Cancellation/refund window:</span>{" "}
-                    {event.cancellation_window_hours} hour{event.cancellation_window_hours === 1 ? "" : "s"}
-                  </p>
-                ) : null}
-                {event.age_policy ? (
-                  <p>
-                    <span className="font-semibold text-[var(--color-text)]">Age policy:</span> {event.age_policy}
-                  </p>
-                ) : null}
-                {artistNames.length ? (
-                  <p>
-                    <span className="font-semibold text-[var(--color-text)]">
-                      {artistNames.length > 1 ? "Artists / hosts" : "Artist / host"}:
-                    </span>{" "}
-                    {artistNames.join(", ")}
-                  </p>
-                ) : null}
-                {event.cost_total != null ? (
-                  <p>
-                    <span className="font-semibold text-[var(--color-text)]">Cost:</span> £{event.cost_total.toFixed(2)}
-                    {event.cost_details ? <span className="block text-xs text-subtle mt-1">{event.cost_details}</span> : null}
-                  </p>
-                ) : null}
-              </div>
-              {event.accessibility_notes ? (
-                <div className="space-y-1 text-[var(--color-text)]">
-                  <p className="font-semibold">Accessibility notes</p>
-                  <p className="whitespace-pre-wrap text-sm text-subtle">{event.accessibility_notes}</p>
-                </div>
-              ) : null}
-              {event.terms_and_conditions ? (
-                <div className="space-y-1 text-[var(--color-text)]">
-                  <p className="font-semibold">Terms & conditions</p>
-                  <p className="whitespace-pre-wrap text-sm text-subtle">{event.terms_and_conditions}</p>
-                </div>
-              ) : null}
-              {publicHighlights.length ? (
-                <div className="space-y-2 text-[var(--color-text)]">
-                  <p className="font-semibold">Event highlights</p>
-                  <ul className="space-y-1 text-sm text-subtle">
-                    {publicHighlights.map((highlight, index) => (
-                      <li key={`${event.id}-highlight-${index}`} className="flex items-start gap-2">
-                        <span
-                          className="mt-[0.35rem] h-1.5 w-1.5 flex-none rounded-full bg-[var(--color-primary-400)]"
-                          aria-hidden="true"
-                        />
-                        <span>{highlight}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-              {hasGoalDetails ? (
-                <div className="space-y-2">
-                  <p className="font-semibold text-[var(--color-text)]">Goals</p>
-                  <div className="space-y-2">
-                    {goalDetails.map((goal) => (
-                      <div key={goal.value}>
-                        <p className="font-medium text-[var(--color-text)]">{goal.label}</p>
-                        {goal.helper ? <p className="text-xs text-subtle">{goal.helper}</p> : null}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-            </CardContent>
-          </Card>
+      {/* Edit mode — EventForm owns the two-column grid */}
+      {canEdit ? (
+        <EventForm
+          mode="edit"
+          defaultValues={event}
+          venues={venues}
+          artists={artists}
+          eventTypes={eventTypes.map((type) => type.label)}
+          role={user.role}
+          userVenueId={user.venueId}
+          sidebar={
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Save & submit</CardTitle>
+                  <CardDescription>Save a draft first, then submit for review when ready.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <EventFormActions eventId={event.id} canDelete={canDelete} />
+                </CardContent>
+              </Card>
 
-          {canEdit ? (
-            <EventForm
-              mode="edit"
-              defaultValues={event}
-              venues={venues}
-              artists={artists}
-              eventTypes={eventTypes.map((type) => type.label)}
-              role={user.role}
-              userVenueId={user.venueId}
-            />
-          ) : null}
+              <EventDetailSummary event={event} />
 
+              {assignmentCard}
+              {reviewDecisionCard}
+              {reviewerTimelineCard}
+              {auditTrailCard}
+              {debriefSubmitCard}
+              {debriefSnapshotCard}
+            </div>
+          }
+        />
+      ) : (
+        /* Read-only / non-editable layout */
+        <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start">
+          <div className="space-y-6">
+            <EventDetailSummary event={event} />
 
-          {canSubmitDebrief ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>Post-event debrief</CardTitle>
-                <CardDescription>Capture attendance and takings as soon as possible.</CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div className="text-sm text-muted">
-                  {event.debrief ? (
-                    <p>
-                      Debrief submitted {new Date(event.debrief.submitted_at).toLocaleDateString("en-GB")}. You can update
-                      it if figures change.
-                    </p>
-                  ) : (
-                    <p>No debrief yet. Please add it after the event.</p>
-                  )}
-                </div>
-                <Button asChild variant="secondary">
-                  <Link href={`/debriefs/${event.id}`}>{event.debrief ? "Update debrief" : "Add debrief"}</Link>
-                </Button>
-              </CardContent>
-            </Card>
-          ) : null}
+            {debriefSubmitCard}
+            {debriefSnapshotCard}
 
-          {event.debrief ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>Debrief snapshot</CardTitle>
-                <CardDescription>Commercial outcome and guest sentiment for this event.</CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-3 text-sm text-muted md:grid-cols-2">
-                <p>
-                  <span className="font-semibold text-[var(--color-text)]">Attendance:</span>{" "}
-                  {event.debrief.attendance ?? "—"}
-                  {event.debrief.baseline_attendance != null
-                    ? ` (baseline ${event.debrief.baseline_attendance})`
-                    : ""}
-                </p>
-                <p>
-                  <span className="font-semibold text-[var(--color-text)]">Event takings:</span>{" "}
-                  {formatCurrency(event.debrief.actual_total_takings)}
-                </p>
-                <p>
-                  <span className="font-semibold text-[var(--color-text)]">Baseline takings:</span>{" "}
-                  {formatCurrency(event.debrief.baseline_total_takings)}
-                </p>
-                <p>
-                  <span className="font-semibold text-[var(--color-text)]">Sales uplift:</span>{" "}
-                  {formatCurrency(event.debrief.sales_uplift_value)} ({formatPercent(event.debrief.sales_uplift_percent)})
-                </p>
-                <p>
-                  <span className="font-semibold text-[var(--color-text)]">Would book again:</span>{" "}
-                  {event.debrief.would_book_again == null ? "Not answered" : event.debrief.would_book_again ? "Yes" : "No"}
-                </p>
-                <p>
-                  <span className="font-semibold text-[var(--color-text)]">Promo score:</span>{" "}
-                  {event.debrief.promo_effectiveness ?? "—"} / 5
-                </p>
-                {event.debrief.guest_sentiment_notes ? (
-                  <p className="md:col-span-2">
-                    <span className="font-semibold text-[var(--color-text)]">Guest sentiment:</span>{" "}
-                    {event.debrief.guest_sentiment_notes}
-                  </p>
-                ) : null}
-                {event.debrief.next_time_actions ? (
-                  <p className="md:col-span-2">
-                    <span className="font-semibold text-[var(--color-text)]">Next time actions:</span>{" "}
-                    {event.debrief.next_time_actions}
-                  </p>
-                ) : null}
-              </CardContent>
-            </Card>
-          ) : null}
+            {!canEdit && canDelete ? (
+              <Card className="border-red-100 bg-red-50/50">
+                <CardHeader>
+                  <CardTitle className="text-red-700">Danger zone</CardTitle>
+                  <CardDescription>Irreversible actions for this event.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <DeleteEventButton eventId={event.id} />
+                </CardContent>
+              </Card>
+            ) : null}
+          </div>
 
-          {!canEdit &&
-          (user.role === "central_planner" ||
-            (user.role === "venue_manager" &&
-              event.created_by === user.id &&
-              ["draft", "needs_revisions"].includes(event.status))) ? (
-            <Card className="border-red-100 bg-red-50/50">
-              <CardHeader>
-                <CardTitle className="text-red-700">Danger zone</CardTitle>
-                <CardDescription>Irreversible actions for this event.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <DeleteEventButton eventId={event.id} />
-              </CardContent>
-            </Card>
-          ) : null}
+          <div className="space-y-6">
+            {assignmentCard}
+            {reviewDecisionCard}
+            {reviewerTimelineCard}
+            {auditTrailCard}
+          </div>
         </div>
-
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Assignment</CardTitle>
-              <CardDescription>Send the next action to the right teammate.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {canUpdateAssignee ? (
-                <form className="space-y-3 text-sm" action={reassignAssignee}>
-                  <div className="space-y-2">
-                    <label htmlFor="assigneeId" className="font-semibold text-[var(--color-text)]">
-                      Assignee
-                    </label>
-                    <Select
-                      id="assigneeId"
-                      name="assigneeId"
-                      defaultValue={event.assignee_id ?? ""}
-                      aria-label="Choose assignee"
-                    >
-                      <option value="">Unassigned</option>
-                      {assignableUsers.map((person) => (
-                        <option key={person.id} value={person.id}>
-                          {person.name} · {person.role.replace("_", " ")}
-                        </option>
-                      ))}
-                    </Select>
-                    <p className="text-xs text-subtle">
-                      Assign the next action to a reviewer, planner, or the submitting venue manager.
-                    </p>
-                  </div>
-                  <input type="hidden" name="eventId" value={event.id} />
-                  <div className="flex justify-end">
-                    <SubmitButton label="Update" pendingLabel="Updating..." variant="secondary" className="px-4 py-1" />
-                  </div>
-                </form>
-              ) : (
-                <p className="text-sm text-muted">
-                  <span className="font-semibold text-[var(--color-text)]">Assignee:</span> {currentAssigneeName}
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
-          {canReview ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>Review decision</CardTitle>
-                <CardDescription>Share a clear decision so the venue knows what to do next.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <DecisionForm eventId={event.id} />
-              </CardContent>
-            </Card>
-          ) : null}
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Reviewer timeline</CardTitle>
-              <CardDescription>Quick view of submissions and reviewer notes.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {event.approvals.length === 0 ? (
-                <p className="text-sm text-subtle">No reviewer decisions recorded yet.</p>
-              ) : (
-                event.approvals.map((entry) => (
-                  <div
-                    key={entry.id}
-                    className="rounded-[var(--radius)] border border-[rgba(39,54,64,0.1)] bg-white/80 px-4 py-3 text-sm shadow-soft"
-                  >
-                    <p className="font-semibold text-[var(--color-text)] capitalize">{entry.decision.replace("_", " ")}</p>
-                    <p className="text-xs text-subtle">
-                      {resolveUserName(entry.reviewer_id)} · {new Date(entry.decided_at).toLocaleString("en-GB")}
-                    </p>
-                    {entry.feedback_text ? (
-                      <p className="mt-2 text-[var(--color-text)]">{entry.feedback_text}</p>
-                    ) : null}
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Audit trail</CardTitle>
-              <CardDescription>Track status changes, assignments, and reviewer feedback.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {auditEntries.length === 0 ? (
-                <p className="text-sm text-subtle">No activity recorded yet.</p>
-              ) : (
-                auditEntries.map((entry) => (
-                  <div
-                    key={entry.id}
-                    className="rounded-[var(--radius)] border border-[rgba(39,54,64,0.1)] bg-white/80 px-4 py-3 text-sm text-[var(--color-text)] shadow-soft"
-                  >
-                    <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <p className="font-semibold text-[var(--color-text)]">{entry.summary}</p>
-                      <time dateTime={entry.createdAtIso ?? undefined} className="text-xs text-subtle">
-                        {entry.timestampLabel}
-                      </time>
-                    </div>
-                    <p className="mt-1 text-xs text-subtle">By {entry.actorName}</p>
-                    {entry.details.length ? (
-                      <ul className="mt-2 space-y-1 text-xs">
-                        {entry.details.map((detail, index) => (
-                          <li key={`${entry.id}-detail-${index}`} className="flex items-start gap-2">
-                            <span
-                              className="mt-[0.35rem] h-1.5 w-1.5 flex-none rounded-full bg-[var(--color-primary-400)]"
-                              aria-hidden="true"
-                            />
-                            <span>{detail}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : null}
-                    {entry.feedback ? (
-                      <p className="mt-3 rounded-[var(--radius)] bg-[rgba(39,54,64,0.06)] p-3 text-sm leading-relaxed text-[var(--color-text)]">
-                        {entry.feedback}
-                      </p>
-                    ) : null}
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+      )}
     </div>
   );
 }
