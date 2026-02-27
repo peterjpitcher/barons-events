@@ -76,6 +76,8 @@ function EventListItem({
     `Ends: ${event.end.format("dddd D MMMM, HH:mm")}`
   ].join("\n");
 
+  const hasAiCopy = Boolean(event.public_title);
+
   return (
     <li
       title={hoverDetails}
@@ -85,21 +87,35 @@ function EventListItem({
         href={`/events/${event.id}`}
         className="truncate text-sm font-semibold text-[var(--color-text)] transition-colors hover:text-[var(--color-primary-700)]"
       >
-        {event.title}
+        {event.public_title ?? event.title}
       </Link>
+      {event.public_teaser && (
+        <p className="line-clamp-2 text-[0.68rem] text-subtle">{event.public_teaser}</p>
+      )}
       <div className="flex flex-col gap-0.5 text-[0.7rem] text-subtle">
         <span className="truncate">{venueName}</span>
         <span className="truncate">{spacesLabel}</span>
         <span>{timeRange}</span>
       </div>
       <div className="mt-auto border-t border-[rgba(39,54,64,0.12)] pt-2 flex items-center justify-between gap-1 flex-wrap">
-        <span
-          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.64rem] font-semibold uppercase tracking-[0.08em] ${accent.badge}`}
-        >
-          <span className={`h-1.5 w-1.5 rounded-full ${accent.dot}`} aria-hidden="true" />
-          {statusLabel}
-        </span>
-        {showApprove ? <ApproveEventButton eventId={event.id} size="sm" /> : null}
+        <div className="flex items-center gap-1 flex-wrap">
+          <span
+            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.64rem] font-semibold uppercase tracking-[0.08em] ${accent.badge}`}
+          >
+            <span className={`h-1.5 w-1.5 rounded-full ${accent.dot}`} aria-hidden="true" />
+            {statusLabel}
+          </span>
+          <span
+            className={`inline-flex items-center rounded-full px-2 py-0.5 text-[0.64rem] font-semibold uppercase tracking-[0.08em] ${
+              hasAiCopy
+                ? "border border-[#355849] bg-[var(--color-success)] text-white"
+                : "border border-[rgba(39,54,64,0.2)] bg-[rgba(39,54,64,0.06)] text-subtle"
+            }`}
+          >
+            {hasAiCopy ? "AI ready" : "No AI copy"}
+          </span>
+        </div>
+        {showApprove ? <ApproveEventButton eventId={event.id} size="sm" className="h-auto px-2 py-0.5 text-[0.64rem]" hasAiCopy={hasAiCopy} /> : null}
       </div>
     </li>
   );

@@ -1325,22 +1325,25 @@ export async function reviewerDecisionAction(
 
     let websiteCopyPayload: Record<string, unknown> | null = null;
     if (newStatus === "approved") {
-      if (!generateWebsiteCopyConfirmed) {
-        return {
-          success: false,
-          message: "Approving an event requires AI website copy generation.",
-          fieldErrors: { decision: "Confirm AI website copy generation" }
-        };
-      }
+      const alreadyHasCopy = Boolean(eventBeforeDecision.public_title);
+      if (!alreadyHasCopy) {
+        if (!generateWebsiteCopyConfirmed) {
+          return {
+            success: false,
+            message: "Approving an event requires AI website copy generation.",
+            fieldErrors: { decision: "Confirm AI website copy generation" }
+          };
+        }
 
-      const generatedWebsiteCopy = await generateWebsiteCopyFromEventRecord(eventBeforeDecision, formData);
-      if (!generatedWebsiteCopy) {
-        return {
-          success: false,
-          message: "Could not generate website copy. Approval was not saved. Check the AI service credentials and try again."
-        };
+        const generatedWebsiteCopy = await generateWebsiteCopyFromEventRecord(eventBeforeDecision, formData);
+        if (!generatedWebsiteCopy) {
+          return {
+            success: false,
+            message: "Could not generate website copy. Approval was not saved. Check the AI service credentials and try again."
+          };
+        }
+        websiteCopyPayload = buildWebsiteCopyUpdatePayload(generatedWebsiteCopy);
       }
-      websiteCopyPayload = buildWebsiteCopyUpdatePayload(generatedWebsiteCopy);
     }
 
     await updateEventWithFallback({
@@ -1380,7 +1383,7 @@ export async function reviewerDecisionAction(
       await recordAuditLogEntry({
         entity: "event",
         entityId: parsedId.data,
-        action: "event.status_changed",
+        action: newStatus === "approved" ? "event.approved" : newStatus === "needs_revisions" ? "event.needs_revisions" : "event.rejected",
         actorId: user.id,
         meta: {
           status: newStatus,
@@ -1417,8 +1420,9 @@ export async function reviewerDecisionAction(
       message: websiteCopyPayload ? "Decision recorded and website copy generated." : "Decision recorded."
     };
   } catch (error) {
-    console.error(error);
-    return { success: false, message: "Could not save the decision." };
+    const detail = error instanceof Error ? error.message : String(error);
+    console.error("reviewerDecisionAction failed:", error);
+    return { success: false, message: `Could not save the decision: ${detail}` };
   }
 }
 

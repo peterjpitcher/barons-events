@@ -578,14 +578,19 @@ export function EventOverlayCard({ event, canApprove }: EventOverlayCardProps) {
             ? "danger"
             : "neutral";
 
+  const hasAiCopy = Boolean(event.publicTitle);
+
   return (
     <article className="space-y-1.5 rounded-[var(--radius)] border border-[rgba(39,54,64,0.14)] bg-[rgba(39,54,64,0.03)] p-2.5">
       <p className="text-xs uppercase tracking-[0.08em] text-subtle">Event (read-only)</p>
       <h3 className="text-base font-semibold text-[var(--color-text)]">
         <Link href={`/events/${event.eventId}`} className="transition-colors hover:text-[var(--color-primary-700)]">
-          {event.title}
+          {event.publicTitle ?? event.title}
         </Link>
       </h3>
+      {event.publicTeaser && (
+        <p className="text-xs text-subtle">{event.publicTeaser}</p>
+      )}
       <p className="text-xs text-subtle">
         {event.venueName ?? "Unknown venue"}
         {event.venueSpace ? ` · ${event.venueSpace}` : ""}
@@ -599,9 +604,14 @@ export function EventOverlayCard({ event, canApprove }: EventOverlayCardProps) {
         })}
       </p>
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <Badge variant={statusTone}>{event.status.replace(/_/g, " ")}</Badge>
-        {canApprove && event.status === "submitted" ? (
-          <ApproveEventButton eventId={event.eventId} size="sm" />
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <Badge variant={statusTone}>{event.status.replace(/_/g, " ")}</Badge>
+          <Badge variant={hasAiCopy ? "success" : "neutral"}>
+            {hasAiCopy ? "AI ready" : "No AI copy"}
+          </Badge>
+        </div>
+        {canApprove && ["submitted", "draft"].includes(event.status) ? (
+          <ApproveEventButton eventId={event.eventId} size="sm" className="h-auto px-3 py-1 text-xs" hasAiCopy={hasAiCopy} />
         ) : null}
       </div>
     </article>

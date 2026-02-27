@@ -157,6 +157,30 @@ export function PlanningBoard({ data, venues, canApproveEvents }: PlanningBoardP
     };
   }, [data.today, visibleEvents]);
 
+  const combinedByBucket = useMemo(() => {
+    const result: Record<PlanningBucketKey, Array<{ type: "planning"; item: PlanningItem } | { type: "event"; event: PlanningEventOverlay }>> = {
+      "0_30": [],
+      "31_60": [],
+      "61_90": [],
+      later: []
+    };
+
+    for (const key of ["0_30", "31_60", "61_90", "later"] as PlanningBucketKey[]) {
+      const merged: Array<{ type: "planning"; item: PlanningItem; targetDate: string; title: string } | { type: "event"; event: PlanningEventOverlay; targetDate: string; title: string }> = [
+        ...planningByBucket[key].map((item) => ({ type: "planning" as const, item, targetDate: item.targetDate, title: item.title })),
+        ...eventsByBucket[key].map((event) => ({ type: "event" as const, event, targetDate: event.targetDate, title: event.title }))
+      ];
+      merged.sort((left, right) => {
+        if (left.targetDate !== right.targetDate) return left.targetDate.localeCompare(right.targetDate);
+        if (left.type !== right.type) return left.type === "planning" ? -1 : 1;
+        return left.title.localeCompare(right.title);
+      });
+      result[key] = merged;
+    }
+
+    return result;
+  }, [planningByBucket, eventsByBucket]);
+
   const visibleBuckets = showLater ? BUCKETS : BUCKETS.slice(0, 3);
   const activeItem = useMemo(
     () => data.planningItems.find((item) => item.id === activeItemId) ?? null,
@@ -310,8 +334,7 @@ export function PlanningBoard({ data, venues, canApproveEvents }: PlanningBoardP
       {viewMode === "board" ? (
         <section className={`grid gap-4 ${showLater ? "xl:grid-cols-4" : "xl:grid-cols-3"}`}>
           {visibleBuckets.map((bucket) => {
-            const planningRows = planningByBucket[bucket.key];
-            const eventRows = eventsByBucket[bucket.key];
+            const rows = combinedByBucket[bucket.key];
             return (
               <article
                 key={bucket.key}
@@ -323,23 +346,24 @@ export function PlanningBoard({ data, venues, canApproveEvents }: PlanningBoardP
                 </header>
 
                 <div className="space-y-2">
-                  {planningRows.map((item) => (
-                    <PlanningItemCard
-                      key={item.id}
-                      item={item}
-                      users={data.users}
-                      venues={venues}
-                      onChanged={refreshBoard}
-                      compact
-                      onOpenDetails={(planningItem) => setActiveItemId(planningItem.id)}
-                    />
-                  ))}
-                  {eventRows.map((event) => (
-                    <EventOverlayCard key={event.id} event={event} canApprove={canApproveEvents} />
-                  ))}
+                  {rows.map((row) =>
+                    row.type === "planning" ? (
+                      <PlanningItemCard
+                        key={row.item.id}
+                        item={row.item}
+                        users={data.users}
+                        venues={venues}
+                        onChanged={refreshBoard}
+                        compact
+                        onOpenDetails={(planningItem) => setActiveItemId(planningItem.id)}
+                      />
+                    ) : (
+                      <EventOverlayCard key={row.event.id} event={row.event} canApprove={canApproveEvents} />
+                    )
+                  )}
                 </div>
 
-                {planningRows.length === 0 && eventRows.length === 0 ? (
+                {rows.length === 0 ? (
                   <p className="mt-auto text-sm text-subtle">No items in this window.</p>
                 ) : null}
               </article>

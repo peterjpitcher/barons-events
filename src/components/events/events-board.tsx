@@ -127,7 +127,7 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
 
   const canApproveEvent = useCallback(
     (event: EventSummary) => {
-      if (!canReviewEvents(user.role) || event.status !== "submitted") return false;
+      if (!canReviewEvents(user.role) || !["submitted", "draft"].includes(event.status)) return false;
       if (user.role === "reviewer") return event.assignee_id === user.id;
       return true;
     },

@@ -160,6 +160,7 @@ export async function listReviewQueue(user: AppUser): Promise<EventSummary[]> {
   let query = supabase
     .from("events")
     .select("*, venue:venues(id,name)")
+    .is("deleted_at", null)
     .in("status", ["submitted", "needs_revisions"])
     .order("start_at", { ascending: true });
 
@@ -187,6 +188,7 @@ export async function listEventsForUser(user: AppUser): Promise<EventSummary[]> 
   let query = supabase
     .from("events")
     .select("*, venue:venues(id,name), artists:event_artists(id,artist_id,billing_order,artist:artists(id,name))")
+    .is("deleted_at", null)
     .order("start_at", { ascending: true });
 
   if (user.role === "central_planner") {

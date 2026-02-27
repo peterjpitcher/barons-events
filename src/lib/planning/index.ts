@@ -162,7 +162,9 @@ function toPlanningEventOverlay(row: any): PlanningEventOverlay {
     targetDate: eventTargetDateFromStart(row.start_at),
     venueId: row.venue_id ?? null,
     venueName: venue?.name ?? null,
-    venueSpace: row.venue_space ?? null
+    venueSpace: row.venue_space ?? null,
+    publicTitle: row.public_title ?? null,
+    publicTeaser: row.public_teaser ?? null
   };
 }
 
@@ -439,7 +441,7 @@ export async function listPlanningBoardData(params?: {
 
   const { data: eventData, error: eventsError } = await admin
     .from("events")
-    .select("id,title,status,start_at,end_at,venue_space,venue_id,venue:venues(name)")
+    .select("id,title,status,start_at,end_at,venue_space,venue_id,public_title,public_teaser,venue:venues(name)")
     .gte("start_at", startLowerIso)
     .lte("start_at", startUpperIso)
     .order("start_at", { ascending: true });

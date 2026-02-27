@@ -63,6 +63,8 @@ export type PlanningEventOverlay = {
   venueId: string | null;
   venueName: string | null;
   venueSpace: string | null;
+  publicTitle: string | null;
+  publicTeaser: string | null;
 };
 
 export type PlanningAlertCounts = {

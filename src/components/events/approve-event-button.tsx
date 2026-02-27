@@ -10,15 +10,19 @@ import { Button } from "@/components/ui/button";
 type ApproveEventButtonProps = {
   eventId: string;
   size?: "sm" | "md";
+  className?: string;
+  hasAiCopy?: boolean;
 };
 
-export function ApproveEventButton({ eventId, size = "sm" }: ApproveEventButtonProps) {
+export function ApproveEventButton({ eventId, size = "sm", className, hasAiCopy = false }: ApproveEventButtonProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
   function handleClick() {
     const confirmed = window.confirm(
-      "Approve this event? AI website listing copy will be generated automatically."
+      hasAiCopy
+        ? "Approve this event?"
+        : "Approve this event? AI website listing copy will be generated automatically."
     );
     if (!confirmed) return;
 
@@ -46,6 +50,7 @@ export function ApproveEventButton({ eventId, size = "sm" }: ApproveEventButtonP
       disabled={isPending}
       onClick={handleClick}
       aria-label="Approve this event"
+      className={className}
     >
       <CheckCircle className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
       {isPending ? "Approving…" : "Approve"}

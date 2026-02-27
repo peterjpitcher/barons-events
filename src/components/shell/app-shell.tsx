@@ -8,6 +8,7 @@ type NavItem = {
   label: string;
   href: string;
   roles: UserRole[];
+  newUntil?: string; // ISO date; show "New" badge until end of this date
 };
 
 type NavSection = {
@@ -27,14 +28,14 @@ const NAV_SECTIONS: NavSection[] = [
   },
   {
     label: "Strategic Planning",
-    items: [{ label: "30/60/90 Planning", href: "/planning", roles: ["central_planner", "reviewer", "venue_manager", "executive"] }]
+    items: [{ label: "30/60/90 Planning", href: "/planning", roles: ["central_planner", "reviewer", "venue_manager", "executive"], newUntil: "2026-03-29" }]
   },
   {
     label: "Administration",
     items: [
       { label: "Venues", href: "/venues", roles: ["central_planner"] },
       { label: "Users", href: "/users", roles: ["central_planner"] },
-      { label: "Opening Hours", href: "/opening-hours", roles: ["central_planner"] },
+      { label: "Opening Hours", href: "/opening-hours", roles: ["central_planner"], newUntil: "2026-03-29" },
       { label: "Settings", href: "/settings", roles: ["central_planner"] }
     ]
   }
@@ -46,6 +47,8 @@ type AppShellProps = {
 };
 
 export function AppShell({ user, children }: AppShellProps) {
+  const todayIso = new Date().toISOString().slice(0, 10);
+
   const sections = NAV_SECTIONS.map((section) => ({
     ...section,
     items: section.items.filter((item) => item.roles.includes(user.role))
@@ -66,7 +69,12 @@ export function AppShell({ user, children }: AppShellProps) {
               <p className="px-3 text-[0.65rem] uppercase tracking-[0.2em] text-[rgba(255,255,255,0.55)]">{section.label}</p>
               <div className="flex flex-col gap-1">
                 {section.items.map((item) => (
-                  <NavLink key={item.href} href={item.href} label={item.label} />
+                  <NavLink
+                    key={item.href}
+                    href={item.href}
+                    label={item.label}
+                    showNew={item.newUntil ? todayIso <= item.newUntil : false}
+                  />
                 ))}
               </div>
             </div>
@@ -107,6 +115,7 @@ export function AppShell({ user, children }: AppShellProps) {
                       key={item.href}
                       href={item.href}
                       label={item.label}
+                      showNew={item.newUntil ? todayIso <= item.newUntil : false}
                       className="rounded-full px-3 py-1 text-[var(--color-primary-700)] hover:bg-[rgba(39,54,64,0.08)] hover:text-[var(--color-primary-900)]"
                     />
                   ))}
