@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useRef } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createVenueAction, deleteVenueAction, updateVenueAction } from "@/actions/venues";
@@ -14,7 +15,7 @@ import { SubmitButton } from "@/components/ui/submit-button";
 import { Button } from "@/components/ui/button";
 import { FieldError } from "@/components/ui/field-error";
 import { cn } from "@/lib/utils";
-import { Plus, Save, Trash2 } from "lucide-react";
+import { Clock, Plus, Save, Trash2 } from "lucide-react";
 
 type VenuesManagerProps = {
   venues: VenueRow[];
@@ -111,6 +112,7 @@ function VenueTable({ venues, reviewers }: VenuesManagerProps) {
           <tr className="bg-[var(--color-muted-surface)] text-left text-xs font-semibold uppercase tracking-[0.14em] text-subtle">
             <th className="px-4 py-3">Venue</th>
             <th className="px-4 py-3">Default reviewer</th>
+            <th className="px-4 py-3">Hours</th>
             <th className="px-4 py-3 text-right">Actions</th>
           </tr>
         </thead>
@@ -154,7 +156,7 @@ function VenueRowEditor({ venue, reviewers }: { venue: VenueRow; reviewers: Revi
   return (
     <tr className="border-t border-[var(--color-border)]">
       <td colSpan={3} className="px-4 py-3">
-        <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_auto_auto] md:items-start">
+        <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_auto_auto_auto] md:items-start">
           <form action={formAction} className="contents" noValidate>
             <input type="hidden" name="venueId" value={venue.id} />
             <div className="space-y-2">
@@ -195,6 +197,14 @@ function VenueRowEditor({ venue, reviewers }: { venue: VenueRow; reviewers: Revi
               />
             </div>
           </form>
+          <div className="flex items-start justify-end">
+            <Button asChild variant="ghost" size="sm" aria-label={`Opening hours for ${venue.name}`}>
+              <Link href={`/venues/${venue.id}/opening-hours`}>
+                <Clock className="h-4 w-4" aria-hidden="true" />
+                Hours
+              </Link>
+            </Button>
+          </div>
           <div className="flex items-start justify-end">
             <form action={deleteAction}>
               <input type="hidden" name="venueId" value={venue.id} />

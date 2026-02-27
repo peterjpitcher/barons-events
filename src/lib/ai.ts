@@ -697,7 +697,7 @@ export async function generateWebsiteCopy(input: WebsiteCopyInput): Promise<Gene
           "Create high-impact website copy for this event.",
           "",
           "Requirements:",
-          "- publicTitle: catchy guest-facing event name (<= 80 chars).",
+          "- publicTitle: catchy guest-facing event name, 5 words maximum.",
           "- publicTeaser: short conversion hook for cards/social (<= 160 chars).",
           "- publicHighlights: array of 3-5 concise bullets (no markdown bullets), each <= 90 chars, focused on USP/value.",
           "- publicDescription: 260-340 words, 2-4 short paragraphs, booking-focused; MUST include the venue name and UK date + time range.",
@@ -736,7 +736,7 @@ export async function generateWebsiteCopy(input: WebsiteCopyInput): Promise<Gene
           properties: {
             publicTitle: {
               type: "string",
-              description: "Public-facing event name, catchy and guest-friendly, <= 80 characters."
+              description: "Public-facing event name, catchy and guest-friendly, 5 words maximum."
             },
             publicTeaser: {
               type: "string",

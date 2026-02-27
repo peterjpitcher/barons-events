@@ -3,6 +3,7 @@ import { PlanningBoard } from "@/components/planning/planning-board";
 import { getCurrentUser } from "@/lib/auth";
 import { listPlanningBoardData } from "@/lib/planning";
 import { listVenues } from "@/lib/venues";
+import { canReviewEvents } from "@/lib/roles";
 
 export const metadata = {
   title: "Planning · EventHub",
@@ -30,6 +31,7 @@ export default async function PlanningPage() {
         id: venue.id,
         name: venue.name
       }))}
+      canApproveEvents={canReviewEvents(user.role)}
     />
   );
 }

@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Check, GripVertical, Pencil, Trash2, X } from "lucide-react";
+import { ApproveEventButton } from "@/components/events/approve-event-button";
 import { deletePlanningItemAction, updatePlanningItemAction } from "@/actions/planning";
 import { PlanningTaskList } from "@/components/planning/planning-task-list";
 import { Badge } from "@/components/ui/badge";
@@ -562,9 +563,10 @@ export function PlanningItemCard({
 
 type EventOverlayCardProps = {
   event: PlanningEventOverlay;
+  canApprove?: boolean;
 };
 
-export function EventOverlayCard({ event }: EventOverlayCardProps) {
+export function EventOverlayCard({ event, canApprove }: EventOverlayCardProps) {
   const statusTone: "neutral" | "info" | "warning" | "success" | "danger" =
     event.status === "submitted"
       ? "info"
@@ -596,7 +598,12 @@ export function EventOverlayCard({ event }: EventOverlayCardProps) {
           minute: "2-digit"
         })}
       </p>
-      <Badge variant={statusTone}>{event.status.replace(/_/g, " ")}</Badge>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <Badge variant={statusTone}>{event.status.replace(/_/g, " ")}</Badge>
+        {canApprove && event.status === "submitted" ? (
+          <ApproveEventButton eventId={event.eventId} size="sm" />
+        ) : null}
+      </div>
     </article>
   );
 }

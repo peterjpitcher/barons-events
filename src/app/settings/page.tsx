@@ -1,10 +1,12 @@
 import { redirect } from "next/navigation";
 import { ArchivedArtistsManager } from "@/components/settings/archived-artists-manager";
 import { EventTypesManager } from "@/components/settings/event-types-manager";
+import { ServiceTypesManager } from "@/components/settings/service-types-manager";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCurrentUser } from "@/lib/auth";
 import { listArchivedArtists } from "@/lib/artists";
 import { listEventTypes } from "@/lib/event-types";
+import { listServiceTypes } from "@/lib/opening-hours";
 
 export const metadata = {
   title: "Settings · EventHub",
@@ -20,7 +22,11 @@ export default async function SettingsPage() {
     redirect("/");
   }
 
-  const [eventTypes, archivedArtists] = await Promise.all([listEventTypes(), listArchivedArtists()]);
+  const [eventTypes, archivedArtists, serviceTypes] = await Promise.all([
+    listEventTypes(),
+    listArchivedArtists(),
+    listServiceTypes()
+  ]);
 
   return (
     <div className="space-y-6">
@@ -43,6 +49,16 @@ export default async function SettingsPage() {
         </CardHeader>
         <CardContent className="space-y-6">
           <EventTypesManager eventTypes={eventTypes} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Opening hours service types</CardTitle>
+          <CardDescription>These categories appear as rows in the weekly opening hours grid for each venue.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <ServiceTypesManager serviceTypes={serviceTypes} />
         </CardContent>
       </Card>
 

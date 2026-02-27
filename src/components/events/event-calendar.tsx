@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import dayjs from "dayjs";
 import type { EventSummary } from "@/lib/events";
+import { ApproveEventButton } from "@/components/events/approve-event-button";
 import { Button } from "@/components/ui/button";
 
 type StatusAccent = {
@@ -24,6 +25,7 @@ type EventCalendarProps = {
   createVenueId?: string;
   getStatusLabel: (status: EventSummary["status"]) => string;
   getStatusAccent: (status: EventSummary["status"]) => StatusAccent;
+  canApproveEvent?: (event: CalendarEvent) => boolean;
 };
 
 function startOfIsoWeek(date: dayjs.Dayjs) {
@@ -53,14 +55,17 @@ function endsInEarlyHoursNextDay(event: CalendarEvent): boolean {
 function EventListItem({
   event,
   getStatusLabel,
-  getStatusAccent
+  getStatusAccent,
+  canApproveEvent
 }: {
   event: CalendarEvent;
   getStatusLabel: EventCalendarProps["getStatusLabel"];
   getStatusAccent: EventCalendarProps["getStatusAccent"];
+  canApproveEvent?: (event: CalendarEvent) => boolean;
 }) {
   const statusLabel = getStatusLabel(event.status);
   const accent = getStatusAccent(event.status);
+  const showApprove = canApproveEvent ? canApproveEvent(event) : false;
   const venueName = event.venue?.name ?? "Unknown venue";
   const spacesLabel = event.venue_space?.trim().length ? event.venue_space : "Space to be confirmed";
   const timeRange = `${event.start.format("HH:mm")} → ${event.end.format("HH:mm")}`;
@@ -87,13 +92,14 @@ function EventListItem({
         <span className="truncate">{spacesLabel}</span>
         <span>{timeRange}</span>
       </div>
-      <div className="mt-auto border-t border-[rgba(39,54,64,0.12)] pt-2">
+      <div className="mt-auto border-t border-[rgba(39,54,64,0.12)] pt-2 flex items-center justify-between gap-1 flex-wrap">
         <span
           className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.64rem] font-semibold uppercase tracking-[0.08em] ${accent.badge}`}
         >
           <span className={`h-1.5 w-1.5 rounded-full ${accent.dot}`} aria-hidden="true" />
           {statusLabel}
         </span>
+        {showApprove ? <ApproveEventButton eventId={event.id} size="sm" /> : null}
       </div>
     </li>
   );
@@ -102,11 +108,13 @@ function EventListItem({
 function OverflowList({
   events,
   getStatusLabel,
-  getStatusAccent
+  getStatusAccent,
+  canApproveEvent
 }: {
   events: CalendarEvent[];
   getStatusLabel: EventCalendarProps["getStatusLabel"];
   getStatusAccent: EventCalendarProps["getStatusAccent"];
+  canApproveEvent?: (event: CalendarEvent) => boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -134,6 +142,7 @@ function OverflowList({
             event={event}
             getStatusLabel={getStatusLabel}
             getStatusAccent={getStatusAccent}
+            canApproveEvent={canApproveEvent}
           />
         ))
       : null}
@@ -148,7 +157,8 @@ export function EventCalendar({
   canCreate,
   createVenueId,
   getStatusLabel,
-  getStatusAccent
+  getStatusAccent,
+  canApproveEvent
 }: EventCalendarProps) {
   const start = useMemo(() => startOfIsoWeek(monthCursor.startOf("month")), [monthCursor]);
   const end = useMemo(() => endOfIsoWeek(monthCursor.endOf("month")), [monthCursor]);
@@ -266,6 +276,7 @@ export function EventCalendar({
                     event={event}
                     getStatusLabel={getStatusLabel}
                     getStatusAccent={getStatusAccent}
+                    canApproveEvent={canApproveEvent}
                   />
                 ))}
                 {dayEvents.length > 3 ? (
@@ -273,6 +284,7 @@ export function EventCalendar({
                     events={dayEvents.slice(3)}
                     getStatusLabel={getStatusLabel}
                     getStatusAccent={getStatusAccent}
+                    canApproveEvent={canApproveEvent}
                   />
                 ) : null}
               </ul>

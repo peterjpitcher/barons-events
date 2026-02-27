@@ -8,6 +8,7 @@ import dayjs from "dayjs";
 import advancedFormat from "dayjs/plugin/advancedFormat";
 import { ChevronLeft, ChevronRight, Search, SlidersHorizontal, X } from "lucide-react";
 import type { EventSummary } from "@/lib/events";
+import { canReviewEvents } from "@/lib/roles";
 import type { AppUser } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -123,6 +124,15 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
     user.role === "central_planner" ? undefined : user.role === "venue_manager" ? myVenueId ?? null : null;
   const canCreate =
     user.role === "central_planner" || (user.role === "venue_manager" && typeof createScopeVenueId === "string");
+
+  const canApproveEvent = useCallback(
+    (event: EventSummary) => {
+      if (!canReviewEvents(user.role) || event.status !== "submitted") return false;
+      if (user.role === "reviewer") return event.assignee_id === user.id;
+      return true;
+    },
+    [user.role, user.id]
+  );
 
   const [selectedVenueId, setSelectedVenueId] = useState<string>(rawVenue);
   const [monthCursor, setMonthCursor] = useState<dayjs.Dayjs>(dayjs().startOf("month"));
@@ -527,6 +537,7 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
         createVenueId={filteredVenueId ?? (typeof createScopeVenueId === "string" ? createScopeVenueId : undefined)}
         getStatusLabel={(status) => (statusConfig[status] ?? statusConfig.draft).label}
         getStatusAccent={(status) => statusAccentStyles[status] ?? statusAccentStyles.draft}
+        canApproveEvent={canApproveEvent}
       />
     </div>
   );

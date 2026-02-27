@@ -34,6 +34,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { label: "Venues", href: "/venues", roles: ["central_planner"] },
       { label: "Users", href: "/users", roles: ["central_planner"] },
+      { label: "Opening Hours", href: "/opening-hours", roles: ["central_planner"] },
       { label: "Settings", href: "/settings", roles: ["central_planner"] }
     ]
   }

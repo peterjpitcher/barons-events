@@ -28,6 +28,7 @@ import { bucketForDayOffset, daysBetween } from "@/lib/planning/utils";
 type PlanningBoardProps = {
   data: PlanningBoardData;
   venues: PlanningVenueOption[];
+  canApproveEvents?: boolean;
 };
 
 type BucketConfig = {
@@ -61,7 +62,7 @@ function sortByDateThenTitle<T extends { targetDate: string; title: string }>(ro
 
 type ViewMode = "board" | "calendar" | "list" | "todos_by_person";
 
-export function PlanningBoard({ data, venues }: PlanningBoardProps) {
+export function PlanningBoard({ data, venues, canApproveEvents }: PlanningBoardProps) {
   const router = useRouter();
   const [viewMode, setViewMode] = useState<ViewMode>("board");
   const [isCreateModalOpen, setCreateModalOpen] = useState(false);
@@ -334,7 +335,7 @@ export function PlanningBoard({ data, venues }: PlanningBoardProps) {
                     />
                   ))}
                   {eventRows.map((event) => (
-                    <EventOverlayCard key={event.id} event={event} />
+                    <EventOverlayCard key={event.id} event={event} canApprove={canApproveEvents} />
                   ))}
                 </div>
 
