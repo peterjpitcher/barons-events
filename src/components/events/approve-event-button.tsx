@@ -11,18 +11,18 @@ type ApproveEventButtonProps = {
   eventId: string;
   size?: "sm" | "md";
   className?: string;
-  hasAiCopy?: boolean;
+  hasWebCopy?: boolean;
 };
 
-export function ApproveEventButton({ eventId, size = "sm", className, hasAiCopy = false }: ApproveEventButtonProps) {
+export function ApproveEventButton({ eventId, size = "sm", className, hasWebCopy = false }: ApproveEventButtonProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
   function handleClick() {
     const confirmed = window.confirm(
-      hasAiCopy
+      hasWebCopy
         ? "Approve this event?"
-        : "Approve this event? AI website listing copy will be generated automatically."
+        : "Approve this event? Webpage listing copy will be generated automatically."
     );
     if (!confirmed) return;
 

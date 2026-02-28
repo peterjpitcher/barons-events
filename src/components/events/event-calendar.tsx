@@ -76,7 +76,7 @@ function EventListItem({
     `Ends: ${event.end.format("dddd D MMMM, HH:mm")}`
   ].join("\n");
 
-  const hasAiCopy = Boolean(event.public_title);
+  const hasWebCopy = Boolean(event.public_title);
 
   return (
     <li
@@ -107,15 +107,15 @@ function EventListItem({
           </span>
           <span
             className={`inline-flex items-center rounded-full px-2 py-0.5 text-[0.64rem] font-semibold uppercase tracking-[0.08em] ${
-              hasAiCopy
+              hasWebCopy
                 ? "border border-[#355849] bg-[var(--color-success)] text-white"
                 : "border border-[rgba(39,54,64,0.2)] bg-[rgba(39,54,64,0.06)] text-subtle"
             }`}
           >
-            {hasAiCopy ? "AI ready" : "No AI copy"}
+            {hasWebCopy ? "Webpage ready" : "No web copy"}
           </span>
         </div>
-        {showApprove ? <ApproveEventButton eventId={event.id} size="sm" className="h-auto px-2 py-0.5 text-[0.64rem]" hasAiCopy={hasAiCopy} /> : null}
+        {showApprove ? <ApproveEventButton eventId={event.id} size="sm" className="h-auto px-2 py-0.5 text-[0.64rem]" hasWebCopy={hasWebCopy} /> : null}
       </div>
     </li>
   );

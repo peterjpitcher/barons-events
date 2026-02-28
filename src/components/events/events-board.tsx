@@ -6,7 +6,20 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import dayjs from "dayjs";
 import advancedFormat from "dayjs/plugin/advancedFormat";
-import { ChevronLeft, ChevronRight, Search, SlidersHorizontal, X } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  List,
+  Rows3,
+  Search,
+  SlidersHorizontal,
+  X
+} from "lucide-react";
 import type { EventSummary } from "@/lib/events";
 import { canReviewEvents } from "@/lib/roles";
 import type { AppUser } from "@/lib/types";
@@ -18,6 +31,9 @@ import { Select } from "@/components/ui/select";
 
 dayjs.extend(advancedFormat);
 
+type ViewMode = "month" | "matrix" | "list";
+type ListSortKey = "date" | "time" | "event" | "venue" | "artist" | "space" | "status";
+type ListSortDirection = "asc" | "desc";
 type EventWithDates = CalendarEvent;
 
 type VenueOption = {
@@ -73,6 +89,41 @@ const statusAccentStyles: Record<
   }
 };
 
+const statusSortOrder: Record<EventSummary["status"], number> = {
+  draft: 0,
+  submitted: 1,
+  needs_revisions: 2,
+  approved: 3,
+  completed: 4,
+  rejected: 5
+};
+
+const localStorageKey = "events-board-view";
+const localStorageHidePastKey = "events-board-hide-past";
+
+function startOfIsoWeek(date: dayjs.Dayjs) {
+  const day = date.day();
+  const diff = (day + 6) % 7;
+  return date.subtract(diff, "day").startOf("day");
+}
+
+function endOfIsoWeek(date: dayjs.Dayjs) {
+  return startOfIsoWeek(date).add(6, "day").endOf("day");
+}
+
+function minutesAfterMidnight(value: dayjs.Dayjs): number {
+  return value.diff(value.startOf("day"), "minute");
+}
+
+function endsInEarlyHoursNextDay(event: EventWithDates): boolean {
+  const startDay = event.start.startOf("day");
+  const endDay = event.end.startOf("day");
+  if (endDay.diff(startDay, "day") !== 1) {
+    return false;
+  }
+  return minutesAfterMidnight(event.end) <= 300;
+}
+
 function normaliseEvents(events: EventSummary[]): EventWithDates[] {
   return events
     .map((event) => ({
@@ -118,7 +169,9 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const rawView = (searchParams.get("view") ?? "") as ViewMode | "";
   const rawVenue = searchParams.get("venueId") ?? "all";
+  const rawMatrixStart = searchParams.get("start");
   const myVenueId = user.venueId ?? null;
   const createScopeVenueId =
     user.role === "central_planner" ? undefined : user.role === "venue_manager" ? myVenueId ?? null : null;
@@ -134,7 +187,13 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
     [user.role, user.id]
   );
 
+  const [view, setView] = useState<ViewMode>(
+    rawView === "matrix" || rawView === "list" ? rawView : "month"
+  );
   const [selectedVenueId, setSelectedVenueId] = useState<string>(rawVenue);
+  const [matrixStart, setMatrixStart] = useState<dayjs.Dayjs>(
+    rawMatrixStart ? dayjs(rawMatrixStart) : dayjs().startOf("day")
+  );
   const [monthCursor, setMonthCursor] = useState<dayjs.Dayjs>(dayjs().startOf("month"));
   const [venueSearch, setVenueSearch] = useState("");
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
@@ -144,8 +203,27 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
   const [eventTypeFilter, setEventTypeFilter] = useState<string>("all");
   const [startDateFilter, setStartDateFilter] = useState("");
   const [endDateFilter, setEndDateFilter] = useState("");
+  const [hidePastEvents, setHidePastEvents] = useState(true);
   const pendingVenueIdRef = useRef<string | null>(null);
   const monthLabel = useMemo(() => monthCursor.format("MMMM YYYY"), [monthCursor]);
+
+  useEffect(() => {
+    if (!rawView) {
+      const stored = typeof window !== "undefined" ? window.localStorage.getItem(localStorageKey) : null;
+      if (stored === "month" || stored === "matrix" || stored === "list") {
+        setView(stored);
+      }
+    }
+  }, [rawView]);
+
+  useEffect(() => {
+    if (view === "matrix" && rawMatrixStart) {
+      const parsed = dayjs(rawMatrixStart);
+      if (parsed.isValid()) {
+        setMatrixStart(parsed.startOf("day"));
+      }
+    }
+  }, [rawMatrixStart, view]);
 
   useEffect(() => {
     const pendingVenueId = pendingVenueIdRef.current;
@@ -162,22 +240,34 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
   }, [rawVenue, selectedVenueId]);
 
   useEffect(() => {
-    const currentParams = new URLSearchParams(searchParams.toString());
-    currentParams.delete("view");
-    currentParams.delete("start");
-
-    if (selectedVenueId && selectedVenueId !== "all") {
-      currentParams.set("venueId", selectedVenueId);
-    } else {
-      currentParams.delete("venueId");
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(localStorageKey, view);
     }
+  }, [view]);
 
-    const nextSearch = currentParams.toString();
-    const existingSearch = searchParams.toString();
-    if (nextSearch !== existingSearch) {
-      router.replace(nextSearch ? `${pathname}?${nextSearch}` : pathname, { scroll: false });
+  useEffect(() => {
+    const stored = typeof window !== "undefined" ? window.localStorage.getItem(localStorageHidePastKey) : null;
+    if (stored !== null) {
+      setHidePastEvents(stored === "true");
     }
-  }, [selectedVenueId, pathname, router, searchParams]);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(localStorageHidePastKey, String(hidePastEvents));
+    }
+  }, [hidePastEvents]);
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (view !== "month") params.set("view", view);
+    if (selectedVenueId && selectedVenueId !== "all") params.set("venueId", selectedVenueId);
+    if (view === "matrix" && matrixStart.isValid()) {
+      params.set("start", matrixStart.format("YYYY-MM-DD"));
+    }
+    const search = params.toString();
+    router.replace(search ? `${pathname}?${search}` : pathname, { scroll: false });
+  }, [view, selectedVenueId, matrixStart, pathname, router]);
 
   const eventDataset = useMemo(() => normaliseEvents(events), [events]);
 
@@ -219,6 +309,14 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
     if (!filteredVenueId) return eventDataset;
     return eventDataset.filter((event) => event.venue?.id === filteredVenueId);
   }, [eventDataset, filteredVenueId]);
+
+  const filteredVenuesForMatrix = useMemo(() => {
+    if (!filteredVenueId) {
+      return venuesList;
+    }
+    const match = venueMap.get(filteredVenueId);
+    return match ? [match] : venuesList;
+  }, [filteredVenueId, venuesList, venueMap]);
 
   const startDateBoundary = useMemo(() => {
     if (!startDateFilter) return null;
@@ -289,6 +387,18 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
     endDateBoundary
   ]);
 
+  const listEvents = useMemo(() => {
+    if (!hidePastEvents) return filteredEvents;
+    const now = dayjs();
+    return filteredEvents.filter((event) => event.end.isAfter(now));
+  }, [filteredEvents, hidePastEvents]);
+
+  const viewOptions: { mode: ViewMode; icon: typeof CalendarDays; label: string }[] = [
+    { mode: "month", icon: CalendarDays, label: "Month" },
+    { mode: "matrix", icon: Rows3, label: "7-day" },
+    { mode: "list", icon: List, label: "List" }
+  ];
+
   const legendItems = (Object.keys(statusConfig) as EventSummary["status"][]).map((status) => ({
     status,
     ...statusConfig[status]
@@ -346,6 +456,16 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
     return options;
   }, [venuesList, venueMap, venueSearch, myVenueId, selectedVenueId]);
 
+  const handleViewChange = useCallback(
+    (next: ViewMode) => {
+      setView(next);
+      if (next === "matrix" && !matrixStart.isValid()) {
+        setMatrixStart(dayjs().startOf("day"));
+      }
+    },
+    [matrixStart]
+  );
+
   const handleVenueChange = useCallback((value: string) => {
     pendingVenueIdRef.current = value;
     setSelectedVenueId(value);
@@ -359,14 +479,29 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
         <div>
           <h1 className="font-brand-serif text-3xl text-[var(--color-primary-700)]">{heading}</h1>
           <p className="mt-1 text-subtle">
-            Track programming across venues in a monthly calendar and jump straight into new drafts.
+            Track programming across venues, pivot between month, week, and list views, and jump straight into new drafts.
           </p>
         </div>
-        {canCreate ? (
-          <Button asChild variant="primary">
-            <Link href="/events/new">New event</Link>
-          </Button>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          {canCreate ? (
+            <Button asChild variant="primary">
+              <Link href="/events/new">New event</Link>
+            </Button>
+          ) : null}
+          <div className="flex items-center gap-1 rounded-full border border-[var(--color-border)] bg-white p-1">
+            {viewOptions.map(({ mode, icon: Icon, label }) => (
+              <Button
+                key={mode}
+                type="button"
+                variant={view === mode ? "primary" : "ghost"}
+                size="sm"
+                onClick={() => handleViewChange(mode)}
+              >
+                <Icon className="mr-1 h-4 w-4" /> {label}
+              </Button>
+            ))}
+          </div>
+        </div>
       </header>
 
       <section className="space-y-3">
@@ -411,21 +546,63 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
             ) : null}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={() => setMonthCursor(monthCursor.subtract(1, "month"))}>
-              <ChevronLeft className="mr-1 h-4 w-4" /> Previous month
-            </Button>
-            <span className="px-2 text-sm font-semibold text-[var(--color-text)]">{monthLabel}</span>
-            <Button type="button" variant="ghost" size="sm" onClick={() => setMonthCursor(dayjs().startOf("month"))}>
-              Today
-            </Button>
-            <Button type="button" variant="outline" size="sm" onClick={() => setMonthCursor(monthCursor.add(1, "month"))}>
-              Next month <ChevronRight className="ml-1 h-4 w-4" />
-            </Button>
-            <div className="rounded-full border border-[var(--color-border)] bg-white px-3 py-2 text-sm text-subtle">
-              {filteredEvents.length} event{filteredEvents.length === 1 ? "" : "s"}
+          {view === "matrix" ? (
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setMatrixStart(matrixStart.subtract(7, "day"))}
+              >
+                Previous 7 days
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setMatrixStart(dayjs().startOf("day"))}
+                disabled={matrixStart.startOf("day").isSame(dayjs().startOf("day"))}
+              >
+                Today
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setMatrixStart(matrixStart.add(7, "day"))}
+              >
+                Next 7 days
+              </Button>
             </div>
-          </div>
+          ) : view === "month" ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setMonthCursor(monthCursor.subtract(1, "month"))}>
+                <ChevronLeft className="mr-1 h-4 w-4" /> Previous month
+              </Button>
+              <span className="px-2 text-sm font-semibold text-[var(--color-text)]">{monthLabel}</span>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setMonthCursor(dayjs().startOf("month"))}>
+                Today
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => setMonthCursor(monthCursor.add(1, "month"))}>
+                Next month <ChevronRight className="ml-1 h-4 w-4" />
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant={hidePastEvents ? "secondary" : "ghost"}
+                size="sm"
+                onClick={() => setHidePastEvents((v) => !v)}
+              >
+                <Clock className="mr-1 h-4 w-4" />
+                {hidePastEvents ? "Past hidden" : "Show past"}
+              </Button>
+              <div className="rounded-full border border-[var(--color-border)] bg-white px-3 py-2 text-sm text-subtle">
+                {listEvents.length} event{listEvents.length === 1 ? "" : "s"}
+              </div>
+            </div>
+          )}
         </div>
 
         {showAdvancedFilters || hasAdvancedFilters ? (
@@ -523,22 +700,35 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
 
       <StatusLegend legendItems={legendItems} />
 
-      <EventCalendar
-        events={filteredEvents}
-        monthCursor={monthCursor}
-        onChangeMonth={setMonthCursor}
-        canCreate={
-          canCreate &&
-          (createScopeVenueId === undefined ||
-            createScopeVenueId === null ||
-            !filteredVenueId ||
-            filteredVenueId === createScopeVenueId)
-        }
-        createVenueId={filteredVenueId ?? (typeof createScopeVenueId === "string" ? createScopeVenueId : undefined)}
-        getStatusLabel={(status) => (statusConfig[status] ?? statusConfig.draft).label}
-        getStatusAccent={(status) => statusAccentStyles[status] ?? statusAccentStyles.draft}
-        canApproveEvent={canApproveEvent}
-      />
+      {view === "month" ? (
+        <EventCalendar
+          events={filteredEvents}
+          monthCursor={monthCursor}
+          onChangeMonth={setMonthCursor}
+          canCreate={
+            canCreate &&
+            (createScopeVenueId === undefined ||
+              createScopeVenueId === null ||
+              !filteredVenueId ||
+              filteredVenueId === createScopeVenueId)
+          }
+          createVenueId={filteredVenueId ?? (typeof createScopeVenueId === "string" ? createScopeVenueId : undefined)}
+          getStatusLabel={(status) => (statusConfig[status] ?? statusConfig.draft).label}
+          getStatusAccent={(status) => statusAccentStyles[status] ?? statusAccentStyles.draft}
+          canApproveEvent={canApproveEvent}
+        />
+      ) : view === "matrix" ? (
+        <SevenDayMatrix
+          events={filteredEvents}
+          venues={filteredVenuesForMatrix}
+          rangeStart={matrixStart}
+          onChangeStart={setMatrixStart}
+          canCreate={canCreate}
+          createScopeVenueId={createScopeVenueId}
+        />
+      ) : (
+        <EventsListTable events={listEvents} />
+      )}
     </div>
   );
 }
@@ -557,5 +747,381 @@ function StatusLegend({
         </Badge>
       ))}
     </div>
+  );
+}
+
+function EventsListTable({ events }: { events: EventWithDates[] }) {
+  const [sortBy, setSortBy] = useState<{ key: ListSortKey; direction: ListSortDirection }>({
+    key: "date",
+    direction: "asc"
+  });
+
+  const toggleSort = useCallback((key: ListSortKey) => {
+    setSortBy((current) => {
+      if (current.key !== key) {
+        return { key, direction: "asc" };
+      }
+      return { key, direction: current.direction === "asc" ? "desc" : "asc" };
+    });
+  }, []);
+
+  const sortedEvents = useMemo(() => {
+    const sorted = [...events];
+    sorted.sort((left, right) => {
+      const leftArtistLabel = getEventArtistLabel(left);
+      const rightArtistLabel = getEventArtistLabel(right);
+      const result = (() => {
+        switch (sortBy.key) {
+          case "date":
+            return left.start.startOf("day").valueOf() - right.start.startOf("day").valueOf();
+          case "time":
+            return minutesAfterMidnight(left.start) - minutesAfterMidnight(right.start);
+          case "event":
+            return compareText(left.title, right.title);
+          case "venue":
+            return compareText(left.venue?.name ?? "", right.venue?.name ?? "");
+          case "artist":
+            return compareText(leftArtistLabel, rightArtistLabel);
+          case "space":
+            return compareText(left.venue_space ?? "", right.venue_space ?? "");
+          case "status":
+            return (statusSortOrder[left.status] ?? 999) - (statusSortOrder[right.status] ?? 999);
+          default:
+            return 0;
+        }
+      })();
+
+      if (result !== 0) {
+        return sortBy.direction === "asc" ? result : -result;
+      }
+
+      const startTieBreaker = left.start.valueOf() - right.start.valueOf();
+      if (startTieBreaker !== 0) {
+        return sortBy.direction === "asc" ? startTieBreaker : -startTieBreaker;
+      }
+
+      return compareText(left.title, right.title);
+    });
+    return sorted;
+  }, [events, sortBy]);
+
+  const sortIcon = useCallback(
+    (key: ListSortKey) => {
+      if (sortBy.key !== key) {
+        return <ArrowUpDown className="h-3.5 w-3.5 text-subtle" aria-hidden="true" />;
+      }
+      return sortBy.direction === "asc" ? (
+        <ArrowUp className="h-3.5 w-3.5" aria-hidden="true" />
+      ) : (
+        <ArrowDown className="h-3.5 w-3.5" aria-hidden="true" />
+      );
+    },
+    [sortBy]
+  );
+
+  const sortAriaValue = useCallback(
+    (key: ListSortKey): "none" | "ascending" | "descending" => {
+      if (sortBy.key !== key) return "none";
+      return sortBy.direction === "asc" ? "ascending" : "descending";
+    },
+    [sortBy]
+  );
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full border-collapse rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-white shadow-soft">
+        <thead>
+          <tr className="bg-[var(--color-muted-surface)] text-left text-xs font-semibold uppercase tracking-[0.12em] text-subtle">
+            <th className="px-4 py-3" aria-sort={sortAriaValue("date")}>
+              <button type="button" className="inline-flex items-center gap-1 hover:text-[var(--color-text)]" onClick={() => toggleSort("date")}>
+                Date {sortIcon("date")}
+              </button>
+            </th>
+            <th className="px-4 py-3" aria-sort={sortAriaValue("time")}>
+              <button type="button" className="inline-flex items-center gap-1 hover:text-[var(--color-text)]" onClick={() => toggleSort("time")}>
+                Time {sortIcon("time")}
+              </button>
+            </th>
+            <th className="px-4 py-3" aria-sort={sortAriaValue("event")}>
+              <button type="button" className="inline-flex items-center gap-1 hover:text-[var(--color-text)]" onClick={() => toggleSort("event")}>
+                Event {sortIcon("event")}
+              </button>
+            </th>
+            <th className="px-4 py-3" aria-sort={sortAriaValue("venue")}>
+              <button type="button" className="inline-flex items-center gap-1 hover:text-[var(--color-text)]" onClick={() => toggleSort("venue")}>
+                Venue {sortIcon("venue")}
+              </button>
+            </th>
+            <th className="px-4 py-3" aria-sort={sortAriaValue("artist")}>
+              <button type="button" className="inline-flex items-center gap-1 hover:text-[var(--color-text)]" onClick={() => toggleSort("artist")}>
+                Artist {sortIcon("artist")}
+              </button>
+            </th>
+            <th className="px-4 py-3" aria-sort={sortAriaValue("space")}>
+              <button type="button" className="inline-flex items-center gap-1 hover:text-[var(--color-text)]" onClick={() => toggleSort("space")}>
+                Space {sortIcon("space")}
+              </button>
+            </th>
+            <th className="px-4 py-3" aria-sort={sortAriaValue("status")}>
+              <button type="button" className="inline-flex items-center gap-1 hover:text-[var(--color-text)]" onClick={() => toggleSort("status")}>
+                Status {sortIcon("status")}
+              </button>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {events.length === 0 ? (
+            <tr>
+              <td colSpan={7} className="px-6 py-10 text-center text-sm text-subtle">
+                No events match this filter.
+              </td>
+            </tr>
+          ) : (
+            sortedEvents.map((event) => {
+              const status = statusConfig[event.status] ?? statusConfig.draft;
+              const venueName = event.venue?.name ?? "Unknown venue";
+              const artistLabel = getEventArtistLabel(event);
+              const spaceName = event.venue_space?.trim().length ? event.venue_space : "Space to be confirmed";
+              return (
+                <tr key={event.id} className="border-t border-[var(--color-border)] text-sm text-[var(--color-text)]">
+                  <td className="px-4 py-3 whitespace-nowrap">{event.start.format("ddd D MMM YYYY")}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    {event.start.format("HH:mm")} - {event.end.format("HH:mm")}
+                  </td>
+                  <td className="px-4 py-3">
+                    <Link
+                      href={`/events/${event.id}`}
+                      className="font-semibold text-[var(--color-text)] transition-colors hover:text-[var(--color-primary-700)]"
+                    >
+                      {event.title}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3">{venueName}</td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`block max-w-[18rem] truncate ${artistLabel === "No artist" ? "text-subtle" : ""}`}
+                      title={artistLabel}
+                    >
+                      {artistLabel}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">{spaceName}</td>
+                  <td className="px-4 py-3">
+                    <Badge variant={status.tone}>{status.label}</Badge>
+                  </td>
+                </tr>
+              );
+            })
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+type SevenDayMatrixProps = {
+  events: EventWithDates[];
+  venues: VenueOption[];
+  rangeStart: dayjs.Dayjs;
+  onChangeStart: (value: dayjs.Dayjs) => void;
+  canCreate: boolean;
+  createScopeVenueId: string | null | undefined;
+};
+
+function SevenDayMatrix({
+  events,
+  venues,
+  rangeStart,
+  onChangeStart,
+  canCreate,
+  createScopeVenueId
+}: SevenDayMatrixProps) {
+  const safeStart = rangeStart.isValid() ? rangeStart.startOf("day") : dayjs().startOf("day");
+  const days = useMemo(() => Array.from({ length: 7 }, (_, index) => safeStart.add(index, "day")), [safeStart]);
+  const rangeEnd = days[days.length - 1].endOf("day");
+
+  useEffect(() => {
+    if (!rangeStart.isValid()) {
+      onChangeStart(dayjs().startOf("day"));
+    }
+  }, [rangeStart, onChangeStart]);
+
+  const eventsByVenue = useMemo(() => {
+    return venues.map((venue) => {
+      const venueEvents = events.filter(
+        (event) =>
+          event.venue?.id === venue.id &&
+          (event.start.isBefore(rangeEnd) || event.start.isSame(rangeEnd)) &&
+          (event.end.isAfter(safeStart) || event.end.isSame(safeStart))
+      );
+      return { venue, events: venueEvents };
+    });
+  }, [events, venues, rangeEnd, safeStart]);
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full border-collapse rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-white shadow-soft">
+        <thead>
+          <tr className="bg-[var(--color-muted-surface)] text-xs font-semibold uppercase tracking-[0.12em] text-subtle">
+            <th className="w-48 px-4 py-3 text-left">Venue</th>
+            {days.map((day) => (
+              <th key={day.toISOString()} className="min-w-[9rem] border-l border-[var(--color-border)] px-4 py-3 text-left">
+                <div className="flex flex-col">
+                  <span className="text-[0.7rem]">{day.format("ddd")}</span>
+                  <span className="text-sm text-[var(--color-text)]">{day.format("D MMM")}</span>
+                </div>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {venues.length === 0 ? (
+            <tr>
+              <td colSpan={8} className="px-6 py-12 text-center text-subtle">
+                No venues match this filter yet.
+              </td>
+            </tr>
+          ) : (
+            eventsByVenue.map(({ venue, events: venueEvents }) => (
+              <VenueMatrixRow
+                key={venue.id}
+                venue={venue}
+                events={venueEvents}
+                days={days}
+                canCreate={
+                  canCreate &&
+                  (createScopeVenueId === undefined || createScopeVenueId === venue.id)
+                }
+                createVenueId={
+                  createScopeVenueId === undefined ? venue.id : createScopeVenueId ?? undefined
+                }
+              />
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+type VenueMatrixRowProps = {
+  venue: VenueOption;
+  events: EventWithDates[];
+  days: dayjs.Dayjs[];
+  canCreate: boolean;
+  createVenueId?: string;
+};
+
+function VenueMatrixRow({ venue, events, days, canCreate, createVenueId }: VenueMatrixRowProps) {
+  const eventsByDay = days.map((day) => {
+    const dayStartEdge = day.startOf("day");
+    const dayEndEdge = day.endOf("day");
+    return events
+      .filter(
+        (event) =>
+          (event.start.isBefore(dayEndEdge) || event.start.isSame(dayEndEdge)) &&
+          (event.end.isAfter(dayStartEdge) || event.end.isSame(dayStartEdge))
+      )
+      .filter((event) => {
+        if (!endsInEarlyHoursNextDay(event)) {
+          return true;
+        }
+        const nextDayStart = event.start.startOf("day").add(1, "day");
+        return !dayStartEdge.isSame(nextDayStart);
+      })
+      .map((event) => {
+        const treatAsSameDay = endsInEarlyHoursNextDay(event) && dayStartEdge.isSame(event.start.startOf("day"));
+        const displayStart = event.start.isBefore(dayStartEdge) ? dayStartEdge : event.start;
+        const displayEnd = event.end.isAfter(dayEndEdge) ? dayEndEdge : event.end;
+        return {
+          event,
+          displayStart,
+          displayEnd: treatAsSameDay ? event.end : displayEnd,
+          spansPrevious: event.start.isBefore(dayStartEdge),
+          spansNext: treatAsSameDay ? false : event.end.isAfter(dayEndEdge)
+        };
+      });
+  });
+
+  return (
+    <tr className="border-t border-[var(--color-border)]">
+      <th className="border-r border-[var(--color-border)] px-4 py-3 text-left align-top text-sm text-[var(--color-text)]">
+        <div className="font-semibold">{venue.name}</div>
+        <div className="text-xs text-subtle">{events.length} event{events.length === 1 ? "" : "s"}</div>
+      </th>
+      <td colSpan={7} className="p-0">
+        <div className="grid grid-cols-7 gap-0 border border-[var(--color-border)] bg-white">
+          {days.map((day, index) => (
+            <div
+              key={day.toISOString()}
+              className="relative flex min-h-[6.5rem] flex-col gap-2 border border-[var(--color-border)] bg-white p-2"
+              style={{
+                borderLeftWidth: index === 0 ? undefined : 0,
+                borderTopWidth: 0,
+                borderBottomWidth: 0
+              }}
+            >
+              {eventsByDay[index].map(({ event, displayStart, displayEnd, spansPrevious, spansNext }) => {
+                const status = statusConfig[event.status] ?? statusConfig.draft;
+                const accent = statusAccentStyles[event.status] ?? statusAccentStyles.draft;
+                const spaceDisplay = event.venue_space?.trim().length
+                  ? event.venue_space
+                  : "Space to be confirmed";
+                return (
+                  <div
+                    key={`${event.id}-${day.format("YYYY-MM-DD")}`}
+                    className="flex h-full flex-col rounded-[var(--radius-sm)] border border-[rgba(39,54,64,0.12)] bg-white p-2 text-xs text-[var(--color-text)] shadow-soft"
+                  >
+                    <Link
+                      href={`/events/${event.id}`}
+                      className="truncate text-sm font-semibold text-[var(--color-text)] transition-colors hover:text-[var(--color-primary-700)]"
+                    >
+                      {event.public_title ?? event.title}
+                    </Link>
+                    <div className="mt-1 flex flex-col gap-1 text-[0.7rem] text-subtle">
+                      <span className="truncate">{spaceDisplay}</span>
+                      <span>
+                        {spansPrevious ? "from prev · " : ""}
+                        {displayStart.format("HH:mm")} → {displayEnd.format("HH:mm")}
+                        {spansNext ? " · continues" : ""}
+                      </span>
+                    </div>
+                    <div className="mt-auto border-t border-[rgba(39,54,64,0.12)] pt-2">
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.64rem] font-semibold uppercase tracking-[0.08em] ${accent.badge}`}
+                      >
+                        <span className={`h-1.5 w-1.5 rounded-full ${accent.dot}`} aria-hidden="true" />
+                        {status.label}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+              {canCreate ? (
+                (() => {
+                  const startAt = day.hour(19).minute(0).second(0).millisecond(0);
+                  const endAt = startAt.add(3, "hour");
+                  const params = new URLSearchParams();
+                  params.set("startAt", startAt.format("YYYY-MM-DDTHH:mm"));
+                  params.set("endAt", endAt.format("YYYY-MM-DDTHH:mm"));
+                  params.set("venueId", createVenueId ?? venue.id);
+                  const href = `/events/new?${params.toString()}`;
+                  return (
+                    <Button
+                      asChild
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 self-start px-2 text-[0.7rem] text-[var(--color-primary-700)]"
+                    >
+                      <Link href={href}>Add</Link>
+                    </Button>
+                  );
+                })()
+              ) : null}
+            </div>
+          ))}
+        </div>
+      </td>
+    </tr>
   );
 }

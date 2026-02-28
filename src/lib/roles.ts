@@ -56,3 +56,8 @@ export function canUsePlanning(role: UserRole): boolean {
 export function canViewAllEvents(role: UserRole): boolean {
   return role === "central_planner" || role === "reviewer" || role === "executive";
 }
+
+/** Can create, edit, or delete short links and manage QR codes */
+export function canManageLinks(role: UserRole): boolean {
+  return role === "central_planner";
+}

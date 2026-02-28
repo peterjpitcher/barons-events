@@ -31,11 +31,17 @@ const NAV_SECTIONS: NavSection[] = [
     items: [{ label: "30/60/90 Planning", href: "/planning", roles: ["central_planner", "reviewer", "venue_manager", "executive"], newUntil: "2026-03-29" }]
   },
   {
+    label: "Tools",
+    items: [
+      { label: "Opening Hours", href: "/opening-hours", roles: ["central_planner"], newUntil: "2026-03-29" },
+      { label: "Links & QR Codes", href: "/links", roles: ["central_planner"], newUntil: "2026-03-29" }
+    ]
+  },
+  {
     label: "Administration",
     items: [
       { label: "Venues", href: "/venues", roles: ["central_planner"] },
       { label: "Users", href: "/users", roles: ["central_planner"] },
-      { label: "Opening Hours", href: "/opening-hours", roles: ["central_planner"], newUntil: "2026-03-29" },
       { label: "Settings", href: "/settings", roles: ["central_planner"] }
     ]
   }

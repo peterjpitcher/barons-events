@@ -3,9 +3,16 @@ import { createServerClient } from "@supabase/ssr";
 
 const authRoutes = ["/login", "/forgot-password", "/reset-password"];
 
+const SHORT_LINK_HOST = process.env.SHORT_LINK_HOST ?? "l.baronspubs.com";
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const res = NextResponse.next();
+
+  // Short-link redirects are public — no auth required.
+  if (req.headers.get("host") === SHORT_LINK_HOST) {
+    return res;
+  }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;

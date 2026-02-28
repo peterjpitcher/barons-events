@@ -578,11 +578,15 @@ export function EventOverlayCard({ event, canApprove }: EventOverlayCardProps) {
             ? "danger"
             : "neutral";
 
-  const hasAiCopy = Boolean(event.publicTitle);
+  const hasWebCopy = Boolean(event.publicTitle);
+  const isLiveOnWebsite = event.status === "approved" && hasWebCopy;
 
   return (
     <article className="space-y-1.5 rounded-[var(--radius)] border border-[rgba(39,54,64,0.14)] bg-[rgba(39,54,64,0.03)] p-2.5">
-      <p className="text-xs uppercase tracking-[0.08em] text-subtle">Event (read-only)</p>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs uppercase tracking-[0.08em] text-subtle">Event (read-only)</p>
+        {isLiveOnWebsite && <Badge variant="success">Live on website</Badge>}
+      </div>
       <h3 className="text-base font-semibold text-[var(--color-text)]">
         <Link href={`/events/${event.eventId}`} className="transition-colors hover:text-[var(--color-primary-700)]">
           {event.publicTitle ?? event.title}
@@ -606,12 +610,12 @@ export function EventOverlayCard({ event, canApprove }: EventOverlayCardProps) {
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-1.5 flex-wrap">
           <Badge variant={statusTone}>{event.status.replace(/_/g, " ")}</Badge>
-          <Badge variant={hasAiCopy ? "success" : "neutral"}>
-            {hasAiCopy ? "AI ready" : "No AI copy"}
+          <Badge variant={hasWebCopy ? "success" : "neutral"}>
+            {hasWebCopy ? "Webpage ready" : "No web copy"}
           </Badge>
         </div>
         {canApprove && ["submitted", "draft"].includes(event.status) ? (
-          <ApproveEventButton eventId={event.eventId} size="sm" className="h-auto px-3 py-1 text-xs" hasAiCopy={hasAiCopy} />
+          <ApproveEventButton eventId={event.eventId} size="sm" className="h-auto px-3 py-1 text-xs" hasWebCopy={hasWebCopy} />
         ) : null}
       </div>
     </article>

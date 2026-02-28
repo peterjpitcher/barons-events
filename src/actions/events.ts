@@ -1234,7 +1234,7 @@ export async function submitEventForReviewAction(
       await recordAuditLogEntry({
         entity: "event",
         entityId: targetEventId,
-        action: "event.status_submitted",
+        action: "event.submitted",
         actorId: user.id,
         meta: {
           status: "submitted",
@@ -1584,7 +1584,7 @@ export async function updateAssigneeAction(formData: FormData) {
     await recordAuditLogEntry({
       entity: "event",
       entityId: parsedEvent.data,
-      action: "event.assignee_updated",
+      action: "event.assignee_changed",
       actorId: user.id,
       meta: {
         assigneeId: nextAssigneeId,
