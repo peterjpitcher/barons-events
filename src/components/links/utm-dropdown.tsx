@@ -4,14 +4,14 @@ import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import QRCode from "qrcode";
-import { ChevronDown, Link2, Printer } from "lucide-react";
+import { ChevronDown, Link2, Loader2, Printer } from "lucide-react";
 import {
   DIGITAL_TOUCHPOINTS,
   PRINT_TOUCHPOINTS,
-  buildUtmShortUrl,
   type ShortLink,
   type Touchpoint,
 } from "@/lib/links";
+import { getOrCreateUtmVariantAction } from "@/actions/links";
 
 const QR_OPTIONS: QRCode.QRCodeToDataURLOptions = {
   width: 512,
@@ -27,11 +27,12 @@ type UtmDropdownProps = {
 };
 
 export function UtmDropdown({ link, mode, disabled }: UtmDropdownProps) {
-  const [open, setOpen]       = useState(false);
-  const [menuRect, setMenuRect] = useState<DOMRect | null>(null);
-  const [mounted, setMounted] = useState(false);
-  const buttonRef             = useRef<HTMLButtonElement>(null);
-  const menuRef               = useRef<HTMLDivElement>(null);
+  const [open, setOpen]           = useState(false);
+  const [menuRect, setMenuRect]   = useState<DOMRect | null>(null);
+  const [mounted, setMounted]     = useState(false);
+  const [loading, setLoading]     = useState<string | null>(null); // touchpoint value being fetched
+  const buttonRef                 = useRef<HTMLButtonElement>(null);
+  const menuRef                   = useRef<HTMLDivElement>(null);
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -67,27 +68,39 @@ export function UtmDropdown({ link, mode, disabled }: UtmDropdownProps) {
 
   async function handleSelect(tp: Touchpoint) {
     setOpen(false);
-    const url = buildUtmShortUrl(link.code, tp, link.name);
+    setLoading(tp.value);
 
-    if (mode === "share") {
-      try {
-        await navigator.clipboard.writeText(url);
-        toast.success(`${tp.label} URL copied.`);
-      } catch {
-        toast.error("Could not copy to clipboard.");
-      }
-      return;
-    }
-
-    // Print: generate and download QR code PNG.
     try {
-      const dataUrl = await QRCode.toDataURL(url, QR_OPTIONS);
-      const a = document.createElement("a");
-      a.href     = dataUrl;
-      a.download = `qr-${link.code}-${tp.value}.png`;
-      a.click();
-    } catch {
-      toast.error("Could not generate QR code.");
+      const result = await getOrCreateUtmVariantAction(link.id, tp.value);
+      if (!result.success || !result.url) {
+        toast.error(result.message ?? "Could not generate link.");
+        return;
+      }
+
+      const url = result.url;
+
+      if (mode === "share") {
+        try {
+          await navigator.clipboard.writeText(url);
+          toast.success(`${tp.label} URL copied.`);
+        } catch {
+          toast.error("Could not copy to clipboard.");
+        }
+        return;
+      }
+
+      // Print: generate and download QR code PNG.
+      try {
+        const dataUrl = await QRCode.toDataURL(url, QR_OPTIONS);
+        const a = document.createElement("a");
+        a.href     = dataUrl;
+        a.download = `qr-${link.code}-${tp.value}.png`;
+        a.click();
+      } catch {
+        toast.error("Could not generate QR code.");
+      }
+    } finally {
+      setLoading(null);
     }
   }
 
@@ -130,21 +143,25 @@ export function UtmDropdown({ link, mode, disabled }: UtmDropdownProps) {
         )
       : null;
 
+  const isLoading = loading !== null;
+
   return (
     <>
       <button
         ref={buttonRef}
         type="button"
         onClick={handleToggle}
-        disabled={disabled}
+        disabled={disabled || isLoading}
         className="flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-subtle hover:bg-[var(--color-muted-surface)] hover:text-[var(--color-text)] transition-colors disabled:opacity-40"
       >
-        {mode === "share"
-          ? <Link2    className="h-3.5 w-3.5" aria-hidden="true" />
-          : <Printer  className="h-3.5 w-3.5" aria-hidden="true" />
+        {isLoading
+          ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+          : mode === "share"
+            ? <Link2   className="h-3.5 w-3.5" aria-hidden="true" />
+            : <Printer className="h-3.5 w-3.5" aria-hidden="true" />
         }
         {mode === "share" ? "Share" : "Print"}
-        <ChevronDown className="h-3 w-3" aria-hidden="true" />
+        {!isLoading && <ChevronDown className="h-3 w-3" aria-hidden="true" />}
       </button>
       {menu}
     </>

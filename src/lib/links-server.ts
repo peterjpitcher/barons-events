@@ -79,3 +79,26 @@ export async function deleteShortLink(id: string): Promise<void> {
   const { error } = await supabase.from("short_links").delete().eq("id", id);
   if (error) throw new Error(`deleteShortLink: ${error.message}`);
 }
+
+export async function getShortLinkById(id: string): Promise<ShortLink | null> {
+  const supabase = await createSupabaseReadonlyClient();
+  const { data, error } = await supabase
+    .from("short_links")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw new Error(`getShortLinkById: ${error.message}`);
+  return (data ?? null) as ShortLink | null;
+}
+
+/** Returns the first short link whose destination exactly matches, or null. */
+export async function findShortLinkByDestination(destination: string): Promise<Pick<ShortLink, "code"> | null> {
+  const supabase = await createSupabaseReadonlyClient();
+  const { data, error } = await supabase
+    .from("short_links")
+    .select("code")
+    .eq("destination", destination)
+    .limit(1);
+  if (error) throw new Error(`findShortLinkByDestination: ${error.message}`);
+  return (data?.[0] ?? null) as Pick<ShortLink, "code"> | null;
+}
