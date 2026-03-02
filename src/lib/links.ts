@@ -140,13 +140,19 @@ export function groupLinks(links: ShortLink[]): GroupedLink[] {
   const groupByName = new Map<string, GroupedLink>();
   const orphans: ShortLink[] = [];
 
+  // First pass: build parent entries so variants can reference them regardless
+  // of ordering (variants are newer, so they sort before parents in DESC lists).
+  for (const link of links) {
+    if (!parseVariantName(link.name) && !groupByName.has(link.name)) {
+      groupByName.set(link.name, { parent: link, variants: [] });
+    }
+  }
+
+  // Second pass: assign variants to their parent group (or mark as orphans).
   for (const link of links) {
     const parsed = parseVariantName(link.name);
-    if (!parsed) {
-      if (!groupByName.has(link.name)) {
-        groupByName.set(link.name, { parent: link, variants: [] });
-      }
-    } else if (parentNames.has(parsed.parentName)) {
+    if (!parsed) continue;
+    if (parentNames.has(parsed.parentName)) {
       groupByName.get(parsed.parentName)!.variants.push(link);
     } else {
       orphans.push(link);
