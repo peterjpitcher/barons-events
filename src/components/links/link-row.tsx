@@ -1,8 +1,8 @@
 "use client";
 
-import { Check, Pencil, Trash2, X } from "lucide-react";
+import { Check, ChevronRight, Pencil, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import type { ShortLink } from "@/lib/links";
+import { SHORT_LINK_BASE_URL, type ShortLink } from "@/lib/links";
 import { LinkForm, type LinkFormValues } from "./link-form";
 import { UtmDropdown } from "./utm-dropdown";
 
@@ -13,6 +13,10 @@ type LinkRowProps = {
   confirmingDelete: boolean;
   fieldErrors?:     Record<string, string>;
   isPending:        boolean;
+  variantCount?:    number;
+  isExpanded?:      boolean;
+  onToggleExpand?:  () => void;
+  onNewVariant?:    (link: ShortLink) => void;
   onEdit:           () => void;
   onSaveEdit:       (values: LinkFormValues) => void;
   onCancelEdit:     () => void;
@@ -45,6 +49,10 @@ export function LinkRow({
   confirmingDelete,
   fieldErrors,
   isPending,
+  variantCount = 0,
+  isExpanded = false,
+  onToggleExpand,
+  onNewVariant,
   onEdit,
   onSaveEdit,
   onCancelEdit,
@@ -73,21 +81,48 @@ export function LinkRow({
     <tr className="group hover:bg-[var(--color-canvas)]">
       {/* Name + destination */}
       <td className="px-4 py-3">
-        <p className="font-medium text-[var(--color-text)]">{link.name}</p>
-        <a
-          href={link.destination}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs text-subtle hover:text-[var(--color-primary-700)] transition-colors max-w-[260px] truncate block"
-        >
-          {link.destination}
-        </a>
+        <div className="flex items-start gap-1.5">
+          {/* Expand/collapse chevron — only shown when there are variants */}
+          {variantCount > 0 ? (
+            <button
+              type="button"
+              onClick={onToggleExpand}
+              aria-label={isExpanded ? "Collapse variants" : "Expand variants"}
+              className="mt-0.5 shrink-0 rounded p-0.5 text-subtle hover:bg-[var(--color-muted-surface)] transition-colors"
+            >
+              <ChevronRight
+                className={`h-4 w-4 transition-transform ${isExpanded ? "rotate-90" : ""}`}
+                aria-hidden="true"
+              />
+            </button>
+          ) : (
+            <span className="w-5 shrink-0" />
+          )}
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <p className="font-medium text-[var(--color-text)]">{link.name}</p>
+              {variantCount > 0 && (
+                <span className="rounded-full bg-[var(--color-muted-surface)] px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-subtle">
+                  {variantCount}
+                </span>
+              )}
+            </div>
+            <a
+              href={link.destination}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-subtle hover:text-[var(--color-primary-700)] transition-colors max-w-[240px] truncate block"
+            >
+              {link.destination}
+            </a>
+          </div>
+        </div>
       </td>
 
       {/* Short code */}
       <td className="px-4 py-3">
         <code className="rounded bg-[var(--color-muted-surface)] px-2 py-0.5 text-xs font-mono text-[var(--color-text)]">
-          /l/{link.code}
+          {SHORT_LINK_BASE_URL}{link.code}
         </code>
       </td>
 
@@ -138,8 +173,8 @@ export function LinkRow({
           </div>
         ) : (
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            <UtmDropdown link={link} mode="share" disabled={isPending} />
-            <UtmDropdown link={link} mode="print" disabled={isPending} />
+            <UtmDropdown link={link} mode="share" disabled={isPending} onNewVariant={onNewVariant} />
+            <UtmDropdown link={link} mode="print" disabled={isPending} onNewVariant={onNewVariant} />
             {canEdit && (
               <>
                 <button

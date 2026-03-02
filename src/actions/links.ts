@@ -144,6 +144,8 @@ export type UtmVariantResult = {
   success: boolean;
   /** Full short URL ready to copy or encode as QR, e.g. "https://l.baronspubs.com/a1b2c3d4" */
   url?: string;
+  /** Present only when a brand-new variant short link was created (not an existing reuse). */
+  link?: ShortLink;
   message?: string;
 };
 
@@ -193,7 +195,7 @@ export async function getOrCreateUtmVariantAction(
     });
 
     revalidatePath("/links");
-    return { success: true, url: SHORT_LINK_BASE_URL + variant.code };
+    return { success: true, url: SHORT_LINK_BASE_URL + variant.code, link: variant };
   } catch (error) {
     console.error("getOrCreateUtmVariantAction error:", error);
     return { success: false, message: "Could not create UTM link. Please try again." };

@@ -21,12 +21,13 @@ const QR_OPTIONS: QRCode.QRCodeToDataURLOptions = {
 };
 
 type UtmDropdownProps = {
-  link:    ShortLink;
-  mode:    "share" | "print";
-  disabled?: boolean;
+  link:           ShortLink;
+  mode:           "share" | "print";
+  disabled?:      boolean;
+  onNewVariant?:  (link: ShortLink) => void;
 };
 
-export function UtmDropdown({ link, mode, disabled }: UtmDropdownProps) {
+export function UtmDropdown({ link, mode, disabled, onNewVariant }: UtmDropdownProps) {
   const [open, setOpen]           = useState(false);
   const [menuRect, setMenuRect]   = useState<DOMRect | null>(null);
   const [mounted, setMounted]     = useState(false);
@@ -78,6 +79,9 @@ export function UtmDropdown({ link, mode, disabled }: UtmDropdownProps) {
       }
 
       const url = result.url;
+
+      // Notify parent when a brand-new variant was created so it can add it to state.
+      if (result.link) onNewVariant?.(result.link);
 
       if (mode === "share") {
         try {

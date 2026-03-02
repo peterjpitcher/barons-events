@@ -5,10 +5,11 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Plus, QrCode } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { type ShortLink } from "@/lib/links";
+import { groupLinks, parseVariantName, type ShortLink } from "@/lib/links";
 import { createShortLinkAction, updateShortLinkAction, deleteShortLinkAction } from "@/actions/links";
 import { LinkForm, type LinkFormValues } from "./link-form";
 import { LinkRow } from "./link-row";
+import { VariantRow } from "./variant-row";
 
 type LinksManagerProps = {
   links:   ShortLink[];
@@ -18,12 +19,15 @@ type LinksManagerProps = {
 export function LinksManager({ links: initialLinks, canEdit }: LinksManagerProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [links, setLinks]                     = useState<ShortLink[]>(initialLinks);
-  const [showCreateForm, setShowCreateForm]   = useState(false);
+  const [links, setLinks]                         = useState<ShortLink[]>(initialLinks);
+  const [showCreateForm, setShowCreateForm]       = useState(false);
   const [createFieldErrors, setCreateFieldErrors] = useState<Record<string, string>>({});
-  const [editingId, setEditingId]             = useState<string | null>(null);
-  const [editFieldErrors, setEditFieldErrors] = useState<Record<string, string>>({});
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [editingId, setEditingId]                 = useState<string | null>(null);
+  const [editFieldErrors, setEditFieldErrors]     = useState<Record<string, string>>({});
+  const [confirmDeleteId, setConfirmDeleteId]     = useState<string | null>(null);
+  const [expandedGroups, setExpandedGroups]       = useState<Set<string>>(new Set());
+
+  const groups = groupLinks(links);
 
   // ── Create ────────────────────────────────────────────────────────────────
 
@@ -99,14 +103,84 @@ export function LinksManager({ links: initialLinks, canEdit }: LinksManagerProps
     });
   }
 
+  // ── New variant callback (called by UtmDropdown → LinkRow) ────────────────
+
+  function handleNewVariant(parentName: string, newLink: ShortLink) {
+    setLinks((prev) => {
+      // Don't add if it already exists (e.g. reused variant path shouldn't reach here).
+      if (prev.some((l) => l.id === newLink.id)) return prev;
+      return [...prev, newLink];
+    });
+    // Auto-expand the parent group so the user sees the new sub-link.
+    setExpandedGroups((prev) => new Set([...prev, parentName]));
+  }
+
   // ── Render ────────────────────────────────────────────────────────────────
+
+  // Flat list of rows rendered inside <tbody>: parent rows + conditionally
+  // their variant sub-rows immediately after.
+  const rows: React.ReactNode[] = [];
+
+  for (const { parent, variants } of groups) {
+    const isExpanded = expandedGroups.has(parent.name);
+
+    rows.push(
+      <LinkRow
+        key={parent.id}
+        link={parent}
+        canEdit={canEdit}
+        isEditing={editingId === parent.id}
+        confirmingDelete={confirmDeleteId === parent.id}
+        fieldErrors={editingId === parent.id ? editFieldErrors : undefined}
+        isPending={isPending}
+        variantCount={variants.length}
+        isExpanded={isExpanded}
+        onToggleExpand={() =>
+          setExpandedGroups((prev) => {
+            const next = new Set(prev);
+            if (next.has(parent.name)) next.delete(parent.name);
+            else next.add(parent.name);
+            return next;
+          })
+        }
+        onNewVariant={(newLink) => handleNewVariant(parent.name, newLink)}
+        onEdit={() => { setEditingId(parent.id); setEditFieldErrors({}); }}
+        onSaveEdit={(values) => handleSaveEdit(parent.id, values)}
+        onCancelEdit={() => setEditingId(null)}
+        onDeleteRequest={() => setConfirmDeleteId(parent.id)}
+        onDeleteConfirm={() => handleDelete(parent.id)}
+        onDeleteCancel={() => setConfirmDeleteId(null)}
+      />
+    );
+
+    if (isExpanded) {
+      for (const variant of variants) {
+        const parsed = parseVariantName(variant.name);
+        rows.push(
+          <VariantRow
+            key={variant.id}
+            link={variant}
+            touchpointLabel={parsed?.touchpointLabel ?? variant.name}
+            canEdit={canEdit}
+            isPending={isPending}
+            confirmingDelete={confirmDeleteId === variant.id}
+            onDeleteRequest={() => setConfirmDeleteId(variant.id)}
+            onDeleteConfirm={() => handleDelete(variant.id)}
+            onDeleteCancel={() => setConfirmDeleteId(null)}
+          />
+        );
+      }
+    }
+  }
+
+  const totalLinks = groups.length;
 
   return (
     <div className="space-y-4">
       {/* Header bar */}
       <div className="flex items-center justify-between">
         <p className="text-sm text-subtle">
-          {links.length} link{links.length !== 1 ? "s" : ""}
+          {totalLinks} link{totalLinks !== 1 ? "s" : ""}
         </p>
         {canEdit && (
           <Button
@@ -137,7 +211,7 @@ export function LinksManager({ links: initialLinks, canEdit }: LinksManagerProps
       )}
 
       {/* Empty state */}
-      {links.length === 0 && !showCreateForm && (
+      {groups.length === 0 && !showCreateForm && (
         <div className="rounded-[var(--radius-lg)] border border-dashed border-[var(--color-border)] bg-white py-14 text-center">
           <QrCode className="mx-auto mb-3 h-8 w-8 text-subtle" aria-hidden="true" />
           <p className="text-sm font-medium text-[var(--color-text)]">No short links yet</p>
@@ -146,7 +220,7 @@ export function LinksManager({ links: initialLinks, canEdit }: LinksManagerProps
       )}
 
       {/* Table */}
-      {links.length > 0 && (
+      {groups.length > 0 && (
         <div className="overflow-visible rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-white shadow-soft">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -162,23 +236,7 @@ export function LinksManager({ links: initialLinks, canEdit }: LinksManagerProps
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--color-border)]">
-                {links.map((link) => (
-                  <LinkRow
-                    key={link.id}
-                    link={link}
-                    canEdit={canEdit}
-                    isEditing={editingId === link.id}
-                    confirmingDelete={confirmDeleteId === link.id}
-                    fieldErrors={editingId === link.id ? editFieldErrors : undefined}
-                    isPending={isPending}
-                    onEdit={() => { setEditingId(link.id); setEditFieldErrors({}); }}
-                    onSaveEdit={(values) => handleSaveEdit(link.id, values)}
-                    onCancelEdit={() => setEditingId(null)}
-                    onDeleteRequest={() => setConfirmDeleteId(link.id)}
-                    onDeleteConfirm={() => handleDelete(link.id)}
-                    onDeleteCancel={() => setConfirmDeleteId(null)}
-                  />
-                ))}
+                {rows}
               </tbody>
             </table>
           </div>

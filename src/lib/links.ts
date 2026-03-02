@@ -97,3 +97,74 @@ export function buildUtmShortUrl(code: string, tp: Touchpoint, linkName: string)
   url.searchParams.set("utm_campaign", slugifyForUtm(linkName));
   return url.toString();
 }
+
+// ── Link grouping ─────────────────────────────────────────────────────────────
+
+export type GroupedLink = {
+  parent:   ShortLink;
+  variants: ShortLink[];
+};
+
+const ALL_TOUCHPOINT_LABELS: Set<string> = new Set([
+  ...DIGITAL_TOUCHPOINTS.map((t) => t.label),
+  ...PRINT_TOUCHPOINTS.map((t) => t.label),
+]);
+
+const VARIANT_SEP = " \u2014 "; // " — " (space + em dash + space)
+
+/**
+ * If the link name is a UTM variant (e.g. "Summer Menu — Facebook"),
+ * returns the parent name and touchpoint label; otherwise returns null.
+ */
+export function parseVariantName(
+  name: string,
+): { parentName: string; touchpointLabel: string } | null {
+  const idx = name.lastIndexOf(VARIANT_SEP);
+  if (idx === -1) return null;
+  const touchpointLabel = name.slice(idx + VARIANT_SEP.length);
+  if (!ALL_TOUCHPOINT_LABELS.has(touchpointLabel)) return null;
+  return { parentName: name.slice(0, idx), touchpointLabel };
+}
+
+/**
+ * Groups a flat link list into parent + variant pairs, preserving
+ * the original creation-time ordering of parent links.
+ * Orphaned variants (whose parent has been deleted/renamed) are
+ * appended as standalone parents at the end.
+ */
+export function groupLinks(links: ShortLink[]): GroupedLink[] {
+  const parentNames = new Set(
+    links.filter((l) => !parseVariantName(l.name)).map((l) => l.name),
+  );
+
+  const groupByName = new Map<string, GroupedLink>();
+  const orphans: ShortLink[] = [];
+
+  for (const link of links) {
+    const parsed = parseVariantName(link.name);
+    if (!parsed) {
+      if (!groupByName.has(link.name)) {
+        groupByName.set(link.name, { parent: link, variants: [] });
+      }
+    } else if (parentNames.has(parsed.parentName)) {
+      groupByName.get(parsed.parentName)!.variants.push(link);
+    } else {
+      orphans.push(link);
+    }
+  }
+
+  // Preserve parent insertion order.
+  const seen = new Set<string>();
+  const result: GroupedLink[] = [];
+  for (const link of links) {
+    if (!parseVariantName(link.name) && !seen.has(link.name)) {
+      seen.add(link.name);
+      const group = groupByName.get(link.name);
+      if (group) result.push(group);
+    }
+  }
+  for (const link of orphans) {
+    result.push({ parent: link, variants: [] });
+  }
+  return result;
+}
