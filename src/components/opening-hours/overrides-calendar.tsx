@@ -10,9 +10,11 @@ import {
 } from "@/actions/opening-hours";
 import type { ServiceTypeRow, OpeningOverrideRow } from "@/lib/opening-hours";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { startOfIsoWeekNative as startOfIsoWeek } from "@/lib/utils/date";
 
 type VenueOption = { id: string; name: string };
 
@@ -26,15 +28,6 @@ type OverridesCalendarProps = {
   /** Pre-selected venue IDs to tick by default when opening the Add override form */
   defaultSelectedVenueIds?: Set<string>;
 };
-
-function startOfIsoWeek(date: Date): Date {
-  const day = date.getDay(); // 0=Sun … 6=Sat
-  const diff = (day + 6) % 7; // shift so Mon=0
-  const monday = new Date(date);
-  monday.setDate(date.getDate() - diff);
-  monday.setHours(0, 0, 0, 0);
-  return monday;
-}
 
 function isoDateKey(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -83,6 +76,8 @@ export function OverridesCalendar({
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingOverride, setEditingOverride] = useState<OpeningOverrideRow | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [pendingDeleteOverride, setPendingDeleteOverride] = useState<OpeningOverrideRow | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const overridesByDate = useMemo(() => {
@@ -133,8 +128,16 @@ export function OverridesCalendar({
     setEditingOverride(null);
   }
 
-  function handleDelete(ov: OpeningOverrideRow) {
-    if (!window.confirm("Remove this override?")) return;
+  function handleDeleteRequest(ov: OpeningOverrideRow) {
+    setPendingDeleteOverride(ov);
+    setDeleteConfirmOpen(true);
+  }
+
+  function handleDeleteConfirm() {
+    if (!pendingDeleteOverride) return;
+    const ov = pendingDeleteOverride;
+    setDeleteConfirmOpen(false);
+    setPendingDeleteOverride(null);
     startTransition(async () => {
       const result = await deleteOpeningOverrideAction(ov.id);
       if (result.success) {
@@ -325,7 +328,7 @@ export function OverridesCalendar({
                         size="sm"
                         variant="destructive"
                         disabled={isPending}
-                        onClick={() => handleDelete(ov)}
+                        onClick={() => handleDeleteRequest(ov)}
                         aria-label="Delete override"
                       >
                         <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
@@ -361,6 +364,16 @@ export function OverridesCalendar({
           }}
         />
       ) : null}
+
+      <ConfirmDialog
+        open={deleteConfirmOpen}
+        title="Remove this override?"
+        description="This will permanently delete the opening time override."
+        confirmLabel="Remove"
+        variant="danger"
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => { setDeleteConfirmOpen(false); setPendingDeleteOverride(null); }}
+      />
     </div>
   );
 }

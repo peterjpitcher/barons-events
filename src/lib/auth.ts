@@ -47,23 +47,15 @@ export async function getCurrentUser(): Promise<AppUser | null> {
     .eq("id", user.id)
     .maybeSingle();
 
-  if (profile) {
-    return {
-      id: profile.id,
-      email: profile.email,
-      fullName: profile.full_name,
-      role: normalizeRole(profile.role),
-      venueId: profile.venue_id
-    };
+  if (!profile) {
+    return null;
   }
 
-  const metadataRole = normalizeRole((user.user_metadata as { role?: string })?.role);
-
   return {
-    id: user.id,
-    email: user.email ?? "",
-    fullName: (user.user_metadata as { full_name?: string })?.full_name ?? null,
-    role: metadataRole,
-    venueId: null
+    id: profile.id,
+    email: profile.email,
+    fullName: profile.full_name,
+    role: normalizeRole(profile.role),
+    venueId: profile.venue_id
   };
 }

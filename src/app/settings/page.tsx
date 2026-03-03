@@ -19,7 +19,7 @@ export default async function SettingsPage() {
     redirect("/login");
   }
   if (user.role !== "central_planner") {
-    redirect("/");
+    redirect("/unauthorized");
   }
 
   const [eventTypes, archivedArtists, serviceTypes] = await Promise.all([

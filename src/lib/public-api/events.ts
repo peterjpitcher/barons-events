@@ -1,6 +1,7 @@
 import "server-only";
 
 import { parseVenueSpaces } from "@/lib/venue-spaces";
+import { normaliseOptionalText, normaliseOptionalInteger } from "@/lib/normalise";
 
 export const PUBLIC_EVENT_STATUSES = ["approved", "completed"] as const;
 export type PublicEventStatus = (typeof PUBLIC_EVENT_STATUSES)[number];
@@ -86,11 +87,6 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function normaliseOptionalText(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed.length ? trimmed : null;
-}
 
 function normaliseHighlights(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
@@ -98,10 +94,6 @@ function normaliseHighlights(value: unknown): string[] {
     .filter((item): item is string => typeof item === "string")
     .map((item) => item.replace(/^\s*[-*•]\s*/, "").trim())
     .filter(Boolean);
-}
-
-function normaliseOptionalInteger(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) && Number.isInteger(value) ? value : null;
 }
 
 function buildEventImageUrl(path: unknown): string | null {

@@ -8,20 +8,19 @@ import { getCurrentUser } from "@/lib/auth";
 import { appendEventVersion, createEventDraft, recordApproval, softDeleteEvent, updateEventDraft, updateEventAssignee } from "@/lib/events";
 import { cleanupOrphanArtists, parseArtistNames, syncEventArtists } from "@/lib/artists";
 import { eventDraftSchema, eventFormSchema } from "@/lib/validation";
-import { getFieldErrors, type FieldErrors } from "@/lib/form-errors";
-import type { EventStatus } from "@/lib/types";
+import { getFieldErrors } from "@/lib/form-errors";
+import type { ActionResult, EventStatus } from "@/lib/types";
 import { sendAssigneeReassignmentEmail, sendEventSubmittedEmail, sendReviewDecisionEmail } from "@/lib/notifications";
 import { recordAuditLogEntry } from "@/lib/audit-log";
 import { generateTermsAndConditions, generateWebsiteCopy, type GeneratedWebsiteCopy } from "@/lib/ai";
 import { normaliseEventDateTimeForStorage } from "@/lib/datetime";
+import {
+  normaliseOptionalText as normaliseOptionalTextField,
+  normaliseOptionalNumber as normaliseOptionalNumberField,
+  normaliseOptionalInteger as normaliseOptionalIntegerField,
+} from "@/lib/normalise";
 
 const reviewerFallback = z.string().uuid().optional();
-
-type ActionResult = {
-  success: boolean;
-  message?: string;
-  fieldErrors?: FieldErrors;
-};
 
 type WebsiteCopyValues = {
   publicTitle: string | null;
@@ -148,26 +147,6 @@ function normaliseVenueSpacesField(value: FormDataEntryValue | null): string {
 
 type BookingType = "ticketed" | "table_booking" | "free_entry" | "mixed";
 const BOOKING_TYPE_VALUES = new Set<BookingType>(["ticketed", "table_booking", "free_entry", "mixed"]);
-
-function normaliseOptionalTextField(value: FormDataEntryValue | null): string | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed.length ? trimmed : null;
-}
-
-function normaliseOptionalNumberField(value: FormDataEntryValue | null): number | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  if (!trimmed.length) return null;
-  const parsed = Number(trimmed);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function normaliseOptionalIntegerField(value: FormDataEntryValue | null): number | null {
-  const parsed = normaliseOptionalNumberField(value);
-  if (parsed === null) return null;
-  return Number.isInteger(parsed) ? parsed : null;
-}
 
 function normaliseOptionalHighlightsField(value: FormDataEntryValue | null): string[] | null {
   if (typeof value !== "string") return null;
@@ -1146,17 +1125,21 @@ export async function submitEventForReviewAction(
       }
     }
 
-    if (user.role === "central_planner") {
-      if (!existingEvent) {
-        throw new Error("Event not found.");
-      }
+    if (!existingEvent) {
+      throw new Error("Event not found.");
+    }
 
+    if (!["draft", "needs_revisions"].includes(existingEvent.status)) {
       if (existingEvent.status === "approved") {
         revalidatePath(`/events/${targetEventId}`);
         revalidatePath("/events");
         revalidatePath("/reviews");
         return { success: true, message: "Event already approved." };
       }
+      return { success: false, message: "This event cannot be submitted in its current state." };
+    }
+
+    if (user.role === "central_planner") {
 
       await autoApproveEvent({
         eventId: targetEventId,
@@ -1305,12 +1288,13 @@ export async function reviewerDecisionAction(
       return { success: false, message: "Event not found." };
     }
 
+    if (eventBeforeDecision.status !== "submitted") {
+      return { success: false, message: "This event is not currently awaiting review." };
+    }
+
     if (user.role === "reviewer") {
       if (eventBeforeDecision.assignee_id !== user.id) {
         return { success: false, message: "This event is not assigned to you." };
-      }
-      if (!["submitted", "needs_revisions"].includes(eventBeforeDecision.status ?? "")) {
-        return { success: false, message: "This event is not currently awaiting review." };
       }
     }
 
@@ -1420,9 +1404,8 @@ export async function reviewerDecisionAction(
       message: websiteCopyPayload ? "Decision recorded and website copy generated." : "Decision recorded."
     };
   } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
     console.error("reviewerDecisionAction failed:", error);
-    return { success: false, message: `Could not save the decision: ${detail}` };
+    return { success: false, message: "Could not save the decision." };
   }
 }
 
@@ -1639,6 +1622,10 @@ export async function deleteEventAction(_: ActionResult | undefined, formData: F
       return { success: false, message: "You don't have permission to delete this event." };
     }
 
+    // Soft delete: sets deleted_at and deleted_by; the event is preserved for audit purposes
+    // and can be recovered by an admin. Artist links and images are retained.
+    await softDeleteEvent(event.id, user.id);
+
     await recordAuditLogEntry({
       entity: "event",
       entityId: event.id,
@@ -1649,10 +1636,6 @@ export async function deleteEventAction(_: ActionResult | undefined, formData: F
         changes: ["Event"]
       }
     });
-
-    // Soft delete: sets deleted_at and deleted_by; the event is preserved for audit purposes
-    // and can be recovered by an admin. Artist links and images are retained.
-    await softDeleteEvent(event.id, user.id);
 
     revalidatePath("/events");
     revalidatePath("/reviews");

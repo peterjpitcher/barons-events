@@ -12,7 +12,7 @@ export const metadata = {
 export default async function OpeningHoursPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (user.role !== "central_planner") redirect("/");
+  if (user.role !== "central_planner") redirect("/unauthorized");
 
   const [venues, serviceTypes, allHours, overrides] = await Promise.all([
     listVenues(),

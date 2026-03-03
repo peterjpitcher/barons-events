@@ -5,13 +5,8 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { createVenue, deleteVenue, updateVenue } from "@/lib/venues";
-import { getFieldErrors, type FieldErrors } from "@/lib/form-errors";
-
-type ActionResult = {
-  success: boolean;
-  message?: string;
-  fieldErrors?: FieldErrors;
-};
+import { getFieldErrors } from "@/lib/form-errors";
+import type { ActionResult } from "@/lib/types";
 
 const uuidOrUndefined = z.preprocess(
   (value) => {

@@ -21,7 +21,7 @@ export default async function DebriefPage({ params }: { params: Promise<{ eventI
     user.role === "central_planner" || (user.role === "venue_manager" && event.created_by === user.id);
 
   if (!allowed) {
-    redirect("/");
+    redirect("/unauthorized");
   }
 
   return (

@@ -15,7 +15,7 @@ export default async function ArtistsPage() {
     redirect("/login");
   }
   if (user.role !== "central_planner" && user.role !== "venue_manager") {
-    redirect("/");
+    redirect("/unauthorized");
   }
 
   const artists = await listArtistsWithPerformance();

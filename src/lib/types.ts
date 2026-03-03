@@ -1,3 +1,5 @@
+import type { FieldErrors } from "@/lib/form-errors";
+
 export type UserRole =
   | "venue_manager"
   | "reviewer"
@@ -19,3 +21,16 @@ export type EventStatus =
   | "approved"
   | "rejected"
   | "completed";
+
+/** Re-export FieldErrors so consumers only need one import. */
+export type { FieldErrors } from "@/lib/form-errors";
+
+/**
+ * Standard result type returned by server actions.
+ * Extended by action-specific result types (e.g. WebsiteCopyActionResult).
+ */
+export type ActionResult = {
+  success: boolean;
+  message?: string;
+  fieldErrors?: FieldErrors;
+};

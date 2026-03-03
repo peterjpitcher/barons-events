@@ -9,7 +9,7 @@ export default async function ArtistDetailPage({ params }: { params: Promise<{ a
     redirect("/login");
   }
   if (user.role !== "central_planner" && user.role !== "venue_manager") {
-    redirect("/");
+    redirect("/unauthorized");
   }
 
   const { artistId } = await params;

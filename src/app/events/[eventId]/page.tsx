@@ -20,6 +20,7 @@ import { listArtists } from "@/lib/artists";
 import { listAssignableUsers, getUsersByIds } from "@/lib/users";
 import { updateAssigneeAction } from "@/actions/events";
 import { parseVenueSpaces } from "@/lib/venue-spaces";
+import { formatCurrency, formatPercent } from "@/lib/utils/format";
 
 const statusCopy: Record<string, { label: string; tone: "neutral" | "info" | "success" | "warning" | "danger" }> = {
   draft: { label: "Draft", tone: "neutral" },
@@ -43,12 +44,6 @@ const auditTimestampFormatter = new Intl.DateTimeFormat("en-GB", {
   timeStyle: "short"
 });
 
-const currencyFormatter = new Intl.NumberFormat("en-GB", {
-  style: "currency",
-  currency: "GBP",
-  minimumFractionDigits: 2
-});
-
 const bookingTypeLabel: Record<string, string> = {
   ticketed: "Ticketed event",
   table_booking: "Table booking event",
@@ -61,16 +56,6 @@ const toMetaRecord = (value: unknown): Record<string, unknown> =>
 
 const toStringArray = (value: unknown): string[] =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
-
-function formatCurrency(value: number | null | undefined): string {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
-  return currencyFormatter.format(value);
-}
-
-function formatPercent(value: number | null | undefined): string {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
-  return `${value.toFixed(2)}%`;
-}
 
 export default async function EventDetailPage({ params }: { params: Promise<{ eventId: string }> }) {
   const { eventId } = await params;
@@ -271,7 +256,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
                 <option value="">Unassigned</option>
                 {assignableUsers.map((person) => (
                   <option key={person.id} value={person.id}>
-                    {person.name} · {person.role.replace("_", " ")}
+                    {person.name} · {person.role.replace(/_/g, " ")}
                   </option>
                 ))}
               </Select>
@@ -320,7 +305,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
               key={entry.id}
               className="rounded-[var(--radius)] border border-[rgba(39,54,64,0.1)] bg-white/80 px-4 py-3 text-sm shadow-soft"
             >
-              <p className="font-semibold text-[var(--color-text)] capitalize">{entry.decision.replace("_", " ")}</p>
+              <p className="font-semibold text-[var(--color-text)] capitalize">{entry.decision.replace(/_/g, " ")}</p>
               <p className="text-xs text-subtle">
                 {resolveUserName(entry.reviewer_id)} · {new Date(entry.decided_at).toLocaleString("en-GB")}
               </p>
@@ -457,16 +442,23 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
 
   return (
     <div className="space-y-6">
+      <Link
+        href="/events"
+        className="inline-flex items-center gap-1 text-sm text-subtle transition-colors hover:text-[var(--color-text)]"
+      >
+        ← Events
+      </Link>
+
       {/* Header card — always visible */}
       <Card>
         <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-2">
-            <Badge variant={status.tone}>{status.label}</Badge>
             <CardTitle className="text-2xl text-[var(--color-primary-700)]">
               <Link href={`/events/${event.id}`} className="transition-colors hover:text-[var(--color-primary-500)]">
                 {event.title}
               </Link>
             </CardTitle>
+            <Badge variant={status.tone}>{status.label}</Badge>
             <CardDescription>
               {event.venue?.name ?? ""} · {formatter.format(new Date(event.start_at))} →{" "}
               {formatter.format(new Date(event.end_at))}
@@ -508,8 +500,8 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
 
               <EventDetailSummary event={event} />
 
-              {assignmentCard}
               {reviewDecisionCard}
+              {assignmentCard}
               {reviewerTimelineCard}
               {auditTrailCard}
               {debriefSubmitCard}
@@ -540,8 +532,8 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
           </div>
 
           <div className="space-y-6">
-            {assignmentCard}
             {reviewDecisionCard}
+            {assignmentCard}
             {reviewerTimelineCard}
             {auditTrailCard}
           </div>

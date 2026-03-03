@@ -12,7 +12,7 @@ import { Select } from "@/components/ui/select";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { FieldError } from "@/components/ui/field-error";
 import { useRouter } from "next/navigation";
-import { Send, Save } from "lucide-react";
+import { Save } from "lucide-react";
 
 type VenueRow = Database["public"]["Tables"]["venues"]["Row"];
 

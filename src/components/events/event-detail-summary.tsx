@@ -2,6 +2,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { parseVenueSpaces } from "@/lib/venue-spaces";
 import { EVENT_GOALS_BY_VALUE, humanizeGoalValue, parseGoalFocus } from "@/lib/event-goals";
 import type { EventDetail } from "@/lib/events";
+import { formatCurrency } from "@/lib/utils/format";
 
 const formatter = new Intl.DateTimeFormat("en-GB", {
   weekday: "long",
@@ -14,12 +15,6 @@ const formatter = new Intl.DateTimeFormat("en-GB", {
 const cutoffTimeFormatter = new Intl.DateTimeFormat("en-GB", {
   hour: "2-digit",
   minute: "2-digit"
-});
-
-const currencyFormatter = new Intl.NumberFormat("en-GB", {
-  style: "currency",
-  currency: "GBP",
-  minimumFractionDigits: 2
 });
 
 const bookingTypeLabel: Record<string, string> = {
@@ -51,11 +46,6 @@ function formatCheckInCutoffLabel(startAt: string, cutoffMinutes: number | null)
   }
   const cutoff = new Date(start.getTime() - cutoffMinutes * 60 * 1000);
   return `${cutoffMinutes} minute${cutoffMinutes === 1 ? "" : "s"} before start (${cutoffTimeFormatter.format(cutoff)})`;
-}
-
-function formatCurrency(value: number | null | undefined): string {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
-  return currencyFormatter.format(value);
 }
 
 type EventDetailSummaryProps = {

@@ -8,17 +8,8 @@ import { debriefSchema } from "@/lib/validation";
 import { createSupabaseActionClient, createSupabaseServiceRoleClient } from "@/lib/supabase/server";
 import { sendPostEventDigestEmail } from "@/lib/notifications";
 import { recordAuditLogEntry } from "@/lib/audit-log";
-
-type ActionResult = {
-  success: boolean;
-  message?: string;
-};
-
-function normaliseText(value: string | null | undefined): string | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed.length ? trimmed : null;
-}
+import type { ActionResult } from "@/lib/types";
+import { normaliseOptionalText as normaliseText } from "@/lib/normalise";
 
 function changedDebriefFields(previous: Record<string, unknown> | null, next: Record<string, unknown>): string[] {
   const fields: Array<[key: string, label: string]> = [
@@ -77,7 +68,7 @@ export async function submitDebriefAction(
   });
 
   if (!parsed.success) {
-    return { success: false, message: parsed.error.issues[0]?.message ?? "Check the details." };
+    return { success: false, message: parsed.error.issues[0]?.message ?? "Check the highlighted fields." };
   }
 
   try {

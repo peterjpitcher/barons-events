@@ -8,7 +8,7 @@ import { getFieldErrors, type FieldErrors } from "@/lib/form-errors";
 
 const credentialsSchema = z.object({
   email: z.string().email({ message: "Enter a valid email" }),
-  password: z.string().min(6, { message: "Password must be at least 6 characters" })
+  password: z.string().min(8, { message: "Password must be at least 8 characters" })
 });
 
 const emailOnlySchema = z.object({

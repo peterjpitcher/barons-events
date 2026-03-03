@@ -16,6 +16,7 @@ import {
   updatePlanningTask
 } from "@/lib/planning";
 import type { PlanningItemStatus, PlanningTaskStatus, RecurrenceFrequency } from "@/lib/planning/types";
+import { canUsePlanning } from "@/lib/roles";
 
 export type PlanningActionResult = {
   success: boolean;
@@ -45,6 +46,9 @@ async function ensureUser() {
   const user = await getCurrentUser();
   if (!user) {
     throw new Error("You must be signed in.");
+  }
+  if (!canUsePlanning(user.role)) {
+    throw new Error("You do not have permission to perform planning actions.");
   }
   return user;
 }

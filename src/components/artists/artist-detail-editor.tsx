@@ -13,6 +13,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { FieldError } from "@/components/ui/field-error";
+import { formatCurrency } from "@/lib/utils/format";
 import { Badge } from "@/components/ui/badge";
 
 type ArtistDetailEditorProps = {
@@ -25,11 +26,6 @@ const scoreTone = (value: number): "success" | "info" | "warning" | "danger" => 
   if (value >= 45) return "warning";
   return "danger";
 };
-
-function formatCurrency(value: number | null | undefined): string {
-  if (typeof value !== "number" || Number.isNaN(value)) return "—";
-  return new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format(value);
-}
 
 function formatPercent(value: number | null | undefined): string {
   if (typeof value !== "number" || Number.isNaN(value)) return "—";

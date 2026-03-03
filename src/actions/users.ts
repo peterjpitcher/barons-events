@@ -6,13 +6,8 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { updateUser } from "@/lib/users";
 import { createSupabaseActionClient, createSupabaseServiceRoleClient } from "@/lib/supabase/server";
-import { getFieldErrors, type FieldErrors } from "@/lib/form-errors";
-
-type ActionResult = {
-  success: boolean;
-  message?: string;
-  fieldErrors?: FieldErrors;
-};
+import { getFieldErrors } from "@/lib/form-errors";
+import type { ActionResult } from "@/lib/types";
 
 const userUpdateSchema = z.object({
   userId: z.string().uuid(),

@@ -44,11 +44,15 @@ function zodFieldErrors(error: z.ZodError): Record<string, string> {
   return result;
 }
 
-async function ensurePlanner() {
+async function ensurePlanner(): Promise<
+  | { ok: true; user: Awaited<ReturnType<typeof getCurrentUser>> & {} }
+  | { ok: false; result: LinksActionResult }
+> {
   const user = await getCurrentUser();
-  if (!user) throw new Error("Not authenticated.");
-  if (!canManageLinks(user.role)) throw new Error("You don't have permission to manage links.");
-  return user;
+  if (!user) return { ok: false, result: { success: false, message: "Not authenticated." } };
+  if (!canManageLinks(user.role))
+    return { ok: false, result: { success: false, message: "You do not have permission to perform this action." } };
+  return { ok: true, user };
 }
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
@@ -75,11 +79,12 @@ const deleteLinkSchema = z.object({
 // ─── Actions ──────────────────────────────────────────────────────────────────
 
 export async function createShortLinkAction(input: unknown): Promise<LinksActionResult> {
+  const auth = await ensurePlanner();
+  if (!auth.ok) return auth.result;
   try {
-    const user = await ensurePlanner();
     const parsed = createLinkSchema.safeParse(input);
     if (!parsed.success) {
-      return { success: false, message: "Please fix the errors below.", fieldErrors: zodFieldErrors(parsed.error) };
+      return { success: false, message: "Check the highlighted fields.", fieldErrors: zodFieldErrors(parsed.error) };
     }
 
     const link = await createShortLink({
@@ -87,7 +92,7 @@ export async function createShortLinkAction(input: unknown): Promise<LinksAction
       destination: parsed.data.destination,
       link_type:   parsed.data.link_type as LinkType,
       expires_at:  parsed.data.expires_at ?? null,
-      created_by:  user.id,
+      created_by:  auth.user.id,
     });
 
     revalidatePath("/links");
@@ -99,11 +104,12 @@ export async function createShortLinkAction(input: unknown): Promise<LinksAction
 }
 
 export async function updateShortLinkAction(input: unknown): Promise<LinksActionResult> {
+  const auth = await ensurePlanner();
+  if (!auth.ok) return auth.result;
   try {
-    await ensurePlanner();
     const parsed = updateLinkSchema.safeParse(input);
     if (!parsed.success) {
-      return { success: false, message: "Please fix the errors below.", fieldErrors: zodFieldErrors(parsed.error) };
+      return { success: false, message: "Check the highlighted fields.", fieldErrors: zodFieldErrors(parsed.error) };
     }
 
     await updateShortLink(parsed.data.id, {
@@ -122,8 +128,9 @@ export async function updateShortLinkAction(input: unknown): Promise<LinksAction
 }
 
 export async function deleteShortLinkAction(input: unknown): Promise<LinksActionResult> {
+  const auth = await ensurePlanner();
+  if (!auth.ok) return auth.result;
   try {
-    await ensurePlanner();
     const parsed = deleteLinkSchema.safeParse(input);
     if (!parsed.success) {
       return { success: false, message: "Invalid request." };
@@ -158,9 +165,9 @@ export async function getOrCreateUtmVariantAction(
   parentLinkId: string,
   touchpointValue: string,
 ): Promise<UtmVariantResult> {
+  const auth = await ensurePlanner();
+  if (!auth.ok) return auth.result;
   try {
-    const user = await ensurePlanner();
-
     if (!z.string().uuid().safeParse(parentLinkId).success) {
       return { success: false, message: "Invalid link ID." };
     }
@@ -191,7 +198,7 @@ export async function getOrCreateUtmVariantAction(
       destination: utmDestination,
       link_type:   parent.link_type,
       expires_at:  parent.expires_at ?? null,
-      created_by:  user.id,
+      created_by:  auth.user.id,
     });
 
     revalidatePath("/links");

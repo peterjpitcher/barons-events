@@ -1,4 +1,5 @@
 import { createSupabaseActionClient, createSupabaseReadonlyClient, createSupabaseServiceRoleClient } from "@/lib/supabase/server";
+import { normaliseOptionalText } from "@/lib/normalise";
 import type { Database } from "@/lib/supabase/types";
 
 type ArtistRow = Database["public"]["Tables"]["artists"]["Row"];
@@ -85,12 +86,6 @@ type SyncEventArtistsParams = {
   artistIds?: string[];
   artistNames?: string[];
 };
-
-function normaliseOptionalText(value: string | null | undefined): string | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed.length ? trimmed : null;
-}
 
 function normaliseArtistName(value: string): string {
   return value.replace(/\s+/g, " ").trim().slice(0, 120);
@@ -609,19 +604,39 @@ export async function syncEventArtists(params: SyncEventArtistsParams): Promise<
   );
   const cleanedNames = Array.from(new Set((params.artistNames ?? []).map((name) => normaliseArtistName(name)).filter(Boolean)));
 
-  const { data: allArtists, error: allArtistsError } = await supabase.from("artists").select("*");
-  if (allArtistsError) {
-    throw new Error(`Could not load artist directory: ${allArtistsError.message}`);
-  }
-
+  // Fetch only the artists we need by ID, plus resolve names from non-archived artists
   const byId = new Map<string, ArtistRow>();
   const byName = new Map<string, ArtistRow>();
-  ((allArtists ?? []) as ArtistRow[]).forEach((artist) => {
-    byId.set(artist.id, artist);
-    if (!artist.is_archived) {
-      byName.set(artist.name.toLowerCase(), artist);
+
+  if (cleanedIds.length > 0) {
+    const { data: idArtists, error: idError } = await supabase
+      .from("artists")
+      .select("*")
+      .in("id", cleanedIds);
+    if (idError) {
+      throw new Error(`Could not load artists by ID: ${idError.message}`);
     }
-  });
+    ((idArtists ?? []) as ArtistRow[]).forEach((artist) => {
+      byId.set(artist.id, artist);
+    });
+  }
+
+  if (cleanedNames.length > 0) {
+    // Use case-insensitive matching to preserve original behavior
+    const ilikeFilters = cleanedNames.map((n) => `name.ilike.${n}`).join(",");
+    const { data: nameArtists, error: nameError } = await supabase
+      .from("artists")
+      .select("*")
+      .eq("is_archived", false)
+      .or(ilikeFilters);
+    if (nameError) {
+      throw new Error(`Could not load artists by name: ${nameError.message}`);
+    }
+    ((nameArtists ?? []) as ArtistRow[]).forEach((artist) => {
+      byId.set(artist.id, artist);
+      byName.set(artist.name.toLowerCase(), artist);
+    });
+  }
 
   const resolvedIds: string[] = [];
   cleanedIds.forEach((artistId) => {

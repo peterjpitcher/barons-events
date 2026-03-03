@@ -18,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
 import { FieldError } from "@/components/ui/field-error";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { EventFormContext } from "@/components/events/event-form-context";
 import { EVENT_GOALS } from "@/lib/event-goals";
@@ -159,6 +160,8 @@ export function EventForm({
   const [termsState, termsAction] = useActionState(generateTermsAndConditionsAction, undefined);
   const [artistCreateState, createArtistFormAction] = useActionState(createArtistAction, undefined);
   const [intent, setIntent] = useState<"draft" | "submit" | "generate">("draft");
+  const [activeTab, setActiveTab] = useState("event-details");
+  const [isDirty, setIsDirty] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [showArtistModal, setShowArtistModal] = useState(false);
   const [artistSearch, setArtistSearch] = useState("");
@@ -184,8 +187,13 @@ export function EventForm({
     save: true
   });
 
+  // Auto-approve confirmation dialog (central planner submitting)
+  const [autoApproveConfirmOpen, setAutoApproveConfirmOpen] = useState(false);
+  const confirmBypassRef = useRef(false);
+
   // Refs for proxy buttons and form (tabbed mode)
   const formRef = useRef<HTMLFormElement>(null);
+  const legacySubmitRef = useRef<HTMLButtonElement>(null);
   const proxyDraftRef = useRef<HTMLButtonElement>(null);
   const proxySubmitRef = useRef<HTMLButtonElement>(null);
   const proxyGenerateRef = useRef<HTMLButtonElement>(null);
@@ -230,6 +238,22 @@ export function EventForm({
       toast.error(termsState.message ?? "Could not generate terms.");
     }
   }, [termsState]);
+
+  // Warn user before navigating away from a dirty form
+  useEffect(() => {
+    if (!isDirty) return;
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [isDirty]);
+
+  // Reset dirty flag on successful save or submit
+  useEffect(() => {
+    if (draftState?.success) setIsDirty(false);
+  }, [draftState]);
+  useEffect(() => {
+    if (submitState?.success) setIsDirty(false);
+  }, [submitState]);
 
   useEffect(() => {
     setAvailableArtists((current) => mergeArtistOptions(current, artists));
@@ -419,16 +443,26 @@ export function EventForm({
 
     const willAutoApprove = role === "central_planner" && nextIntent === "submit";
     if (willAutoApprove) {
-      const confirmed = window.confirm(
-        "Submitting as a central planner will approve this event instantly. Continue?"
-      );
-      if (!confirmed) {
+      if (confirmBypassRef.current) {
+        confirmBypassRef.current = false;
+      } else {
         event.preventDefault();
+        setAutoApproveConfirmOpen(true);
         return;
       }
     }
 
     setIntent(nextIntent);
+  }
+
+  function handleAutoApproveConfirm() {
+    setAutoApproveConfirmOpen(false);
+    confirmBypassRef.current = true;
+    if (sidebar) {
+      proxySubmitRef.current?.click();
+    } else {
+      legacySubmitRef.current?.click();
+    }
   }
 
   const completionPercent = (checks: boolean[]): number => {
@@ -507,6 +541,23 @@ export function EventForm({
       fieldErrors.seoDescription || fieldErrors.seoSlug
     )
   };
+
+  // Auto-switch to the first tab with errors and scroll to the first invalid field
+  const hasFieldErrors = Object.keys(fieldErrors).length > 0;
+  useEffect(() => {
+    if (!hasFieldErrors) return;
+    if (tabErrors.eventDetails) {
+      setActiveTab("event-details");
+    } else if (tabErrors.accelerateGrowth) {
+      setActiveTab("accelerate-growth");
+    } else if (tabErrors.websiteListings) {
+      setActiveTab("website-listings");
+    }
+    const timer = setTimeout(() => {
+      document.querySelector('[aria-invalid="true"]')?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [hasFieldErrors, tabErrors.eventDetails, tabErrors.accelerateGrowth, tabErrors.websiteListings]);
 
   const isPending = isSavingPending || isSubmittingPending || isGeneratingPending;
 
@@ -625,7 +676,11 @@ export function EventForm({
           ))}
         </Select>
         <FieldError id="event-type-error" message={fieldErrors.eventType} />
-        <p className="text-xs text-subtle">Need a new option? Add it in Settings.</p>
+        <p className="text-xs text-subtle">
+          {role === "central_planner"
+            ? "Need a new option? Add it in Settings."
+            : "Need a new option? Contact your administrator to add new event types."}
+        </p>
       </div>
     </div>
   );
@@ -1537,7 +1592,7 @@ export function EventForm({
       <EventFormContext.Provider value={contextValue}>
         <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start">
           <div className="min-w-0">
-            <form ref={formRef} action={draftAction} noValidate onSubmit={handleSubmit}>
+            <form ref={formRef} action={draftAction} noValidate onSubmit={handleSubmit} onChange={() => setIsDirty(true)}>
               <input type="hidden" name="eventId" defaultValue={defaultValues?.id} />
               {/* Proxy buttons — sr-only, clicked programmatically from sidebar */}
               <button
@@ -1567,8 +1622,9 @@ export function EventForm({
                 className="sr-only"
               />
 
+              <fieldset disabled={isPending} className="disabled:opacity-60">
               <Card>
-                <Tabs defaultTab="event-details">
+                <Tabs defaultTab="event-details" value={activeTab} onValueChange={setActiveTab}>
                   <div className="border-b border-[var(--color-border)] px-2">
                     <TabsList>
                       <TabsTrigger
@@ -1643,6 +1699,7 @@ export function EventForm({
                   </CardContent>
                 </Tabs>
               </Card>
+              </fieldset>
             </form>
           </div>
 
@@ -1651,6 +1708,15 @@ export function EventForm({
 
         {artistModal}
         {termsModal}
+
+        <ConfirmDialog
+          open={autoApproveConfirmOpen}
+          title="Auto-approve this event?"
+          description="Submitting as a central planner will approve this event instantly."
+          confirmLabel="Submit & Approve"
+          onConfirm={handleAutoApproveConfirm}
+          onCancel={() => setAutoApproveConfirmOpen(false)}
+        />
       </EventFormContext.Provider>
     );
   }
@@ -1660,8 +1726,10 @@ export function EventForm({
   return (
     <EventFormContext.Provider value={contextValue}>
       <>
-        <form action={draftAction} className="space-y-6" noValidate onSubmit={handleSubmit}>
+        <form action={draftAction} className="space-y-6" noValidate onSubmit={handleSubmit} onChange={() => setIsDirty(true)}>
           <input type="hidden" name="eventId" defaultValue={defaultValues?.id} />
+          <button ref={legacySubmitRef} type="submit" formAction={submitAction} data-intent="submit" className="sr-only" aria-hidden tabIndex={-1} />
+          <fieldset disabled={isPending} className="space-y-6 disabled:opacity-60">
 
           <Card>
             <CardHeader>
@@ -1835,10 +1903,20 @@ export function EventForm({
               {mode === "edit" && defaultValues?.id ? <DeleteEventButton eventId={defaultValues.id} variant="button" /> : null}
             </CardContent>
           </Card>
+          </fieldset>
         </form>
 
         {artistModal}
         {termsModal}
+
+        <ConfirmDialog
+          open={autoApproveConfirmOpen}
+          title="Auto-approve this event?"
+          description="Submitting as a central planner will approve this event instantly."
+          confirmLabel="Submit & Approve"
+          onConfirm={handleAutoApproveConfirm}
+          onCancel={() => setAutoApproveConfirmOpen(false)}
+        />
       </>
     </EventFormContext.Provider>
   );

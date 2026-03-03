@@ -33,7 +33,7 @@ export default async function NewEventPage({ searchParams }: PageProps) {
   }
 
   if (user.role === "reviewer" || user.role === "executive") {
-    redirect("/");
+    redirect("/unauthorized");
   }
 
   const searchParamsPromise =

@@ -129,7 +129,10 @@ const eventDraftBaseSchema = z.object({
   seoSlug: seoSlugSchema
 });
 
-export const eventDraftSchema = eventDraftBaseSchema;
+export const eventDraftSchema = eventDraftBaseSchema.refine(
+  (data) => !data.endAt || !data.startAt || new Date(data.endAt) > new Date(data.startAt),
+  { message: "End time must be after start time", path: ["endAt"] }
+);
 
 export const eventFormSchema = eventDraftBaseSchema
   .extend({
@@ -137,6 +140,13 @@ export const eventFormSchema = eventDraftBaseSchema
     agePolicy: requiredText(2, 120, "Add an age policy")
   })
   .superRefine((values, ctx) => {
+    if (values.endAt && values.startAt && new Date(values.endAt) <= new Date(values.startAt)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "End time must be after start time",
+        path: ["endAt"]
+      });
+    }
     if (values.bookingType === "ticketed" && values.ticketPrice === undefined) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,

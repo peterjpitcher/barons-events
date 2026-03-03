@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import type { PlanningEventOverlay, PlanningItem, PlanningPerson, PlanningVenueOption } from "@/lib/planning/types";
+import { formatDate } from "@/lib/utils/format";
 
 type PlanningItemCardProps = {
   item: PlanningItem;
@@ -44,16 +45,6 @@ const STATUS_BADGE_VARIANT: Record<PlanningItem["status"], "neutral" | "info" | 
 
 function formatStatus(value: PlanningItem["status"]): string {
   return value.replace(/_/g, " ");
-}
-
-function formatDate(value: string): string {
-  const parsed = new Date(`${value}T00:00:00Z`);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric"
-  }).format(parsed);
 }
 
 export function PlanningItemCard({

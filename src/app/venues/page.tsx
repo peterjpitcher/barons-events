@@ -16,7 +16,7 @@ export default async function VenuesPage() {
     redirect("/login");
   }
   if (user.role !== "central_planner") {
-    redirect("/");
+    redirect("/unauthorized");
   }
 
   const [venues, reviewers] = await Promise.all([listVenues(), listReviewers()]);

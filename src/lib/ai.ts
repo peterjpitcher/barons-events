@@ -1,5 +1,7 @@
 import "server-only";
 
+import { formatCurrency } from "@/lib/utils/format";
+
 export type BookingType = "ticketed" | "table_booking" | "free_entry" | "mixed";
 
 export type WebsiteCopyInput = {
@@ -224,13 +226,6 @@ function toDisplayBookingType(value: BookingType | null): string {
   return "Not provided";
 }
 
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("en-GB", {
-    style: "currency",
-    currency: "GBP",
-    minimumFractionDigits: 2
-  }).format(value);
-}
 
 function normaliseHighlights(values: unknown, maxItems = 5): string[] {
   if (!Array.isArray(values)) return [];

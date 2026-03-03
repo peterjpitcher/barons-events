@@ -6,6 +6,7 @@ import dayjs from "dayjs";
 import type { EventSummary } from "@/lib/events";
 import { ApproveEventButton } from "@/components/events/approve-event-button";
 import { Button } from "@/components/ui/button";
+import { startOfIsoWeek, endOfIsoWeek, endsInEarlyHoursNextDay } from "@/lib/utils/date";
 
 type StatusAccent = {
   badge: string;
@@ -27,30 +28,6 @@ type EventCalendarProps = {
   getStatusAccent: (status: EventSummary["status"]) => StatusAccent;
   canApproveEvent?: (event: CalendarEvent) => boolean;
 };
-
-function startOfIsoWeek(date: dayjs.Dayjs) {
-  const day = date.day();
-  const diff = (day + 6) % 7;
-  return date.subtract(diff, "day").startOf("day");
-}
-
-function endOfIsoWeek(date: dayjs.Dayjs) {
-  return startOfIsoWeek(date).add(6, "day").endOf("day");
-}
-
-function minutesAfterMidnight(value: dayjs.Dayjs): number {
-  return value.diff(value.startOf("day"), "minute");
-}
-
-function endsInEarlyHoursNextDay(event: CalendarEvent): boolean {
-  const startDay = event.start.startOf("day");
-  const endDay = event.end.startOf("day");
-  if (endDay.diff(startDay, "day") !== 1) {
-    return false;
-  }
-
-  return minutesAfterMidnight(event.end) <= 300;
-}
 
 function EventListItem({
   event,
@@ -99,12 +76,14 @@ function EventListItem({
       </div>
       <div className="mt-auto border-t border-[rgba(39,54,64,0.12)] pt-2 flex items-center justify-between gap-1 flex-wrap">
         <div className="flex items-center gap-1 flex-wrap">
+          {/* Intentional departure from Badge component: includes dot indicator for compact calendar cells */}
           <span
             className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.64rem] font-semibold uppercase tracking-[0.08em] ${accent.badge}`}
           >
             <span className={`h-1.5 w-1.5 rounded-full ${accent.dot}`} aria-hidden="true" />
             {statusLabel}
           </span>
+          {/* Intentional departure from Badge component: conditional web-copy indicator with custom colours */}
           <span
             className={`inline-flex items-center rounded-full px-2 py-0.5 text-[0.64rem] font-semibold uppercase tracking-[0.08em] ${
               hasWebCopy
@@ -217,7 +196,8 @@ export function EventCalendar({
   }, [monthCursor, onChangeMonth]);
 
   return (
-    <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-white shadow-soft">
+    <div className="overflow-x-auto">
+    <div className="min-w-[560px] rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-white shadow-soft">
       <div className="grid grid-cols-7 border-b border-[var(--color-border)] bg-[var(--color-muted-surface)] text-center text-xs font-semibold uppercase tracking-[0.12em] text-subtle">
         {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((label) => (
           <div key={label} className="px-3 py-2">
@@ -259,7 +239,7 @@ export function EventCalendar({
                 {quickCreateHref ? (
                   <Link
                     href={quickCreateHref}
-                    className={`rounded-full px-2 py-1 text-sm font-semibold transition ${
+                    className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full px-2 py-1 text-sm font-semibold transition ${
                       isCurrentMonth ? "text-[var(--color-text)] hover:bg-[var(--color-muted-surface)]" : "text-subtle"
                     } ${isToday ? "bg-[var(--color-primary-700)] text-white hover:bg-[var(--color-primary-800)]" : ""}`}
                   >
@@ -309,6 +289,7 @@ export function EventCalendar({
           );
         })}
       </div>
+    </div>
     </div>
   );
 }

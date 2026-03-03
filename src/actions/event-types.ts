@@ -5,13 +5,8 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { createEventType, updateEventType, deleteEventType } from "@/lib/event-types";
-import { getFieldErrors, type FieldErrors } from "@/lib/form-errors";
-
-type ActionResult = {
-  success: boolean;
-  message?: string;
-  fieldErrors?: FieldErrors;
-};
+import { getFieldErrors } from "@/lib/form-errors";
+import type { ActionResult } from "@/lib/types";
 
 const baseSchema = z.object({
   label: z.string().min(2, "Add an event type name").max(120)

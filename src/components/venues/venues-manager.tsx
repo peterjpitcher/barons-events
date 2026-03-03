@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -14,6 +14,7 @@ import { Select } from "@/components/ui/select";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { Button } from "@/components/ui/button";
 import { FieldError } from "@/components/ui/field-error";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn } from "@/lib/utils";
 import { Clock, Plus, Save, Trash2 } from "lucide-react";
 
@@ -129,6 +130,8 @@ function VenueTable({ venues, reviewers }: VenuesManagerProps) {
 function VenueRowEditor({ venue, reviewers }: { venue: VenueRow; reviewers: ReviewerOption[] }) {
   const [state, formAction] = useActionState(updateVenueAction, undefined);
   const [deleteState, deleteAction] = useActionState(deleteVenueAction, undefined);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const deleteFormRef = useRef<HTMLFormElement>(null);
   const router = useRouter();
   const nameError = state?.fieldErrors?.name;
   const nameErrorId = `venue-name-${venue.id}-error`;
@@ -206,13 +209,22 @@ function VenueRowEditor({ venue, reviewers }: { venue: VenueRow; reviewers: Revi
             </Button>
           </div>
           <div className="flex items-start justify-end">
-            <form action={deleteAction}>
+            <form ref={deleteFormRef} action={deleteAction}>
               <input type="hidden" name="venueId" value={venue.id} />
-              <Button type="submit" variant="destructive" size="sm" aria-label={`Delete ${venue.name}`}>
+              <Button type="button" variant="destructive" size="sm" aria-label={`Delete ${venue.name}`} onClick={() => setDeleteConfirmOpen(true)}>
                 <Trash2 className="h-4 w-4" aria-hidden="true" />
                 Delete
               </Button>
             </form>
+            <ConfirmDialog
+              open={deleteConfirmOpen}
+              title={`Delete ${venue.name}?`}
+              description="This will permanently remove the venue. Events linked to it may be affected."
+              confirmLabel="Delete"
+              variant="danger"
+              onConfirm={() => { setDeleteConfirmOpen(false); deleteFormRef.current?.requestSubmit(); }}
+              onCancel={() => setDeleteConfirmOpen(false)}
+            />
           </div>
         </div>
       </td>

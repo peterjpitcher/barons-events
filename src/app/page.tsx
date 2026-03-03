@@ -33,20 +33,26 @@ export default async function OverviewPage() {
   }
 
   const copy = roleCopy[user.role] ?? roleCopy["central_planner"];
-  const events = await listEventsForUser(user);
-  const upcoming = events
-    .filter((event) => new Date(event.start_at) >= new Date())
-    .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
-    .slice(0, 5);
 
   const cards: ReactNode[] = [];
+  let upcoming: Awaited<ReturnType<typeof listEventsForUser>> = [];
+
+  function computeUpcoming(events: Awaited<ReturnType<typeof listEventsForUser>>) {
+    return events
+      .filter((event) => new Date(event.start_at) >= new Date())
+      .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
+      .slice(0, 5);
+  }
 
   if (user.role === "central_planner") {
-    const [statusCounts, queue, conflicts] = await Promise.all([
+    const [events, statusCounts, queue, conflicts] = await Promise.all([
+      listEventsForUser(user),
       getStatusCounts(),
       listReviewQueue(user),
       findConflicts()
     ]);
+
+    upcoming = computeUpcoming(events);
 
     cards.push(
       <Card key="status">
@@ -57,7 +63,7 @@ export default async function OverviewPage() {
         <CardContent className="grid gap-3 sm:grid-cols-3">
           {Object.entries(statusCounts).map(([status, count]) => (
             <div key={status} className="rounded-[var(--radius)] border border-[rgba(39,54,64,0.12)] bg-white/80 px-4 py-3 shadow-soft">
-              <p className="text-sm text-subtle">{status.replace("_", " ")}</p>
+              <p className="text-sm text-subtle">{status.replace(/_/g, " ")}</p>
               <p className="text-2xl font-semibold text-[var(--color-primary-700)]">{count}</p>
             </div>
           ))}
@@ -88,7 +94,7 @@ export default async function OverviewPage() {
                 </Link>
                 <p className="text-subtle">{event.venue?.name ?? ""} · {new Date(event.start_at).toLocaleString("en-GB")}</p>
               </div>
-              <Badge variant="info">{event.status.replace("_", " ")}</Badge>
+              <Badge variant="info">{event.status.replace(/_/g, " ")}</Badge>
             </div>
           ))}
           {queue.length === 0 ? <p className="text-sm text-subtle">All caught up.</p> : null}
@@ -131,7 +137,13 @@ export default async function OverviewPage() {
       </Card>
     );
   } else if (user.role === "reviewer") {
-    const queue = await listReviewQueue(user);
+    const [events, queue] = await Promise.all([
+      listEventsForUser(user),
+      listReviewQueue(user)
+    ]);
+
+    upcoming = computeUpcoming(events);
+
     cards.push(
       <Card key="queue">
         <CardHeader className="flex items-center justify-between">
@@ -159,6 +171,9 @@ export default async function OverviewPage() {
         </CardContent>
       </Card>
     );
+  } else {
+    const events = await listEventsForUser(user);
+    upcoming = computeUpcoming(events);
   }
 
   cards.push(
@@ -189,7 +204,7 @@ export default async function OverviewPage() {
                 </Link>
                 <p className="text-subtle">{event.venue?.name ?? ""} · {new Date(event.start_at).toLocaleString("en-GB")}</p>
               </div>
-              <Badge variant="neutral">{event.status.replace("_", " ")}</Badge>
+              <Badge variant="neutral">{event.status.replace(/_/g, " ")}</Badge>
             </div>
           ))
         )}
@@ -199,9 +214,16 @@ export default async function OverviewPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-brand-serif text-3xl text-[var(--color-primary-700)]">{copy.heading}</h1>
-        <p className="mt-2 max-w-2xl text-base text-subtle">{copy.body}</p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="font-brand-serif text-3xl text-[var(--color-primary-700)]">{copy.heading}</h1>
+          <p className="mt-2 max-w-2xl text-base text-subtle">{copy.body}</p>
+        </div>
+        {user.role === "venue_manager" && (
+          <Button asChild>
+            <Link href="/events/new">New Event</Link>
+          </Button>
+        )}
       </div>
       <div className="grid gap-6 lg:grid-cols-2">{cards}</div>
     </div>

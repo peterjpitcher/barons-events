@@ -28,7 +28,7 @@ export default async function ReviewsPage() {
   }
 
   if (user.role === "venue_manager" || user.role === "executive") {
-    redirect("/");
+    redirect("/unauthorized");
   }
 
   const queue = await listReviewQueue(user);
@@ -58,12 +58,12 @@ export default async function ReviewsPage() {
                     </Link>
                   </CardTitle>
                   <CardDescription>
-                    {event.venue?.name ?? ""} · {timeFormat.format(new Date(event.start_at))}
+                    {event.venue?.name ?? ""} · {event.start_at ? timeFormat.format(new Date(event.start_at)) : "Date not set"}
                   </CardDescription>
                 </div>
-                <Badge variant={tone}>{event.status.replace("_", " ")}</Badge>
+                <Badge variant={tone}>{event.status.replace(/_/g, " ")}</Badge>
               </CardHeader>
-              <CardContent className="grid gap-4 md:grid-cols-[2fr_1fr] md:items-center">
+              <CardContent className="grid gap-4 md:grid-cols-[1fr_2fr] md:items-center">
                 <div className="text-sm text-muted">
                   <p>
                     {spaceLabel}: <span className="font-medium text-[var(--color-text)]">{spaceDisplay}</span>

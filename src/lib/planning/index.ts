@@ -4,6 +4,7 @@ import {
   createSupabaseServiceRoleClient
 } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
+import { normaliseOptionalText } from "@/lib/normalise";
 import type {
   CreatePlanningItemInput,
   CreatePlanningSeriesInput,
@@ -71,12 +72,6 @@ function toDateKey(value: Date | string): string {
   }
 
   return londonDateString(parsed);
-}
-
-function normaliseOptionalText(value: string | null | undefined): string | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed.length ? trimmed : null;
 }
 
 function toPerson(row: { id: string; full_name: string | null; email: string; role?: string | null }): PlanningPerson {

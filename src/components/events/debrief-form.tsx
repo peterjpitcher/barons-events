@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { SubmitButton } from "@/components/ui/submit-button";
+import { formatCurrency, formatPercent } from "@/lib/utils/format";
 
 type DebriefFormProps = {
   eventId: string;
@@ -33,20 +34,6 @@ function asNumber(value: string): number | null {
   if (!trimmed.length) return null;
   const parsed = Number(trimmed);
   return Number.isFinite(parsed) ? parsed : null;
-}
-
-function formatCurrency(value: number | null): string {
-  if (value === null) return "—";
-  return new Intl.NumberFormat("en-GB", {
-    style: "currency",
-    currency: "GBP",
-    minimumFractionDigits: 2
-  }).format(value);
-}
-
-function formatPercent(value: number | null): string {
-  if (value === null || Number.isNaN(value)) return "—";
-  return `${value.toFixed(2)}%`;
 }
 
 export function DebriefForm({ eventId, defaults }: DebriefFormProps) {

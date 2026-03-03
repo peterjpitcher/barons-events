@@ -2,7 +2,7 @@ import "server-only";
 
 import { NextResponse } from "next/server";
 
-import { requireWebsiteApiKey } from "@/lib/public-api/auth";
+import { checkApiRateLimit, requireWebsiteApiKey } from "@/lib/public-api/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -314,6 +314,9 @@ const spec = {
 } as const;
 
 export async function GET(request: Request) {
+  const rateLimitResponse = checkApiRateLimit(request);
+  if (rateLimitResponse) return rateLimitResponse;
+
   const authResponse = requireWebsiteApiKey(request);
   if (authResponse) return authResponse;
 

@@ -14,13 +14,8 @@ import {
   deleteOpeningOverride,
   type UpsertHoursInput
 } from "@/lib/opening-hours";
-import { getFieldErrors, type FieldErrors } from "@/lib/form-errors";
-
-type ActionResult = {
-  success: boolean;
-  message?: string;
-  fieldErrors?: FieldErrors;
-};
+import { getFieldErrors } from "@/lib/form-errors";
+import type { ActionResult } from "@/lib/types";
 
 // ─── Service Types ────────────────────────────────────────────────────────────
 
@@ -180,7 +175,7 @@ export async function createOpeningOverrideAction(payload: {
 
   const parsed = overrideSchema.safeParse(payload);
   if (!parsed.success) {
-    return { success: false, message: "Check override details.", fieldErrors: getFieldErrors(parsed.error) };
+    return { success: false, message: "Check the highlighted fields.", fieldErrors: getFieldErrors(parsed.error) };
   }
 
   try {
@@ -213,7 +208,7 @@ export async function updateOpeningOverrideAction(
 
   const parsed = overrideSchema.safeParse(payload);
   if (!parsed.success) {
-    return { success: false, message: "Check override details.", fieldErrors: getFieldErrors(parsed.error) };
+    return { success: false, message: "Check the highlighted fields.", fieldErrors: getFieldErrors(parsed.error) };
   }
 
   try {

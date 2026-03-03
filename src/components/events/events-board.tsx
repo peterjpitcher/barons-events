@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import dayjs from "dayjs";
 import advancedFormat from "dayjs/plugin/advancedFormat";
+import { startOfIsoWeek, endOfIsoWeek, minutesAfterMidnight, endsInEarlyHoursNextDay } from "@/lib/utils/date";
 import {
   ArrowDown,
   ArrowUp,
@@ -100,29 +101,6 @@ const statusSortOrder: Record<EventSummary["status"], number> = {
 
 const localStorageKey = "events-board-view";
 const localStorageHidePastKey = "events-board-hide-past";
-
-function startOfIsoWeek(date: dayjs.Dayjs) {
-  const day = date.day();
-  const diff = (day + 6) % 7;
-  return date.subtract(diff, "day").startOf("day");
-}
-
-function endOfIsoWeek(date: dayjs.Dayjs) {
-  return startOfIsoWeek(date).add(6, "day").endOf("day");
-}
-
-function minutesAfterMidnight(value: dayjs.Dayjs): number {
-  return value.diff(value.startOf("day"), "minute");
-}
-
-function endsInEarlyHoursNextDay(event: EventWithDates): boolean {
-  const startDay = event.start.startOf("day");
-  const endDay = event.end.startOf("day");
-  if (endDay.diff(startDay, "day") !== 1) {
-    return false;
-  }
-  return minutesAfterMidnight(event.end) <= 300;
-}
 
 function normaliseEvents(events: EventSummary[]): EventWithDates[] {
   return events
@@ -1086,6 +1064,7 @@ function VenueMatrixRow({ venue, events, days, canCreate, createVenueId }: Venue
                         {spansNext ? " · continues" : ""}
                       </span>
                     </div>
+                    {/* Intentional departure from Badge component: includes dot indicator for compact board cells */}
                     <div className="mt-auto border-t border-[rgba(39,54,64,0.12)] pt-2">
                       <span
                         className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.64rem] font-semibold uppercase tracking-[0.08em] ${accent.badge}`}

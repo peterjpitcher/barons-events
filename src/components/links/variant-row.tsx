@@ -113,7 +113,7 @@ export function VariantRow({
             type="button"
             onClick={onDeleteRequest}
             title="Delete variant"
-            className="rounded p-1.5 text-subtle opacity-0 group-hover:opacity-100 hover:bg-[rgba(239,68,68,0.1)] hover:text-[var(--color-danger)] transition-colors"
+            className="rounded p-1.5 text-subtle md:opacity-0 md:group-hover:opacity-100 hover:bg-[rgba(239,68,68,0.1)] hover:text-[var(--color-danger)] transition-colors"
           >
             <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
             <span className="sr-only">Delete variant</span>

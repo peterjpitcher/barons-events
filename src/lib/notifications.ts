@@ -349,8 +349,8 @@ export async function sendReviewDecisionEmail(eventId: string, decision: string)
     if (!event?.creator?.email) return;
 
     const { html, text } = renderEmailTemplate({
-      headline: `Your event is now marked ${decision.replace("_", " ")}`,
-      intro: `${buildGreeting(event.creator)} "${event.title}" has moved to ${decision.replace("_", " ")}.`,
+      headline: `Your event is now marked ${decision.replace(/_/g, " ")}`,
+      intro: `${buildGreeting(event.creator)} "${event.title}" has moved to ${decision.replace(/_/g, " ")}.`,
       body: [
         "Review the notes and make any updates needed so we can keep momentum.",
         "Once everything looks good, push the latest version live."
@@ -360,7 +360,7 @@ export async function sendReviewDecisionEmail(eventId: string, decision: string)
         `Event: ${event.title}`,
         `Venue: ${event.venue?.name ?? "Unknown venue"}`,
         `When: ${formatEventWindow(event)}`,
-        `Status: ${decision.replace("_", " ")}`
+        `Status: ${decision.replace(/_/g, " ")}`
       ]
     });
 

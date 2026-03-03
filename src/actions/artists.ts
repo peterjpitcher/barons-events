@@ -5,13 +5,11 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { createArtist, setArtistArchived, updateArtist } from "@/lib/artists";
-import { getFieldErrors, type FieldErrors } from "@/lib/form-errors";
+import { getFieldErrors } from "@/lib/form-errors";
+import type { ActionResult as BaseActionResult } from "@/lib/types";
 import { canManageArtists } from "@/lib/roles";
 
-type ActionResult = {
-  success: boolean;
-  message?: string;
-  fieldErrors?: FieldErrors;
+type ActionResult = BaseActionResult & {
   artist?: {
     id: string;
     name: string;

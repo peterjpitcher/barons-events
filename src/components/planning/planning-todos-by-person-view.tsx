@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import type { PlanningItem } from "@/lib/planning/types";
+import { formatDate } from "@/lib/utils/format";
 
 type PlanningTodosByPersonViewProps = {
   items: PlanningItem[];
@@ -18,16 +19,6 @@ type PersonTaskRow = {
   assigneeName: string;
   planningItem: PlanningItem;
 };
-
-function formatDate(value: string): string {
-  const parsed = new Date(`${value}T00:00:00Z`);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric"
-  }).format(parsed);
-}
 
 function sortTasks(rows: PersonTaskRow[]): PersonTaskRow[] {
   return [...rows].sort((left, right) => {

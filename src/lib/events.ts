@@ -1,4 +1,5 @@
 import { createSupabaseActionClient, createSupabaseReadonlyClient, createSupabaseServiceRoleClient } from "@/lib/supabase/server";
+import { normaliseOptionalText, normaliseOptionalNumber, normaliseOptionalInteger } from "@/lib/normalise";
 import type { Database } from "@/lib/supabase/types";
 import type { AppUser, EventStatus } from "@/lib/types";
 import { recordAuditLogEntry } from "@/lib/audit-log";
@@ -69,30 +70,6 @@ function extractMissingColumn(error: { code?: string; message?: string } | null 
   return match?.[1] ?? null;
 }
 
-function normaliseOptionalText(value: string | null | undefined): string | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed.length ? trimmed : null;
-}
-
-function normaliseOptionalNumber(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    if (!trimmed.length) return null;
-    const parsed = Number(trimmed);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
-}
-
-function normaliseOptionalInteger(value: unknown): number | null {
-  const parsed = normaliseOptionalNumber(value);
-  if (parsed === null) return null;
-  return Number.isInteger(parsed) ? parsed : null;
-}
 
 function normaliseOptionalHighlights(value: unknown): string[] | null {
   if (Array.isArray(value)) {
@@ -192,7 +169,12 @@ export async function listEventsForUser(user: AppUser): Promise<EventSummary[]> 
     .order("start_at", { ascending: true });
 
   if (user.role === "central_planner") {
-    // no extra filter
+    // Default date range: 1 year back to 2 years forward
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+    const twoYearsForward = new Date();
+    twoYearsForward.setFullYear(twoYearsForward.getFullYear() + 2);
+    query = query.gte("start_at", oneYearAgo.toISOString()).lte("start_at", twoYearsForward.toISOString());
   } else if (user.role === "venue_manager") {
     query = query.eq("created_by", user.id);
   } else if (user.role === "reviewer") {
@@ -679,11 +661,16 @@ export async function recordApproval(params: {
 export async function getStatusCounts(): Promise<Record<EventStatus, number>> {
   const supabase = await createSupabaseReadonlyClient();
 
-  const { data, error } = await supabase.from("events").select("status");
-
-  if (error) {
-    throw new Error(`Could not load status counts: ${error.message}`);
-  }
+  const statuses = ["draft", "submitted", "needs_revisions", "approved", "rejected", "completed"] as const;
+  const results = await Promise.all(
+    statuses.map((status) =>
+      supabase
+        .from("events")
+        .select("*", { count: "exact", head: true })
+        .eq("status", status)
+        .is("deleted_at", null)
+    )
+  );
 
   const base: Record<EventStatus, number> = {
     draft: 0,
@@ -694,11 +681,12 @@ export async function getStatusCounts(): Promise<Record<EventStatus, number>> {
     completed: 0
   };
 
-  for (const row of (data ?? []) as any[]) {
-    const status = row.status as EventStatus;
-    if (status in base) {
-      base[status] += 1;
+  for (let i = 0; i < statuses.length; i++) {
+    const { count, error } = results[i];
+    if (error) {
+      throw new Error(`Could not load status counts: ${error.message}`);
     }
+    base[statuses[i]] = count ?? 0;
   }
 
   return base;
@@ -724,10 +712,15 @@ export async function softDeleteEvent(eventId: string, actorId: string): Promise
 export async function findConflicts(): Promise<Array<{ event: EventSummary; conflictingWith: EventSummary }>> {
   const supabase = await createSupabaseReadonlyClient();
 
+  const now = new Date();
+  const ceiling = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+
   const { data, error } = await supabase
     .from("events")
     .select("*, venue:venues(id,name)")
-    .gte("start_at", new Date().toISOString())
+    .is("deleted_at", null)
+    .gte("start_at", now.toISOString())
+    .lte("start_at", ceiling.toISOString())
     .order("start_at", { ascending: true });
 
   if (error) {
