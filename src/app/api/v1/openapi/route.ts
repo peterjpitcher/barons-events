@@ -309,6 +309,90 @@ const spec = {
           "503": { description: "Not configured", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
         }
       }
+    },
+    "/api/v1/opening-times": {
+      get: {
+        operationId: "getOpeningTimes",
+        summary: "Get resolved opening times",
+        description: "Returns day-by-day effective opening times for all venues (or one venue), with date-specific overrides already applied. The consumer receives the final hours for each day and never needs to merge templates with exceptions.",
+        parameters: [
+          {
+            name: "days",
+            in: "query",
+            required: false,
+            schema: { type: "integer", minimum: 1, maximum: 90, default: 7 },
+            description: "Number of days to return, starting from today (Europe/London). Defaults to 7, maximum 90."
+          },
+          {
+            name: "venueId",
+            in: "query",
+            required: false,
+            schema: { type: "string", format: "uuid" },
+            description: "Filter results to a single venue. Omit to receive all venues."
+          }
+        ],
+        responses: {
+          "200": {
+            description: "Resolved opening times",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    from: { type: "string", format: "date", example: "2026-03-10" },
+                    to: { type: "string", format: "date", example: "2026-03-16" },
+                    venues: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          venueId: { type: "string", format: "uuid" },
+                          venueName: { type: "string" },
+                          days: {
+                            type: "array",
+                            items: {
+                              type: "object",
+                              properties: {
+                                date: { type: "string", format: "date" },
+                                dayOfWeek: {
+                                  type: "string",
+                                  enum: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+                                },
+                                services: {
+                                  type: "array",
+                                  items: {
+                                    type: "object",
+                                    properties: {
+                                      serviceTypeId: { type: "string", format: "uuid" },
+                                      serviceType: { type: "string", example: "Bar" },
+                                      isOpen: { type: "boolean" },
+                                      openTime: { type: "string", nullable: true, example: "11:00" },
+                                      closeTime: { type: "string", nullable: true, example: "23:00" },
+                                      isOverride: { type: "boolean", description: "True when these hours come from a date-specific override rather than the weekly template." },
+                                      note: { type: "string", nullable: true, description: "Optional note from the override record explaining the change." }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": { description: "Invalid query parameters", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "401": { description: "Missing or invalid API key", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "404": { description: "Venue not found (when venueId supplied)", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "429": { description: "Rate limit exceeded" },
+          "500": { description: "Database error", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } },
+          "503": { description: "Supabase service role not configured", content: { "application/json": { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        },
+        security: [{ bearerAuth: [] }]
+      }
     }
   }
 } as const;
