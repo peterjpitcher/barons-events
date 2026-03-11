@@ -52,6 +52,12 @@ export function canUsePlanning(role: UserRole): boolean {
   return role === "central_planner";
 }
 
+/** Can view the planning workspace (central_planner has full access; executive is a read-only observer) */
+export function canViewPlanning(role: UserRole): boolean {
+  // central_planner has full planning access; executive is a read-only observer
+  return role === 'central_planner' || role === 'executive';
+}
+
 /** Can view all events regardless of venue or assignment */
 export function canViewAllEvents(role: UserRole): boolean {
   return role === "central_planner" || role === "reviewer" || role === "executive";
