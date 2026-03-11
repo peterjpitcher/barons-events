@@ -29,6 +29,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
     (await searchParams?.catch(() => ({} as SearchParams))) ??
     ({} as SearchParams);
   const redirectTarget = sanitizeRedirect(query.redirectedFrom);
+  const reason = query.reason;
 
   if (session) {
     redirect(redirectTarget);
@@ -50,6 +51,11 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           </CardDescription>
         </CardHeader>
         <CardContent className={AUTH_CARD_CONTENT_CLASS}>
+          {reason === "idle" ? (
+            <p className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              You were signed out due to inactivity.
+            </p>
+          ) : null}
           <LoginForm redirectTo={redirectTarget} />
           <div className="space-y-3 text-sm text-muted">
             <Link href="/forgot-password" className="font-medium text-[var(--color-primary-700)] underline">

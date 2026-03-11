@@ -1,8 +1,8 @@
 import {
   createSupabaseActionClient,
-  createSupabaseReadonlyClient,
-  createSupabaseServiceRoleClient
+  createSupabaseReadonlyClient
 } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/types";
 import { normaliseOptionalText } from "@/lib/normalise";
 import type {
@@ -176,7 +176,7 @@ async function createTasksFromTemplates(params: {
     return;
   }
 
-  const admin = createSupabaseServiceRoleClient();
+  const admin = createSupabaseAdminClient();
 
   const taskRows: Array<Pick<PlanningTaskRow, "planning_item_id" | "title" | "assignee_id" | "due_date" | "status" | "sort_order" | "created_by">> = [];
 
@@ -208,7 +208,7 @@ async function createTasksFromTemplates(params: {
 }
 
 async function getSeriesTaskTemplates(seriesId: string): Promise<PlanningTemplateRow[]> {
-  const admin = createSupabaseServiceRoleClient();
+  const admin = createSupabaseAdminClient();
   const { data, error } = await admin
     .from("planning_series_task_templates")
     .select("*")
@@ -223,7 +223,7 @@ async function getSeriesTaskTemplates(seriesId: string): Promise<PlanningTemplat
 }
 
 async function generateOccurrencesForSeries(series: PlanningSeriesRow, throughDate: string): Promise<void> {
-  const admin = createSupabaseServiceRoleClient();
+  const admin = createSupabaseAdminClient();
   const startsOn = series.starts_on;
   const generationStart = series.generated_through ? addDays(series.generated_through, 1) : startsOn;
   const fromDate = maxDate(startsOn, generationStart);
@@ -322,7 +322,7 @@ async function generateOccurrencesForSeries(series: PlanningSeriesRow, throughDa
 
 export async function ensurePlanningOccurrencesThrough(throughDateInput: Date | string): Promise<void> {
   const throughDate = toDateKey(throughDateInput);
-  const admin = createSupabaseServiceRoleClient();
+  const admin = createSupabaseAdminClient();
 
   const { data, error } = await admin
     .from("planning_series")
@@ -344,7 +344,7 @@ export async function ensurePlanningOccurrencesThrough(throughDateInput: Date | 
 }
 
 export async function listPlanningUsers(): Promise<PlanningPerson[]> {
-  const admin = createSupabaseServiceRoleClient();
+  const admin = createSupabaseAdminClient();
   const { data, error } = await admin
     .from("users")
     .select("id,full_name,email,role")
@@ -373,7 +373,7 @@ export async function listPlanningBoardData(params?: {
   const lowerBound = addDays(today, -30);
   const upperBound = includeLater ? addDays(today, 365) : planningWindowEnd;
 
-  const admin = createSupabaseServiceRoleClient();
+  const admin = createSupabaseAdminClient();
 
   let itemsQuery = admin
     .from("planning_items")

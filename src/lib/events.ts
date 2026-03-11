@@ -1,4 +1,5 @@
-import { createSupabaseActionClient, createSupabaseReadonlyClient, createSupabaseServiceRoleClient } from "@/lib/supabase/server";
+import { createSupabaseActionClient, createSupabaseReadonlyClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { normaliseOptionalText, normaliseOptionalNumber, normaliseOptionalInteger } from "@/lib/normalise";
 import type { Database } from "@/lib/supabase/types";
 import type { AppUser, EventStatus } from "@/lib/types";
@@ -610,7 +611,7 @@ export async function updateEventDraft(eventId: string, updates: Partial<EventRo
 export async function appendEventVersion(eventId: string, actorId: string, versionData: Record<string, unknown>) {
   // Use the service role client so it can call the next_event_version RPC which is
   // restricted to service_role and provides an atomic, race-free version number.
-  const admin = createSupabaseServiceRoleClient();
+  const admin = createSupabaseAdminClient();
 
   const { data: nextVersion, error: versionError } = await admin.rpc("next_event_version", {
     p_event_id: eventId

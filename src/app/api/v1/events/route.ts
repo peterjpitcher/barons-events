@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { checkApiRateLimit, jsonError, methodNotAllowed, requireWebsiteApiKey } from "@/lib/public-api/auth";
 import { PUBLIC_EVENT_STATUSES, decodeCursor, encodeCursor, toPublicEvent, type RawEventRow } from "@/lib/public-api/events";
 
@@ -46,7 +46,7 @@ export async function GET(request: Request) {
 
   let supabase;
   try {
-    supabase = createSupabaseServiceRoleClient();
+    supabase = createSupabaseAdminClient();
   } catch (error) {
     console.error("Public API: Supabase service role client is not configured", error);
     return jsonError(503, "not_configured", "Supabase service role is not configured");

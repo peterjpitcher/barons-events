@@ -22,7 +22,6 @@ export default async function ForgotPasswordPage({ searchParams }: ForgotPasswor
     ({} as SearchParams);
 
   const status = query.status;
-  const email = query.email;
 
   const isSuccess = status === "sent";
 
@@ -31,7 +30,7 @@ export default async function ForgotPasswordPage({ searchParams }: ForgotPasswor
       intro={
         isSuccess ? (
           <p>
-            We&apos;ve emailed reset instructions to {email ?? "your inbox"}. Follow the link to set a new
+            We&apos;ve emailed reset instructions to your inbox. Follow the link to set a new
             password and get back into EventHub.
           </p>
         ) : (

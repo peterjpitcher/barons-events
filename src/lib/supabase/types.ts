@@ -226,6 +226,25 @@ export interface Database {
           created_at: string;
         };
       };
+      app_sessions: {
+        Row: {
+          session_id: string;
+          user_id: string;
+          created_at: string;
+          last_activity_at: string;
+          expires_at: string;
+          user_agent: string | null;
+          ip_address: string | null;
+        };
+      };
+      login_attempts: {
+        Row: {
+          id: string;
+          email_hash: string;
+          ip_address: string;
+          attempted_at: string;
+        };
+      };
     };
   };
 }

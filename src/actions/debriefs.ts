@@ -5,7 +5,8 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { upsertDebrief } from "@/lib/debriefs";
 import { debriefSchema } from "@/lib/validation";
-import { createSupabaseActionClient, createSupabaseServiceRoleClient } from "@/lib/supabase/server";
+import { createSupabaseActionClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { sendPostEventDigestEmail } from "@/lib/notifications";
 import { recordAuditLogEntry } from "@/lib/audit-log";
 import type { ActionResult } from "@/lib/types";
@@ -122,7 +123,7 @@ export async function submitDebriefAction(
     let statusUpdated = false;
 
     try {
-      const admin = createSupabaseServiceRoleClient();
+      const admin = createSupabaseAdminClient();
       let updateQuery = admin.from("events").update({ status: "completed" }).eq("id", values.eventId);
       if (user.role === "venue_manager") {
         updateQuery = updateQuery.eq("created_by", user.id);

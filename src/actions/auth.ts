@@ -1,10 +1,23 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { z } from "zod";
-import { createSupabaseActionClient, createSupabaseServiceRoleClient } from "@/lib/supabase/server";
+import { createSupabaseActionClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { sendPasswordResetEmail } from "@/lib/notifications";
 import { getFieldErrors, type FieldErrors } from "@/lib/form-errors";
+import {
+  createSession,
+  destroyAllSessionsForUser,
+  clearLockoutForAllIps,
+  recordFailedLoginAttempt,
+  isLockedOut,
+  makeSessionCookieOptions,
+  SESSION_COOKIE_NAME
+} from "@/lib/auth/session";
+import { validatePassword } from "@/lib/auth/password-policy";
+import { logAuthEvent, hashEmailForAudit } from "@/lib/audit-log";
 
 const credentialsSchema = z.object({
   email: z.string().email({ message: "Enter a valid email" }),
@@ -35,11 +48,8 @@ export type PasswordResetRequestState = AuthFormState;
 
 const passwordResetSchema = z
   .object({
-    password: z.string().min(8, { message: "Password must be at least 8 characters." }),
-    confirmPassword: z.string().min(8, { message: "Confirm your password with at least 8 characters." }),
-    token: z.string().optional(),
-    accessToken: z.string().optional(),
-    refreshToken: z.string().optional()
+    password: z.string().min(12, { message: "Password must be at least 12 characters." }),
+    confirmPassword: z.string().min(12, { message: "Confirm your password with at least 12 characters." })
   })
   .superRefine((data, ctx) => {
     if (data.password !== data.confirmPassword) {
@@ -47,14 +57,6 @@ const passwordResetSchema = z
         code: z.ZodIssueCode.custom,
         path: ["confirmPassword"],
         message: "Passwords do not match."
-      });
-    }
-
-    if (!data.token && !(data.accessToken && data.refreshToken)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["token"],
-        message: "Missing reset token."
       });
     }
   });
@@ -87,19 +89,95 @@ export async function signInAction(_: SignInState | undefined, formData: FormDat
     };
   }
 
-  const supabase = await createSupabaseActionClient();
+  // Get client IP for lockout tracking (Next.js headers)
+  const { headers } = await import("next/headers");
+  const headerStore = await headers();
+  const ip =
+    headerStore.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    headerStore.get("x-real-ip") ??
+    "unknown";
 
-  const { error } = await supabase.auth.signInWithPassword(parsed.data);
-
-  if (error) {
+  // Check lockout before attempting sign-in
+  const locked = await isLockedOut(parsed.data.email, ip);
+  if (locked) {
+    // Return identical error to wrong password — prevents lockout state enumeration
     return { success: false, message: "Those details didn't match." };
   }
+
+  const supabase = await createSupabaseActionClient();
+  const { data, error } = await supabase.auth.signInWithPassword(parsed.data);
+
+  if (error) {
+    // Record the failed attempt
+    await recordFailedLoginAttempt(parsed.data.email, ip);
+    const emailHash = await hashEmailForAudit(parsed.data.email);
+    await logAuthEvent({
+      event: "auth.login.failure",
+      ipAddress: ip,
+      emailHash,
+      userAgent: headerStore.get("user-agent") ?? undefined,
+      meta: { reason: error.message }
+    });
+    return { success: false, message: "Those details didn't match." };
+  }
+
+  if (!data.user) {
+    return { success: false, message: "Sign-in failed. Please try again." };
+  }
+
+  // Clear lockout counter for this IP on successful sign-in
+  try {
+    const { clearLockoutForIp } = await import("@/lib/auth/session");
+    await clearLockoutForIp(parsed.data.email, ip);
+  } catch {
+    // Non-fatal
+  }
+
+  // Create custom app session record
+  try {
+    const userAgent = headerStore.get("user-agent") ?? undefined;
+    const sessionId = await createSession(data.user.id, { userAgent, ipAddress: ip });
+    const cookieStore = await cookies();
+    cookieStore.set(SESSION_COOKIE_NAME, sessionId, makeSessionCookieOptions());
+  } catch (sessionError) {
+    console.error("Failed to create app session after sign-in:", sessionError);
+    // Non-fatal: fall through — Supabase JWT still provides basic auth
+  }
+
+  await logAuthEvent({
+    event: "auth.login.success",
+    userId: data.user.id,
+    ipAddress: ip,
+    userAgent: headerStore.get("user-agent") ?? undefined
+  });
 
   redirect(redirectTarget);
 }
 
 export async function signOutAction() {
   const supabase = await createSupabaseActionClient();
+
+  // Capture user before destroying session
+  const { data: { user: currentUser } } = await supabase.auth.getUser();
+
+  // Destroy the app session record
+  try {
+    const cookieStore = await cookies();
+    const sessionId = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+    if (sessionId) {
+      const { destroySession } = await import("@/lib/auth/session");
+      await destroySession(sessionId);
+      cookieStore.set(SESSION_COOKIE_NAME, "", { maxAge: 0, path: "/" });
+    }
+  } catch (error) {
+    console.error("Failed to destroy app session on sign-out:", error);
+  }
+
+  await logAuthEvent({
+    event: "auth.logout",
+    userId: currentUser?.id
+  });
+
   await supabase.auth.signOut();
   redirect("/login");
 }
@@ -120,44 +198,46 @@ export async function requestPasswordResetAction(
     };
   }
 
-  const redirectUrl = new URL("/reset-password", resolveAppUrl()).toString();
-
-  let resetEmailSent = false;
+  const redirectUrl = new URL("/auth/confirm", resolveAppUrl()).toString();
 
   try {
-    const adminClient = createSupabaseServiceRoleClient();
+    const adminClient = createSupabaseAdminClient();
     const { data, error } = await adminClient.auth.admin.generateLink({
       type: "recovery",
       email: parsed.data.email,
-      options: {
-        redirectTo: redirectUrl
-      }
+      options: { redirectTo: redirectUrl }
     });
 
     if (error) {
       if ((error as { code?: string }).code !== "user_not_found") {
         console.error("Password reset link generation failed", error);
       }
+      // Always redirect with success to prevent email enumeration
     } else if (data?.properties?.action_link) {
-      resetEmailSent = await sendPasswordResetEmail(parsed.data.email, data.properties.action_link);
+      const sent = await sendPasswordResetEmail(parsed.data.email, data.properties.action_link);
+      if (!sent) {
+        console.error("Password reset email failed to send via Resend");
+      }
     }
   } catch (error) {
-    console.error("Password reset link generation threw", error);
+    console.error("Password reset threw:", error);
   }
 
-  if (!resetEmailSent) {
-    const supabase = await createSupabaseActionClient();
-    const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
-      redirectTo: redirectUrl
-    });
-
-    if (error) {
-      console.error("Password reset request failed", error);
-    }
+  // Clear lockout records for this email (password reset is a valid recovery mechanism)
+  try {
+    await clearLockoutForAllIps(parsed.data.email);
+  } catch {
+    // Non-fatal
   }
 
-  const params = new URLSearchParams({ status: "sent", email: parsed.data.email });
-  redirect(`/forgot-password?${params.toString()}`);
+  const emailHashForLog = await hashEmailForAudit(parsed.data.email);
+  await logAuthEvent({
+    event: "auth.password_reset.requested",
+    emailHash: emailHashForLog
+  });
+
+  // Always generic success — never reveal if the email exists
+  redirect("/forgot-password?status=sent");
 }
 
 export async function completePasswordResetAction(
@@ -166,10 +246,7 @@ export async function completePasswordResetAction(
 ): Promise<ResetPasswordState> {
   const parsed = passwordResetSchema.safeParse({
     password: formData.get("password"),
-    confirmPassword: formData.get("confirmPassword"),
-    token: formData.get("token"),
-    accessToken: formData.get("accessToken"),
-    refreshToken: formData.get("refreshToken")
+    confirmPassword: formData.get("confirmPassword")
   });
 
   if (!parsed.success) {
@@ -178,56 +255,24 @@ export async function completePasswordResetAction(
     if (messages.includes("Passwords do not match.")) {
       return {
         status: "mismatch",
-        message: "Those passwords didn’t match. Try again with the same password twice.",
-        fieldErrors: {
-          ...fieldErrors,
-          confirmPassword: "Passwords do not match."
-        }
-      };
-    }
-    if (messages.includes("Missing reset token.")) {
-      return {
-        status: "missing-token",
-        message: "We couldn’t detect a valid reset token. Open the latest reset link from your email and try again.",
-        fieldErrors: {
-          ...fieldErrors,
-          token: "Missing reset token."
-        }
+        message: "Those passwords didn't match. Try again with the same password twice.",
+        fieldErrors: { ...fieldErrors, confirmPassword: "Passwords do not match." }
       };
     }
     return { status: "invalid", message: "Check the highlighted fields.", fieldErrors };
   }
 
-  const supabase = await createSupabaseActionClient();
-
-  if (parsed.data.token) {
-    const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(parsed.data.token);
-    if (exchangeError) {
-      console.error("Password reset token exchange failed", exchangeError);
-      return {
-        status: "expired",
-        message: "That password reset link has expired. Request a fresh link and try again."
-      };
-    }
-  } else if (parsed.data.accessToken && parsed.data.refreshToken) {
-    const { error: sessionError } = await supabase.auth.setSession({
-      access_token: parsed.data.accessToken,
-      refresh_token: parsed.data.refreshToken
-    });
-
-    if (sessionError) {
-      console.error("Password reset session error", sessionError);
-      return {
-        status: "expired",
-        message: "That password reset link has expired. Request a fresh link and try again."
-      };
-    }
-  } else {
+  // Server-side password policy validation (authoritative)
+  const policyResult = await validatePassword(parsed.data.password);
+  if (!policyResult.valid) {
     return {
-      status: "missing-token",
-      message: "We couldn’t detect a valid reset token. Open the latest reset link from your email and try again."
+      status: "invalid",
+      message: policyResult.errors[0] ?? "Password does not meet requirements.",
+      fieldErrors: { password: policyResult.errors[0] }
     };
   }
+
+  const supabase = await createSupabaseActionClient();
 
   const { error: updateError } = await supabase.auth.updateUser({
     password: parsed.data.password
@@ -239,6 +284,20 @@ export async function completePasswordResetAction(
       status: "error",
       message: "Something went wrong updating your password. Request a new reset link and try again."
     };
+  }
+
+  // Destroy all sessions — user must re-authenticate
+  try {
+    const { data: { user: currentUser } } = await supabase.auth.getUser();
+    if (currentUser) {
+      await destroyAllSessionsForUser(currentUser.id);
+      await logAuthEvent({
+        event: "auth.password_updated",
+        userId: currentUser.id
+      });
+    }
+  } catch (sessionError) {
+    console.error("Failed to destroy sessions after password reset:", sessionError);
   }
 
   await supabase.auth.signOut();

@@ -5,9 +5,12 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { updateUser } from "@/lib/users";
-import { createSupabaseActionClient, createSupabaseServiceRoleClient } from "@/lib/supabase/server";
+import { createSupabaseActionClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getFieldErrors } from "@/lib/form-errors";
 import type { ActionResult } from "@/lib/types";
+import { destroyAllSessionsForUser } from "@/lib/auth/session";
+import { logAuthEvent, hashEmailForAudit } from "@/lib/audit-log";
 
 const userUpdateSchema = z.object({
   userId: z.string().uuid(),
@@ -49,6 +52,25 @@ export async function updateUserAction(
       role: parsed.data.role,
       venueId: parsed.data.venueId ? parsed.data.venueId : null
     });
+
+    // Destroy all sessions for the user when their role changes.
+    // This prevents demoted users from retaining elevated access in active sessions.
+    try {
+      await destroyAllSessionsForUser(parsed.data.userId);
+    } catch (sessionError) {
+      console.error("Failed to destroy sessions after role update:", sessionError);
+      // Non-fatal: the role change in DB is authoritative
+    }
+
+    await logAuthEvent({
+      event: "auth.role.changed",
+      userId: currentUser.id,
+      meta: {
+        targetUserId: parsed.data.userId,
+        newRole: parsed.data.role
+      }
+    });
+
     revalidatePath("/users");
     return { success: true, message: "User updated." };
   } catch (error) {
@@ -91,7 +113,7 @@ export async function inviteUserAction(
     };
   }
 
-  const adminClient = createSupabaseServiceRoleClient();
+  const adminClient = createSupabaseAdminClient();
   const { data, error } = await adminClient.auth.admin.inviteUserByEmail(parsed.data.email, {
     data: {
       full_name: parsed.data.fullName ?? undefined
@@ -119,8 +141,8 @@ export async function inviteUserAction(
 
   try {
     if (userId) {
-      const supabase = await createSupabaseActionClient();
-      const { error: upsertError } = await supabase.from("users").upsert({
+      const adminDb = createSupabaseAdminClient();
+      const { error: upsertError } = await adminDb.from("users").upsert({
         id: userId,
         email: parsed.data.email,
         full_name: parsed.data.fullName ?? null,
@@ -133,10 +155,27 @@ export async function inviteUserAction(
       }
     }
 
+    const emailHash = await hashEmailForAudit(parsed.data.email);
+    await logAuthEvent({
+      event: "auth.invite.sent",
+      userId: currentUser.id,
+      emailHash,
+      meta: { role: parsed.data.role, inviteeId: userId }
+    });
+
     revalidatePath("/users");
     return { success: true, message: "Invite sent." };
   } catch (upsertError) {
     console.error(upsertError);
-    return { success: false, message: "Invitation sent but updating access failed." };
+    // Atomicity: remove the auth user if we couldn't write their profile record
+    if (userId) {
+      try {
+        const cleanupClient = createSupabaseAdminClient();
+        await cleanupClient.auth.admin.deleteUser(userId);
+      } catch (cleanupError) {
+        console.error("Failed to clean up orphaned auth user after invite failure", cleanupError);
+      }
+    }
+    return { success: false, message: "Invitation sent but updating access failed. Please try again." };
   }
 }

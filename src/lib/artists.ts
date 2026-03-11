@@ -1,4 +1,5 @@
-import { createSupabaseActionClient, createSupabaseReadonlyClient, createSupabaseServiceRoleClient } from "@/lib/supabase/server";
+import { createSupabaseActionClient, createSupabaseReadonlyClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { normaliseOptionalText } from "@/lib/normalise";
 import type { Database } from "@/lib/supabase/types";
 
@@ -676,7 +677,7 @@ export async function syncEventArtists(params: SyncEventArtistsParams): Promise<
 
   // Use the atomic RPC to replace artist links in a single transaction,
   // preventing the event from ending up with no artists if the insert fails after a delete.
-  const admin = createSupabaseServiceRoleClient();
+  const admin = createSupabaseAdminClient();
   const { error: syncError } = await admin.rpc("sync_event_artists", {
     p_event_id: params.eventId,
     p_artist_ids: resolvedIds,

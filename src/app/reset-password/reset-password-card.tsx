@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { Eye, EyeOff, CheckCircle } from "lucide-react";
-import { useFormState } from "react-dom";
+import { useActionState } from "react";
 import { AUTH_CARD_CLASS, AUTH_CARD_CONTENT_CLASS, AUTH_CARD_HEADER_CLASS } from "@/components/auth/styles";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -13,70 +13,26 @@ import { Button } from "@/components/ui/button";
 import { FieldError } from "@/components/ui/field-error";
 import { completePasswordResetAction, type ResetPasswordState } from "@/actions/auth";
 
-type ResetPasswordCardProps = {
-  initialQuery: Record<string, string | undefined>;
-};
-
 const INITIAL_STATE: ResetPasswordState = { status: "idle" };
 const errorInputClass = "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]";
 
-export function ResetPasswordCard({ initialQuery }: ResetPasswordCardProps) {
-  const [state, formAction] = useFormState(completePasswordResetAction, INITIAL_STATE);
+export function ResetPasswordCard() {
+  const [state, formAction] = useActionState(completePasswordResetAction, INITIAL_STATE);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [token, setToken] = useState(initialQuery.token ?? initialQuery.code ?? "");
-  const [accessToken, setAccessToken] = useState(initialQuery.access_token ?? "");
-  const [refreshToken, setRefreshToken] = useState(initialQuery.refresh_token ?? "");
-  const [localError, setLocalError] = useState<string | null>(null);
   const [localFieldErrors, setLocalFieldErrors] = useState<Record<string, string>>({});
 
-  const hasResetToken = useMemo(
-    () => Boolean(token) || (Boolean(accessToken) && Boolean(refreshToken)),
-    [token, accessToken, refreshToken]
-  );
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const hash = window.location.hash;
-    if (!hash) return;
-
-    const params = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash);
-    const access = params.get("access_token");
-    const refresh = params.get("refresh_token");
-    const code = params.get("code") ?? params.get("token") ?? params.get("recovery_token");
-
-    if (access) {
-      setAccessToken(access);
-    }
-    if (refresh) {
-      setRefreshToken(refresh);
-    }
-    if (!token && code) {
-      setToken(code);
-    }
-  }, [token]);
-
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    setLocalError(null);
     setLocalFieldErrors({});
-
-    if (!hasResetToken) {
-      event.preventDefault();
-      setLocalError("We couldn’t detect a valid reset token. Open the latest reset link from your email and try again.");
-      return;
-    }
-
     const nextFieldErrors: Record<string, string> = {};
 
-    if (password.trim().length < 8) {
-      nextFieldErrors.password = "Password must be at least 8 characters long.";
+    if (password.trim().length < 12) {
+      nextFieldErrors.password = "Password must be at least 12 characters long.";
     }
-
-    if (confirmPassword.trim().length < 8) {
-      nextFieldErrors.confirmPassword = "Confirm your password with at least 8 characters.";
+    if (confirmPassword.trim().length < 12) {
+      nextFieldErrors.confirmPassword = "Confirm your password with at least 12 characters.";
     } else if (password !== confirmPassword) {
       nextFieldErrors.confirmPassword = "Passwords must match.";
     }
@@ -110,7 +66,7 @@ export function ResetPasswordCard({ initialQuery }: ResetPasswordCardProps) {
 
   const passwordError = localFieldErrors.password ?? state.fieldErrors?.password;
   const confirmPasswordError = localFieldErrors.confirmPassword ?? state.fieldErrors?.confirmPassword;
-  const errorMessage = localError ?? (state.fieldErrors ? null : state.message);
+  const errorMessage = state.fieldErrors ? null : state.message;
 
   return (
     <Card className={AUTH_CARD_CLASS}>
@@ -126,17 +82,7 @@ export function ResetPasswordCard({ initialQuery }: ResetPasswordCardProps) {
             {errorMessage}
           </p>
         ) : null}
-        {!hasResetToken ? (
-          <p className="rounded-[var(--radius)] border border-white/20 bg-white/30 p-3 text-sm text-[var(--color-primary-700)]">
-            We&apos;re waiting for the secure token that comes with your reset link. If you reached this page
-            manually, open the password reset email again and use the latest link.
-          </p>
-        ) : null}
         <form action={formAction} onSubmit={handleSubmit} className="space-y-6" noValidate>
-          <input type="hidden" name="token" value={token} />
-          <input type="hidden" name="accessToken" value={accessToken} />
-          <input type="hidden" name="refreshToken" value={refreshToken} />
-
           <div className="space-y-2">
             <Label className="text-[var(--color-text-subtle)]" htmlFor="password">
               New password
@@ -148,7 +94,7 @@ export function ResetPasswordCard({ initialQuery }: ResetPasswordCardProps) {
                 type={showPassword ? "text" : "password"}
                 autoComplete="new-password"
                 required
-                minLength={8}
+                minLength={12}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 aria-invalid={Boolean(passwordError)}
@@ -165,7 +111,7 @@ export function ResetPasswordCard({ initialQuery }: ResetPasswordCardProps) {
               </button>
             </div>
             <FieldError id="password-error" message={passwordError} />
-            <p className="text-xs text-muted">Must be at least 8 characters long.</p>
+            <p className="text-xs text-muted">At least 12 characters with uppercase, lowercase, number, and special character.</p>
           </div>
 
           <div className="space-y-2">
@@ -179,7 +125,7 @@ export function ResetPasswordCard({ initialQuery }: ResetPasswordCardProps) {
                 type={showConfirmPassword ? "text" : "password"}
                 autoComplete="new-password"
                 required
-                minLength={8}
+                minLength={12}
                 value={confirmPassword}
                 onChange={(event) => setConfirmPassword(event.target.value)}
                 aria-invalid={Boolean(confirmPasswordError)}
@@ -198,12 +144,7 @@ export function ResetPasswordCard({ initialQuery }: ResetPasswordCardProps) {
             <FieldError id="confirm-password-error" message={confirmPasswordError} />
           </div>
 
-          <SubmitButton
-            label="Update password"
-            pendingLabel="Updating..."
-            disabled={!hasResetToken}
-            className="w-full"
-          />
+          <SubmitButton label="Update password" pendingLabel="Updating..." className="w-full" />
 
           <p className="text-sm text-muted">
             Need a fresh link?{" "}

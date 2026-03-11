@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { createSupabaseActionClient, createSupabaseServiceRoleClient } from "@/lib/supabase/server";
+import { createSupabaseActionClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth";
 import { appendEventVersion, createEventDraft, recordApproval, softDeleteEvent, updateEventDraft, updateEventAssignee } from "@/lib/events";
 import { cleanupOrphanArtists, parseArtistNames, syncEventArtists } from "@/lib/artists";
@@ -384,7 +385,7 @@ async function updateEventWithFallback(params: {
 }) {
   let updateError: { message: string } | null = null;
   try {
-    const admin = createSupabaseServiceRoleClient();
+    const admin = createSupabaseAdminClient();
     let adminUpdate = admin.from("events").update(params.payload as any).eq("id", params.eventId);
     if (params.reviewerAssigneeId) {
       adminUpdate = adminUpdate.eq("assignee_id", params.reviewerAssigneeId);
@@ -449,7 +450,7 @@ async function uploadEventImage(params: {
 
   let admin;
   try {
-    admin = createSupabaseServiceRoleClient();
+    admin = createSupabaseAdminClient();
   } catch (error) {
     console.error(error);
     return { error: "Supabase service role is not configured for image upload." };
@@ -487,7 +488,7 @@ async function uploadEventImage(params: {
 async function removeEventImageObject(path: string | null | undefined): Promise<void> {
   if (!path || !path.trim().length) return;
   try {
-    const admin = createSupabaseServiceRoleClient();
+    const admin = createSupabaseAdminClient();
     const { error } = await admin.storage.from(EVENT_IMAGE_BUCKET).remove([path]);
     if (error) {
       console.warn("Failed to remove event image object", error);

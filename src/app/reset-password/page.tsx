@@ -6,17 +6,7 @@ export const metadata = {
   description: "Choose a new password to regain access to EventHub."
 };
 
-type SearchParams = Record<string, string | undefined>;
-
-type ResetPasswordPageProps = {
-  searchParams?: Promise<SearchParams>;
-};
-
-export default async function ResetPasswordPage({ searchParams }: ResetPasswordPageProps) {
-  const query =
-    (await searchParams?.catch(() => ({} as SearchParams))) ??
-    ({} as SearchParams);
-
+export default function ResetPasswordPage() {
   return (
     <AuthLayout
       intro={
@@ -26,7 +16,7 @@ export default async function ResetPasswordPage({ searchParams }: ResetPasswordP
         </p>
       }
     >
-      <ResetPasswordCard initialQuery={query} />
+      <ResetPasswordCard />
     </AuthLayout>
   );
 }

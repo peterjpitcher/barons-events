@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseServiceRoleClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 // The hostname that serves short links.
 // In production: l.baronspubs.com  — add this as a custom domain on your hosting platform.
@@ -25,7 +25,7 @@ export async function GET(
     return new NextResponse("Not found.", { status: 404 });
   }
 
-  const supabase = createSupabaseServiceRoleClient();
+  const supabase = createSupabaseAdminClient();
 
   const { data: link, error } = await supabase
     .from("short_links")
