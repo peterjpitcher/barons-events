@@ -78,16 +78,17 @@ function RefreshInspirationButton() {
 
   return (
     <div className="flex items-center gap-2">
-      <button
+      <Button
         type="button"
+        variant="ghost"
+        size="sm"
         onClick={handleRefresh}
         disabled={loading}
-        className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-50 flex items-center gap-1 transition-colors"
         title="Refresh inspiration items"
       >
         <span>{loading ? '⏳' : '✨'}</span>
         <span>{loading ? 'Refreshing…' : 'Refresh inspiration'}</span>
-      </button>
+      </Button>
       {message && <span className="text-xs text-muted-foreground">{message}</span>}
     </div>
   );
