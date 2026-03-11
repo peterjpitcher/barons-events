@@ -157,6 +157,25 @@ describe('generateInspirationItems', () => {
     consoleSpy.mockRestore();
   });
 
+  it('deletes dismissals pointing at current items before replacing batch', async () => {
+    // Make select return existing IDs
+    mockDb.select.mockResolvedValueOnce({ data: [{ id: 'existing-id-1' }], error: null });
+
+    (global.fetch as Mock)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ 'england-and-wales': { events: [] } }),
+      })
+      .mockRejectedValueOnce(new Error('OpenAI skipped'));
+
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await generateInspirationItems(new Date('2026-03-11'), new Date('2026-09-07'));
+
+    // Verify .in() was called with the existing ID (dismissal cleanup uses .in, not .not)
+    expect(mockDb.in).toHaveBeenCalledWith('inspiration_item_id', ['existing-id-1']);
+    consoleSpy.mockRestore();
+  });
+
   it('deduplicates items with same date and event name', async () => {
     // gov.uk returns "Christmas Day", computed dates also generate "Christmas Day"
     // Only one should survive deduplication

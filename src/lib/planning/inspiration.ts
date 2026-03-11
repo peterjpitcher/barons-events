@@ -217,17 +217,21 @@ export async function generateInspirationItems(
   const db = createSupabaseAdminClient();
 
   // Step 1: Fetch current inspiration item IDs before deleting
-  const { data: currentItems } = await db
+  const { data: currentItems, error: selectError } = await db
     .from('planning_inspiration_items')
     .select('id');
+  if (selectError) {
+    console.error('generateInspirationItems: could not read current IDs', selectError);
+    throw new Error(`Failed to read inspiration items: ${selectError.message}`);
+  }
   const currentIds = (currentItems ?? []).map((r: { id: string }) => r.id);
 
-  // Step 2: Delete orphaned dismissals (pointing at items about to be replaced)
+  // Step 2: Delete dismissals pointing at items about to be replaced
   if (currentIds.length > 0) {
     await db
       .from('planning_inspiration_dismissals')
       .delete()
-      .not('inspiration_item_id', 'in', `(${currentIds.join(',')})`);
+      .in('inspiration_item_id', currentIds);
   }
 
   // Step 3: Delete all existing inspiration items (replaced with fresh batch)
