@@ -5,14 +5,14 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { Check, GripVertical, Pencil, Trash2, X } from "lucide-react";
 import { ApproveEventButton } from "@/components/events/approve-event-button";
-import { deletePlanningItemAction, updatePlanningItemAction } from "@/actions/planning";
+import { convertInspirationItemAction, deletePlanningItemAction, dismissInspirationItemAction, updatePlanningItemAction } from "@/actions/planning";
 import { PlanningTaskList } from "@/components/planning/planning-task-list";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import type { PlanningEventOverlay, PlanningItem, PlanningPerson, PlanningVenueOption } from "@/lib/planning/types";
+import type { PlanningEventOverlay, PlanningInspirationItem, PlanningItem, PlanningPerson, PlanningVenueOption } from "@/lib/planning/types";
 import { formatDate } from "@/lib/utils/format";
 
 type PlanningItemCardProps = {
@@ -549,6 +549,77 @@ export function PlanningItemCard({
 
       <PlanningTaskList itemId={item.id} tasks={item.tasks} users={users} onChanged={onChanged} />
     </article>
+  );
+}
+
+const CATEGORY_LABELS: Record<PlanningInspirationItem['category'], string> = {
+  bank_holiday: 'Bank Holiday',
+  seasonal: 'Seasonal',
+  floating: 'Occasion',
+  sporting: 'Sporting',
+};
+
+export function InspirationItemCard({ item }: { item: PlanningInspirationItem }) {
+  const [converting, setConverting] = useState(false);
+  const [dismissing, setDismissing] = useState(false);
+
+  async function handleConvert() {
+    setConverting(true);
+    const result = await convertInspirationItemAction(item.id);
+    if (!result.success) {
+      console.error(result.message);
+    }
+    setConverting(false);
+  }
+
+  async function handleDismiss() {
+    setDismissing(true);
+    await dismissInspirationItemAction(item.id);
+    setDismissing(false);
+  }
+
+  // Format the date as "Fri 14 Feb" using London timezone
+  const formattedDate = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London',
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  }).format(new Date(`${item.eventDate}T12:00:00Z`));
+
+  return (
+    <div className="rounded-md border-2 border-dashed border-amber-400 bg-amber-50 px-3 py-2 flex items-start justify-between gap-2">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-sm">✨</span>
+          <span className="text-sm font-medium text-amber-900 truncate">{item.eventName}</span>
+          <span className="text-xs text-amber-600 bg-amber-100 rounded px-1.5 py-0.5 shrink-0">
+            {CATEGORY_LABELS[item.category]}
+          </span>
+        </div>
+        <p className="text-xs text-amber-700 mt-0.5">{formattedDate}</p>
+        {item.description && (
+          <p className="text-xs text-amber-600 mt-0.5 truncate">{item.description}</p>
+        )}
+      </div>
+      <div className="flex items-center gap-1 shrink-0">
+        <button
+          type="button"
+          disabled={converting || dismissing}
+          onClick={handleConvert}
+          className="text-xs bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white rounded px-2 py-1 font-medium transition-colors"
+        >
+          {converting ? '…' : 'Add to plan'}
+        </button>
+        <button
+          type="button"
+          disabled={converting || dismissing}
+          onClick={handleDismiss}
+          className="text-xs text-amber-700 hover:text-amber-900 disabled:opacity-50 rounded px-2 py-1 transition-colors"
+        >
+          {dismissing ? '…' : 'Hide'}
+        </button>
+      </div>
+    </div>
   );
 }
 
