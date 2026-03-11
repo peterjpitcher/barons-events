@@ -3,7 +3,7 @@ import Link from "next/link";
 import { AuthLayout } from "@/components/auth/auth-layout";
 import { AUTH_CARD_CLASS, AUTH_CARD_CONTENT_CLASS, AUTH_CARD_HEADER_CLASS } from "@/components/auth/styles";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { getSession } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth";
 import { LoginForm } from "./login-form";
 
 export const metadata = {
@@ -24,14 +24,18 @@ function sanitizeRedirect(path?: string | null) {
 }
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
-  const session = await getSession();
   const query =
     (await searchParams?.catch(() => ({} as SearchParams))) ??
     ({} as SearchParams);
   const redirectTarget = sanitizeRedirect(query.redirectedFrom);
   const reason = query.reason;
 
-  if (session) {
+  // Use getCurrentUser() (which calls getUser()) rather than getSession().
+  // getSession() trusts the local cookie and can return a stale session even
+  // when the refresh token is no longer valid — causing a redirect loop with
+  // the middleware, which also uses getUser() and rejects the same stale token.
+  const user = await getCurrentUser();
+  if (user) {
     redirect(redirectTarget);
   }
 
