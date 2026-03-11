@@ -67,6 +67,18 @@ export type PlanningEventOverlay = {
   publicTeaser: string | null;
 };
 
+export type InspirationCategory = 'bank_holiday' | 'seasonal' | 'floating' | 'sporting';
+export type InspirationSource = 'gov_uk_api' | 'computed' | 'openai';
+
+export type PlanningInspirationItem = {
+  id: string;
+  eventName: string;
+  eventDate: string;        // YYYY-MM-DD
+  category: InspirationCategory;
+  description: string | null;
+  source: InspirationSource;
+};
+
 export type PlanningAlertCounts = {
   overdueItems: number;
   overdueTasks: number;
@@ -80,6 +92,7 @@ export type PlanningBoardData = {
   planningItems: PlanningItem[];
   events: PlanningEventOverlay[];
   users: PlanningPerson[];
+  inspirationItems: PlanningInspirationItem[];
 };
 
 export type SeriesTaskTemplateInput = {
