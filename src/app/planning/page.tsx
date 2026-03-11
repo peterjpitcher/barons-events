@@ -32,6 +32,7 @@ export default async function PlanningPage() {
         name: venue.name
       }))}
       canApproveEvents={canReviewEvents(user.role)}
+      userRole={user.role}
     />
   );
 }

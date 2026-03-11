@@ -4,10 +4,10 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { CalendarRange, Filter, LayoutGrid, List, MoveHorizontal, Plus, Users } from "lucide-react";
-import { movePlanningItemDateAction } from "@/actions/planning";
+import { movePlanningItemDateAction, refreshInspirationItemsAction } from "@/actions/planning";
 import { PlanningAlertStrip } from "@/components/planning/planning-alert-strip";
 import { PlanningCalendarView } from "@/components/planning/planning-calendar-view";
-import { PlanningItemCard, EventOverlayCard } from "@/components/planning/planning-item-card";
+import { PlanningItemCard, EventOverlayCard, InspirationItemCard } from "@/components/planning/planning-item-card";
 import { PlanningItemEditor } from "@/components/planning/planning-item-editor";
 import { PlanningListView } from "@/components/planning/planning-list-view";
 import { PlanningModal } from "@/components/planning/planning-modal";
@@ -20,6 +20,7 @@ import type {
   PlanningBoardData,
   PlanningBucketKey,
   PlanningEventOverlay,
+  PlanningInspirationItem,
   PlanningItem,
   PlanningVenueOption
 } from "@/lib/planning/types";
@@ -29,6 +30,7 @@ type PlanningBoardProps = {
   data: PlanningBoardData;
   venues: PlanningVenueOption[];
   canApproveEvents?: boolean;
+  userRole?: string;
 };
 
 type BucketConfig = {
@@ -62,7 +64,36 @@ function sortByDateThenTitle<T extends { targetDate: string; title: string }>(ro
 
 type ViewMode = "board" | "calendar" | "list" | "todos_by_person";
 
-export function PlanningBoard({ data, venues, canApproveEvents }: PlanningBoardProps) {
+function RefreshInspirationButton() {
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  async function handleRefresh() {
+    setLoading(true);
+    setMessage(null);
+    const result = await refreshInspirationItemsAction();
+    setMessage(result.message ?? (result.success ? 'Done.' : 'Failed.'));
+    setLoading(false);
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={handleRefresh}
+        disabled={loading}
+        className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-50 flex items-center gap-1 transition-colors"
+        title="Refresh inspiration items"
+      >
+        <span>{loading ? '⏳' : '✨'}</span>
+        <span>{loading ? 'Refreshing…' : 'Refresh inspiration'}</span>
+      </button>
+      {message && <span className="text-xs text-muted-foreground">{message}</span>}
+    </div>
+  );
+}
+
+export function PlanningBoard({ data, venues, canApproveEvents, userRole }: PlanningBoardProps) {
   const router = useRouter();
   const [viewMode, setViewMode] = useState<ViewMode>("board");
   const [isCreateModalOpen, setCreateModalOpen] = useState(false);
@@ -156,6 +187,18 @@ export function PlanningBoard({ data, venues, canApproveEvents }: PlanningBoardP
       later: sortByDateThenTitle(grouped.later)
     };
   }, [data.today, visibleEvents]);
+
+  const inspirationByBucket = useMemo(() => {
+    const map: Record<PlanningBucketKey, PlanningInspirationItem[]> = {
+      '0_30': [], '31_60': [], '61_90': [], later: [],
+    };
+    for (const item of data.inspirationItems) {
+      const offset = daysBetween(data.today, item.eventDate);
+      const bucket = bucketForDayOffset(offset);
+      map[bucket].push(item);
+    }
+    return map;
+  }, [data.inspirationItems, data.today]);
 
   const combinedByBucket = useMemo(() => {
     const result: Record<PlanningBucketKey, Array<{ type: "planning"; item: PlanningItem } | { type: "event"; event: PlanningEventOverlay }>> = {
@@ -252,6 +295,7 @@ export function PlanningBoard({ data, venues, canApproveEvents }: PlanningBoardP
             <p className="max-w-3xl text-subtle">
               Track operational actions and launches in a rolling 30/60/90 planner, with recurring templates and task ownership.
             </p>
+            {userRole === 'central_planner' && <RefreshInspirationButton />}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button type="button" onClick={() => setCreateModalOpen(true)}>
@@ -361,6 +405,9 @@ export function PlanningBoard({ data, venues, canApproveEvents }: PlanningBoardP
                       <EventOverlayCard key={row.event.id} event={row.event} canApprove={canApproveEvents} />
                     )
                   )}
+                  {inspirationByBucket[bucket.key].map(item => (
+                    <InspirationItemCard key={item.id} item={item} />
+                  ))}
                 </div>
 
                 {rows.length === 0 ? (
