@@ -11,6 +11,7 @@ import type {
   CreatePlanningTaskInput,
   PlanningBoardData,
   PlanningEventOverlay,
+  PlanningInspirationItem,
   PlanningItem,
   PlanningItemStatus,
   PlanningPerson,
@@ -357,6 +358,46 @@ export async function listPlanningUsers(): Promise<PlanningPerson[]> {
   return ((data ?? []) as Array<{ id: string; full_name: string | null; email: string; role: string | null }>).map(toPerson);
 }
 
+async function fetchInspirationItems(
+  db: ReturnType<typeof createSupabaseAdminClient>,
+  today: string,
+  windowEndDate: string
+): Promise<PlanningInspirationItem[]> {
+  // Fetch all active dismissal IDs first
+  const { data: dismissals } = await db
+    .from('planning_inspiration_dismissals')
+    .select('inspiration_item_id');
+
+  const dismissedIds = (dismissals ?? []).map((d: { inspiration_item_id: string }) => d.inspiration_item_id);
+
+  let query = db
+    .from('planning_inspiration_items')
+    .select('*')
+    .gte('event_date', today)
+    .lte('event_date', windowEndDate)
+    .order('event_date', { ascending: true });
+
+  if (dismissedIds.length > 0) {
+    query = query.not('id', 'in', `(${dismissedIds.join(',')})`);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    console.error('fetchInspirationItems: query failed', error);
+    return [];
+  }
+
+  return (data ?? []).map((row: Record<string, unknown>) => ({
+    id: row.id as string,
+    eventName: row.event_name as string,
+    eventDate: row.event_date as string,
+    category: row.category as PlanningInspirationItem['category'],
+    description: (row.description as string | null) ?? null,
+    source: row.source as PlanningInspirationItem['source'],
+  }));
+}
+
 export async function listPlanningBoardData(params?: {
   today?: Date | string;
   includeLater?: boolean;
@@ -450,6 +491,10 @@ export async function listPlanningBoardData(params?: {
   );
 
   const users = await listPlanningUsers();
+
+  const windowEndStr = addDays(today, 180);
+  const inspirationItems = await fetchInspirationItems(admin, today, windowEndStr);
+
   const soonLimit = addDays(today, 7);
   const openItemStatuses = new Set<PlanningItemStatus>(["planned", "in_progress", "blocked"]);
 
@@ -472,7 +517,8 @@ export async function listPlanningBoardData(params?: {
     },
     planningItems,
     events,
-    users
+    users,
+    inspirationItems
   };
 }
 
