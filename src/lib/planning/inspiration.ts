@@ -235,6 +235,8 @@ export async function generateInspirationItems(
   }
 
   // Step 3: Delete all existing inspiration items (replaced with fresh batch)
+  // Supabase requires a filter on DELETE — this dummy neq filter deletes all rows
+  // (no real ID can match this nil UUID) while satisfying the SDK constraint.
   await db
     .from('planning_inspiration_items')
     .delete()

@@ -363,7 +363,9 @@ async function fetchInspirationItems(
   today: string,
   windowEndDate: string
 ): Promise<PlanningInspirationItem[]> {
-  // Fetch all active dismissal IDs first
+  // Fetch all dismissal IDs — dismissals are organisation-wide (single-tenant system).
+  // All users share the same suppression list so once any user hides an inspiration item,
+  // it no longer appears for anyone. This is by design (see spec).
   const { data: dismissals } = await db
     .from('planning_inspiration_dismissals')
     .select('inspiration_item_id');
