@@ -104,7 +104,10 @@ export function getFixedSeasonalDates(
 }
 
 /**
- * Returns floating (algorithmically computed) occasions within the window.
+ * Returns ALL computed occasions within the window — both fixed seasonal dates
+ * (Valentine's Day, Christmas, etc., via `getFixedSeasonalDates`) and floating
+ * dates that are calculated relative to Easter (Mother's Day, Father's Day).
+ * Results are sorted chronologically by date.
  */
 export function getComputedDates(
   windowStart: Date,

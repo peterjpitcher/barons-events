@@ -136,4 +136,25 @@ describe('getComputedDates', () => {
     const items = getComputedDates(new Date('2026-04-01'), new Date('2026-06-30'));
     expect(items.every(i => i.eventDate >= '2026-04-01' && i.eventDate <= '2026-06-30')).toBe(true);
   });
+
+  it("finds Mother's Day from the second year in a cross-year window", () => {
+    // Oct 2025 – Mar 2026: Mother's Day 2026 (15 Mar 2026) should be included
+    const items = getComputedDates(
+      new Date('2025-10-01'),
+      new Date('2026-03-31')
+    );
+    const mothersDay = items.find(i => i.eventName === "Mother's Day");
+    expect(mothersDay).toBeDefined();
+    expect(mothersDay!.eventDate).toBe('2026-03-15'); // Easter 2026 is 5 Apr; 21 days before = 15 Mar
+    // Should not include Mother's Day 2025 (30 Mar 2025) which is outside the window
+    const allMothersDays = items.filter(i => i.eventName === "Mother's Day");
+    expect(allMothersDays).toHaveLength(1);
+  });
+
+  it('returns both seasonal and floating categories', () => {
+    const items = getComputedDates(new Date('2026-01-01'), new Date('2026-12-31'));
+    const categories = new Set(items.map(i => i.category));
+    expect(categories.has('seasonal')).toBe(true);
+    expect(categories.has('floating')).toBe(true);
+  });
 });
