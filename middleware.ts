@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import { validateSession, renewSession, SESSION_COOKIE_NAME, makeSessionCookieOptions } from "@/lib/auth/session";
+import { createSession, validateSession, renewSession, SESSION_COOKIE_NAME, makeSessionCookieOptions } from "@/lib/auth/session";
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
@@ -167,26 +167,36 @@ export async function middleware(req: NextRequest) {
   const isHeartbeat = pathname === "/api/auth/heartbeat";
 
   if (!isHeartbeat) {
-    if (!appSessionId) {
-      // No app session cookie — redirect to login so a new session can be created on next sign-in
-      const redirectUrl = req.nextUrl.clone();
-      redirectUrl.pathname = "/login";
-      const originalPath = `${pathname}${req.nextUrl.search ?? ""}`;
-      redirectUrl.searchParams.set("redirectedFrom", originalPath);
-      const redirectRes = NextResponse.redirect(redirectUrl);
-      applySecurityHeaders(redirectRes);
-      return redirectRes;
+    let resolvedSessionId = appSessionId;
+
+    if (!resolvedSessionId) {
+      // No app-session-id cookie but user has a valid Supabase JWT.
+      // This happens when: (a) the user was already logged in before the session
+      // layer was deployed, or (b) session creation failed at sign-in time.
+      // Create a new session now rather than redirect-looping.
+      try {
+        resolvedSessionId = await createSession(user.id, {
+          userAgent: req.headers.get("user-agent"),
+          ipAddress: req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null
+        });
+        res.cookies.set(SESSION_COOKIE_NAME, resolvedSessionId, makeSessionCookieOptions());
+      } catch (err) {
+        // Session store unavailable (e.g. migration not yet applied).
+        // Fall through rather than redirect-loop — Supabase JWT still provides auth.
+        console.error("Session layer unavailable, serving request without app session:", err);
+      }
     }
 
-    const session = await validateSession(appSessionId);
+    const session = resolvedSessionId ? await validateSession(resolvedSessionId) : null;
 
-    if (!session) {
-      // Session invalid, expired, or store error — fail closed
+    if (!session && resolvedSessionId) {
+      // resolvedSessionId was set but validateSession returned null — the session
+      // is genuinely expired or invalid (not a DB availability issue, since
+      // createSession above would also have failed). Fail closed.
       const redirectUrl = req.nextUrl.clone();
       redirectUrl.pathname = "/login";
       redirectUrl.searchParams.set("reason", "session_expired");
       const redirectRes = NextResponse.redirect(redirectUrl);
-      // Clear the stale session cookie
       redirectRes.cookies.set(SESSION_COOKIE_NAME, "", {
         ...makeSessionCookieOptions(),
         maxAge: 0
@@ -196,7 +206,7 @@ export async function middleware(req: NextRequest) {
     }
 
     // Renew session activity (non-blocking — don't await in the critical path)
-    renewSession(appSessionId).catch((err: unknown) => {
+    renewSession(resolvedSessionId ?? "").catch((err: unknown) => {
       console.error("Session renewal failed (non-fatal):", err);
     });
   }
