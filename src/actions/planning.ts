@@ -16,7 +16,9 @@ import {
   updatePlanningTask
 } from "@/lib/planning";
 import type { PlanningItemStatus, PlanningTaskStatus, RecurrenceFrequency } from "@/lib/planning/types";
-import { canUsePlanning } from "@/lib/roles";
+import { canUsePlanning, canViewPlanning } from "@/lib/roles";
+import { createSupabaseActionClient } from "@/lib/supabase/server";
+import { generateInspirationItems } from "@/lib/planning/inspiration";
 
 export type PlanningActionResult = {
   success: boolean;
@@ -476,5 +478,107 @@ export async function deletePlanningTaskAction(input: unknown): Promise<Planning
   } catch (error) {
     console.error("Failed to delete planning task", error);
     return { success: false, message: "Could not delete task." };
+  }
+}
+
+// ─── Inspiration item actions ─────────────────────────────────────────────────
+
+export async function convertInspirationItemAction(
+  id: string
+): Promise<{ success: boolean; message?: string }> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return { success: false, message: "You must be signed in." };
+    if (!canViewPlanning(user.role)) {
+      return { success: false, message: "You do not have permission to perform this action." };
+    }
+
+    const db = await createSupabaseActionClient();
+
+    // Fetch the inspiration item
+    const { data: item, error: fetchError } = await db
+      .from("planning_inspiration_items")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (fetchError || !item) {
+      return { success: false, message: "Inspiration item not found." };
+    }
+
+    // Create the planning item
+    const { error: insertItemError } = await db
+      .from("planning_items")
+      .insert({
+        title: item.event_name,
+        target_date: item.event_date,
+        type_label: "Occasion",
+        status: "planned",
+        created_by: user.id,
+      });
+
+    if (insertItemError) {
+      console.error("convertInspirationItemAction: insert planning_item failed", insertItemError);
+      return { success: false, message: "Failed to add to plan." };
+    }
+
+    // Record the dismissal (with reason = 'converted')
+    await db.from("planning_inspiration_dismissals").insert({
+      inspiration_item_id: id,
+      dismissed_by: user.id,
+      reason: "converted",
+    });
+
+    revalidatePath("/planning");
+    return { success: true, message: "Added to your plan." };
+  } catch (error) {
+    console.error("convertInspirationItemAction:", error);
+    return { success: false, message: "Something went wrong." };
+  }
+}
+
+export async function dismissInspirationItemAction(
+  id: string
+): Promise<{ success: boolean; message?: string }> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return { success: false, message: "You must be signed in." };
+    if (!canViewPlanning(user.role)) {
+      return { success: false, message: "You do not have permission to perform this action." };
+    }
+
+    const db = await createSupabaseActionClient();
+    await db.from("planning_inspiration_dismissals").insert({
+      inspiration_item_id: id,
+      dismissed_by: user.id,
+      reason: "dismissed",
+    });
+
+    revalidatePath("/planning");
+    return { success: true };
+  } catch (error) {
+    console.error("dismissInspirationItemAction:", error);
+    return { success: false, message: "Something went wrong." };
+  }
+}
+
+export async function refreshInspirationItemsAction(): Promise<{ success: boolean; message?: string }> {
+  try {
+    const user = await getCurrentUser();
+    if (!user || user.role !== "central_planner") {
+      return { success: false, message: "Unauthorised." };
+    }
+
+    const today = new Date();
+    const windowEnd = new Date(today);
+    windowEnd.setDate(today.getDate() + 180);
+
+    const count = await generateInspirationItems(today, windowEnd);
+
+    revalidatePath("/planning");
+    return { success: true, message: `Inspiration items refreshed — ${count} occasions found.` };
+  } catch (error) {
+    console.error("refreshInspirationItemsAction:", error);
+    return { success: false, message: "Refresh failed. Check server logs." };
   }
 }
