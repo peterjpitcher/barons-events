@@ -87,6 +87,12 @@ describe('dismissInspirationItemAction', () => {
     expect(result.success).toBe(false);
   });
 
+  it('returns error if user role cannot view planning', async () => {
+    (getCurrentUser as Mock).mockResolvedValue(makeUser('reviewer'));
+    const result = await dismissInspirationItemAction('item-1');
+    expect(result.success).toBe(false);
+  });
+
   it('inserts dismissal row for authenticated viewer', async () => {
     (getCurrentUser as Mock).mockResolvedValue(makeUser('central_planner'));
     const db = makeChainableDb();

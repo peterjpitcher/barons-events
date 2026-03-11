@@ -523,11 +523,14 @@ export async function convertInspirationItemAction(
     }
 
     // Record the dismissal (with reason = 'converted')
-    await db.from("planning_inspiration_dismissals").insert({
+    const { error: dismissalError } = await db.from("planning_inspiration_dismissals").insert({
       inspiration_item_id: id,
       dismissed_by: user.id,
       reason: "converted",
     });
+    if (dismissalError) {
+      console.warn("convertInspirationItemAction: dismissal insert failed (item may reappear on board)", dismissalError);
+    }
 
     revalidatePath("/planning");
     return { success: true, message: "Added to your plan." };
@@ -548,11 +551,15 @@ export async function dismissInspirationItemAction(
     }
 
     const db = await createSupabaseActionClient();
-    await db.from("planning_inspiration_dismissals").insert({
+    const { error: dismissalError } = await db.from("planning_inspiration_dismissals").insert({
       inspiration_item_id: id,
       dismissed_by: user.id,
       reason: "dismissed",
     });
+    if (dismissalError) {
+      console.error("dismissInspirationItemAction: dismissal insert failed", dismissalError);
+      return { success: false, message: "Failed to hide item." };
+    }
 
     revalidatePath("/planning");
     return { success: true };
