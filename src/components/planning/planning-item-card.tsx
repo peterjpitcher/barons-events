@@ -567,14 +567,17 @@ export function InspirationItemCard({ item }: { item: PlanningInspirationItem })
     setConverting(true);
     const result = await convertInspirationItemAction(item.id);
     if (!result.success) {
-      console.error(result.message);
+      toast.error(result.message ?? 'Failed to add to plan.');
     }
     setConverting(false);
   }
 
   async function handleDismiss() {
     setDismissing(true);
-    await dismissInspirationItemAction(item.id);
+    const result = await dismissInspirationItemAction(item.id);
+    if (!result.success) {
+      toast.error(result.message ?? 'Failed to hide item.');
+    }
     setDismissing(false);
   }
 
@@ -602,22 +605,25 @@ export function InspirationItemCard({ item }: { item: PlanningInspirationItem })
         )}
       </div>
       <div className="flex items-center gap-1 shrink-0">
-        <button
+        <Button
           type="button"
+          variant="primary"
+          size="sm"
           disabled={converting || dismissing}
           onClick={handleConvert}
-          className="text-xs bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white rounded px-2 py-1 font-medium transition-colors"
+          className="bg-amber-500 hover:bg-amber-600 text-white"
         >
           {converting ? '…' : 'Add to plan'}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
           disabled={converting || dismissing}
           onClick={handleDismiss}
-          className="text-xs text-amber-700 hover:text-amber-900 disabled:opacity-50 rounded px-2 py-1 transition-colors"
         >
           {dismissing ? '…' : 'Hide'}
-        </button>
+        </Button>
       </div>
     </div>
   );

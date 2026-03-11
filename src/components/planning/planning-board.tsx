@@ -194,7 +194,7 @@ export function PlanningBoard({ data, venues, canApproveEvents, userRole }: Plan
     };
     for (const item of data.inspirationItems) {
       const offset = daysBetween(data.today, item.eventDate);
-      const bucket = bucketForDayOffset(offset);
+      const bucket = bucketForPlanningOffset(offset);
       map[bucket].push(item);
     }
     return map;
@@ -410,7 +410,7 @@ export function PlanningBoard({ data, venues, canApproveEvents, userRole }: Plan
                   ))}
                 </div>
 
-                {rows.length === 0 ? (
+                {rows.length === 0 && inspirationByBucket[bucket.key].length === 0 ? (
                   <p className="mt-auto text-sm text-subtle">No items in this window.</p>
                 ) : null}
               </article>
