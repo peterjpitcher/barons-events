@@ -130,9 +130,15 @@ export async function inviteUserAction(
     errorMessage: error?.message ?? null
   });
 
-  if (error && error.status !== 422) {
-    console.error("[invite] non-422 error from inviteUserByEmail:", error);
-    return { success: false, message: "Invitation failed. Double-check the email." };
+  if (error) {
+    if (error.status === 429) {
+      console.error("[invite] email rate limit hit:", error);
+      return { success: false, message: "Too many invitations sent recently. Please wait a few minutes and try again." };
+    }
+    if (error.status !== 422) {
+      console.error("[invite] non-422 error from inviteUserByEmail:", error);
+      return { success: false, message: "Invitation failed. Double-check the email." };
+    }
   }
 
   let userId = data?.user?.id ?? null;
