@@ -682,7 +682,7 @@ export function EventOverlayCard({ event, canApprove }: EventOverlayCardProps) {
             {hasWebCopy ? "Webpage ready" : "No web copy"}
           </Badge>
         </div>
-        {canApprove && ["submitted", "draft"].includes(event.status) ? (
+        {canApprove && event.status === "submitted" ? (
           <ApproveEventButton eventId={event.eventId} size="sm" className="h-auto px-3 py-1 text-xs" hasWebCopy={hasWebCopy} />
         ) : null}
       </div>
