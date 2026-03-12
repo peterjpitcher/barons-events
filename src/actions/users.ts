@@ -115,58 +115,79 @@ export async function inviteUserAction(
     };
   }
 
-  const adminClient = createSupabaseAdminClient();
-  const confirmUrl = new URL("/auth/confirm", resolveAppUrl()).toString();
+  let adminClient: ReturnType<typeof createSupabaseAdminClient>;
+  try {
+    adminClient = createSupabaseAdminClient();
+    console.log("[invite:1] admin client created OK");
+  } catch (clientErr) {
+    console.error("[invite:1] FAILED to create admin client:", clientErr);
+    return { success: false, message: "Server configuration error. Contact support." };
+  }
 
-  // Use generateLink instead of inviteUserByEmail so we control email delivery via Resend.
-  // generateLink creates the auth user (or reuses an existing one) and returns a signed URL
-  // without sending any email — identical to how password reset works in this codebase.
-  const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
-    type: "invite",
-    email: parsed.data.email,
-    options: {
-      data: { full_name: parsed.data.fullName ?? undefined },
-      redirectTo: confirmUrl
-    }
-  });
+  const confirmUrl = new URL("/auth/confirm", resolveAppUrl()).toString();
+  console.log("[invite:2] confirmUrl =", confirmUrl, "| email =", parsed.data.email, "| role =", parsed.data.role);
+
+  let linkData: Awaited<ReturnType<typeof adminClient.auth.admin.generateLink>>["data"];
+  let linkError: Awaited<ReturnType<typeof adminClient.auth.admin.generateLink>>["error"];
+
+  try {
+    const result = await adminClient.auth.admin.generateLink({
+      type: "invite",
+      email: parsed.data.email,
+      options: {
+        data: { full_name: parsed.data.fullName ?? undefined },
+        redirectTo: confirmUrl
+      }
+    });
+    linkData = result.data;
+    linkError = result.error;
+    console.log("[invite:3] generateLink response — error:", linkError ? `${linkError.status} ${linkError.message}` : "none", "| userId:", result.data?.user?.id ?? "null", "| hasActionLink:", !!result.data?.properties?.action_link);
+  } catch (generateErr) {
+    console.error("[invite:3] generateLink THREW:", generateErr);
+    return { success: false, message: "Invitation failed unexpectedly. Please try again." };
+  }
 
   if (linkError) {
-    console.error("[invite] generateLink failed:", linkError);
+    console.error("[invite:3] generateLink error detail — status:", linkError.status, "| code:", (linkError as unknown as Record<string, unknown>).code, "| message:", linkError.message);
     if (linkError.status === 429) {
       return { success: false, message: "Too many invitations sent recently. Please wait a few minutes and try again." };
     }
-    return { success: false, message: "Invitation failed. Double-check the email and try again." };
+    return { success: false, message: `Invitation failed (code ${linkError.status}). Please try again.` };
   }
 
   const userId = linkData?.user?.id ?? null;
   const actionLink = linkData?.properties?.action_link ?? null;
 
+  console.log("[invite:4] userId =", userId, "| actionLink present =", !!actionLink);
+
   if (!userId) {
-    console.error("[invite] generateLink returned no user id for", parsed.data.email);
+    console.error("[invite:4] no userId returned — linkData:", JSON.stringify(linkData));
     return { success: false, message: "Invitation could not be sent. Please try again or contact support." };
   }
 
   try {
-    if (userId) {
-      const adminDb = createSupabaseAdminClient();
-      const { error: upsertError } = await adminDb.from("users").upsert({
-        id: userId,
-        email: parsed.data.email,
-        full_name: parsed.data.fullName ?? null,
-        role: parsed.data.role,
-        venue_id: parsed.data.venueId ? parsed.data.venueId : null
-      });
+    console.log("[invite:5] upserting into public.users — id:", userId);
+    const adminDb = createSupabaseAdminClient();
+    const { error: upsertError } = await adminDb.from("users").upsert({
+      id: userId,
+      email: parsed.data.email,
+      full_name: parsed.data.fullName ?? null,
+      role: parsed.data.role,
+      venue_id: parsed.data.venueId ? parsed.data.venueId : null
+    });
 
-      if (upsertError) {
-        throw upsertError;
-      }
+    if (upsertError) {
+      console.error("[invite:5] upsert failed:", upsertError);
+      throw upsertError;
     }
+    console.log("[invite:5] upsert OK");
 
     if (actionLink) {
+      console.log("[invite:6] sending invite email via Resend");
       const sent = await sendInviteEmail(parsed.data.email, actionLink, parsed.data.fullName ?? null);
-      if (!sent) {
-        console.error("[invite] Resend failed to deliver invite email to", parsed.data.email);
-      }
+      console.log("[invite:6] Resend result:", sent ? "sent" : "FAILED");
+    } else {
+      console.error("[invite:6] no actionLink — skipping email");
     }
 
     const emailHash = await hashEmailForAudit(parsed.data.email);
@@ -178,17 +199,16 @@ export async function inviteUserAction(
     });
 
     revalidatePath("/users");
+    console.log("[invite:7] SUCCESS");
     return { success: true, message: "Invite sent." };
   } catch (upsertError) {
-    console.error(upsertError);
-    // Atomicity: remove the auth user if we couldn't write their profile record
-    if (userId) {
-      try {
-        const cleanupClient = createSupabaseAdminClient();
-        await cleanupClient.auth.admin.deleteUser(userId);
-      } catch (cleanupError) {
-        console.error("Failed to clean up orphaned auth user after invite failure", cleanupError);
-      }
+    console.error("[invite:5] catch block — rolling back auth user:", upsertError);
+    try {
+      const cleanupClient = createSupabaseAdminClient();
+      await cleanupClient.auth.admin.deleteUser(userId);
+      console.log("[invite:5] auth user deleted (rollback)");
+    } catch (cleanupError) {
+      console.error("[invite:5] rollback FAILED:", cleanupError);
     }
     return { success: false, message: "Invitation sent but updating access failed. Please try again." };
   }
