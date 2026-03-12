@@ -461,6 +461,9 @@ export async function listPlanningBoardData(params?: {
 
   if (params?.filters?.statuses && params.filters.statuses.length > 0) {
     itemsQuery = itemsQuery.in("status", params.filters.statuses);
+  } else {
+    // By default, hide completed/cancelled planning items from the board
+    itemsQuery = itemsQuery.not("status", "in", '("done","cancelled")');
   }
 
   const { data: itemData, error: itemsError } = await itemsQuery;
@@ -482,6 +485,7 @@ export async function listPlanningBoardData(params?: {
     .select("id,title,status,start_at,end_at,venue_space,venue_id,public_title,public_teaser,venue:venues(name)")
     .gte("start_at", startLowerIso)
     .lte("start_at", startUpperIso)
+    .neq("status", "completed")
     .order("start_at", { ascending: true });
 
   if (eventsError) {
