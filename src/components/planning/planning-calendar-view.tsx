@@ -56,11 +56,13 @@ function formatDayNumber(dateKey: string): string {
   return parseDateKey(dateKey).toLocaleDateString("en-GB", { day: "numeric", timeZone: "UTC" });
 }
 
+const SOURCE_RANK: Record<string, number> = { planning: 0, event: 1, inspiration: 2 };
+
 function sortEntries(entries: PlanningViewEntry[]): PlanningViewEntry[] {
   return [...entries].sort((left, right) => {
-    if (left.source !== right.source) {
-      return left.source === "planning" ? -1 : 1;
-    }
+    const lr = SOURCE_RANK[left.source] ?? 3;
+    const rr = SOURCE_RANK[right.source] ?? 3;
+    if (lr !== rr) return lr - rr;
     return left.title.localeCompare(right.title);
   });
 }
@@ -163,6 +165,18 @@ export function PlanningCalendarView({ today, entries, onOpenPlanningItem, onMov
                       >
                         {entry.title}
                       </button>
+                    );
+                  }
+
+                  if (entry.source === "inspiration") {
+                    return (
+                      <div
+                        key={entry.id}
+                        className="block rounded-[var(--radius-sm)] border-l-4 border-amber-400 bg-amber-50 px-2 py-1 text-[0.72rem] leading-tight text-[var(--color-text)]"
+                        title={entry.title}
+                      >
+                        ✨ {entry.title}
+                      </div>
                     );
                   }
 

@@ -1,4 +1,4 @@
-import type { PlanningItem } from "@/lib/planning/types";
+import type { PlanningInspirationItem, PlanningItem } from "@/lib/planning/types";
 
 export type PlanningViewEntry =
   | {
@@ -19,4 +19,11 @@ export type PlanningViewEntry =
       venueLabel: string;
       eventId: string;
       startAt: string;
+    }
+  | {
+      id: string;
+      source: "inspiration";
+      targetDate: string;
+      title: string;
+      inspirationItem: PlanningInspirationItem;
     };

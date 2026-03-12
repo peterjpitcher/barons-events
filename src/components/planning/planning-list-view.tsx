@@ -36,14 +36,16 @@ function formatOffset(today: string, date: string): string {
   return `${offset}d`;
 }
 
+const SOURCE_RANK: Record<string, number> = { planning: 0, event: 1, inspiration: 2 };
+
 function sortEntries(entries: PlanningViewEntry[]): PlanningViewEntry[] {
   return [...entries].sort((left, right) => {
     if (left.targetDate !== right.targetDate) {
       return left.targetDate.localeCompare(right.targetDate);
     }
-    if (left.source !== right.source) {
-      return left.source === "planning" ? -1 : 1;
-    }
+    const lr = SOURCE_RANK[left.source] ?? 3;
+    const rr = SOURCE_RANK[right.source] ?? 3;
+    if (lr !== rr) return lr - rr;
     return left.title.localeCompare(right.title);
   });
 }
@@ -126,6 +128,20 @@ export function PlanningListView({ today, entries, onOpenPlanningItem }: Plannin
                         </span>
                         <span className="text-xs font-semibold text-[var(--color-primary-700)]">Open</span>
                       </button>
+                    );
+                  }
+
+                  if (entry.source === "inspiration") {
+                    return (
+                      <div
+                        key={entry.id}
+                        className="flex items-center gap-3 rounded-[var(--radius-sm)] border border-dashed border-amber-400 bg-amber-50 px-3 py-2"
+                      >
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium text-[var(--color-text)]">✨ {entry.title}</span>
+                          <span className="block text-xs text-subtle">Inspiration · Seasonal occasion</span>
+                        </span>
+                      </div>
                     );
                   }
 

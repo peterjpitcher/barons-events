@@ -202,28 +202,31 @@ export function PlanningBoard({ data, venues, canApproveEvents, userRole }: Plan
   }, [data.inspirationItems, data.today]);
 
   const combinedByBucket = useMemo(() => {
-    const result: Record<PlanningBucketKey, Array<{ type: "planning"; item: PlanningItem } | { type: "event"; event: PlanningEventOverlay }>> = {
-      "0_30": [],
-      "31_60": [],
-      "61_90": [],
-      later: []
-    };
+    const typeOrder: Record<string, number> = { planning: 0, event: 1, inspiration: 2 };
+    const result: Record<PlanningBucketKey, Array<
+      | { type: "planning"; item: PlanningItem }
+      | { type: "event"; event: PlanningEventOverlay }
+      | { type: "inspiration"; item: PlanningInspirationItem }
+    >> = { "0_30": [], "31_60": [], "61_90": [], later: [] };
 
     for (const key of ["0_30", "31_60", "61_90", "later"] as PlanningBucketKey[]) {
-      const merged: Array<{ type: "planning"; item: PlanningItem; targetDate: string; title: string } | { type: "event"; event: PlanningEventOverlay; targetDate: string; title: string }> = [
+      const merged = [
         ...planningByBucket[key].map((item) => ({ type: "planning" as const, item, targetDate: item.targetDate, title: item.title })),
-        ...eventsByBucket[key].map((event) => ({ type: "event" as const, event, targetDate: event.targetDate, title: event.title }))
+        ...eventsByBucket[key].map((event) => ({ type: "event" as const, event, targetDate: event.targetDate, title: event.title })),
+        ...inspirationByBucket[key].map((item) => ({ type: "inspiration" as const, item, targetDate: item.eventDate, title: item.eventName }))
       ];
       merged.sort((left, right) => {
         if (left.targetDate !== right.targetDate) return left.targetDate.localeCompare(right.targetDate);
-        if (left.type !== right.type) return left.type === "planning" ? -1 : 1;
+        const lo = typeOrder[left.type] ?? 3;
+        const ro = typeOrder[right.type] ?? 3;
+        if (lo !== ro) return lo - ro;
         return left.title.localeCompare(right.title);
       });
       result[key] = merged;
     }
 
     return result;
-  }, [planningByBucket, eventsByBucket]);
+  }, [planningByBucket, eventsByBucket, inspirationByBucket]);
 
   const visibleBuckets = showLater ? BUCKETS : BUCKETS.slice(0, 3);
   const activeItem = useMemo(
@@ -232,6 +235,8 @@ export function PlanningBoard({ data, venues, canApproveEvents, userRole }: Plan
   );
 
   const combinedEntries = useMemo<PlanningViewEntry[]>(() => {
+    const sourceOrder: Record<string, number> = { planning: 0, event: 1, inspiration: 2 };
+
     const planningEntries: PlanningViewEntry[] = filteredPlanningItems.map((item) => ({
       id: `planning-${item.id}`,
       source: "planning",
@@ -253,12 +258,22 @@ export function PlanningBoard({ data, venues, canApproveEvents, userRole }: Plan
       startAt: event.startAt
     }));
 
-    return [...planningEntries, ...eventEntries].sort((left, right) => {
+    const inspirationEntries: PlanningViewEntry[] = data.inspirationItems.map((item) => ({
+      id: `inspiration-${item.id}`,
+      source: "inspiration",
+      targetDate: item.eventDate,
+      title: item.eventName,
+      inspirationItem: item
+    }));
+
+    return [...planningEntries, ...eventEntries, ...inspirationEntries].sort((left, right) => {
       if (left.targetDate !== right.targetDate) return left.targetDate.localeCompare(right.targetDate);
-      if (left.source !== right.source) return left.source === "planning" ? -1 : 1;
+      const lo = sourceOrder[left.source] ?? 3;
+      const ro = sourceOrder[right.source] ?? 3;
+      if (lo !== ro) return lo - ro;
       return left.title.localeCompare(right.title);
     });
-  }, [filteredPlanningItems, visibleEvents]);
+  }, [filteredPlanningItems, visibleEvents, data.inspirationItems]);
 
   useEffect(() => {
     if (activeItemId && !activeItem) {
@@ -391,27 +406,28 @@ export function PlanningBoard({ data, venues, canApproveEvents, userRole }: Plan
                 </header>
 
                 <div className="space-y-2">
-                  {rows.map((row) =>
-                    row.type === "planning" ? (
-                      <PlanningItemCard
-                        key={row.item.id}
-                        item={row.item}
-                        users={data.users}
-                        venues={venues}
-                        onChanged={refreshBoard}
-                        compact
-                        onOpenDetails={(planningItem) => setActiveItemId(planningItem.id)}
-                      />
-                    ) : (
-                      <EventOverlayCard key={row.event.id} event={row.event} canApprove={canApproveEvents} />
-                    )
-                  )}
-                  {inspirationByBucket[bucket.key].map(item => (
-                    <InspirationItemCard key={item.id} item={item} />
-                  ))}
+                  {rows.map((row) => {
+                    if (row.type === "planning") {
+                      return (
+                        <PlanningItemCard
+                          key={row.item.id}
+                          item={row.item}
+                          users={data.users}
+                          venues={venues}
+                          onChanged={refreshBoard}
+                          compact
+                          onOpenDetails={(planningItem) => setActiveItemId(planningItem.id)}
+                        />
+                      );
+                    }
+                    if (row.type === "inspiration") {
+                      return <InspirationItemCard key={row.item.id} item={row.item} />;
+                    }
+                    return <EventOverlayCard key={row.event.id} event={row.event} canApprove={canApproveEvents} />;
+                  })}
                 </div>
 
-                {rows.length === 0 && inspirationByBucket[bucket.key].length === 0 ? (
+                {rows.length === 0 ? (
                   <p className="mt-auto text-sm text-subtle">No items in this window.</p>
                 ) : null}
               </article>
