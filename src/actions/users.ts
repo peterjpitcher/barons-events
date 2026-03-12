@@ -148,11 +148,13 @@ export async function inviteUserAction(
   }
 
   if (linkError) {
-    console.error("[invite:3] generateLink error detail — status:", linkError.status, "| code:", (linkError as unknown as Record<string, unknown>).code, "| message:", linkError.message);
+    const errCode = (linkError as unknown as Record<string, unknown>).code;
+    console.error("[invite:3] generateLink error detail — status:", linkError.status, "| code:", errCode, "| message:", linkError.message);
     if (linkError.status === 429) {
       return { success: false, message: "Too many invitations sent recently. Please wait a few minutes and try again." };
     }
-    return { success: false, message: `Invitation failed (code ${linkError.status}). Please try again.` };
+    // DEBUG: include raw error so we can diagnose without log streaming
+    return { success: false, message: `[DEBUG] generateLink failed — status: ${linkError.status}, code: ${String(errCode ?? "none")}, message: ${linkError.message}` };
   }
 
   const userId = linkData?.user?.id ?? null;
@@ -162,7 +164,8 @@ export async function inviteUserAction(
 
   if (!userId) {
     console.error("[invite:4] no userId returned — linkData:", JSON.stringify(linkData));
-    return { success: false, message: "Invitation could not be sent. Please try again or contact support." };
+    // DEBUG: include raw data so we can diagnose without log streaming
+    return { success: false, message: `[DEBUG] generateLink returned no userId. linkData: ${JSON.stringify(linkData)}` };
   }
 
   try {
