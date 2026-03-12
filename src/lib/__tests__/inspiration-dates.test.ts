@@ -8,6 +8,12 @@ import {
   computeEasterSunday,
   computeMothersDayUK,
   computeFathersDay,
+  computeWorldWhiskyDay,
+  computeWorldGinDay,
+  computeNationalFishAndChipDay,
+  computeInternationalBeerDay,
+  computeNationalBurgerDay,
+  computeNationalCurryWeek,
   getFixedSeasonalDates,
   getComputedDates,
 } from '@/lib/planning/inspiration-dates';
@@ -85,6 +91,118 @@ describe('computeFathersDay', () => {
   });
 });
 
+describe('computeWorldWhiskyDay', () => {
+  it('returns the 3rd Saturday of May 2024 (18 May)', () => {
+    const d = computeWorldWhiskyDay(2024);
+    expect(d.getFullYear()).toBe(2024);
+    expect(d.getMonth()).toBe(4); // May
+    expect(d.getDate()).toBe(18);
+    expect(d.getDay()).toBe(6); // Saturday
+  });
+
+  it('returns the 3rd Saturday of May 2025 (17 May)', () => {
+    const d = computeWorldWhiskyDay(2025);
+    expect(d.getDate()).toBe(17);
+    expect(d.getDay()).toBe(6);
+  });
+
+  it('always returns a Saturday', () => {
+    for (const year of [2024, 2025, 2026, 2027]) {
+      expect(computeWorldWhiskyDay(year).getDay()).toBe(6);
+    }
+  });
+});
+
+describe('computeWorldGinDay', () => {
+  it('returns the 2nd Saturday of June 2024 (8 Jun)', () => {
+    const d = computeWorldGinDay(2024);
+    expect(d.getFullYear()).toBe(2024);
+    expect(d.getMonth()).toBe(5); // June
+    expect(d.getDate()).toBe(8);
+    expect(d.getDay()).toBe(6); // Saturday
+  });
+
+  it('always returns a Saturday in June', () => {
+    for (const year of [2024, 2025, 2026, 2027]) {
+      const d = computeWorldGinDay(year);
+      expect(d.getDay()).toBe(6);
+      expect(d.getMonth()).toBe(5);
+    }
+  });
+});
+
+describe('computeNationalFishAndChipDay', () => {
+  it('returns the 1st Friday of June 2024 (7 Jun)', () => {
+    const d = computeNationalFishAndChipDay(2024);
+    expect(d.getFullYear()).toBe(2024);
+    expect(d.getMonth()).toBe(5); // June
+    expect(d.getDate()).toBe(7);
+    expect(d.getDay()).toBe(5); // Friday
+  });
+
+  it('always returns a Friday in June', () => {
+    for (const year of [2024, 2025, 2026, 2027]) {
+      const d = computeNationalFishAndChipDay(year);
+      expect(d.getDay()).toBe(5);
+      expect(d.getMonth()).toBe(5);
+    }
+  });
+});
+
+describe('computeInternationalBeerDay', () => {
+  it('returns the 1st Friday of August 2024 (2 Aug)', () => {
+    const d = computeInternationalBeerDay(2024);
+    expect(d.getFullYear()).toBe(2024);
+    expect(d.getMonth()).toBe(7); // August
+    expect(d.getDate()).toBe(2);
+    expect(d.getDay()).toBe(5); // Friday
+  });
+
+  it('always returns a Friday in August', () => {
+    for (const year of [2024, 2025, 2026, 2027]) {
+      const d = computeInternationalBeerDay(year);
+      expect(d.getDay()).toBe(5);
+      expect(d.getMonth()).toBe(7);
+    }
+  });
+});
+
+describe('computeNationalBurgerDay', () => {
+  it('returns the last Thursday of August 2024 (29 Aug)', () => {
+    const d = computeNationalBurgerDay(2024);
+    expect(d.getFullYear()).toBe(2024);
+    expect(d.getMonth()).toBe(7); // August
+    expect(d.getDate()).toBe(29);
+    expect(d.getDay()).toBe(4); // Thursday
+  });
+
+  it('always returns a Thursday in August', () => {
+    for (const year of [2024, 2025, 2026, 2027]) {
+      const d = computeNationalBurgerDay(year);
+      expect(d.getDay()).toBe(4);
+      expect(d.getMonth()).toBe(7);
+    }
+  });
+});
+
+describe('computeNationalCurryWeek', () => {
+  it('returns the 2nd Monday of October 2024 (14 Oct)', () => {
+    const d = computeNationalCurryWeek(2024);
+    expect(d.getFullYear()).toBe(2024);
+    expect(d.getMonth()).toBe(9); // October
+    expect(d.getDate()).toBe(14);
+    expect(d.getDay()).toBe(1); // Monday
+  });
+
+  it('always returns a Monday in October', () => {
+    for (const year of [2024, 2025, 2026, 2027]) {
+      const d = computeNationalCurryWeek(year);
+      expect(d.getDay()).toBe(1);
+      expect(d.getMonth()).toBe(9);
+    }
+  });
+});
+
 describe('getFixedSeasonalDates', () => {
   it("returns Valentine's Day for a year in the window", () => {
     const items = getFixedSeasonalDates(
@@ -114,6 +232,15 @@ describe('getFixedSeasonalDates', () => {
       new Date('2026-06-30')
     );
     expect(items.every(i => i.eventDate >= '2026-03-01' && i.eventDate <= '2026-06-30')).toBe(true);
+  });
+
+  it('returns hospitality occasions (Gin Day excluded — it is floating)', () => {
+    const items = getFixedSeasonalDates(new Date('2026-01-01'), new Date('2026-12-31'));
+    expect(items.some(i => i.eventName === 'National Beer Day')).toBe(true);
+    expect(items.some(i => i.eventName === 'World Rum Day')).toBe(true);
+    expect(items.some(i => i.eventName === 'National Prosecco Day')).toBe(true);
+    expect(items.some(i => i.eventName === 'World Coffee Day')).toBe(true);
+    expect(items.some(i => i.eventName === 'British Pie Week')).toBe(true);
   });
 });
 
@@ -156,5 +283,15 @@ describe('getComputedDates', () => {
     const categories = new Set(items.map(i => i.category));
     expect(categories.has('seasonal')).toBe(true);
     expect(categories.has('floating')).toBe(true);
+  });
+
+  it('includes floating hospitality occasions in a full-year window', () => {
+    const items = getComputedDates(new Date('2026-01-01'), new Date('2026-12-31'));
+    expect(items.some(i => i.eventName === 'World Gin Day')).toBe(true);
+    expect(items.some(i => i.eventName === 'World Whisky Day')).toBe(true);
+    expect(items.some(i => i.eventName === 'National Fish & Chip Day')).toBe(true);
+    expect(items.some(i => i.eventName === 'International Beer Day')).toBe(true);
+    expect(items.some(i => i.eventName === 'National Burger Day')).toBe(true);
+    expect(items.some(i => i.eventName === 'National Curry Week')).toBe(true);
   });
 });
