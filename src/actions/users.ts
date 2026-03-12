@@ -12,6 +12,7 @@ import type { ActionResult } from "@/lib/types";
 import { destroyAllSessionsForUser } from "@/lib/auth/session";
 import { logAuthEvent, hashEmailForAudit } from "@/lib/audit-log";
 import { resolveAppUrl } from "@/lib/app-url";
+import { sendInviteEmail } from "@/lib/notifications";
 
 const userUpdateSchema = z.object({
   userId: z.string().uuid(),
@@ -116,57 +117,32 @@ export async function inviteUserAction(
 
   const adminClient = createSupabaseAdminClient();
   const confirmUrl = new URL("/auth/confirm", resolveAppUrl()).toString();
-  const { data, error } = await adminClient.auth.admin.inviteUserByEmail(parsed.data.email, {
-    data: {
-      full_name: parsed.data.fullName ?? undefined
-    },
-    redirectTo: confirmUrl
-  });
 
-  console.log("[invite] inviteUserByEmail result:", {
+  // Use generateLink instead of inviteUserByEmail so we control email delivery via Resend.
+  // generateLink creates the auth user (or reuses an existing one) and returns a signed URL
+  // without sending any email — identical to how password reset works in this codebase.
+  const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
+    type: "invite",
     email: parsed.data.email,
-    userId: data?.user?.id ?? null,
-    errorStatus: error?.status ?? null,
-    errorMessage: error?.message ?? null
+    options: {
+      data: { full_name: parsed.data.fullName ?? undefined },
+      redirectTo: confirmUrl
+    }
   });
 
-  // Track whether email delivery failed so we can surface a different message
-  const emailDeliveryFailed = error?.status === 500;
-
-  if (error) {
-    if (error.status === 429) {
-      console.error("[invite] email rate limit hit:", error);
+  if (linkError) {
+    console.error("[invite] generateLink failed:", linkError);
+    if (linkError.status === 429) {
       return { success: false, message: "Too many invitations sent recently. Please wait a few minutes and try again." };
     }
-    // 422 = user already exists; 500 = email delivery failed (user may still have been created)
-    // Both fall through to the listUsers check below
-    if (error.status !== 422 && error.status !== 500) {
-      console.error("[invite] unexpected error from inviteUserByEmail:", error);
-      return { success: false, message: "Invitation failed. Double-check the email." };
-    }
-    if (emailDeliveryFailed) {
-      console.error("[invite] email delivery failed (500), checking if user was created:", error.message);
-    }
+    return { success: false, message: "Invitation failed. Double-check the email and try again." };
   }
 
-  let userId = data?.user?.id ?? null;
+  const userId = linkData?.user?.id ?? null;
+  const actionLink = linkData?.properties?.action_link ?? null;
 
   if (!userId) {
-    const { data: existingList, error: listError } = await adminClient.auth.admin.listUsers({ page: 1, perPage: 200 });
-    if (listError) {
-      console.error("[invite] Could not list users to find existing account", listError);
-      return { success: false, message: "Invitation failed. Could not verify existing accounts." };
-    }
-    const match = existingList?.users?.find(
-      (candidate) => candidate.email?.toLowerCase() === parsed.data.email.toLowerCase()
-    );
-    userId = match?.id ?? null;
-    console.log("[invite] listUsers fallback:", { found: !!userId, totalUsers: existingList?.users?.length });
-  }
-
-  // If we still have no userId the invite failed silently — surface the error
-  if (!userId) {
-    console.error("[invite] userId is null after all fallbacks — invite failed silently for", parsed.data.email);
+    console.error("[invite] generateLink returned no user id for", parsed.data.email);
     return { success: false, message: "Invitation could not be sent. Please try again or contact support." };
   }
 
@@ -186,6 +162,13 @@ export async function inviteUserAction(
       }
     }
 
+    if (actionLink) {
+      const sent = await sendInviteEmail(parsed.data.email, actionLink, parsed.data.fullName ?? null);
+      if (!sent) {
+        console.error("[invite] Resend failed to deliver invite email to", parsed.data.email);
+      }
+    }
+
     const emailHash = await hashEmailForAudit(parsed.data.email);
     await logAuthEvent({
       event: "auth.invite.sent",
@@ -195,9 +178,6 @@ export async function inviteUserAction(
     });
 
     revalidatePath("/users");
-    if (emailDeliveryFailed) {
-      return { success: true, message: "User added, but the invite email could not be sent. Use 'Forgot password' on the login page to send them a sign-in link." };
-    }
     return { success: true, message: "Invite sent." };
   } catch (upsertError) {
     console.error(upsertError);

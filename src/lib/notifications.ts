@@ -376,6 +376,39 @@ export async function sendReviewDecisionEmail(eventId: string, decision: string)
   }
 }
 
+export async function sendInviteEmail(email: string, inviteLink: string, fullName?: string | null) {
+  const resend = getResendClient();
+  if (!resend) {
+    return false;
+  }
+
+  try {
+    const greeting = fullName ? `Hi ${escapeHtml(fullName)},` : "Hi there,";
+    const { html, text } = renderEmailTemplate({
+      headline: "You've been invited to EventHub",
+      intro: `${greeting} you've been invited to join the Barons EventHub planning platform.`,
+      body: [
+        "Use the button below to set your password and get started.",
+        "This invite link is valid for 7 days. If you didn't expect this email, you can safely ignore it."
+      ],
+      button: { label: "Accept invite & set password", url: inviteLink },
+      meta: [`Invite link: ${inviteLink}`]
+    });
+
+    await resend.emails.send({
+      from: RESEND_FROM_ADDRESS,
+      to: email,
+      subject: "You've been invited to EventHub",
+      html,
+      text
+    });
+    return true;
+  } catch (error) {
+    console.warn("Failed to send invite email", error);
+    return false;
+  }
+}
+
 export async function sendPasswordResetEmail(email: string, resetLink: string) {
   const resend = getResendClient();
   if (!resend) {
