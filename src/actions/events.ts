@@ -1649,3 +1649,78 @@ export async function deleteEventAction(_: ActionResult | undefined, formData: F
     return { success: false, message: "Could not delete the event." };
   }
 }
+
+// Permissive UUID format check (8-4-4-4-12 hex groups) without enforcing RFC 4122 version/variant bits.
+// z.string().uuid() in Zod v4 enforces strict RFC 4122 which rejects synthetic test UUIDs.
+const uuidFormatSchema = z.string().regex(
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+  "Invalid UUID"
+);
+
+export async function revertToDraftAction(
+  _: ActionResult | undefined,
+  formData: FormData
+): Promise<ActionResult> {
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect("/login");
+  }
+
+  const eventId = formData.get("eventId");
+  const parsedEvent = uuidFormatSchema.safeParse(eventId);
+  if (!parsedEvent.success) {
+    return { success: false, message: "Invalid event reference." };
+  }
+
+  const supabase = await createSupabaseActionClient();
+
+  try {
+    const { data: event, error: fetchError } = await supabase
+      .from("events")
+      .select("id, status")
+      .eq("id", parsedEvent.data)
+      .single();
+
+    if (fetchError || !event) {
+      return { success: false, message: "Event not found." };
+    }
+
+    if (event.status !== "approved") {
+      return { success: false, message: "Event is not currently approved." };
+    }
+
+    const { error: updateError } = await supabase
+      .from("events")
+      .update({ status: "draft", assignee_id: null, updated_at: new Date().toISOString() })
+      .eq("id", event.id);
+
+    if (updateError) {
+      return { success: false, message: "Could not revert event to draft." };
+    }
+
+    await recordAuditLogEntry({
+
+      entity: "event",
+      entityId: event.id,
+      action: "event.status_changed",
+      actorId: user.id,
+      meta: {
+        status: "draft",
+        previousStatus: "approved",
+        changes: ["Status"],
+      },
+    });
+
+    revalidatePath(`/events/${event.id}`);
+    revalidatePath("/events");
+    revalidatePath("/reviews");
+
+    return { success: true, message: "Event reverted to draft." };
+  } catch (error) {
+    if (error instanceof Error && error.message === "NEXT_REDIRECT") {
+      throw error;
+    }
+    console.error(error);
+    return { success: false, message: "Could not revert event to draft." };
+  }
+}
