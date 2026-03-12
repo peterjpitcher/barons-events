@@ -18,6 +18,7 @@ import {
 } from "@/lib/auth/session";
 import { validatePassword } from "@/lib/auth/password-policy";
 import { logAuthEvent, hashEmailForAudit } from "@/lib/audit-log";
+import { resolveAppUrl } from "@/lib/app-url";
 
 const credentialsSchema = z.object({
   email: z.string().email({ message: "Enter a valid email" }),
@@ -60,14 +61,6 @@ const passwordResetSchema = z
       });
     }
   });
-
-function resolveAppUrl() {
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? null;
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? null;
-  const vercelUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null;
-
-  return siteUrl ?? appUrl ?? vercelUrl ?? "https://eventhub.orangejelly.co.uk";
-}
 
 export async function signInAction(_: SignInState | undefined, formData: FormData): Promise<SignInState> {
   const redirectToRaw = formData.get("redirectTo");

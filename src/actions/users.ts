@@ -11,6 +11,7 @@ import { getFieldErrors } from "@/lib/form-errors";
 import type { ActionResult } from "@/lib/types";
 import { destroyAllSessionsForUser } from "@/lib/auth/session";
 import { logAuthEvent, hashEmailForAudit } from "@/lib/audit-log";
+import { resolveAppUrl } from "@/lib/app-url";
 
 const userUpdateSchema = z.object({
   userId: z.string().uuid(),
@@ -114,14 +115,23 @@ export async function inviteUserAction(
   }
 
   const adminClient = createSupabaseAdminClient();
+  const confirmUrl = new URL("/auth/confirm", resolveAppUrl()).toString();
   const { data, error } = await adminClient.auth.admin.inviteUserByEmail(parsed.data.email, {
     data: {
       full_name: parsed.data.fullName ?? undefined
-    }
+    },
+    redirectTo: confirmUrl
+  });
+
+  console.log("[invite] inviteUserByEmail result:", {
+    email: parsed.data.email,
+    userId: data?.user?.id ?? null,
+    errorStatus: error?.status ?? null,
+    errorMessage: error?.message ?? null
   });
 
   if (error && error.status !== 422) {
-    console.error(error);
+    console.error("[invite] non-422 error from inviteUserByEmail:", error);
     return { success: false, message: "Invitation failed. Double-check the email." };
   }
 
@@ -130,13 +140,20 @@ export async function inviteUserAction(
   if (!userId) {
     const { data: existingList, error: listError } = await adminClient.auth.admin.listUsers({ page: 1, perPage: 200 });
     if (listError) {
-      console.error("Could not list users to find existing account", listError);
+      console.error("[invite] Could not list users to find existing account", listError);
       return { success: false, message: "Invitation failed. Could not verify existing accounts." };
     }
     const match = existingList?.users?.find(
       (candidate) => candidate.email?.toLowerCase() === parsed.data.email.toLowerCase()
     );
     userId = match?.id ?? null;
+    console.log("[invite] listUsers fallback:", { found: !!userId, totalUsers: existingList?.users?.length });
+  }
+
+  // If we still have no userId the invite failed silently — surface the error
+  if (!userId) {
+    console.error("[invite] userId is null after all fallbacks — invite failed silently for", parsed.data.email);
+    return { success: false, message: "Invitation could not be sent. Please try again or contact support." };
   }
 
   try {
