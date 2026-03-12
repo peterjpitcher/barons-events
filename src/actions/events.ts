@@ -1289,7 +1289,7 @@ export async function reviewerDecisionAction(
       return { success: false, message: "Event not found." };
     }
 
-    if (eventBeforeDecision.status !== "submitted") {
+    if (!["submitted", "draft"].includes(eventBeforeDecision.status)) {
       return { success: false, message: "This event is not currently awaiting review." };
     }
 
