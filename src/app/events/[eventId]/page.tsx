@@ -4,6 +4,7 @@ import { EventForm } from "@/components/events/event-form";
 import { EventFormActions } from "@/components/events/event-form-actions";
 import { EventDetailSummary } from "@/components/events/event-detail-summary";
 import { DeleteEventButton } from "@/components/events/delete-event-button";
+import { RevertToDraftButton } from "@/components/events/revert-to-draft-button";
 import { DecisionForm } from "@/components/reviews/decision-form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -87,6 +88,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
     (user.role === "venue_manager" &&
       event.created_by === user.id &&
       ["draft", "needs_revisions"].includes(event.status));
+  const canRevertToDraft = event.status === "approved";
 
   const reassignAssignee = async (formData: FormData) => {
     "use server";
@@ -495,6 +497,11 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
                 </CardHeader>
                 <CardContent>
                   <EventFormActions eventId={event.id} canDelete={canDelete} />
+                  {canRevertToDraft ? (
+                    <div className="mt-4 border-t border-[var(--color-border)] pt-4">
+                      <RevertToDraftButton eventId={event.id} />
+                    </div>
+                  ) : null}
                 </CardContent>
               </Card>
 
@@ -517,6 +524,18 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
 
             {debriefSubmitCard}
             {debriefSnapshotCard}
+
+            {canRevertToDraft ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Revert to draft</CardTitle>
+                  <CardDescription>Pull this event back to draft for further changes.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <RevertToDraftButton eventId={event.id} />
+                </CardContent>
+              </Card>
+            ) : null}
 
             {!canEdit && canDelete ? (
               <Card className="border-red-100 bg-red-50/50">
