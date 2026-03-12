@@ -130,14 +130,22 @@ export async function inviteUserAction(
     errorMessage: error?.message ?? null
   });
 
+  // Track whether email delivery failed so we can surface a different message
+  const emailDeliveryFailed = error?.status === 500;
+
   if (error) {
     if (error.status === 429) {
       console.error("[invite] email rate limit hit:", error);
       return { success: false, message: "Too many invitations sent recently. Please wait a few minutes and try again." };
     }
-    if (error.status !== 422) {
-      console.error("[invite] non-422 error from inviteUserByEmail:", error);
+    // 422 = user already exists; 500 = email delivery failed (user may still have been created)
+    // Both fall through to the listUsers check below
+    if (error.status !== 422 && error.status !== 500) {
+      console.error("[invite] unexpected error from inviteUserByEmail:", error);
       return { success: false, message: "Invitation failed. Double-check the email." };
+    }
+    if (emailDeliveryFailed) {
+      console.error("[invite] email delivery failed (500), checking if user was created:", error.message);
     }
   }
 
@@ -187,6 +195,9 @@ export async function inviteUserAction(
     });
 
     revalidatePath("/users");
+    if (emailDeliveryFailed) {
+      return { success: true, message: "User added, but the invite email could not be sent. Use 'Forgot password' on the login page to send them a sign-in link." };
+    }
     return { success: true, message: "Invite sent." };
   } catch (upsertError) {
     console.error(upsertError);
