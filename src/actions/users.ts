@@ -161,6 +161,7 @@ export async function inviteUserAction(
       const sent = await sendInviteEmail(parsed.data.email, actionLink, parsed.data.fullName ?? null);
       if (!sent) {
         console.error("[invite] Resend failed to deliver invite email to", parsed.data.email);
+        return { success: false, message: "User created but the invite email failed to send. Please try again." };
       }
     }
 
