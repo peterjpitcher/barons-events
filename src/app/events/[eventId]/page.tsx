@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { EventForm } from "@/components/events/event-form";
 import { EventFormActions } from "@/components/events/event-form-actions";
+import { BookingSettingsCard } from "@/components/events/booking-settings-card";
 import { EventDetailSummary } from "@/components/events/event-detail-summary";
 import { DeleteEventButton } from "@/components/events/delete-event-button";
 import { RevertToDraftButton } from "@/components/events/revert-to-draft-button";
@@ -466,14 +467,22 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
               {formatter.format(new Date(event.end_at))}
             </CardDescription>
           </div>
-          <div className="flex flex-col items-start gap-1 text-xs text-subtle lg:items-end">
-            <span>
-              <span className="font-semibold text-[var(--color-text)]">Assignee:</span> {currentAssigneeName}
-            </span>
-            <span>
-              <span className="font-semibold text-[var(--color-text)]">Created by:</span>{" "}
-              {event.created_by === user.id ? "You" : resolveUserName(event.created_by)}
-            </span>
+          <div className="flex flex-col items-start gap-3 lg:items-end">
+            <div className="flex flex-col gap-1 text-xs text-subtle lg:items-end">
+              <span>
+                <span className="font-semibold text-[var(--color-text)]">Assignee:</span> {currentAssigneeName}
+              </span>
+              <span>
+                <span className="font-semibold text-[var(--color-text)]">Created by:</span>{" "}
+                {event.created_by === user.id ? "You" : resolveUserName(event.created_by)}
+              </span>
+            </div>
+            {(user.role === "central_planner" || user.role === "executive" ||
+              (user.role === "venue_manager" && event.venue_id === user.venueId)) ? (
+              <Button asChild variant="secondary" size="sm">
+                <Link href={`/events/${event.id}/bookings`}>Bookings</Link>
+              </Button>
+            ) : null}
           </div>
         </CardHeader>
       </Card>
@@ -506,6 +515,14 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
               </Card>
 
               <EventDetailSummary event={event} />
+
+              <BookingSettingsCard
+                eventId={event.id}
+                bookingEnabled={Boolean((event as any).booking_enabled)}
+                totalCapacity={(event as any).total_capacity ?? null}
+                maxTicketsPerBooking={(event as any).max_tickets_per_booking ?? 10}
+                seoSlug={event.seo_slug ?? null}
+              />
 
               {reviewDecisionCard}
               {assignmentCard}

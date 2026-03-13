@@ -91,6 +91,44 @@ export async function cancelBooking(bookingId: string): Promise<void> {
 }
 
 /**
+ * Generate a URL-safe slug from an event title and date, guaranteed unique
+ * across the events table. Appends a short numeric suffix if there is a
+ * collision. Caller is responsible for persisting the returned slug.
+ */
+export async function generateUniqueEventSlug(title: string, startAt: Date): Promise<string> {
+  const db = createSupabaseAdminClient();
+
+  // Build base slug: lowercase, alphanumeric + hyphens, max 60 chars
+  const dateStr = startAt.toISOString().slice(0, 10); // YYYY-MM-DD
+  const base = `${title}-${dateStr}`
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+
+  // Check if base is already unique
+  const { count: baseCount } = await db
+    .from("events")
+    .select("*", { count: "exact", head: true })
+    .eq("seo_slug", base);
+
+  if (!baseCount) return base;
+
+  // Append incrementing suffix until unique
+  for (let suffix = 2; suffix <= 99; suffix++) {
+    const candidate = `${base}-${suffix}`;
+    const { count } = await db
+      .from("events")
+      .select("*", { count: "exact", head: true })
+      .eq("seo_slug", candidate);
+    if (!count) return candidate;
+  }
+
+  // Fallback: append timestamp millis
+  return `${base}-${Date.now()}`;
+}
+
+/**
  * Get total confirmed ticket count for an event.
  */
 export async function getConfirmedTicketCount(eventId: string): Promise<number> {

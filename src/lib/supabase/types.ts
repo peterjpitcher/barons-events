@@ -27,6 +27,7 @@ export interface Database {
           address: string | null;
           capacity: number | null;
           default_reviewer_id: string | null;
+          google_review_url: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -95,6 +96,9 @@ export interface Database {
           seo_title: string | null;
           seo_description: string | null;
           seo_slug: string | null;
+          booking_enabled: boolean;
+          total_capacity: number | null;
+          max_tickets_per_booking: number;
           created_by: string;
           assignee_id: string | null;
           submitted_at: string | null;
