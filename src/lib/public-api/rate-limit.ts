@@ -1,44 +1,16 @@
 import "server-only";
 
 /**
- * Simple in-process sliding-window rate limiter for the public API.
+ * Configurable in-process sliding-window rate limiter.
  *
- * IMPORTANT: This implementation is in-process and works per serverless instance.
- * In a horizontally-scaled or serverless deployment (e.g., Vercel), each cold-start
- * creates a fresh counter, so the effective limit is `limit * number_of_instances`.
- *
- * For a production multi-instance deployment, replace the store below with a
- * distributed counter such as Upstash Redis (@upstash/ratelimit) which is
- * compatible with both Edge and Node runtimes on Vercel.
- *
- * Current settings: 120 requests per IP per 60 seconds.
+ * IMPORTANT: In-process — each Vercel cold-start gets a fresh counter.
+ * For production multi-instance deployments, replace with Upstash Redis.
  */
-
-const WINDOW_MS = 60_000; // 60 seconds
-const MAX_REQUESTS = 120; // per IP per window
 
 type WindowEntry = {
   count: number;
   resetAt: number;
 };
-
-// Module-level store — survives across requests within the same instance lifetime.
-const store = new Map<string, WindowEntry>();
-
-// Periodically purge expired entries to prevent unbounded memory growth.
-// The interval is held as a reference so it doesn't block Node process exit.
-const cleanupInterval = setInterval(
-  () => {
-    const now = Date.now();
-    for (const [key, entry] of store) {
-      if (entry.resetAt <= now) {
-        store.delete(key);
-      }
-    }
-  },
-  WINDOW_MS * 2
-);
-if (cleanupInterval.unref) cleanupInterval.unref();
 
 export type RateLimitResult = {
   allowed: boolean;
@@ -46,27 +18,50 @@ export type RateLimitResult = {
   resetAt: number;
 };
 
-/**
- * Check and record a request from the given identifier (typically an IP address).
- * Returns whether the request is allowed and the rate-limit state for response headers.
- */
-export function checkRateLimit(identifier: string): RateLimitResult {
-  const now = Date.now();
-  const existing = store.get(identifier);
+export class RateLimiter {
+  private store = new Map<string, WindowEntry>();
+  private windowMs: number;
+  private maxRequests: number;
 
-  if (!existing || existing.resetAt <= now) {
-    const resetAt = now + WINDOW_MS;
-    store.set(identifier, { count: 1, resetAt });
-    return { allowed: true, remaining: MAX_REQUESTS - 1, resetAt };
+  constructor({ windowMs, maxRequests }: { windowMs: number; maxRequests: number }) {
+    this.windowMs = windowMs;
+    this.maxRequests = maxRequests;
+
+    const interval = setInterval(() => {
+      const now = Date.now();
+      for (const [key, entry] of this.store) {
+        if (entry.resetAt <= now) this.store.delete(key);
+      }
+    }, windowMs * 2);
+    if (interval.unref) interval.unref();
   }
 
-  existing.count += 1;
-  const allowed = existing.count <= MAX_REQUESTS;
-  return {
-    allowed,
-    remaining: Math.max(0, MAX_REQUESTS - existing.count),
-    resetAt: existing.resetAt
-  };
+  check(identifier: string): RateLimitResult {
+    const now = Date.now();
+    const existing = this.store.get(identifier);
+
+    if (!existing || existing.resetAt <= now) {
+      const resetAt = now + this.windowMs;
+      this.store.set(identifier, { count: 1, resetAt });
+      return { allowed: true, remaining: this.maxRequests - 1, resetAt };
+    }
+
+    existing.count += 1;
+    const allowed = existing.count <= this.maxRequests;
+    return {
+      allowed,
+      remaining: Math.max(0, this.maxRequests - existing.count),
+      resetAt: existing.resetAt,
+    };
+  }
+}
+
+/** Default instance for the public event API — 120 req/60 s. */
+export const publicApiLimiter = new RateLimiter({ windowMs: 60_000, maxRequests: 120 });
+
+/** Backward-compatible export so existing callers don't need updating. */
+export function checkRateLimit(identifier: string): RateLimitResult {
+  return publicApiLimiter.check(identifier);
 }
 
 /**
