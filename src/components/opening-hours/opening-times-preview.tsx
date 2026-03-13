@@ -176,6 +176,18 @@ function ResultsTable({
   );
   const columns = serviceTypes.filter((st) => presentServiceTypeIds.has(st.id));
 
+  // Only show days that have at least one service entry — days with no data at all
+  // would show as all dashes and add no useful information.
+  const days = result.days.filter((d) => d.services.length > 0);
+
+  if (days.length === 0) {
+    return (
+      <p className="text-sm text-subtle">
+        No opening hours are configured for this venue for the selected period.
+      </p>
+    );
+  }
+
   return (
     <div className="overflow-x-auto">
       <table className="min-w-full border-collapse text-sm">
@@ -195,7 +207,7 @@ function ResultsTable({
           </tr>
         </thead>
         <tbody>
-          {result.days.map((day) => (
+          {days.map((day) => (
             <tr
               key={day.date}
               className="border-b border-[var(--color-border)] last:border-0"
