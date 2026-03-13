@@ -101,13 +101,15 @@ export async function middleware(req: NextRequest) {
   if (host === SHORT_LINK_HOST) {
     // 8-hex-char paths are existing short links — let them fall through to [code] handler
     const isShortLink = /^\/[0-9a-f]{8}$/.test(pathname);
-    if (!isShortLink) {
+    // Static assets (_next, images, fonts, etc.) must not be rewritten
+    const isStaticAsset = pathname.startsWith("/_next") || STATIC_ASSET_PATTERN.test(pathname);
+    if (!isShortLink && !isStaticAsset) {
       // Rewrite slug-style paths (e.g. /jazz-night-20-mar-2026) to /l/[path]
       const rewriteUrl = req.nextUrl.clone();
       rewriteUrl.pathname = `/l${pathname}`;
       return NextResponse.rewrite(rewriteUrl);
     }
-    // Short link paths (8-hex-char) continue through middleware normally
+    // Short link paths (8-hex-char) and static assets continue through middleware normally
   }
 
   const res = NextResponse.next();
