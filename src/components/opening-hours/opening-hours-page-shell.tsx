@@ -4,8 +4,8 @@ import { useMemo, useState } from "react";
 import type { ServiceTypeRow, OpeningHoursRow, OpeningOverrideRow } from "@/lib/opening-hours";
 import { WeeklyHoursGrid } from "@/components/opening-hours/weekly-hours-grid";
 import { OverridesCalendar } from "@/components/opening-hours/overrides-calendar";
+import { OpeningTimesPreview } from "@/components/opening-hours/opening-times-preview";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 
 type VenueOption = { id: string; name: string };
 
@@ -22,13 +22,8 @@ export function OpeningHoursPageShell({
   allHours,
   overrides
 }: OpeningHoursPageShellProps) {
-  // Venue filter: null = all venues, otherwise a Set of selected venue IDs
-  const [selectedVenueIds, setSelectedVenueIds] = useState<Set<string>>(
-    () => new Set(venues.map((v) => v.id))
-  );
-
-  // Which venue's weekly grid is currently being edited (when multiple selected)
-  const [activeVenueId, setActiveVenueId] = useState<string>(venues[0]?.id ?? "");
+  // Venue filter: empty set = nothing selected (initial state)
+  const [selectedVenueIds, setSelectedVenueIds] = useState<Set<string>>(() => new Set());
 
   // Overrides state lives here so the calendar can do optimistic updates
   const [localOverrides, setLocalOverrides] = useState<OpeningOverrideRow[]>(overrides);
@@ -38,11 +33,7 @@ export function OpeningHoursPageShell({
     [venues, selectedVenueIds]
   );
 
-  // Ensure activeVenueId is always within the current selection
-  const resolvedActiveVenueId = useMemo(() => {
-    if (selectedVenueIds.has(activeVenueId)) return activeVenueId;
-    return selectedVenues[0]?.id ?? "";
-  }, [activeVenueId, selectedVenueIds, selectedVenues]);
+  const resolvedActiveVenueId = selectedVenues[0]?.id ?? "";
 
   // Hours filtered to the active (tab) venue
   const activeVenueHours = useMemo(
@@ -50,9 +41,10 @@ export function OpeningHoursPageShell({
     [allHours, resolvedActiveVenueId]
   );
 
-  // Overrides that include at least one selected venue
+  // Overrides that include at least one selected venue.
+  // When nothing (or everything) is selected, show all overrides.
   const filteredOverrides = useMemo(() => {
-    if (selectedVenueIds.size === venues.length) return localOverrides;
+    if (selectedVenueIds.size === 0 || selectedVenueIds.size === venues.length) return localOverrides;
     return localOverrides.filter((ov) =>
       ov.venue_ids.some((id) => selectedVenueIds.has(id))
     );
@@ -62,8 +54,6 @@ export function OpeningHoursPageShell({
     setSelectedVenueIds((prev) => {
       const next = new Set(prev);
       if (next.has(venueId)) {
-        // Don't allow deselecting the last venue
-        if (next.size === 1) return prev;
         next.delete(venueId);
       } else {
         next.add(venueId);
@@ -72,8 +62,12 @@ export function OpeningHoursPageShell({
     });
   }
 
-  function selectAll() {
-    setSelectedVenueIds(new Set(venues.map((v) => v.id)));
+  function toggleAll() {
+    if (allSelected) {
+      setSelectedVenueIds(new Set());
+    } else {
+      setSelectedVenueIds(new Set(venues.map((v) => v.id)));
+    }
   }
 
   const allSelected = selectedVenueIds.size === venues.length;
@@ -109,7 +103,7 @@ export function OpeningHoursPageShell({
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={selectAll}
+              onClick={toggleAll}
               className={`rounded-full border px-4 py-1.5 text-sm font-medium transition-colors ${
                 allSelected
                   ? "border-[var(--color-primary-700)] bg-[var(--color-primary-700)] text-white"
@@ -169,32 +163,27 @@ export function OpeningHoursPageShell({
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Venue tabs — only show when more than one venue is selected */}
-            {selectedVenues.length > 1 && (
-              <div className="flex flex-wrap gap-1.5 border-b border-[var(--color-border)] pb-3">
-                {selectedVenues.map((venue) => (
-                  <Button
-                    key={venue.id}
-                    type="button"
-                    size="sm"
-                    variant={venue.id === resolvedActiveVenueId ? "secondary" : "ghost"}
-                    onClick={() => setActiveVenueId(venue.id)}
-                  >
-                    {venue.name}
-                  </Button>
-                ))}
-              </div>
-            )}
+            {selectedVenues.length === 0 ? (
+              <p className="text-sm text-subtle">
+                Select one or more venues above to view and edit their standard weekly hours.
+              </p>
+            ) : (
+              <>
+                {selectedVenues.length > 1 && (
+                  <p className="text-xs text-subtle">
+                    Showing {selectedVenues[0].name}&apos;s current hours as reference — save will apply to all {selectedVenues.length} selected venues.
+                  </p>
+                )}
 
-            {resolvedActiveVenueId ? (
-              <WeeklyHoursGrid
-                key={resolvedActiveVenueId}
-                venueId={resolvedActiveVenueId}
-                serviceTypes={serviceTypes}
-                openingHours={activeVenueHours}
-                canEdit
-              />
-            ) : null}
+                <WeeklyHoursGrid
+                  key={resolvedActiveVenueId}
+                  venues={selectedVenues}
+                  serviceTypes={serviceTypes}
+                  openingHours={activeVenueHours}
+                  canEdit
+                />
+              </>
+            )}
           </CardContent>
         </Card>
       )}
@@ -220,6 +209,14 @@ export function OpeningHoursPageShell({
           />
         </CardContent>
       </Card>
+
+      {/* ── Preview resolved times ────────────────────────────────────── */}
+      <OpeningTimesPreview
+        venues={venues}
+        serviceTypes={serviceTypes}
+        allHours={allHours}
+        overrides={localOverrides}
+      />
     </div>
   );
 }
