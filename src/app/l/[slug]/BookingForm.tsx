@@ -182,6 +182,20 @@ export function BookingForm({ eventId, maxTickets, isSoldOut }: BookingFormProps
           </p>
         )}
 
+        {/* Privacy policy notice */}
+        <p className="text-[0.68rem] text-[#637c8c] leading-relaxed">
+          By booking you agree to our{" "}
+          <a
+            href="https://www.baronspubs.com/policies/website-privacy/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-[#273640]"
+          >
+            privacy policy
+          </a>
+          .
+        </p>
+
         {/* Submit */}
         <button
           type="submit"
