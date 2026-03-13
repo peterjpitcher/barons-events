@@ -38,6 +38,25 @@ export type ActionResult = {
 /** Status of a customer booking. */
 export type BookingStatus = "confirmed" | "cancelled";
 
+/** A customer record — one per unique mobile number across all bookings. */
+export interface Customer {
+  id: string;
+  firstName: string;
+  lastName: string | null;
+  mobile: string;        // E.164
+  email: string | null;
+  marketingOptIn: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** Customer with aggregated booking stats for list views. */
+export interface CustomerWithStats extends Customer {
+  bookingCount: number;
+  ticketCount: number;
+  firstSeen: Date;
+}
+
 /** A customer booking for an event. camelCase — convert from DB snake_case using fromDb(). */
 export interface EventBooking {
   id: string;
