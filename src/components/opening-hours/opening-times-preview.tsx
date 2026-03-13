@@ -169,24 +169,18 @@ function ResultsTable({
   result: ResolvedVenueHours;
   serviceTypes: ServiceTypeRow[];
 }) {
-  // Only show columns for service types that appear at least once in the results.
-  // serviceTypes is already ordered by display_order then name.
-  const presentServiceTypeIds = new Set(
-    result.days.flatMap((d) => d.services.map((s) => s.serviceTypeId))
+  // Only show columns for service types that have at least one open entry with
+  // actual times set for this venue. Services with no hours configured at all
+  // are omitted from the resolved output by resolveOpeningTimes, so they will
+  // not appear here. serviceTypes is already ordered by display_order then name.
+  const configuredServiceTypeIds = new Set(
+    result.days.flatMap((d) =>
+      d.services
+        .filter((s) => s.isOpen && (s.openTime !== null || s.closeTime !== null))
+        .map((s) => s.serviceTypeId)
+    )
   );
-  const columns = serviceTypes.filter((st) => presentServiceTypeIds.has(st.id));
-
-  // Only show days that have at least one service entry — days with no data at all
-  // would show as all dashes and add no useful information.
-  const days = result.days.filter((d) => d.services.length > 0);
-
-  if (days.length === 0) {
-    return (
-      <p className="text-sm text-subtle">
-        No opening hours are configured for this venue for the selected period.
-      </p>
-    );
-  }
+  const columns = serviceTypes.filter((st) => configuredServiceTypeIds.has(st.id));
 
   return (
     <div className="overflow-x-auto">
@@ -207,7 +201,7 @@ function ResultsTable({
           </tr>
         </thead>
         <tbody>
-          {days.map((day) => (
+          {result.days.map((day) => (
             <tr
               key={day.date}
               className="border-b border-[var(--color-border)] last:border-0"
