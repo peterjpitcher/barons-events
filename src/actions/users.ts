@@ -186,3 +186,94 @@ export async function inviteUserAction(
     return { success: false, message: "Invitation sent but updating access failed. Please try again." };
   }
 }
+
+export async function resendInviteAction(
+  _: ActionResult | undefined,
+  formData: FormData
+): Promise<ActionResult> {
+  const currentUser = await getCurrentUser();
+  if (!currentUser) {
+    redirect("/login");
+  }
+  if (currentUser.role !== "central_planner") {
+    return { success: false, message: "Only planners can resend invites." };
+  }
+
+  // Validate inputs — consistent with the Zod pattern used in inviteUserAction and updateUserAction.
+  // `z` is already imported in this file (used by existing schemas above).
+  const resendSchema = z.object({
+    userId: z.string().uuid(),
+    email: z.string().email({ message: "Enter a valid email" }),
+    fullName: z.string().max(120).optional()
+  });
+
+  const parsed = resendSchema.safeParse({
+    userId: formData.get("userId"),
+    email: formData.get("email"),
+    fullName: typeof formData.get("fullName") === "string" ? formData.get("fullName") : undefined
+  });
+
+  if (!parsed.success) {
+    return { success: false, message: "Missing required fields." };
+  }
+
+  const userId = parsed.data.userId;
+  const email = parsed.data.email;
+  const fullName = parsed.data.fullName ?? null;   // undefined → null, consistent with inviteUserAction pattern
+
+  const adminClient = createSupabaseAdminClient();
+
+  // Verify the user hasn't already confirmed their email
+  const { data: authData, error: getUserError } = await adminClient.auth.admin.getUserById(userId);
+  if (getUserError) {
+    console.error("[resend-invite] getUserById failed:", getUserError.message);
+    return { success: false, message: "Could not verify invite status. Please try again." };
+  }
+  if (authData?.user?.email_confirmed_at) {   // double-guard: authData itself can be null
+    return { success: false, message: "This user has already accepted their invite." };
+  }
+
+  const confirmUrl = new URL("/auth/confirm", resolveAppUrl()).toString();
+
+  const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
+    type: "invite",
+    email,
+    options: {
+      data: { full_name: fullName ?? undefined },
+      redirectTo: confirmUrl
+    }
+  });
+
+  if (linkError) {
+    console.error("[resend-invite] generateLink failed:", linkError.status, linkError.message);
+    if (linkError.status === 429) {
+      return { success: false, message: "Too many invitations sent recently. Please wait a few minutes and try again." };
+    }
+    return { success: false, message: "Invitation failed. Please try again." };
+  }
+
+  const actionLink = linkData?.properties?.action_link ?? null;
+
+  // For a resend action the entire purpose is sending an email, so a missing action_link
+  // (generateLink succeeded but returned no link) is treated as an error rather than a silent skip.
+  if (!actionLink) {
+    console.error("[resend-invite] generateLink returned no action_link for", email);
+    return { success: false, message: "Invitation failed. Please try again." };
+  }
+
+  const sent = await sendInviteEmail(email, actionLink, fullName);
+  if (!sent) {
+    console.error("[resend-invite] Resend failed to deliver invite email to", email);
+    return { success: false, message: "Invite created but the email failed to send. Please try again." };
+  }
+
+  const emailHash = await hashEmailForAudit(email);
+  await logAuthEvent({
+    event: "auth.invite.resent",
+    userId: currentUser.id,
+    emailHash,
+    meta: { inviteeId: userId }
+  });
+
+  return { success: true, message: "Invite resent." };
+}
