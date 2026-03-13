@@ -1,0 +1,198 @@
+"use client";
+
+import { useState } from "react";
+import { createBookingAction } from "@/actions/bookings";
+import type { CreateBookingInput } from "@/actions/bookings";
+
+interface BookingFormProps {
+  eventId: string;
+  maxTickets: number;
+  isSoldOut: boolean;
+}
+
+export function BookingForm({ eventId, maxTickets, isSoldOut }: BookingFormProps) {
+  const [ticketCount, setTicketCount] = useState(1);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [mobile, setMobile] = useState("");
+  const [email, setEmail] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+  const [bookedMobile, setBookedMobile] = useState("");
+
+  if (isSoldOut) {
+    return (
+      <div className="rounded-lg bg-stone-50 border border-stone-200 p-6 text-center">
+        <p className="text-stone-500 font-medium">
+          Sorry, this event is fully booked.
+        </p>
+      </div>
+    );
+  }
+
+  if (success) {
+    return (
+      <div className="rounded-lg bg-stone-50 border border-stone-200 p-6 text-center space-y-2">
+        <p className="text-lg font-semibold text-green-700">You&apos;re booked in!</p>
+        <p className="text-stone-500 text-sm">
+          We&apos;ve sent a confirmation text to {bookedMobile}.
+        </p>
+      </div>
+    );
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+
+    const input: CreateBookingInput = {
+      eventId,
+      firstName: firstName.trim(),
+      lastName: lastName.trim() || null,
+      mobile: mobile.trim(),
+      email: email.trim() || null,
+      ticketCount,
+    };
+
+    const result = await createBookingAction(input);
+    setLoading(false);
+
+    if (!result.success) {
+      if (result.error === "sold_out") {
+        setError("Sorry, this event is now fully booked.");
+      } else if (result.error === "rate_limited") {
+        setError("Too many attempts. Please try again in a few minutes.");
+      } else {
+        setError(result.error || "Something went wrong. Please try again.");
+      }
+      return;
+    }
+
+    setBookedMobile(mobile.trim());
+    setSuccess(true);
+  }
+
+  return (
+    <div className="bg-stone-50 border-t border-stone-200 p-6">
+      <h2 className="text-sm font-bold uppercase tracking-wider text-[#273640] mb-4">
+        Reserve Your Seats
+      </h2>
+
+      <form onSubmit={handleSubmit} noValidate className="space-y-4">
+        {/* Ticket count stepper */}
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-stone-500">How many seats?</span>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setTicketCount((n) => Math.max(1, n - 1))}
+              disabled={ticketCount <= 1}
+              className="w-8 h-8 rounded-full bg-[#273640] text-white font-bold
+                         disabled:opacity-40 flex items-center justify-center hover:bg-[#1a2830]
+                         focus:outline-none focus:ring-2 focus:ring-[#273640] focus:ring-offset-1"
+              aria-label="Decrease ticket count"
+            >
+              −
+            </button>
+            <span className="text-lg font-bold w-6 text-center" aria-live="polite">
+              {ticketCount}
+            </span>
+            <button
+              type="button"
+              onClick={() => setTicketCount((n) => Math.min(maxTickets, n + 1))}
+              disabled={ticketCount >= maxTickets}
+              className="w-8 h-8 rounded-full bg-[#273640] text-white font-bold
+                         disabled:opacity-40 flex items-center justify-center hover:bg-[#1a2830]
+                         focus:outline-none focus:ring-2 focus:ring-[#273640] focus:ring-offset-1"
+              aria-label="Increase ticket count"
+            >
+              +
+            </button>
+          </div>
+        </div>
+
+        {/* Name fields */}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label htmlFor="firstName" className="sr-only">First name</label>
+            <input
+              id="firstName"
+              type="text"
+              placeholder="First name *"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              required
+              autoComplete="given-name"
+              className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm
+                         placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-[#273640]"
+            />
+          </div>
+          <div>
+            <label htmlFor="lastName" className="sr-only">Last name</label>
+            <input
+              id="lastName"
+              type="text"
+              placeholder="Last name"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              autoComplete="family-name"
+              className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm
+                         placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-[#273640]"
+            />
+          </div>
+        </div>
+
+        {/* Mobile */}
+        <div>
+          <label htmlFor="mobile" className="sr-only">Mobile number</label>
+          <input
+            id="mobile"
+            type="tel"
+            placeholder="Mobile number *"
+            value={mobile}
+            onChange={(e) => setMobile(e.target.value)}
+            required
+            autoComplete="tel"
+            className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm
+                       placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-[#273640]"
+          />
+        </div>
+
+        {/* Email */}
+        <div>
+          <label htmlFor="email" className="sr-only">Email address (optional)</label>
+          <input
+            id="email"
+            type="email"
+            placeholder="Email address (optional)"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            autoComplete="email"
+            className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm
+                       placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-[#273640]"
+          />
+        </div>
+
+        {/* Error message */}
+        {error && (
+          <p role="alert" className="text-sm text-red-600 bg-red-50 border border-red-200 rounded p-3">
+            {error}
+          </p>
+        )}
+
+        {/* Submit */}
+        <button
+          type="submit"
+          disabled={loading || !firstName.trim() || !mobile.trim()}
+          className="w-full bg-[#b98c5b] hover:bg-[#a07848] text-white font-bold text-sm
+                     uppercase tracking-wider py-3 rounded-md disabled:opacity-50
+                     transition-colors focus:outline-none focus:ring-2 focus:ring-[#b98c5b] focus:ring-offset-1"
+        >
+          {loading ? "Booking…" : "Book Now — Free Entry"}
+        </button>
+      </form>
+    </div>
+  );
+}
