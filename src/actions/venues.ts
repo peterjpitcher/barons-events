@@ -21,7 +21,8 @@ const uuidOrUndefined = z.preprocess(
 const venueSchema = z.object({
   venueId: z.string().uuid().optional(),
   name: z.string().min(2, "Add a venue name"),
-  defaultReviewerId: uuidOrUndefined
+  defaultReviewerId: uuidOrUndefined,
+  googleReviewUrl: z.string().url("Enter a valid URL").optional().or(z.literal(""))
 });
 
 export async function createVenueAction(
@@ -77,7 +78,8 @@ export async function updateVenueAction(
   const parsed = venueSchema.safeParse({
     venueId: formData.get("venueId"),
     name: typeof formData.get("name") === "string" ? formData.get("name") : "",
-    defaultReviewerId: typeof formData.get("defaultReviewerId") === "string" ? formData.get("defaultReviewerId") : ""
+    defaultReviewerId: typeof formData.get("defaultReviewerId") === "string" ? formData.get("defaultReviewerId") : "",
+    googleReviewUrl: typeof formData.get("googleReviewUrl") === "string" ? formData.get("googleReviewUrl") : ""
   });
 
   if (!parsed.success) {
@@ -94,7 +96,8 @@ export async function updateVenueAction(
   try {
     await updateVenue(parsed.data.venueId, {
       name: parsed.data.name,
-      defaultReviewerId: parsed.data.defaultReviewerId ?? null
+      defaultReviewerId: parsed.data.defaultReviewerId ?? null,
+      googleReviewUrl: parsed.data.googleReviewUrl || null
     });
     revalidatePath("/venues");
     return { success: true, message: "Venue updated." };

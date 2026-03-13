@@ -111,10 +111,11 @@ function VenueTable({ venues, reviewers }: VenuesManagerProps) {
       <table className="min-w-full border-collapse">
         <thead>
           <tr className="bg-[var(--color-muted-surface)] text-left text-xs font-semibold uppercase tracking-[0.14em] text-subtle">
-            <th className="px-4 py-3">Venue</th>
-            <th className="px-4 py-3">Default reviewer</th>
-            <th className="px-4 py-3">Hours</th>
-            <th className="px-4 py-3 text-right">Actions</th>
+            <th scope="col" className="px-4 py-3">Venue</th>
+            <th scope="col" className="px-4 py-3">Default reviewer</th>
+            <th scope="col" className="px-4 py-3">Google Review URL</th>
+            <th scope="col" className="px-4 py-3">Hours</th>
+            <th scope="col" className="px-4 py-3 text-right">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -159,7 +160,7 @@ function VenueRowEditor({ venue, reviewers }: { venue: VenueRow; reviewers: Revi
   return (
     <tr className="border-t border-[var(--color-border)]">
       <td colSpan={3} className="px-4 py-3">
-        <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_auto_auto_auto] md:items-start">
+        <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,2fr)_auto_auto_auto] md:items-start">
           <form action={formAction} className="contents" noValidate>
             <input type="hidden" name="venueId" value={venue.id} />
             <div className="space-y-2">
@@ -189,6 +190,18 @@ function VenueRowEditor({ venue, reviewers }: { venue: VenueRow; reviewers: Revi
                   </option>
                 ))}
               </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="sr-only" htmlFor={`venue-google-review-${venue.id}`}>
+                Google Review URL
+              </label>
+              <Input
+                id={`venue-google-review-${venue.id}`}
+                name="googleReviewUrl"
+                type="url"
+                defaultValue={venue.google_review_url ?? ""}
+                placeholder="Google Review URL"
+              />
             </div>
             <div className="flex items-start justify-end">
               <SubmitButton

@@ -27,12 +27,13 @@ export async function createVenue(payload: { name: string; address?: string | nu
   }
 }
 
-export async function updateVenue(id: string, updates: { name: string; address?: string | null; defaultReviewerId?: string | null }) {
+export async function updateVenue(id: string, updates: { name: string; address?: string | null; defaultReviewerId?: string | null; googleReviewUrl?: string | null }) {
   const supabase = await createSupabaseActionClient();
   const updatePayload: {
     name: string;
     default_reviewer_id: string | null;
     address?: string | null;
+    google_review_url?: string | null;
   } = {
     name: updates.name,
     default_reviewer_id: updates.defaultReviewerId ?? null
@@ -40,6 +41,10 @@ export async function updateVenue(id: string, updates: { name: string; address?:
 
   if (Object.prototype.hasOwnProperty.call(updates, "address")) {
     updatePayload.address = updates.address ?? null;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(updates, "googleReviewUrl")) {
+    updatePayload.google_review_url = updates.googleReviewUrl ?? null;
   }
 
   const { error } = await supabase
