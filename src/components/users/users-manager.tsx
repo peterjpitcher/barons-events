@@ -4,7 +4,9 @@ import { useActionState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { inviteUserAction, updateUserAction } from "@/actions/users";
 import type { Database } from "@/lib/supabase/types";
-import type { AppUserRow } from "@/lib/users";
+import type { AppUserRow, EnrichedUser } from "@/lib/users";
+import { formatRelativeTime } from "@/lib/datetime";
+import { ResendInviteButton } from "@/components/users/resend-invite-button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -17,7 +19,7 @@ import { Save } from "lucide-react";
 type VenueRow = Database["public"]["Tables"]["venues"]["Row"];
 
 type UsersManagerProps = {
-  users: AppUserRow[];
+  users: EnrichedUser[];
   venues: VenueRow[];
 };
 
@@ -134,7 +136,7 @@ function InviteUserForm({ venues }: { venues: VenueRow[] }) {
   );
 }
 
-function UserCardMobile({ user, venues }: { user: AppUserRow; venues: VenueRow[] }) {
+function UserCardMobile({ user, venues }: { user: EnrichedUser; venues: VenueRow[] }) {
   const [state, formAction] = useActionState(updateUserAction, undefined);
   const router = useRouter();
 
@@ -151,11 +153,24 @@ function UserCardMobile({ user, venues }: { user: AppUserRow; venues: VenueRow[]
   return (
     <Card>
       <CardHeader className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-        <div>
+        <div className="flex-1 min-w-0">
           <CardTitle className="text-lg text-[var(--color-primary-700)]">{user.full_name ?? user.email}</CardTitle>
           <CardDescription>{user.email}</CardDescription>
+          <div className="mt-1 flex items-center gap-1.5">
+            <span
+              className={`inline-block h-2 w-2 flex-shrink-0 rounded-full ${
+                user.emailConfirmedAt ? "bg-green-500" : "bg-amber-400"
+              }`}
+              aria-hidden="true"
+            />
+            <span className="text-xs text-[var(--color-text-muted)]">
+              {user.emailConfirmedAt ? "Active" : "Pending"}
+              {" · "}
+              {formatRelativeTime(user.lastSignInAt)}
+            </span>
+          </div>
         </div>
-        <p className="rounded-full bg-muted-surface px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
+        <p className="flex-shrink-0 rounded-full bg-muted-surface px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
           {roleLabels[user.role]}
         </p>
       </CardHeader>
@@ -192,6 +207,15 @@ function UserCardMobile({ user, venues }: { user: AppUserRow; venues: VenueRow[]
               ))}
             </Select>
           </div>
+          {!user.emailConfirmedAt && (
+            <div className="md:col-span-2">
+              <ResendInviteButton
+                userId={user.id}
+                email={user.email}
+                fullName={user.full_name}
+              />
+            </div>
+          )}
           <div className="md:col-span-2 flex justify-end">
             <SubmitButton
               label="Save changes"
@@ -217,7 +241,7 @@ function UserDesktopList({ users, venues }: UsersManagerProps) {
 
   return (
     <div className="hidden overflow-hidden rounded-[var(--radius)] border border-[var(--color-border)] bg-white md:block">
-      <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,2fr)_auto] gap-4 border-b border-[var(--color-border)] bg-[var(--color-muted-surface)] px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-subtle">
+      <div className="grid grid-cols-[minmax(0,2.5fr)_minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,2fr)_auto] gap-4 border-b border-[var(--color-border)] bg-[var(--color-muted-surface)] px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-subtle">
         <div>Name</div>
         <div>Email</div>
         <div>Role</div>
@@ -233,7 +257,7 @@ function UserDesktopList({ users, venues }: UsersManagerProps) {
   );
 }
 
-function UserDesktopRow({ user, venues, isFirst }: { user: AppUserRow; venues: VenueRow[]; isFirst: boolean }) {
+function UserDesktopRow({ user, venues, isFirst }: { user: EnrichedUser; venues: VenueRow[]; isFirst: boolean }) {
   const [state, formAction] = useActionState(updateUserAction, undefined);
   const router = useRouter();
 
@@ -253,7 +277,7 @@ function UserDesktopRow({ user, venues, isFirst }: { user: AppUserRow; venues: V
         isFirst ? "border-b" : "border-y"
       } hover:bg-[rgba(39,54,64,0.03)]`}
     >
-      <form action={formAction} className="grid grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,2fr)_auto] items-center gap-4">
+      <form action={formAction} className="grid grid-cols-[minmax(0,2.5fr)_minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,2fr)_auto] items-center gap-4">
         <input type="hidden" name="userId" value={user.id} />
         <div className="flex flex-col gap-1">
           <label className="sr-only" htmlFor={`desktop-fullName-${user.id}`}>
@@ -265,6 +289,26 @@ function UserDesktopRow({ user, venues, isFirst }: { user: AppUserRow; venues: V
             defaultValue={user.full_name ?? ""}
             placeholder="Full name"
           />
+          <div className="flex items-center gap-1.5">
+            <span
+              className={`inline-block h-2 w-2 flex-shrink-0 rounded-full ${
+                user.emailConfirmedAt ? "bg-green-500" : "bg-amber-400"
+              }`}
+              aria-hidden="true"
+            />
+            <span className="text-xs text-[var(--color-text-muted)]">
+              {user.emailConfirmedAt ? "Active" : "Pending"}
+              {" · "}
+              {formatRelativeTime(user.lastSignInAt)}
+            </span>
+          </div>
+          {!user.emailConfirmedAt && (
+            <ResendInviteButton
+              userId={user.id}
+              email={user.email}
+              fullName={user.full_name}
+            />
+          )}
         </div>
         <div className="space-y-1">
           <span className="text-xs font-medium uppercase tracking-[0.18em] text-subtle">Email</span>
