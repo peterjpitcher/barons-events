@@ -49,7 +49,7 @@ export function OpeningHoursManager({
             </p>
           ) : (
             <WeeklyHoursGrid
-              venueId={venueId}
+              venues={[{ id: venueId, name: venueName }]}
               serviceTypes={serviceTypes}
               openingHours={openingHours}
               canEdit={canEdit}

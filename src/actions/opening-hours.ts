@@ -146,6 +146,34 @@ export async function upsertVenueOpeningHoursAction(
   }
 }
 
+export async function upsertMultiVenueOpeningHoursAction(
+  venueIds: string[],
+  rows: UpsertHoursInput[]
+): Promise<ActionResult> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  if (user.role !== "central_planner") {
+    return { success: false, message: "Only planners can manage opening hours." };
+  }
+
+  if (venueIds.length === 0) {
+    return { success: false, message: "Select at least one venue." };
+  }
+
+  try {
+    await Promise.all(venueIds.map((venueId) => upsertVenueOpeningHours(venueId, rows)));
+    venueIds.forEach((venueId) => revalidatePath(`/venues/${venueId}/opening-hours`));
+    revalidatePath("/opening-hours");
+    return {
+      success: true,
+      message: venueIds.length > 1 ? `Opening hours saved for ${venueIds.length} venues.` : "Opening hours saved."
+    };
+  } catch (error) {
+    console.error(error);
+    return { success: false, message: "Could not save opening hours right now." };
+  }
+}
+
 // ─── Overrides ────────────────────────────────────────────────────────────────
 
 const overrideSchema = z.object({

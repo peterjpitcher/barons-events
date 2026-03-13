@@ -3,9 +3,10 @@
 import { useCallback, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { upsertVenueOpeningHoursAction } from "@/actions/opening-hours";
+import { upsertMultiVenueOpeningHoursAction } from "@/actions/opening-hours";
 import type { ServiceTypeRow, OpeningHoursRow, UpsertHoursInput } from "@/lib/opening-hours";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 // 0 = Monday … 6 = Sunday (ISO week, UK convention)
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -44,15 +45,17 @@ function buildInitialState(
   return state;
 }
 
+type VenueOption = { id: string; name: string };
+
 type WeeklyHoursGridProps = {
-  venueId: string;
+  venues: VenueOption[];
   serviceTypes: ServiceTypeRow[];
   openingHours: OpeningHoursRow[];
   canEdit: boolean;
 };
 
 export function WeeklyHoursGrid({
-  venueId,
+  venues,
   serviceTypes,
   openingHours,
   canEdit
@@ -60,6 +63,9 @@ export function WeeklyHoursGrid({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [grid, setGrid] = useState<GridState>(() => buildInitialState(serviceTypes, openingHours));
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const venueIds = venues.map((v) => v.id);
 
   const updateCell = useCallback(
     (serviceTypeId: string, day: number, updates: Partial<CellState>) => {
@@ -74,7 +80,13 @@ export function WeeklyHoursGrid({
     []
   );
 
-  function handleSave() {
+  function handleSaveClick() {
+    setConfirmOpen(true);
+  }
+
+  function handleConfirmedSave() {
+    setConfirmOpen(false);
+
     const rows: UpsertHoursInput[] = [];
     Object.entries(grid).forEach(([serviceTypeId, days]) => {
       Object.entries(days).forEach(([dayStr, cell]) => {
@@ -88,12 +100,8 @@ export function WeeklyHoursGrid({
       });
     });
 
-    const formData = new FormData();
-    formData.set("venueId", venueId);
-    formData.set("rows", JSON.stringify(rows));
-
     startTransition(async () => {
-      const result = await upsertVenueOpeningHoursAction(undefined, formData);
+      const result = await upsertMultiVenueOpeningHoursAction(venueIds, rows);
       if (result.success) {
         toast.success(result.message ?? "Opening hours saved.");
         router.refresh();
@@ -102,6 +110,8 @@ export function WeeklyHoursGrid({
       }
     });
   }
+
+  const confirmDescription = buildConfirmDescription(venues);
 
   return (
     <div className="space-y-4">
@@ -151,19 +161,49 @@ export function WeeklyHoursGrid({
       </div>
 
       {canEdit ? (
-        <div className="flex justify-end">
+        <div className="flex items-center justify-end gap-3">
+          {venues.length > 1 && (
+            <p className="text-xs text-subtle">
+              Will apply to all {venues.length} selected venues
+            </p>
+          )}
           <Button
             type="button"
             variant="primary"
             disabled={isPending}
-            onClick={handleSave}
+            onClick={handleSaveClick}
           >
             {isPending ? "Saving…" : "Save weekly hours"}
           </Button>
         </div>
       ) : null}
+
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Overwrite weekly hours?"
+        description={confirmDescription}
+        confirmLabel="Yes, overwrite"
+        cancelLabel="Cancel"
+        variant="danger"
+        onConfirm={handleConfirmedSave}
+        onCancel={() => setConfirmOpen(false)}
+      />
     </div>
   );
+}
+
+function buildConfirmDescription(venues: VenueOption[]): string {
+  if (venues.length === 1) {
+    return `This will permanently overwrite all existing standard weekly hours for ${venues[0].name}. The current schedule will be replaced with what you have entered above. This cannot be undone.`;
+  }
+
+  const names = venues.map((v) => v.name);
+  const listed =
+    names.length === 2
+      ? `${names[0]} and ${names[1]}`
+      : `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
+
+  return `This will permanently overwrite all existing standard weekly hours for ${venues.length} venues: ${listed}. Every venue's current schedule will be replaced with what you have entered above. This cannot be undone.`;
 }
 
 function HoursCell({
