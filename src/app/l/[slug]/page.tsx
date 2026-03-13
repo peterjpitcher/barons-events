@@ -140,12 +140,12 @@ export default async function EventLandingPage({ params }: PageProps) {
   const displayTitle = event.public_title || event.title;
 
   return (
-    <div className="min-h-screen bg-[#1a2830] sm:flex sm:items-start sm:justify-center sm:py-8 sm:px-4">
+    <div className="min-h-screen bg-[#273640] sm:flex sm:items-start sm:justify-center sm:py-8 sm:px-4">
       {/* Card wrapper — full screen on mobile, centred narrow card on desktop */}
       <div className="w-full sm:max-w-[900px] sm:rounded-xl sm:overflow-hidden sm:shadow-2xl sm:flex">
 
         {/* ── LEFT COLUMN (desktop only) ── */}
-        <div className="hidden sm:flex sm:flex-col sm:w-[420px] sm:flex-shrink-0 bg-[#1a2830]">
+        <div className="hidden sm:flex sm:flex-col sm:w-[420px] sm:flex-shrink-0 bg-[#637c8c]">
           {/* Square event image */}
           {imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -155,8 +155,8 @@ export default async function EventLandingPage({ params }: PageProps) {
               className="w-full aspect-square object-cover"
             />
           ) : (
-            <div className="w-full aspect-square bg-[#273640] flex items-center justify-center">
-              <span className="text-stone-500 text-sm">No image</span>
+            <div className="w-full aspect-square bg-[#637c8c] flex items-center justify-center">
+              <span className="text-white/60 text-sm">No image</span>
             </div>
           )}
 
@@ -166,7 +166,7 @@ export default async function EventLandingPage({ params }: PageProps) {
               <ul className="space-y-3">
                 {highlights.map((item, i) => (
                   <li key={i} className="flex items-start gap-3 text-white">
-                    <span className="text-[#b98c5b] mt-0.5 flex-shrink-0">✓</span>
+                    <span className="text-[#781f25] mt-0.5 flex-shrink-0">✓</span>
                     <span className="text-sm leading-relaxed">{item}</span>
                   </li>
                 ))}
@@ -178,13 +178,9 @@ export default async function EventLandingPage({ params }: PageProps) {
         {/* ── RIGHT COLUMN / MOBILE MAIN ── */}
         <div className="flex-1 bg-white flex flex-col">
           {/* Top bar */}
-          <div className="bg-[#f4f1eb] px-4 py-3 flex items-center gap-3 border-b border-stone-200">
-            <div className="w-8 h-8 rounded-full bg-[#273640] flex items-center justify-center flex-shrink-0">
-              <span className="font-serif font-bold text-[#b98c5b] text-sm">B</span>
-            </div>
-            <span className="font-serif font-semibold text-[#273640] tracking-wide text-sm">
-              Barons Pubs
-            </span>
+          <div className="bg-[#cbd5db] px-4 py-3 flex items-center gap-3 border-b border-[#93ab97]/30">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="Barons Pubs" className="h-8 w-auto flex-shrink-0" />
           </div>
 
           {/* Event image — mobile only */}
@@ -197,8 +193,8 @@ export default async function EventLandingPage({ params }: PageProps) {
                 className="w-full aspect-square object-cover"
               />
             ) : (
-              <div className="w-full aspect-square bg-[#273640] flex items-center justify-center">
-                <span className="text-stone-500 text-sm">No image</span>
+              <div className="w-full aspect-square bg-[#637c8c] flex items-center justify-center">
+                <span className="text-white/60 text-sm">No image</span>
               </div>
             )}
           </div>
@@ -211,14 +207,14 @@ export default async function EventLandingPage({ params }: PageProps) {
 
             {/* Date/time/venue chips */}
             <div className="flex flex-wrap gap-2 mb-4">
-              <span className="bg-stone-100 text-[#273640] text-xs font-semibold px-2.5 py-1 rounded">
+              <span className="bg-[#cbd5db] text-[#273640] text-xs font-semibold px-2.5 py-1 rounded">
                 {dateStr}
               </span>
-              <span className="bg-stone-100 text-[#273640] text-xs font-semibold px-2.5 py-1 rounded">
+              <span className="bg-[#cbd5db] text-[#273640] text-xs font-semibold px-2.5 py-1 rounded">
                 {timeStr}
               </span>
               {event.venue?.name && (
-                <span className="bg-stone-100 text-[#273640] text-xs font-semibold px-2.5 py-1 rounded">
+                <span className="bg-[#cbd5db] text-[#273640] text-xs font-semibold px-2.5 py-1 rounded">
                   {event.venue.name}
                 </span>
               )}
@@ -226,12 +222,12 @@ export default async function EventLandingPage({ params }: PageProps) {
 
             {/* Description */}
             {event.public_teaser && (
-              <p className="text-stone-600 italic text-sm mb-3 leading-relaxed">
+              <p className="text-[#637c8c] italic text-sm mb-3 leading-relaxed">
                 {event.public_teaser}
               </p>
             )}
             {event.public_description && (
-              <p className="text-stone-700 text-sm leading-relaxed mb-4">
+              <p className="text-[#273640] text-sm leading-relaxed mb-4">
                 {event.public_description}
               </p>
             )}
@@ -239,11 +235,11 @@ export default async function EventLandingPage({ params }: PageProps) {
 
           {/* USPs — mobile only, hidden if no highlights */}
           {hasHighlights && (
-            <div className="sm:hidden bg-[#273640] px-6 py-5">
+            <div className="sm:hidden bg-[#93ab97] px-6 py-5">
               <ul className="space-y-3">
                 {highlights.map((item, i) => (
                   <li key={i} className="flex items-start gap-3 text-white">
-                    <span className="text-[#b98c5b] mt-0.5 flex-shrink-0">✓</span>
+                    <span className="text-[#781f25] mt-0.5 flex-shrink-0">✓</span>
                     <span className="text-sm leading-relaxed">{item}</span>
                   </li>
                 ))}

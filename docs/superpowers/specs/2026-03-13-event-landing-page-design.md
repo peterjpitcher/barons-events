@@ -134,6 +134,10 @@ create policy "staff_read_bookings" on event_bookings
 -- Authenticated staff can update (cancellations)
 create policy "staff_update_bookings" on event_bookings
   for update using (auth.uid() is not null);
+
+-- Grant insert permission to the anon role so unauthenticated visitors can book
+-- (RLS policy above still applies — anon cannot insert unless booking_enabled = true)
+grant insert on event_bookings to anon;
 ```
 
 ### New columns on `events`
@@ -220,7 +224,9 @@ Same page layout, booking form replaced with:
 
 ### Rate Limiting on Booking Submission
 
-The booking server action is a public unauthenticated write endpoint. Apply per-IP rate limiting using the existing `src/lib/public-api/rate-limit.ts` sliding window: **10 booking submissions per IP per 10 minutes**. Return a 429-equivalent error to the client if exceeded.
+The booking server action is a public unauthenticated write endpoint. Apply per-IP rate limiting using the existing `src/lib/public-api/rate-limit.ts` sliding window. The existing limiter is hardcoded to 120/60s for the public API — instantiate a **separate `RateLimiter` instance** with `{ limit: 10, windowMs: 600_000 }` (10 per 10 minutes) for bookings. Return a 429-equivalent error to the client if exceeded.
+
+**CSRF:** Next.js Server Actions have built-in same-origin CSRF protection — no additional CSRF token handling is required for the booking form.
 
 ---
 
@@ -271,12 +277,24 @@ Two new entries in `vercel.json`:
 **Timing note:** Vercel cron schedules are UTC. UK time is UTC+0 in winter (GMT) and UTC+1 in summer (BST). The above schedule fires at 9:00 UTC / 10:00 UTC. In winter this is 9:00am / 10:00am UK time. In summer (BST) this is 10:00am / 11:00am UK time. This ~1 hour seasonal drift is acceptable — messages land in a reasonable morning window year-round.
 
 **`/api/cron/sms-reminders`** (runs 09:00 UTC daily):
-- Query: confirmed bookings where `events.start_at` falls on tomorrow (UK local date) AND `sms_reminder_sent_at` is null
+- Query confirmed bookings using timezone-aware date comparison:
+  ```sql
+  where date(events.start_at at time zone 'Europe/London')
+      = (current_date at time zone 'Europe/London') + interval '1 day'
+    and eb.sms_reminder_sent_at is null
+    and eb.status = 'confirmed'
+  ```
 - Send reminder SMS to each booking's mobile number
 - Update `sms_reminder_sent_at = now()`
 
 **`/api/cron/sms-post-event`** (runs 10:00 UTC daily):
-- Query: confirmed bookings where `events.start_at` fell on yesterday (UK local date) AND `sms_post_event_sent_at` is null
+- Query confirmed bookings using timezone-aware date comparison:
+  ```sql
+  where date(events.start_at at time zone 'Europe/London')
+      = (current_date at time zone 'Europe/London') - interval '1 day'
+    and eb.sms_post_event_sent_at is null
+    and eb.status = 'confirmed'
+  ```
 - Generate tracked Google Review short link for the venue (if URL exists)
 - Send post-event SMS to each booking's mobile number
 - Update `sms_post_event_sent_at = now()`
@@ -299,6 +317,7 @@ Columns: Name | Mobile | Email | Tickets | Booked at | Status
 - Cancel button per row — sets `status = 'cancelled'` via authenticated server action using the anon-key client (covered by the `staff_update_bookings` RLS policy)
 - Cancellation does not trigger any SMS to the customer
 - No pagination required initially
+- **Permission scoping:** venue managers see bookings only for events belonging to their venue; central planners and executives see all bookings across all venues (enforce in the query, not just RLS)
 
 ### New Booking Settings (Event Edit Form)
 
@@ -339,7 +358,17 @@ New "Google Review URL" text field on the venue edit page (`/venues/[venueId]`).
 
 ---
 
-## 8. Files to Create / Modify
+## 8. Pre-Implementation Code Fixes Required
+
+These existing files need small fixes **before** building new features:
+
+| File | Fix |
+|---|---|
+| `src/lib/links.ts` | Change `CreateLinkInput.created_by` from `string` (required) to `string \| null` (optional) — needed for system-generated short links from cron jobs |
+
+---
+
+## 9. Files to Create / Modify
 
 | Path | Action | Purpose |
 |---|---|---|

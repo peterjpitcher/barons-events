@@ -23,8 +23,8 @@ export function BookingForm({ eventId, maxTickets, isSoldOut }: BookingFormProps
 
   if (isSoldOut) {
     return (
-      <div className="rounded-lg bg-stone-50 border border-stone-200 p-6 text-center">
-        <p className="text-stone-500 font-medium">
+      <div className="rounded-lg bg-white border border-[#cbd5db] p-6 text-center">
+        <p className="text-[#637c8c] font-medium">
           Sorry, this event is fully booked.
         </p>
       </div>
@@ -33,9 +33,9 @@ export function BookingForm({ eventId, maxTickets, isSoldOut }: BookingFormProps
 
   if (success) {
     return (
-      <div className="rounded-lg bg-stone-50 border border-stone-200 p-6 text-center space-y-2">
-        <p className="text-lg font-semibold text-green-700">You&apos;re booked in!</p>
-        <p className="text-stone-500 text-sm">
+      <div className="rounded-lg bg-white border border-[#cbd5db] p-6 text-center space-y-2">
+        <p className="text-lg font-semibold text-[#273640]">You&apos;re booked in!</p>
+        <p className="text-[#637c8c] text-sm">
           We&apos;ve sent a confirmation text to {bookedMobile}.
         </p>
       </div>
@@ -75,7 +75,7 @@ export function BookingForm({ eventId, maxTickets, isSoldOut }: BookingFormProps
   }
 
   return (
-    <div className="bg-stone-50 border-t border-stone-200 p-6">
+    <div className="bg-white border-t border-[#cbd5db] p-6">
       <h2 className="text-sm font-bold uppercase tracking-wider text-[#273640] mb-4">
         Reserve Your Seats
       </h2>
@@ -83,14 +83,14 @@ export function BookingForm({ eventId, maxTickets, isSoldOut }: BookingFormProps
       <form onSubmit={handleSubmit} noValidate className="space-y-4">
         {/* Ticket count stepper */}
         <div className="flex items-center justify-between">
-          <span className="text-sm text-stone-500">How many seats?</span>
+          <span className="text-sm text-[#637c8c]">How many seats?</span>
           <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={() => setTicketCount((n) => Math.max(1, n - 1))}
               disabled={ticketCount <= 1}
               className="w-8 h-8 rounded-full bg-[#273640] text-white font-bold
-                         disabled:opacity-40 flex items-center justify-center hover:bg-[#1a2830]
+                         disabled:opacity-40 flex items-center justify-center hover:bg-[#637c8c]
                          focus:outline-none focus:ring-2 focus:ring-[#273640] focus:ring-offset-1"
               aria-label="Decrease ticket count"
             >
@@ -104,7 +104,7 @@ export function BookingForm({ eventId, maxTickets, isSoldOut }: BookingFormProps
               onClick={() => setTicketCount((n) => Math.min(maxTickets, n + 1))}
               disabled={ticketCount >= maxTickets}
               className="w-8 h-8 rounded-full bg-[#273640] text-white font-bold
-                         disabled:opacity-40 flex items-center justify-center hover:bg-[#1a2830]
+                         disabled:opacity-40 flex items-center justify-center hover:bg-[#637c8c]
                          focus:outline-none focus:ring-2 focus:ring-[#273640] focus:ring-offset-1"
               aria-label="Increase ticket count"
             >
@@ -125,7 +125,7 @@ export function BookingForm({ eventId, maxTickets, isSoldOut }: BookingFormProps
               onChange={(e) => setFirstName(e.target.value)}
               required
               autoComplete="given-name"
-              className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm
+              className="w-full rounded-md border border-[#cbd5db] bg-white px-3 py-2 text-sm
                          placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-[#273640]"
             />
           </div>
@@ -138,7 +138,7 @@ export function BookingForm({ eventId, maxTickets, isSoldOut }: BookingFormProps
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
               autoComplete="family-name"
-              className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm
+              className="w-full rounded-md border border-[#cbd5db] bg-white px-3 py-2 text-sm
                          placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-[#273640]"
             />
           </div>
@@ -186,9 +186,9 @@ export function BookingForm({ eventId, maxTickets, isSoldOut }: BookingFormProps
         <button
           type="submit"
           disabled={loading || !firstName.trim() || !mobile.trim()}
-          className="w-full bg-[#b98c5b] hover:bg-[#a07848] text-white font-bold text-sm
+          className="w-full bg-[#c8a005] hover:bg-[#a88804] text-white font-bold text-sm
                      uppercase tracking-wider py-3 rounded-md disabled:opacity-50
-                     transition-colors focus:outline-none focus:ring-2 focus:ring-[#b98c5b] focus:ring-offset-1"
+                     transition-colors focus:outline-none focus:ring-2 focus:ring-[#c8a005] focus:ring-offset-1"
         >
           {loading ? "Booking…" : "Book Now — Free Entry"}
         </button>
