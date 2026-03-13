@@ -23,6 +23,8 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { label: "Dashboard", href: "/", roles: ["central_planner", "reviewer", "venue_manager", "executive"] },
       { label: "Events", href: "/events", roles: ["central_planner", "venue_manager"] },
+      { label: "Bookings", href: "/bookings", roles: ["central_planner", "venue_manager"] },
+      { label: "Customers", href: "/customers", roles: ["central_planner", "venue_manager"] },
       { label: "Artists", href: "/artists", roles: ["central_planner", "venue_manager"] },
       { label: "Reviews", href: "/reviews", roles: ["central_planner", "reviewer"] }
     ]
