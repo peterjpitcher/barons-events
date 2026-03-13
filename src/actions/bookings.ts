@@ -9,17 +9,20 @@ import { createBookingAtomic, cancelBooking } from "@/lib/bookings";
 import { getCurrentUser } from "@/lib/auth";
 import { recordAuditLogEntry } from "@/lib/audit-log";
 import { sendBookingConfirmationSms } from "@/lib/sms";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { MARKETING_CONSENT_WORDING } from "@/lib/booking-consent";
 
 // 10 booking attempts per IP per 10 minutes — separate from the public API limiter
 const bookingLimiter = new RateLimiter({ windowMs: 600_000, maxRequests: 10 });
 
 const createBookingSchema = z.object({
-  eventId:     z.string().uuid(),
-  firstName:   z.string().min(1, "First name is required").max(100),
-  lastName:    z.string().max(100).nullable(),
-  mobile:      z.string().min(1, "Mobile number is required"),
-  email:       z.string().email("Invalid email address").nullable(),
-  ticketCount: z.number().int().min(1).max(50),
+  eventId:       z.string().uuid(),
+  firstName:     z.string().min(1, "First name is required").max(100),
+  lastName:      z.string().max(100).nullable(),
+  mobile:        z.string().min(1, "Mobile number is required"),
+  email:         z.string().email("Invalid email address").nullable(),
+  ticketCount:   z.number().int().min(1).max(50),
+  marketingOptIn: z.boolean().default(false),
 });
 
 export type CreateBookingInput = z.infer<typeof createBookingSchema>;
@@ -85,6 +88,68 @@ export async function createBookingAction(
   sendBookingConfirmationSms(bookingId).catch((err) => {
     console.warn("Failed to send booking confirmation SMS:", err);
   });
+
+  // Upsert customer record — non-blocking (booking already confirmed)
+  try {
+    const db = createSupabaseAdminClient();
+
+    // Step 1: Upsert core fields. Do NOT include marketing_opt_in here —
+    // it is upgrade-only and handled separately below.
+    // name = last-write-wins; email only set when provided (preserves existing email).
+    const upsertPayload: Record<string, unknown> = {
+      mobile:     normalisedMobile,
+      first_name: data.firstName,
+      last_name:  data.lastName ?? null,
+      updated_at: new Date().toISOString(),
+    };
+    if (data.email) upsertPayload.email = data.email;
+
+    const { data: upserted, error: upsertError } = await db
+      .from("customers")
+      .upsert(upsertPayload, { onConflict: "mobile" })
+      .select("id, marketing_opt_in")
+      .single();
+
+    if (upsertError) {
+      console.error("Customer upsert failed:", upsertError);
+    } else if (upserted) {
+      // Step 2: Upgrade-only opt-in.
+      // Only write marketing_opt_in when the new value is TRUE.
+      // If new value is false, leave the existing DB value unchanged.
+      const previousOptIn = upserted.marketing_opt_in as boolean;
+      if (data.marketingOptIn && !previousOptIn) {
+        await db
+          .from("customers")
+          .update({ marketing_opt_in: true })
+          .eq("id", upserted.id);
+      }
+
+      // Step 3: Log consent event only when value genuinely changes.
+      const newOptIn = data.marketingOptIn;
+      if (newOptIn !== previousOptIn) {
+        const { error: consentError } = await db
+          .from("customer_consent_events")
+          .insert({
+            customer_id:     upserted.id,
+            event_type:      newOptIn ? "opt_in" : "opt_out",
+            consent_wording: MARKETING_CONSENT_WORDING,
+            booking_id:      bookingId,
+          });
+        if (consentError) {
+          console.error("Consent event insert failed:", consentError);
+        }
+      }
+
+      // Step 4: Link booking to customer
+      await db
+        .from("event_bookings")
+        .update({ customer_id: upserted.id })
+        .eq("id", bookingId);
+    }
+  } catch (customerErr) {
+    console.error("Customer upsert pipeline failed:", customerErr);
+    // Non-fatal — booking is confirmed
+  }
 
   return { success: true, bookingId };
 }
