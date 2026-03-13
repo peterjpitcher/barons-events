@@ -55,11 +55,30 @@ function EventListItem({
 
   const hasWebCopy = Boolean(event.public_title);
 
+  const imageUrl = (() => {
+    const path = event.event_image_path;
+    if (!path) return null;
+    const base = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/\/+$/, "");
+    if (!base) return null;
+    const encoded = path.split("/").map(encodeURIComponent).join("/");
+    return `${base}/storage/v1/object/public/event-images/${encoded}`;
+  })();
+
   return (
     <li
       title={hoverDetails}
-      className="flex flex-col gap-1.5 rounded-[var(--radius-sm)] border border-[rgba(39,54,64,0.12)] bg-white p-2 text-xs text-[var(--color-text)] shadow-soft"
+      className="flex flex-col gap-1.5 rounded-[var(--radius-sm)] border border-[rgba(39,54,64,0.12)] bg-white overflow-hidden text-xs text-[var(--color-text)] shadow-soft"
     >
+      {imageUrl && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={imageUrl}
+          alt=""
+          className="w-full h-20 object-cover"
+          aria-hidden="true"
+        />
+      )}
+      <div className="flex flex-col gap-1.5 p-2">
       <Link
         href={`/events/${event.id}`}
         className="truncate text-sm font-semibold text-[var(--color-text)] transition-colors hover:text-[var(--color-primary-700)]"
@@ -95,6 +114,7 @@ function EventListItem({
           </span>
         </div>
         {showApprove ? <ApproveEventButton eventId={event.id} size="sm" className="h-auto px-2 py-0.5 text-[0.64rem]" hasWebCopy={hasWebCopy} /> : null}
+      </div>
       </div>
     </li>
   );
