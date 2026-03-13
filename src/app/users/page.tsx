@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
-import { listUsers } from "@/lib/users";
+import { listUsersWithAuthData } from "@/lib/users";
 import { listVenues } from "@/lib/venues";
 import { UsersManager } from "@/components/users/users-manager";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,7 +19,7 @@ export default async function UsersPage() {
     redirect("/unauthorized");
   }
 
-  const [users, venues] = await Promise.all([listUsers(), listVenues()]);
+  const [users, venues] = await Promise.all([listUsersWithAuthData(), listVenues()]);
 
   return (
     <div className="space-y-6">
