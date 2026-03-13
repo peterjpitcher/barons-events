@@ -38,7 +38,7 @@ function isPublicPath(pathname: string): boolean {
 
 // ─── Security headers ─────────────────────────────────────────────────────────
 
-function applySecurityHeaders(response: NextResponse): void {
+function applySecurityHeaders(response: NextResponse, nonce: string): void {
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("X-Frame-Options", "DENY");
   response.headers.set(
@@ -55,20 +55,35 @@ function applySecurityHeaders(response: NextResponse): void {
     "Content-Security-Policy",
     [
       "default-src 'self'",
-      "script-src 'self'",
-      "style-src 'self'",
-      `connect-src 'self' ${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""} https://api.pwnedpasswords.com`,
+      // 'nonce-…' allows Next.js hydration inline scripts and any <Script nonce={nonce}> tags.
+      // https://challenges.cloudflare.com is required for the Turnstile widget JS.
+      `script-src 'self' 'nonce-${nonce}' https://challenges.cloudflare.com`,
+      // 'unsafe-inline' on style-src is needed for Turnstile's injected inline styles.
+      "style-src 'self' 'unsafe-inline'",
+      `connect-src 'self' ${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""} https://api.pwnedpasswords.com https://challenges.cloudflare.com`,
       `img-src 'self' data: blob: ${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""}`,
       "font-src 'self' https://fonts.gstatic.com",
+      // frame-src is required for the Turnstile challenge iframe.
+      "frame-src https://challenges.cloudflare.com",
       "frame-ancestors 'none'",
     ].join("; ")
   );
 }
 
-// ─── CSRF helpers ─────────────────────────────────────────────────────────────
+// ─── Nonce / CSRF helpers ──────────────────────────────────────────────────────
 
 const CSRF_COOKIE_NAME = "csrf-token";
 const MUTATION_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+/**
+ * Generates a random base64-encoded nonce for CSP.
+ * 16 bytes = 128 bits of entropy, base64-encoded to ~22 chars.
+ */
+function generateNonce(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return btoa(String.fromCharCode(...bytes));
+}
 
 function generateCsrfToken(): string {
   const bytes = new Uint8Array(32);
@@ -112,10 +127,18 @@ export async function middleware(req: NextRequest) {
     // Short link paths (8-hex-char) and static assets continue through middleware normally
   }
 
-  const res = NextResponse.next();
+  // Generate a per-request CSP nonce and forward it to the app via a request header.
+  // Next.js App Router reads x-nonce and applies it to its own generated inline scripts.
+  const nonce = generateNonce();
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set("x-nonce", nonce);
+
+  const res = NextResponse.next({
+    request: { headers: requestHeaders }
+  });
 
   // Step 3: Security headers — applied to every response regardless of auth state
-  applySecurityHeaders(res);
+  applySecurityHeaders(res, nonce);
 
   // Static assets / public paths: return early after headers
   if (isPublicPath(pathname)) {
@@ -167,7 +190,7 @@ export async function middleware(req: NextRequest) {
     const originalPath = `${pathname}${req.nextUrl.search ?? ""}`;
     redirectUrl.searchParams.set("redirectedFrom", originalPath);
     const redirectRes = NextResponse.redirect(redirectUrl);
-    applySecurityHeaders(redirectRes);
+    applySecurityHeaders(redirectRes, nonce);
     return redirectRes;
   }
 
@@ -214,7 +237,7 @@ export async function middleware(req: NextRequest) {
         ...makeSessionCookieOptions(),
         maxAge: 0
       });
-      applySecurityHeaders(redirectRes);
+      applySecurityHeaders(redirectRes, nonce);
       return redirectRes;
     }
 

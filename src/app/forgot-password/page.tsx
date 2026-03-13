@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { AuthLayout } from "@/components/auth/auth-layout";
 import { AUTH_CARD_CLASS, AUTH_CARD_CONTENT_CLASS, AUTH_CARD_HEADER_CLASS } from "@/components/auth/styles";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,6 +21,9 @@ export default async function ForgotPasswordPage({ searchParams }: ForgotPasswor
   const query =
     (await searchParams?.catch(() => ({} as SearchParams))) ??
     ({} as SearchParams);
+
+  const headersList = await headers();
+  const nonce = headersList.get("x-nonce") ?? undefined;
 
   const status = query.status;
 
@@ -64,7 +68,7 @@ export default async function ForgotPasswordPage({ searchParams }: ForgotPasswor
               </Button>
             </div>
           ) : (
-            <ForgotPasswordForm />
+            <ForgotPasswordForm nonce={nonce} />
           )}
         </CardContent>
       </Card>

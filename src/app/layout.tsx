@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Script from "next/script";
+import { headers } from "next/headers";
 import { Geist, Geist_Mono, Playfair_Display } from "next/font/google";
 import "./globals.css";
 import { getCurrentUser } from "@/lib/auth";
@@ -151,6 +152,8 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const headersList = await headers();
+  const nonce = headersList.get("x-nonce") ?? undefined;
   const user = await getCurrentUser();
 
   return (
@@ -158,7 +161,7 @@ export default async function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${playfair.variable} bg-[var(--color-canvas)] text-[var(--color-text)] antialiased`}
       >
-        <Script id="client-polyfills" strategy="beforeInteractive">
+        <Script id="client-polyfills" strategy="beforeInteractive" nonce={nonce}>
           {clientPolyfills}
         </Script>
         <Toaster />

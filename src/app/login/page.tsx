@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { headers } from "next/headers";
 import { AuthLayout } from "@/components/auth/auth-layout";
 import { AUTH_CARD_CLASS, AUTH_CARD_CONTENT_CLASS, AUTH_CARD_HEADER_CLASS } from "@/components/auth/styles";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,6 +35,9 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   // getSession() trusts the local cookie and can return a stale session even
   // when the refresh token is no longer valid — causing a redirect loop with
   // the middleware, which also uses getUser() and rejects the same stale token.
+  const headersList = await headers();
+  const nonce = headersList.get("x-nonce") ?? undefined;
+
   const user = await getCurrentUser();
   if (user) {
     redirect(redirectTarget);
@@ -60,7 +64,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
               You were signed out due to inactivity.
             </p>
           ) : null}
-          <LoginForm redirectTo={redirectTarget} />
+          <LoginForm redirectTo={redirectTarget} nonce={nonce} />
           <div className="space-y-3 text-sm text-muted">
             <Link href="/forgot-password" className="font-medium text-[var(--color-primary-700)] underline">
               Reset your password

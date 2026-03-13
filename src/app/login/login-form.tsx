@@ -10,11 +10,12 @@ import { FieldError } from "@/components/ui/field-error";
 
 type LoginFormProps = {
   redirectTo: string;
+  nonce?: string;
 };
 
 const errorInputClass = "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]";
 
-export function LoginForm({ redirectTo }: LoginFormProps) {
+export function LoginForm({ redirectTo, nonce }: LoginFormProps) {
   const [state, formAction] = useActionState(signInAction, undefined);
   const emailError = state?.fieldErrors?.email;
   const passwordError = state?.fieldErrors?.password;
@@ -63,7 +64,7 @@ export function LoginForm({ redirectTo }: LoginFormProps) {
       />
       <SubmitButton label="Sign in" />
     </form>
-    <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js" strategy="lazyOnload" />
+    <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js" strategy="lazyOnload" nonce={nonce} />
     </>
   );
 }

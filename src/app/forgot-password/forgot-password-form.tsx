@@ -11,7 +11,7 @@ import { FieldError } from "@/components/ui/field-error";
 
 const errorInputClass = "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]";
 
-export function ForgotPasswordForm() {
+export function ForgotPasswordForm({ nonce }: { nonce?: string }) {
   const [state, formAction] = useActionState(requestPasswordResetAction, undefined);
   const emailError = state?.fieldErrors?.email;
   const formError = state?.fieldErrors ? null : state?.message;
@@ -49,7 +49,7 @@ export function ForgotPasswordForm() {
         .
       </p>
     </form>
-    <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js" strategy="lazyOnload" />
+    <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js" strategy="lazyOnload" nonce={nonce} />
     </>
   );
 }
