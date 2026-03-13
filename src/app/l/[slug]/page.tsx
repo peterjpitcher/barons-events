@@ -178,7 +178,7 @@ export default async function EventLandingPage({ params }: PageProps) {
         {/* ── RIGHT COLUMN / MOBILE MAIN ── */}
         <div className="flex-1 bg-white flex flex-col">
           {/* Top bar */}
-          <div className="bg-[#cbd5db] px-4 py-3 flex items-center gap-3 border-b border-[#93ab97]/30">
+          <div className="bg-[#273640] px-4 py-3 flex items-center gap-3 border-b border-white/10">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/logo.png" alt="Barons Pubs" className="h-8 w-auto flex-shrink-0" />
           </div>
