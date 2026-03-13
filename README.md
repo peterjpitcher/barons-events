@@ -54,8 +54,8 @@ This build is a slimmed-down reboot focused on the core flows for Sprint 1: ev
 This app exposes a read-only API for the brand website to pull **public** events (status `approved` or `completed`).
 
 **Auth**
-- Set `EVENTHUB_WEBSITE_API_KEY` (and ensure `SUPABASE_SERVICE_ROLE_KEY` is present server-side).
-- Send `Authorization: Bearer <EVENTHUB_WEBSITE_API_KEY>`.
+- Set `BARONSHUB_WEBSITE_API_KEY` (and ensure `SUPABASE_SERVICE_ROLE_KEY` is present server-side).
+- Send `Authorization: Bearer <BARONSHUB_WEBSITE_API_KEY>`.
 
 **Endpoints**
 - `GET /api/v1/health`
@@ -68,7 +68,7 @@ This app exposes a read-only API for the brand website to pull **public** events
 
 Example:
 ```bash
-curl -H "Authorization: Bearer $EVENTHUB_WEBSITE_API_KEY" "http://localhost:3000/api/v1/events?limit=25"
+curl -H "Authorization: Bearer $BARONSHUB_WEBSITE_API_KEY" "http://localhost:3000/api/v1/events?limit=25"
 ```
 
 ## Deployment Notes

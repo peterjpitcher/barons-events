@@ -1,4 +1,4 @@
-# Auth Compliance Structural Audit — BARONS-EventHub
+# Auth Compliance Structural Audit — BARONS-BaronsHub
 
 **Audit Date:** 2026-03-11  
 **Baseline:** Auth Standard Section 1-13 (mandatory compliance)  
@@ -310,7 +310,7 @@ type UserRole = "venue_manager" | "reviewer" | "central_planner" | "executive"
 ```
 
 **NOT the standard 3-tier model (admin/editor/viewer):**
-- Custom role hierarchy specific to EventHub
+- Custom role hierarchy specific to BaronsHub
 - Does NOT follow global role standard from Section 7
 
 **Role storage:**
@@ -478,7 +478,7 @@ const passwordResetSchema = z
 ### Email Infrastructure
 **File:** `src/lib/notifications.ts`
 - Email service: Resend
-- From address: `RESEND_FROM_EMAIL` env var (default: `EventHub <no-reply@eventhub.orangejelly.co.uk>`)
+- From address: `RESEND_FROM_EMAIL` env var (default: `BaronsHub <no-reply@baronshub.orangejelly.co.uk>`)
 - Branded email template function: `renderEmailTemplate()` (line 41)
 - HTML output: Custom generated (line 58-186)
 
@@ -497,8 +497,8 @@ const passwordResetSchema = z
 **Function:** `sendPasswordResetEmail()` (line 379)
 
 Content:
-- Headline: "Reset your EventHub password"
-- Body: "we received a request to reset your EventHub password"
+- Headline: "Reset your BaronsHub password"
+- Body: "we received a request to reset your BaronsHub password"
 - Security notice: "If you didn't request this, you can safely ignore this message" ✓
 - Reset link: Embedded in button
 - Expires: Not stated in email body

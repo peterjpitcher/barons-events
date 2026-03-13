@@ -323,7 +323,7 @@ async function fetchHtml(url) {
   try {
     const res = await fetch(url, {
       redirect: "follow",
-      headers: { "User-Agent": "EventHubImporter/1.0" },
+      headers: { "User-Agent": "BaronsHubImporter/1.0" },
       signal: controller.signal
     });
     const html = await res.text();
@@ -339,7 +339,7 @@ async function fetchJson(url) {
   try {
     const res = await fetch(url, {
       redirect: "follow",
-      headers: { "User-Agent": "EventHubImporter/1.0" },
+      headers: { "User-Agent": "BaronsHubImporter/1.0" },
       signal: controller.signal
     });
     if (!res.ok) return null;

@@ -4,7 +4,7 @@ import { timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
 import { checkRateLimit, getClientIp } from "./rate-limit";
 
-const API_KEY_ENV = "EVENTHUB_WEBSITE_API_KEY";
+const API_KEY_ENV = "BARONSHUB_WEBSITE_API_KEY";
 
 function constantTimeEquals(a: string, b: string): boolean {
   const aBuf = Buffer.from(a);

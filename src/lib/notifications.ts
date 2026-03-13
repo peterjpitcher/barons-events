@@ -3,11 +3,11 @@ import { createSupabaseReadonlyClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
 import { formatSpacesLabel } from "@/lib/venue-spaces";
 
-const RESEND_FROM_ADDRESS = process.env.RESEND_FROM_EMAIL ?? "EventHub <no-reply@eventhub.orangejelly.co.uk>";
+const RESEND_FROM_ADDRESS = process.env.RESEND_FROM_EMAIL ?? "BaronsHub <no-reply@baronshub.orangejelly.co.uk>";
 const APP_BASE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ??
   process.env.NEXT_PUBLIC_APP_URL ??
-  "https://eventhub.orangejelly.co.uk";
+  "https://baronshub.orangejelly.co.uk";
 
 type EventRow = Database["public"]["Tables"]["events"]["Row"];
 type UserRow = Database["public"]["Tables"]["users"]["Row"];
@@ -165,8 +165,8 @@ function renderEmailTemplate({ headline, intro, body = [], button, meta, footerN
     <div class="wrapper">
       <div class="card">
         <div class="header">
-          <h1>EventHub</h1>
-          <p>A Barons Innovation</p>
+          <h1>BaronsHub</h1>
+          <p>Accelerating Barons Success Everyday</p>
         </div>
         <div class="content">
           <h2>${safeHeadline}</h2>
@@ -176,7 +176,7 @@ function renderEmailTemplate({ headline, intro, body = [], button, meta, footerN
           ${metaHtml}
         </div>
         <div class="footer">
-          © ${escapeHtml(APP_BASE_URL)} · Sent from the EventHub planning team.<br />
+          © ${escapeHtml(APP_BASE_URL)} · Sent from the BaronsHub planning team.<br />
           Need help? Email <a href="mailto:peter@orangejelly.co.uk">peter@orangejelly.co.uk</a>.
           ${footerHtml}
         </div>
@@ -385,8 +385,8 @@ export async function sendInviteEmail(email: string, inviteLink: string, fullNam
   try {
     const greeting = fullName ? `Hi ${escapeHtml(fullName)},` : "Hi there,";
     const { html, text } = renderEmailTemplate({
-      headline: "You've been invited to EventHub",
-      intro: `${greeting} you've been invited to join the Barons EventHub planning platform.`,
+      headline: "You've been invited to BaronsHub",
+      intro: `${greeting} you've been invited to join the Barons BaronsHub planning platform.`,
       body: [
         "Use the button below to set your password and get started.",
         "This invite link is valid for 7 days. If you didn't expect this email, you can safely ignore it."
@@ -398,7 +398,7 @@ export async function sendInviteEmail(email: string, inviteLink: string, fullNam
     await resend.emails.send({
       from: RESEND_FROM_ADDRESS,
       to: email,
-      subject: "You've been invited to EventHub",
+      subject: "You've been invited to BaronsHub",
       html,
       text
     });
@@ -417,8 +417,8 @@ export async function sendPasswordResetEmail(email: string, resetLink: string) {
 
   try {
     const { html, text } = renderEmailTemplate({
-      headline: "Reset your EventHub password",
-      intro: "Hi there — we received a request to reset your EventHub password.",
+      headline: "Reset your BaronsHub password",
+      intro: "Hi there — we received a request to reset your BaronsHub password.",
       body: [
         "Use the button below to choose a new password and get back to planning.",
         "If you didn’t request this, you can safely ignore this message."
@@ -430,7 +430,7 @@ export async function sendPasswordResetEmail(email: string, resetLink: string) {
     await resend.emails.send({
       from: RESEND_FROM_ADDRESS,
       to: email,
-      subject: "Reset your EventHub password",
+      subject: "Reset your BaronsHub password",
       html,
       text
     });
@@ -688,7 +688,7 @@ export async function sendPostEventDigestEmail(eventId: string) {
         `When: ${formatEventWindow(event)}`,
         `Submitted by: ${event.creator?.full_name ?? "Unknown"}`
       ],
-      footerNote: "You’re receiving this because you’re listed as a planner or executive in EventHub."
+      footerNote: "You’re receiving this because you’re listed as a planner or executive in BaronsHub."
     });
 
     await resend.emails.send({
@@ -780,13 +780,13 @@ export async function sendWeeklyPipelineSummaryEmail() {
       body,
       button: { label: "Open planning board", url: plannerDashboardLink() },
       meta: [`Generated: ${new Date().toLocaleString("en-GB")}`],
-      footerNote: "You’re receiving this because you’re a central planner in EventHub."
+      footerNote: "You’re receiving this because you’re a central planner in BaronsHub."
     });
 
     await resend.emails.send({
       from: RESEND_FROM_ADDRESS,
       to: planners.map((user) => user.email),
-      subject: "Weekly EventHub pipeline roundup",
+      subject: "Weekly BaronsHub pipeline roundup",
       html,
       text
     });

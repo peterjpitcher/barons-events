@@ -12,7 +12,7 @@ export async function generateMetadata({ params }: { params: Promise<{ venueId: 
   const venues = await listVenues();
   const venue = venues.find((v) => v.id === venueId);
   return {
-    title: venue ? `Opening hours · ${venue.name}` : "Opening hours · EventHub"
+    title: venue ? `Opening hours · ${venue.name}` : "Opening hours · BaronsHub"
   };
 }
 

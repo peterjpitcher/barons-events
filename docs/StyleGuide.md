@@ -1,6 +1,6 @@
-# EventHub Style Guide (plain English)
+# BaronsHub Style Guide (plain English)
 
-This is the visual system used in EventHub. Copy these notes into your new app to reproduce the same look and feel.
+This is the visual system used in BaronsHub. Copy these notes into your new app to reproduce the same look and feel.
 
 ## Palette
 - Base: warm navy. Primary shade is `#273640`; lighter tones range up to `#ccd4db`.
@@ -20,7 +20,7 @@ This is the visual system used in EventHub. Copy these notes into your new app t
 - Typical sizes: page titles around `text-3xl` serif; card titles `text-lg` semibold; helper text `text-xs` muted/subtle.
 
 ## Layout patterns
-- App shell: dark navy sidebar (primary-700) with bronze “EventHub” serif mark and white nav links; main area sits on the canvas background with white cards.
+- App shell: dark navy sidebar (primary-700) with bronze “BaronsHub” serif mark and white nav links; main area sits on the canvas background with white cards.
 - Header bar: white surface with subtle bottom border and soft shadow; muted labels for metadata.
 - Grid spacing: generous `gap-6` between cards/sections; card padding usually `p-6`.
 
@@ -51,7 +51,7 @@ This is the visual system used in EventHub. Copy these notes into your new app t
 
 ## Auth screens
 - Full-bleed dark navy background with a bronze radial glow.
-- Centered layout: left column has bronze serif “EventHub” logo and uppercase microcopy; right column hosts the form card.
+- Centered layout: left column has bronze serif “BaronsHub” logo and uppercase microcopy; right column hosts the form card.
 - Auth card: semi-opaque white (`bg-white/95`), soft shadow, subtle ring, generous padding (`p-8`), tight gaps (`gap-6`).
 
 ## Utilities & misc

@@ -1505,7 +1505,7 @@ export function EventForm({
           <div>
             <h2 className="text-lg font-semibold text-[var(--color-text)]">Build Terms & Conditions</h2>
             <p className="text-sm text-subtle">
-              Choose booking guardrails and EventHub will draft clear guest-facing terms.
+              Choose booking guardrails and BaronsHub will draft clear guest-facing terms.
             </p>
           </div>
           <Button type="button" variant="ghost" size="sm" onClick={() => setShowTermsModal(false)}>

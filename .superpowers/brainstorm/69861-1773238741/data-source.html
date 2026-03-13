@@ -1,0 +1,40 @@
+<h2>Where do inspiration events come from?</h2>
+<p class="subtitle">This shapes the entire architecture — pick the approach that fits best</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Curated static calendar in the codebase</h3>
+      <p>A hand-crafted list of UK hospitality-relevant dates (bank holidays, Valentine's Day, Bonfire Night, Six Nations, Wimbledon, etc.) maintained as structured data in the repo. The cron job filters this list for the next 180 days each month. Developers update the list annually. No external API calls.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>No API dependency or cost</li><li>Full control over what's included</li><li>Works offline, deterministic</li><li>Very fast</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Needs manual updates each year</li><li>Misses one-off events (elections, jubilees)</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>External API + curated fallback</h3>
+      <p>Pulls UK bank holidays from the gov.uk API, supplements with a curated list for sporting/cultural events. The cron job merges both sources and deduplicates. Automatic for bank holidays; manual curation for the rest.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>Bank holidays are always accurate (official source)</li><li>No manual date maintenance for bank holidays</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>External API dependency</li><li>Still need curated list for non-bank-holiday events</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>AI-generated list (Claude)</h3>
+      <p>Each month, a cron job calls Claude to generate a list of UK hospitality-relevant events in the next 180 days. Claude knows about recurring events, sporting calendars, cultural moments, etc.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>Can catch varied event types automatically</li><li>Minimal maintenance</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Dates can hallucinate — unreliable for exact dates</li><li>API cost per run</li><li>Non-deterministic output</li></ul></div>
+      </div>
+    </div>
+  </div>
+</div>

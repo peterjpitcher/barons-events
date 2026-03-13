@@ -28,7 +28,7 @@ _Last updated: 2025-03-05_
 
 - **Notifications & Email**
   - Re-skinned existing Resend templates to match the app typography/brand palette and added reviewer notification improvements (`src/emails/*.tsx`, `src/lib/notifications/*.tsx`).
-  - Designed Supabase system email templates (invite, password reset, OTP, etc.) that mirror the EventHub styling and stored them as pure HTML in `docs/emails/`.
+  - Designed Supabase system email templates (invite, password reset, OTP, etc.) that mirror the BaronsHub styling and stored them as pure HTML in `docs/emails/`.
 
 - **Design System & Documentation**
   - Laid down shared UI primitives (cards, buttons, alerts, headers, badges, etc.) for consistent styling across pages (`src/components/ui/*`, `src/app/globals.css`).

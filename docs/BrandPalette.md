@@ -1,4 +1,4 @@
-# EventHub Brand Palette
+# BaronsHub Brand Palette
 
 | Role                | Colour Name        | Hex Code | Description                                                                       |
 | ------------------- | ------------------ | -------- | --------------------------------------------------------------------------------- |

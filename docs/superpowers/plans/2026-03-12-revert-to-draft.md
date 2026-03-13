@@ -168,7 +168,7 @@ describe('revertToDraftAction', () => {
 - [ ] **Step 1.2 — Run tests to confirm they all fail**
 
 ```bash
-cd /Users/peterpitcher/Cursor/BARONS-EventHub && npx vitest run src/actions/__tests__/revert-to-draft.test.ts
+cd /Users/peterpitcher/Cursor/BARONS-BaronsHub && npx vitest run src/actions/__tests__/revert-to-draft.test.ts
 ```
 
 Expected: all 8 tests fail (function not exported yet).
@@ -250,7 +250,7 @@ export async function revertToDraftAction(
 - [ ] **Step 1.4 — Run tests to confirm they all pass**
 
 ```bash
-cd /Users/peterpitcher/Cursor/BARONS-EventHub && npx vitest run src/actions/__tests__/revert-to-draft.test.ts
+cd /Users/peterpitcher/Cursor/BARONS-BaronsHub && npx vitest run src/actions/__tests__/revert-to-draft.test.ts
 ```
 
 Expected: 8 tests pass.
@@ -258,7 +258,7 @@ Expected: 8 tests pass.
 - [ ] **Step 1.5 — Run full lint + typecheck**
 
 ```bash
-cd /Users/peterpitcher/Cursor/BARONS-EventHub && npm run lint && npm run typecheck
+cd /Users/peterpitcher/Cursor/BARONS-BaronsHub && npm run lint && npm run typecheck
 ```
 
 Expected: zero errors and zero warnings.
@@ -266,7 +266,7 @@ Expected: zero errors and zero warnings.
 - [ ] **Step 1.6 — Commit**
 
 ```bash
-cd /Users/peterpitcher/Cursor/BARONS-EventHub && git add src/actions/events.ts src/actions/__tests__/revert-to-draft.test.ts && git commit -m "feat: add revertToDraftAction server action with tests"
+cd /Users/peterpitcher/Cursor/BARONS-BaronsHub && git add src/actions/events.ts src/actions/__tests__/revert-to-draft.test.ts && git commit -m "feat: add revertToDraftAction server action with tests"
 ```
 
 ---
@@ -349,7 +349,7 @@ export function RevertToDraftButton({ eventId }: RevertToDraftButtonProps) {
 - [ ] **Step 2.2 — Run typecheck**
 
 ```bash
-cd /Users/peterpitcher/Cursor/BARONS-EventHub && npm run typecheck
+cd /Users/peterpitcher/Cursor/BARONS-BaronsHub && npm run typecheck
 ```
 
 Expected: zero errors. If `ConfirmDialog` `variant` prop doesn't accept `"default"`, change to `"secondary"` or remove the prop entirely (check `src/components/ui/confirm-dialog.tsx` for accepted values).
@@ -357,7 +357,7 @@ Expected: zero errors. If `ConfirmDialog` `variant` prop doesn't accept `"defaul
 - [ ] **Step 2.3 — Commit**
 
 ```bash
-cd /Users/peterpitcher/Cursor/BARONS-EventHub && git add src/components/events/revert-to-draft-button.tsx && git commit -m "feat: add RevertToDraftButton client component"
+cd /Users/peterpitcher/Cursor/BARONS-BaronsHub && git add src/components/events/revert-to-draft-button.tsx && git commit -m "feat: add RevertToDraftButton client component"
 ```
 
 ---
@@ -427,7 +427,7 @@ In the edit-mode sidebar (the `EventForm` `sidebar` prop, around line 490), add 
 - [ ] **Step 3.4 — Run lint + typecheck**
 
 ```bash
-cd /Users/peterpitcher/Cursor/BARONS-EventHub && npm run lint && npm run typecheck
+cd /Users/peterpitcher/Cursor/BARONS-BaronsHub && npm run lint && npm run typecheck
 ```
 
 Expected: zero errors and zero warnings.
@@ -435,7 +435,7 @@ Expected: zero errors and zero warnings.
 - [ ] **Step 3.5 — Run full test suite**
 
 ```bash
-cd /Users/peterpitcher/Cursor/BARONS-EventHub && npm test
+cd /Users/peterpitcher/Cursor/BARONS-BaronsHub && npm test
 ```
 
 Expected: all tests pass, including the 8 new revert-to-draft tests.
@@ -443,7 +443,7 @@ Expected: all tests pass, including the 8 new revert-to-draft tests.
 - [ ] **Step 3.6 — Run build**
 
 ```bash
-cd /Users/peterpitcher/Cursor/BARONS-EventHub && npm run build
+cd /Users/peterpitcher/Cursor/BARONS-BaronsHub && npm run build
 ```
 
 Expected: successful production build with no errors.
@@ -451,7 +451,7 @@ Expected: successful production build with no errors.
 - [ ] **Step 3.7 — Commit**
 
 ```bash
-cd /Users/peterpitcher/Cursor/BARONS-EventHub && git add src/app/events/[eventId]/page.tsx && git commit -m "feat: wire RevertToDraftButton into event detail page"
+cd /Users/peterpitcher/Cursor/BARONS-BaronsHub && git add src/app/events/[eventId]/page.tsx && git commit -m "feat: wire RevertToDraftButton into event detail page"
 ```
 
 ---

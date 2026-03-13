@@ -1,13 +1,13 @@
-# Auth Audit Brief — BARONS-EventHub
+# Auth Audit Brief — BARONS-BaronsHub
 
 ## Objective
-Audit the EventHub application against the workspace auth standard (`/Users/peterpitcher/Cursor/.claude/rules/auth-standard.md`). Identify every gap, deviation, and missing requirement. This is a discovery-only phase — produce a full findings report, not fixes.
+Audit the BaronsHub application against the workspace auth standard (`/Users/peterpitcher/Cursor/.claude/rules/auth-standard.md`). Identify every gap, deviation, and missing requirement. This is a discovery-only phase — produce a full findings report, not fixes.
 
 ## Auth Standard Location
 `/Users/peterpitcher/Cursor/.claude/rules/auth-standard.md`
 
 ## Project Root
-`/Users/peterpitcher/Cursor/BARONS-EventHub`
+`/Users/peterpitcher/Cursor/BARONS-BaronsHub`
 
 ## Key Files (from recon)
 

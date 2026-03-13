@@ -18,10 +18,10 @@ export function AuthLayout({ children, intro, className }: AuthLayoutProps) {
       <div className="relative z-10 flex w-full max-w-5xl flex-col items-center gap-6 md:flex-row md:items-start md:justify-between md:gap-8">
         <div className="flex max-w-sm flex-col items-center text-center md:items-start md:text-left">
           <h1 className="font-brand-serif text-4xl font-bold text-[var(--color-accent-warm)] md:text-5xl">
-            EventHub
+            BaronsHub
           </h1>
           <p className="mt-2 text-xs font-semibold uppercase tracking-[0.35em] text-white/70">
-            A Barons Innovation
+            Accelerating Barons Success Everyday
           </p>
           {intro ? (
             <div className="mt-6 text-base leading-relaxed text-white/80">{intro}</div>

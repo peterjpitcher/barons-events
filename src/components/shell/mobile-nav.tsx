@@ -54,9 +54,9 @@ export function MobileNav({ sections, todayIso }: MobileNavProps) {
       >
         <div className="flex items-center justify-between">
           <div>
-            <p className="font-brand-serif text-4xl font-bold text-[var(--color-accent-warm)]">EventHub</p>
+            <p className="font-brand-serif text-4xl font-bold text-[var(--color-accent-warm)]">BaronsHub</p>
             <p className="mt-1 text-[0.65rem] uppercase tracking-[0.35em] text-[rgba(255,255,255,0.65)]">
-              A Barons Innovation
+              Accelerating Barons Success Everyday
             </p>
           </div>
           <button

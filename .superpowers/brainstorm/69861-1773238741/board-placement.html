@@ -1,0 +1,77 @@
+<h2>Where do inspiration items live on the planning board?</h2>
+<p class="subtitle">The board already has 4 time buckets with planning items and event overlays. Where should inspiration items appear?</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Inline in buckets — visually distinct cards</h3>
+      <p>Inspiration items appear in the same 0–30 / 31–60 / 61–90 / 90+ day buckets as planning items, but with a distinct visual style (e.g. dashed border, sparkle icon). They feel like suggestions sitting alongside your actual plans.</p>
+      <div class="mockup" style="margin-top:12px">
+        <div class="mockup-header">31–60 days bucket</div>
+        <div class="mockup-body" style="display:flex;flex-direction:column;gap:8px;padding:12px">
+          <div style="background:#e0f2fe;border:1px solid #0284c7;border-radius:6px;padding:8px 12px;font-size:13px">
+            📋 <strong>Quiz Night – 14 Apr</strong> <span style="color:#6b7280;font-size:11px">planning item</span>
+          </div>
+          <div style="background:#fefce8;border:2px dashed #ca8a04;border-radius:6px;padding:8px 12px;font-size:13px">
+            ✨ <strong>Father's Day – 15 Jun</strong> <span style="color:#6b7280;font-size:11px">inspiration</span>
+            <span style="float:right;font-size:11px;color:#ca8a04">Convert · Hide</span>
+          </div>
+          <div style="background:#e0f2fe;border:1px solid #0284c7;border-radius:6px;padding:8px 12px;font-size:13px">
+            📋 <strong>Staff Training Day – 20 Apr</strong> <span style="color:#6b7280;font-size:11px">planning item</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Separate "Inspiration" tab on the board</h3>
+      <p>A new tab alongside the existing Board / Calendar / List views. When you switch to Inspiration, you see only the suggested events grouped by time bucket — a focused triage view. The main board stays clean.</p>
+      <div class="mockup" style="margin-top:12px">
+        <div class="mockup-header">Planning Board</div>
+        <div class="mockup-body" style="padding:0">
+          <div class="mock-nav" style="font-size:12px;border-bottom:1px solid #e5e7eb;padding:8px 12px">
+            Board &nbsp;|&nbsp; Calendar &nbsp;|&nbsp; List &nbsp;|&nbsp; <strong style="color:#ca8a04">✨ Inspiration (8)</strong> &nbsp;|&nbsp; Todos by Person
+          </div>
+          <div style="padding:12px;display:flex;flex-direction:column;gap:8px">
+            <div style="background:#fefce8;border:2px dashed #ca8a04;border-radius:6px;padding:8px 12px;font-size:13px">
+              ✨ <strong>Valentine's Day – 14 Feb</strong>
+              <span style="float:right;font-size:11px;color:#ca8a04">Convert · Hide</span>
+            </div>
+            <div style="background:#fefce8;border:2px dashed #ca8a04;border-radius:6px;padding:8px 12px;font-size:13px">
+              ✨ <strong>Six Nations Final – 22 Mar</strong>
+              <span style="float:right;font-size:11px;color:#ca8a04">Convert · Hide</span>
+            </div>
+            <div style="background:#fefce8;border:2px dashed #ca8a04;border-radius:6px;padding:8px 12px;font-size:13px">
+              ✨ <strong>Bank Holiday Monday – 4 May</strong>
+              <span style="float:right;font-size:11px;color:#ca8a04">Convert · Hide</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Collapsible section at the top of each bucket</h3>
+      <p>Within each time bucket, inspiration items appear in a collapsible "Upcoming occasions" section above the planning items. Collapsed by default to keep the board clean; expanding reveals the suggestions for that window.</p>
+      <div class="mockup" style="margin-top:12px">
+        <div class="mockup-header">0–30 days bucket</div>
+        <div class="mockup-body" style="padding:12px;display:flex;flex-direction:column;gap:8px">
+          <div style="background:#fefce8;border:1px solid #ca8a04;border-radius:6px;padding:8px 12px;font-size:13px;cursor:pointer">
+            ✨ <strong>Upcoming occasions</strong> <span style="color:#6b7280;font-size:11px">(3)</span>
+            <span style="float:right;font-size:11px;color:#6b7280">▼ expand</span>
+          </div>
+          <div style="background:#e0f2fe;border:1px solid #0284c7;border-radius:6px;padding:8px 12px;font-size:13px">
+            📋 <strong>Quiz Night – 14 Apr</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

@@ -52,7 +52,7 @@ export function ResetPasswordCard() {
             <CardTitle className="text-2xl text-[var(--color-success)]">Password updated</CardTitle>
           </div>
           <CardDescription className="text-[var(--color-text-muted)]">
-            You&apos;re all set. Sign in with your new password to jump back into EventHub.
+            You&apos;re all set. Sign in with your new password to jump back into BaronsHub.
           </CardDescription>
         </CardHeader>
         <CardContent className={AUTH_CARD_CONTENT_CLASS}>
@@ -73,7 +73,7 @@ export function ResetPasswordCard() {
       <CardHeader className={AUTH_CARD_HEADER_CLASS}>
         <CardTitle className="text-2xl">Reset your password</CardTitle>
         <CardDescription className="text-[var(--color-text-muted)]">
-          Choose a new password for your EventHub account.
+          Choose a new password for your BaronsHub account.
         </CardDescription>
       </CardHeader>
       <CardContent className={AUTH_CARD_CONTENT_CLASS}>

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
 export const metadata = {
-  title: "Event types · EventHub",
+  title: "Event types · BaronsHub",
   description: "Manage the picklist of event types available to venues."
 };
 

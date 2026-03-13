@@ -1,7 +1,7 @@
 # Planning Inspiration Items — Design Spec
 
 **Date:** 2026-03-11
-**Project:** BARONS-EventHub
+**Project:** BARONS-BaronsHub
 **Status:** Approved
 
 ---

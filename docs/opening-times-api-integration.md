@@ -1,6 +1,6 @@
 # Opening Times API — Developer Integration Guide
 
-This document describes how to fetch venue opening times from the EventHub API for display on the brand website. The endpoint returns fully resolved, day-by-day opening hours with all exceptions already applied — your code never needs to merge templates with overrides.
+This document describes how to fetch venue opening times from the BaronsHub API for display on the brand website. The endpoint returns fully resolved, day-by-day opening hours with all exceptions already applied — your code never needs to merge templates with overrides.
 
 ---
 
@@ -19,10 +19,10 @@ The key is a shared secret — keep it server-side only. Never expose it in clie
 ## Base URL
 
 ```
-https://<eventhub-domain>/api/v1
+https://<baronshub-domain>/api/v1
 ```
 
-Replace `<eventhub-domain>` with the EventHub deployment URL provided to you.
+Replace `<baronshub-domain>` with the BaronsHub deployment URL provided to you.
 
 ---
 
@@ -160,7 +160,7 @@ GET /api/v1/opening-times?days=30&venueId=3b4e6f82-1a2b-4c3d-8e9f-0a1b2c3d4e5f
 
 ## Service Types
 
-These are the current service types configured in EventHub:
+These are the current service types configured in BaronsHub:
 
 | Name | Description |
 |------|-------------|
@@ -171,7 +171,7 @@ These are the current service types configured in EventHub:
 | Cafe Hours | Café trading hours |
 | Coffee Trailer | Outdoor coffee trailer hours |
 
-Service types are configured centrally in EventHub and may be added to in future. Your integration should render whatever service types are returned rather than hardcoding this list.
+Service types are configured centrally in BaronsHub and may be added to in future. Your integration should render whatever service types are returned rather than hardcoding this list.
 
 ---
 
@@ -195,7 +195,7 @@ All error responses follow the same envelope format:
 | `404` | `not_found` | The supplied `venueId` does not exist |
 | `429` | `rate_limit_exceeded` | Too many requests — see `Retry-After` response header |
 | `500` | `internal_error` | Database query failed |
-| `503` | `not_configured` | Server configuration error — contact EventHub |
+| `503` | `not_configured` | Server configuration error — contact BaronsHub |
 
 ---
 
@@ -225,7 +225,7 @@ For a website integration, a single server-side fetch on page load or via a back
 
 ```javascript
 const response = await fetch(
-  'https://<eventhub-domain>/api/v1/opening-times?days=7',
+  'https://<baronshub-domain>/api/v1/opening-times?days=7',
   {
     headers: {
       Authorization: `Bearer ${process.env.EVENTHUB_API_KEY}`,
@@ -248,7 +248,7 @@ const { from, to, venues } = await response.json();
 const venueId = '3b4e6f82-1a2b-4c3d-8e9f-0a1b2c3d4e5f';
 
 const response = await fetch(
-  `https://<eventhub-domain>/api/v1/opening-times?days=7&venueId=${venueId}`,
+  `https://<baronshub-domain>/api/v1/opening-times?days=7&venueId=${venueId}`,
   {
     headers: { Authorization: `Bearer ${process.env.EVENTHUB_API_KEY}` },
   }

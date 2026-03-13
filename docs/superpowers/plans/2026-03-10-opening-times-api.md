@@ -683,19 +683,19 @@ Start the dev server (`npm run dev`) and test with curl, substituting your actua
 
 ```bash
 # Default: 7 days, all venues
-curl -H "Authorization: Bearer <EVENTHUB_WEBSITE_API_KEY>" \
+curl -H "Authorization: Bearer <BARONSHUB_WEBSITE_API_KEY>" \
   "http://localhost:3000/api/v1/opening-times"
 
 # 14 days
-curl -H "Authorization: Bearer <EVENTHUB_WEBSITE_API_KEY>" \
+curl -H "Authorization: Bearer <BARONSHUB_WEBSITE_API_KEY>" \
   "http://localhost:3000/api/v1/opening-times?days=14"
 
 # Single venue
-curl -H "Authorization: Bearer <EVENTHUB_WEBSITE_API_KEY>" \
+curl -H "Authorization: Bearer <BARONSHUB_WEBSITE_API_KEY>" \
   "http://localhost:3000/api/v1/opening-times?venueId=<a-real-uuid>"
 
 # Invalid days → expect 400
-curl -H "Authorization: Bearer <EVENTHUB_WEBSITE_API_KEY>" \
+curl -H "Authorization: Bearer <BARONSHUB_WEBSITE_API_KEY>" \
   "http://localhost:3000/api/v1/opening-times?days=999"
 
 # Missing auth → expect 401
@@ -820,7 +820,7 @@ Add this entry alongside the existing paths:
 - [ ] **Step 2: Verify the OpenAPI route still returns valid JSON**
 
 ```bash
-curl -H "Authorization: Bearer <EVENTHUB_WEBSITE_API_KEY>" \
+curl -H "Authorization: Bearer <BARONSHUB_WEBSITE_API_KEY>" \
   "http://localhost:3000/api/v1/openapi" | python3 -m json.tool > /dev/null && echo "Valid JSON"
 ```
 

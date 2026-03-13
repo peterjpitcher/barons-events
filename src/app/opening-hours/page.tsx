@@ -5,7 +5,7 @@ import { listServiceTypes, listAllVenueOpeningHours, listOpeningOverrides } from
 import { OpeningHoursPageShell } from "@/components/opening-hours/opening-hours-page-shell";
 
 export const metadata = {
-  title: "Opening Hours · EventHub",
+  title: "Opening Hours · BaronsHub",
   description: "Manage standard weekly hours and date-specific changes across all venues."
 };
 

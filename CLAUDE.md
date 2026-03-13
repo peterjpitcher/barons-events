@@ -1,4 +1,4 @@
-# CLAUDE.md — EventHub
+# CLAUDE.md — BaronsHub
 
 This file provides project-specific guidance. See the workspace-level `CLAUDE.md` one directory up for shared conventions.
 
@@ -71,7 +71,7 @@ npm run supabase:reset   # Reset database (linked, requires confirmation)
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key (public) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service-role key (server-only) |
 | `RESEND_API_KEY` | Resend email service key |
-| `EVENTHUB_WEBSITE_API_KEY` | EventHub website integration API key |
+| `BARONSHUB_WEBSITE_API_KEY` | BaronsHub website integration API key |
 
 ## Project-Specific Rules / Gotchas
 

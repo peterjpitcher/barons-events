@@ -9,7 +9,7 @@ A new public API endpoint that returns resolved, day-by-day opening times for on
 
 ## Consumer
 
-The EventHub public website, authenticated via the existing `EVENTHUB_WEBSITE_API_KEY` bearer token (same pattern as all other `/api/v1/` routes).
+The BaronsHub public website, authenticated via the existing `BARONSHUB_WEBSITE_API_KEY` bearer token (same pattern as all other `/api/v1/` routes).
 
 ## Endpoint
 

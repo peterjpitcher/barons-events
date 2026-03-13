@@ -9,7 +9,7 @@ import { listEventTypes } from "@/lib/event-types";
 import { listServiceTypes } from "@/lib/opening-hours";
 
 export const metadata = {
-  title: "Settings · EventHub",
+  title: "Settings · BaronsHub",
   description: "Manage event configuration and defaults."
 };
 

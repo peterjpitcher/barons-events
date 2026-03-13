@@ -104,7 +104,7 @@ Severity: CRITICAL
 
 ## [CSRF] No token generation or validation
 Root cause: Architectural gap. No csrf-token cookie, no x-csrf-token header validation, no constant-time comparison.
-Partial failure: Any authenticated mutation (createEvent, updateUser, deleteArtist, etc.) is vulnerable to CSRF via malicious third-party page with a form targeting EventHub.
+Partial failure: Any authenticated mutation (createEvent, updateUser, deleteArtist, etc.) is vulnerable to CSRF via malicious third-party page with a form targeting BaronsHub.
 Severity: CRITICAL
 
 ---

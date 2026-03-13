@@ -78,9 +78,9 @@ export function AppShell({ user, children }: AppShellProps) {
       </a>
       <aside className="hidden w-72 border-r border-white/10 bg-[var(--color-primary-700)] px-5 py-8 shadow-soft md:flex md:flex-col md:gap-6">
         <div>
-          <h1 className="font-brand-serif text-4xl font-bold text-[var(--color-accent-warm)]">EventHub</h1>
+          <h1 className="font-brand-serif text-4xl font-bold text-[var(--color-accent-warm)]">BaronsHub</h1>
           <p className="mt-1 text-[0.65rem] uppercase tracking-[0.35em] text-[rgba(255,255,255,0.65)]">
-            A Barons Innovation
+            Accelerating Barons Success Everyday
           </p>
         </div>
         <nav className="flex flex-col gap-4">

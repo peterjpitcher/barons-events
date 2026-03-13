@@ -6,7 +6,7 @@ import { listVenues } from "@/lib/venues";
 import { canReviewEvents } from "@/lib/roles";
 
 export const metadata = {
-  title: "Planning · EventHub",
+  title: "Planning · BaronsHub",
   description: "Manage operational planning in 30/60/90 windows with recurring templates and tasks."
 };
 

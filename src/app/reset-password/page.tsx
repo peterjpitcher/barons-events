@@ -3,7 +3,7 @@ import { ResetPasswordCard } from "./reset-password-card";
 
 export const metadata = {
   title: "Reset password · Barons Events",
-  description: "Choose a new password to regain access to EventHub."
+  description: "Choose a new password to regain access to BaronsHub."
 };
 
 export default function ResetPasswordPage() {

@@ -31,7 +31,7 @@ export default async function ForgotPasswordPage({ searchParams }: ForgotPasswor
         isSuccess ? (
           <p>
             We&apos;ve emailed reset instructions to your inbox. Follow the link to set a new
-            password and get back into EventHub.
+            password and get back into BaronsHub.
           </p>
         ) : (
           <p>
