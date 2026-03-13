@@ -1,4 +1,5 @@
 import "server-only";
+import bcrypt from "bcryptjs";
 
 export type PasswordValidationResult = {
   valid: boolean;
@@ -6,18 +7,34 @@ export type PasswordValidationResult = {
 };
 
 const MIN_LENGTH = 12;
-const MAX_LENGTH = 128;
+const MAX_LENGTH = 72; // bcrypt silently truncates at 72 bytes; enforcing at character level is a safe conservative bound
 
 /**
  * Validates a password against the workspace password policy.
  * Must be called server-side — never client-side only.
  *
- * Policy: minimum 12 characters, maximum 128, must contain uppercase,
- * lowercase, digit, and special character. Checked against HIBP breached
- * password database using k-anonymity (SHA-1, first 5 chars sent only).
+ * Policy: minimum 12 characters, maximum 72 characters (bcrypt byte limit).
+ * No mandatory character composition rules — per NIST SP 800-63B and OWASP,
+ * composition rules are explicitly prohibited. Passwords are checked against
+ * the HIBP breached password database using k-anonymity (SHA-1, first 5 chars sent only).
+ *
+ * @param password - The candidate password to validate.
+ * @param currentPasswordHash - Optional bcrypt hash of the user's current password.
+ *   If provided, the new password must not match the current one.
  */
-export async function validatePassword(password: string): Promise<PasswordValidationResult> {
+export async function validatePassword(
+  password: string,
+  currentPasswordHash?: string
+): Promise<PasswordValidationResult> {
   const errors: string[] = [];
+
+  // Check for password reuse before other constraints
+  if (currentPasswordHash) {
+    const isSamePassword = await bcrypt.compare(password, currentPasswordHash);
+    if (isSamePassword) {
+      errors.push("New password must be different from your current password.");
+    }
+  }
 
   if (password.length < MIN_LENGTH) {
     errors.push(`Password must be at least ${MIN_LENGTH} characters long.`);
@@ -25,22 +42,6 @@ export async function validatePassword(password: string): Promise<PasswordValida
 
   if (password.length > MAX_LENGTH) {
     errors.push(`Password must be no longer than ${MAX_LENGTH} characters.`);
-  }
-
-  if (!/[A-Z]/.test(password)) {
-    errors.push("Password must contain at least one uppercase letter.");
-  }
-
-  if (!/[a-z]/.test(password)) {
-    errors.push("Password must contain at least one lowercase letter.");
-  }
-
-  if (!/[0-9]/.test(password)) {
-    errors.push("Password must contain at least one number.");
-  }
-
-  if (!/[^A-Za-z0-9]/.test(password)) {
-    errors.push("Password must contain at least one special character.");
   }
 
   // Only check HIBP if the password passes basic constraints (avoid wasted API calls)

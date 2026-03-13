@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { logAuthEvent } from "@/lib/audit-log";
 
 export const SESSION_COOKIE_NAME = "app-session-id";
 const IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
@@ -94,10 +95,23 @@ export async function validateSession(sessionId: string): Promise<SessionRecord 
     const lastActivityAt = new Date(data.last_activity_at);
     const idleDeadline = new Date(lastActivityAt.getTime() + IDLE_TIMEOUT_MS);
 
-    // Check absolute and idle timeouts
-    if (now > expiresAt || now > idleDeadline) {
+    // Check absolute and idle timeouts separately so we can log the correct event type
+    const isAbsoluteExpired = now > expiresAt;
+    const isIdleExpired = now > idleDeadline;
+
+    if (isAbsoluteExpired || isIdleExpired) {
       // Session expired — destroy it asynchronously (don't block the response)
       db.from("app_sessions").delete().eq("session_id", sessionId).then(() => {});
+
+      // Fire-and-forget audit log — non-blocking, non-fatal
+      const eventType = isAbsoluteExpired
+        ? "auth.session.expired.absolute"
+        : "auth.session.expired.idle";
+      logAuthEvent({
+        event: eventType,
+        userId: data.user_id
+      }).catch(() => {});
+
       return null;
     }
 

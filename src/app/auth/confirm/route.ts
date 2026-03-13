@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createSupabaseActionClient } from "@/lib/supabase/server";
+import { logAuthEvent } from "@/lib/audit-log";
 
 /**
  * Token exchange endpoint for Supabase email links (invite acceptance, password reset).
@@ -32,6 +33,17 @@ export async function GET(req: NextRequest) {
         return NextResponse.redirect(
           `${baseUrl}/login?error=invalid_token`
         );
+      }
+
+      // Log auth.invite.accepted event for invite flows (fire-and-forget)
+      if (type === "invite" || type === "signup") {
+        const { data: { user: confirmedUser } } = await supabase.auth.getUser();
+        if (confirmedUser) {
+          logAuthEvent({
+            event: "auth.invite.accepted",
+            userId: confirmedUser.id
+          }).catch(() => {}); // fire-and-forget — never block the redirect
+        }
       }
     } else if (code) {
       // OAuth/PKCE code exchange (e.g. from email links using code flow)

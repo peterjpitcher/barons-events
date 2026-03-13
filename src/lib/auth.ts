@@ -2,6 +2,18 @@ import { redirect } from "next/navigation";
 import { createSupabaseReadonlyClient } from "./supabase/server";
 import type { AppUser, UserRole } from "./types";
 
+/**
+ * Constant-time string comparison to prevent timing attacks on CSRF token validation.
+ */
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
+}
+
 function normalizeRole(role: string | null | undefined): UserRole | null {
   switch (role) {
     case "venue_manager":
@@ -158,7 +170,7 @@ export function withAuthAndCSRF(
       ?.trim();
     const csrfHeader = req.headers.get("x-csrf-token");
 
-    if (!csrfCookie || !csrfHeader || csrfCookie !== csrfHeader) {
+    if (!csrfCookie || !csrfHeader || !timingSafeEqual(csrfCookie, csrfHeader)) {
       return new Response(JSON.stringify({ error: "CSRF validation failed" }), {
         status: 403,
         headers: { "Content-Type": "application/json" }
@@ -197,7 +209,7 @@ export function withAdminAuthAndCSRF(
       ?.trim();
     const csrfHeader = req.headers.get("x-csrf-token");
 
-    if (!csrfCookie || !csrfHeader || csrfCookie !== csrfHeader) {
+    if (!csrfCookie || !csrfHeader || !timingSafeEqual(csrfCookie, csrfHeader)) {
       return new Response(JSON.stringify({ error: "CSRF validation failed" }), {
         status: 403,
         headers: { "Content-Type": "application/json" }

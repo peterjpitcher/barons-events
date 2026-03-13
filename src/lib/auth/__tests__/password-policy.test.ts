@@ -1,11 +1,15 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
 import { validatePassword } from "../password-policy";
 
-// "Password1!ab" (12 chars) — meets all policy constraints.
-// SHA-1 = EE903C4ED23E65ADF50DB545DB81E90C9C98E19C
-// prefix (first 5 chars) = EE903
-// suffix (remaining 35 chars) = C4ED23E65ADF50DB545DB81E90C9C98E19C
-const TEST_PASSWORD = "Password1!ab";
+// "passwordlongerthan12chars" (25 chars) — meets all policy constraints (no composition rules).
+// SHA-1 = computed for HIBP tests via the known hash below.
+// Using a simple long-enough password with no special chars to confirm composition rules are NOT enforced.
+const TEST_PASSWORD = "passwordlongerthan12chars";
+// SHA-1("passwordlongerthan12chars") prefix/suffix for HIBP mock routing.
+// We still mock HIBP using the old TEST_PASSWORD for HIBP-specific tests so those remain stable.
+// For HIBP tests we keep the original well-known password with a known SHA-1:
+// "Password1!ab" SHA-1 = EE903C4ED23E65ADF50DB545DB81E90C9C98E19C
+const HIBP_TEST_PASSWORD = "Password1!ab";
 const TEST_SHA1_PREFIX = "EE903";
 const TEST_SHA1_SUFFIX = "C4ED23E65ADF50DB545DB81E90C9C98E19C";
 
@@ -52,17 +56,17 @@ beforeEach(() => {
 describe("validatePassword", () => {
   describe("minimum length constraint", () => {
     it("should reject a password shorter than 12 characters", async () => {
-      const result = await validatePassword("Sh0rt!");
+      const result = await validatePassword("shortpass");
       expect(result.valid).toBe(false);
       expect(result.errors).toContain("Password must be at least 12 characters long.");
     });
 
-    it("should reject an 11-character password that otherwise meets all constraints", async () => {
-      // "Password1!x" = 11 chars — has upper, lower, digit, special; only fails length
-      const result = await validatePassword("Password1!x");
+    it("should reject an 11-character password", async () => {
+      // 11 chars — fails length only; no composition rules apply
+      const result = await validatePassword("onlyeleven1");
       expect(result.valid).toBe(false);
       expect(result.errors).toContain("Password must be at least 12 characters long.");
-      // Must not complain about other constraints
+      // Must not produce any composition-rule errors
       expect(result.errors).not.toContain("Password must contain at least one uppercase letter.");
       expect(result.errors).not.toContain("Password must contain at least one lowercase letter.");
       expect(result.errors).not.toContain("Password must contain at least one number.");
@@ -71,54 +75,89 @@ describe("validatePassword", () => {
   });
 
   describe("maximum length constraint", () => {
-    it("should reject a password longer than 128 characters", async () => {
-      const longPassword = "Aa1!" + "a".repeat(125); // 129 characters total
+    it("should reject a password longer than 72 characters", async () => {
+      const longPassword = "a".repeat(73); // 73 characters — exceeds bcrypt byte limit
       const result = await validatePassword(longPassword);
       expect(result.valid).toBe(false);
-      expect(result.errors).toContain("Password must be no longer than 128 characters.");
+      expect(result.errors).toContain("Password must be no longer than 72 characters.");
     });
 
-    it("should accept a password of exactly 128 characters when all other constraints pass", async () => {
+    it("should accept a password of exactly 72 characters when all other constraints pass", async () => {
       mockFetchOk(buildSafeHibpBody());
-      const exactPassword = "Aa1!" + "a".repeat(124); // 128 characters total
+      const exactPassword = "a".repeat(72); // 72 characters — at the limit
       const result = await validatePassword(exactPassword);
-      expect(result.errors).not.toContain("Password must be no longer than 128 characters.");
+      expect(result.errors).not.toContain("Password must be no longer than 72 characters.");
     });
   });
 
-  describe("uppercase letter constraint", () => {
-    it("should reject a password with no uppercase letter", async () => {
-      // 12 chars, has digit, special, lowercase — missing uppercase only
-      const result = await validatePassword("password1!ab");
-      expect(result.valid).toBe(false);
-      expect(result.errors).toContain("Password must contain at least one uppercase letter.");
+  describe("no mandatory character composition rules (NIST SP 800-63B)", () => {
+    it("should accept a password with no uppercase letters", async () => {
+      mockFetchOk(buildSafeHibpBody());
+      // 12+ chars, all lowercase, no uppercase, no digits, no specials
+      const result = await validatePassword("alllowercasepassword");
+      expect(result.valid).toBe(true);
+      expect(result.errors).not.toContain("Password must contain at least one uppercase letter.");
+    });
+
+    it("should accept a password with no lowercase letters", async () => {
+      mockFetchOk(buildSafeHibpBody());
+      // 12+ chars, all uppercase
+      const result = await validatePassword("ALLUPPERCASEPASSWORD");
+      expect(result.valid).toBe(true);
+      expect(result.errors).not.toContain("Password must contain at least one lowercase letter.");
+    });
+
+    it("should accept a password with no digits", async () => {
+      mockFetchOk(buildSafeHibpBody());
+      // 12+ chars, no digits
+      const result = await validatePassword("nodigitsatallpassword");
+      expect(result.valid).toBe(true);
+      expect(result.errors).not.toContain("Password must contain at least one number.");
+    });
+
+    it("should accept a password with no special characters", async () => {
+      mockFetchOk(buildSafeHibpBody());
+      // 12+ chars, no special chars
+      const result = await validatePassword("nospecialcharspassword");
+      expect(result.valid).toBe(true);
+      expect(result.errors).not.toContain("Password must contain at least one special character.");
     });
   });
 
-  describe("lowercase letter constraint", () => {
-    it("should reject a password with no lowercase letter", async () => {
-      // 12 chars, has digit, special, uppercase — missing lowercase only
-      const result = await validatePassword("PASSWORD1!AB");
-      expect(result.valid).toBe(false);
-      expect(result.errors).toContain("Password must contain at least one lowercase letter.");
-    });
-  });
+  describe("current password reuse detection", () => {
+    it("should reject when the new password matches the current password hash", async () => {
+      // We need a real bcrypt hash; import bcryptjs to generate one for the test
+      const bcrypt = await import("bcryptjs");
+      const currentHash = await bcrypt.hash("mycurrentpassword!abc", 10);
 
-  describe("number constraint", () => {
-    it("should reject a password with no number", async () => {
-      // 13 chars, has upper, lower, special — missing digit only
-      const result = await validatePassword("Password!abcd");
-      expect(result.valid).toBe(false);
-      expect(result.errors).toContain("Password must contain at least one number.");
-    });
-  });
+      const result = await validatePassword("mycurrentpassword!abc", currentHash);
 
-  describe("special character constraint", () => {
-    it("should reject a password with no special character", async () => {
-      // 13 chars, has upper, lower, digit — missing special char only
-      const result = await validatePassword("Password12345");
       expect(result.valid).toBe(false);
-      expect(result.errors).toContain("Password must contain at least one special character.");
+      expect(result.errors).toContain(
+        "New password must be different from your current password."
+      );
+    });
+
+    it("should not reject when the new password differs from the current password hash", async () => {
+      mockFetchOk(buildSafeHibpBody());
+      const bcrypt = await import("bcryptjs");
+      const currentHash = await bcrypt.hash("mycurrentpassword!abc", 10);
+
+      const result = await validatePassword("adifferentlongpassword", currentHash);
+
+      expect(result.errors).not.toContain(
+        "New password must be different from your current password."
+      );
+    });
+
+    it("should skip reuse check when no currentPasswordHash is provided", async () => {
+      mockFetchOk(buildSafeHibpBody());
+      // No second argument — reuse check must be skipped entirely
+      const result = await validatePassword("alowercaselongpassword");
+      expect(result.valid).toBe(true);
+      expect(result.errors).not.toContain(
+        "New password must be different from your current password."
+      );
     });
   });
 
@@ -126,7 +165,7 @@ describe("validatePassword", () => {
     it("should return valid:true when password passes all constraints and is not in HIBP", async () => {
       mockFetchOk(buildSafeHibpBody());
 
-      const result = await validatePassword(TEST_PASSWORD);
+      const result = await validatePassword(HIBP_TEST_PASSWORD);
 
       expect(result.valid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -135,7 +174,7 @@ describe("validatePassword", () => {
     it("should return valid:false with a breach message when password appears in HIBP", async () => {
       mockFetchOk(buildBreachedHibpBody());
 
-      const result = await validatePassword(TEST_PASSWORD);
+      const result = await validatePassword(HIBP_TEST_PASSWORD);
 
       expect(result.valid).toBe(false);
       expect(result.errors).toContain(
@@ -149,7 +188,7 @@ describe("validatePassword", () => {
         vi.fn().mockRejectedValue(new Error("Network error"))
       );
 
-      const result = await validatePassword(TEST_PASSWORD);
+      const result = await validatePassword(HIBP_TEST_PASSWORD);
 
       // Fail-open: HIBP unavailability must not block a valid password
       expect(result.valid).toBe(true);
@@ -166,7 +205,7 @@ describe("validatePassword", () => {
         })
       );
 
-      const result = await validatePassword(TEST_PASSWORD);
+      const result = await validatePassword(HIBP_TEST_PASSWORD);
 
       // Fail-open: a bad status must not block a valid password
       expect(result.valid).toBe(true);
@@ -177,8 +216,8 @@ describe("validatePassword", () => {
       const fetchMock = vi.fn();
       vi.stubGlobal("fetch", fetchMock);
 
-      // Password missing uppercase — fails a basic constraint before HIBP check
-      await validatePassword("password1!abc");
+      // Password shorter than 12 chars — fails a basic constraint before HIBP check
+      await validatePassword("short");
 
       expect(fetchMock).not.toHaveBeenCalled();
     });
@@ -188,7 +227,7 @@ describe("validatePassword", () => {
     it("should send exactly 5 uppercase hex characters to the HIBP API (SHA-1, not SHA-256)", async () => {
       mockFetchOk(buildSafeHibpBody());
 
-      await validatePassword(TEST_PASSWORD);
+      await validatePassword(HIBP_TEST_PASSWORD);
 
       const fetchMock = vi.mocked(fetch);
       expect(fetchMock).toHaveBeenCalledOnce();
@@ -218,7 +257,7 @@ describe("validatePassword", () => {
       // This confirms the source splits the hash correctly for k-anonymity matching.
       mockFetchOk(buildBreachedHibpBody());
 
-      const result = await validatePassword(TEST_PASSWORD);
+      const result = await validatePassword(HIBP_TEST_PASSWORD);
 
       expect(result.valid).toBe(false);
       expect(result.errors).toContain(
@@ -227,17 +266,18 @@ describe("validatePassword", () => {
     });
   });
 
-  describe("multiple simultaneous constraint errors", () => {
-    it("should accumulate all failing constraint errors for a very weak password", async () => {
-      // "short" — fails minimum length, uppercase, number, and special character
+  describe("accumulation of multiple constraint errors", () => {
+    it("should report only the length error for a short password (no composition errors)", async () => {
+      // "short" — fails only minimum length; must NOT report composition-rule errors
       const result = await validatePassword("short");
 
       expect(result.valid).toBe(false);
       expect(result.errors).toContain("Password must be at least 12 characters long.");
-      expect(result.errors).toContain("Password must contain at least one uppercase letter.");
-      expect(result.errors).toContain("Password must contain at least one number.");
-      expect(result.errors).toContain("Password must contain at least one special character.");
-      expect(result.errors.length).toBeGreaterThanOrEqual(4);
+      // Composition rules must not appear
+      expect(result.errors).not.toContain("Password must contain at least one uppercase letter.");
+      expect(result.errors).not.toContain("Password must contain at least one lowercase letter.");
+      expect(result.errors).not.toContain("Password must contain at least one number.");
+      expect(result.errors).not.toContain("Password must contain at least one special character.");
     });
   });
 });

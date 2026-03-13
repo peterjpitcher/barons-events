@@ -55,8 +55,8 @@ function applySecurityHeaders(response: NextResponse): void {
     "Content-Security-Policy",
     [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline'", // Next.js requires this for inline scripts
-      "style-src 'self' 'unsafe-inline'",  // Tailwind CSS requires unsafe-inline
+      "script-src 'self'",
+      "style-src 'self'",
       `connect-src 'self' ${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""} https://api.pwnedpasswords.com`,
       `img-src 'self' data: blob: ${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""}`,
       "font-src 'self' https://fonts.gstatic.com",

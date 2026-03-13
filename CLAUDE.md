@@ -99,6 +99,25 @@ npm run supabase:reset   # Reset database (linked, requires confirmation)
 - Check permissions in both UI and server actions (defense in depth)
 - RLS enforces at database level
 
+### Auth Standard Deviation: Custom Role Model
+
+**Deviation from workspace standard (auth-standard.md §7):** The workspace standard mandates three generic roles (`admin`, `editor`, `viewer`). This project uses four domain-specific roles approved for this application:
+
+| Application Role | Maps to Standard Tier | Capabilities |
+|---|---|---|
+| `central_planner` | `admin` | Full platform access, user management, all event operations |
+| `venue_manager` | `editor` | Event creation and editing for assigned venues |
+| `reviewer` | `editor` | Event review and moderation, read access to all events |
+| `executive` | `viewer` | Read-only access to all events and reporting |
+
+**Why:** Event management requires two distinct editor-tier roles with different operational scopes (venue ownership vs. cross-venue review). A single `editor` role cannot express this.
+
+**Implementation notes:**
+- Roles stored in `public.users.role` column (not Supabase `app_metadata`) — see `supabase/migrations/20250218000000_initial_mvp.sql`
+- Role helpers in `src/lib/roles.ts` use explicit capability functions rather than numeric hierarchy
+- Permission checks use `role === "central_planner"` for admin operations
+- All 7 required RBAC helper functions are present in `src/lib/auth.ts`
+
 ### Email & Notifications
 - `src/lib/notifications.ts` handles async dispatch
 - Never await email sends in critical paths — queue for background jobs

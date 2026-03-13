@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import Script from "next/script";
 import { signInAction } from "@/actions/auth";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,6 +21,7 @@ export function LoginForm({ redirectTo }: LoginFormProps) {
   const formError = state?.fieldErrors ? null : state?.message;
 
   return (
+    <>
     <form action={formAction} className="space-y-6" noValidate>
       <input type="hidden" name="redirectTo" value={redirectTo} />
       <div className="space-y-2">
@@ -55,8 +57,14 @@ export function LoginForm({ redirectTo }: LoginFormProps) {
         <FieldError id="password-error" message={passwordError} />
       </div>
       {formError ? <p className="text-sm text-[var(--color-danger)]">{formError}</p> : null}
+      <div
+        className="cf-turnstile"
+        data-sitekey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY}
+      />
       <SubmitButton label="Sign in" />
     </form>
+    <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js" strategy="lazyOnload" />
+    </>
   );
 }
 

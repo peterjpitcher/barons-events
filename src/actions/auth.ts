@@ -62,6 +62,40 @@ const passwordResetSchema = z
     }
   });
 
+/**
+ * Verifies a Cloudflare Turnstile token server-side.
+ * Fails soft (returns true) when the secret key is absent or the Turnstile API is unreachable,
+ * per auth standard §6 fail-soft behaviour.
+ */
+async function verifyTurnstile(token: string | null, action: string): Promise<boolean> {
+  if (!token) return false;
+  const secret = process.env.TURNSTILE_SECRET_KEY;
+  if (!secret) {
+    // In development without key configured, fail-soft
+    console.warn("[turnstile] TURNSTILE_SECRET_KEY not set — skipping verification");
+    return true;
+  }
+  try {
+    const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ secret, response: token })
+    });
+    if (!res.ok) {
+      console.warn("[turnstile] siteverify API unavailable — failing soft");
+      return true; // fail-soft per auth standard §6
+    }
+    const data = (await res.json()) as { success: boolean; action?: string };
+    if (data.action && data.action !== action) {
+      return false; // action mismatch
+    }
+    return data.success === true;
+  } catch {
+    console.warn("[turnstile] siteverify error — failing soft");
+    return true; // fail-soft
+  }
+}
+
 export async function signInAction(_: SignInState | undefined, formData: FormData): Promise<SignInState> {
   const redirectToRaw = formData.get("redirectTo");
   const redirectTarget =
@@ -82,6 +116,13 @@ export async function signInAction(_: SignInState | undefined, formData: FormDat
     };
   }
 
+  // Verify Turnstile CAPTCHA token before any auth work
+  const turnstileToken = formData.get("cf-turnstile-response") as string | null;
+  const turnstileValid = await verifyTurnstile(turnstileToken, "login");
+  if (!turnstileValid) {
+    return { success: false, message: "Security check failed. Please try again." };
+  }
+
   // Get client IP for lockout tracking (Next.js headers)
   const { headers } = await import("next/headers");
   const headerStore = await headers();
@@ -93,6 +134,14 @@ export async function signInAction(_: SignInState | undefined, formData: FormDat
   // Check lockout before attempting sign-in
   const locked = await isLockedOut(parsed.data.email, ip);
   if (locked) {
+    // Log lockout event (fire-and-forget)
+    const lockoutEmailHash = await hashEmailForAudit(parsed.data.email);
+    logAuthEvent({
+      event: "auth.lockout",
+      emailHash: lockoutEmailHash,
+      ipAddress: ip,
+      userAgent: headerStore.get("user-agent") ?? undefined
+    }).catch(() => {});
     // Return identical error to wrong password — prevents lockout state enumeration
     return { success: false, message: "Those details didn't match." };
   }
@@ -191,6 +240,13 @@ export async function requestPasswordResetAction(
     };
   }
 
+  // Verify Turnstile CAPTCHA token before processing the request
+  const turnstileToken = formData.get("cf-turnstile-response") as string | null;
+  const turnstileValid = await verifyTurnstile(turnstileToken, "password_reset");
+  if (!turnstileValid) {
+    return { success: false, message: "Security check failed. Please try again." };
+  }
+
   const redirectUrl = new URL("/auth/confirm", resolveAppUrl()).toString();
 
   try {
@@ -279,11 +335,24 @@ export async function completePasswordResetAction(
     };
   }
 
-  // Destroy all sessions — user must re-authenticate
+  // Destroy all sessions then immediately issue a fresh one to prevent session fixation
   try {
     const { data: { user: currentUser } } = await supabase.auth.getUser();
     if (currentUser) {
       await destroyAllSessionsForUser(currentUser.id);
+
+      // Issue a replacement session before signing out (auth standard §3 — session fixation prevention)
+      try {
+        const cookieStore = await cookies();
+        const newSessionId = await createSession(currentUser.id, {
+          userAgent: "",
+          ipAddress: "", // not available in server action context
+        });
+        cookieStore.set(SESSION_COOKIE_NAME, newSessionId, makeSessionCookieOptions());
+      } catch (sessionError) {
+        console.error("Failed to issue replacement session after password reset:", sessionError);
+      }
+
       await logAuthEvent({
         event: "auth.password_updated",
         userId: currentUser.id
