@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Desktop Layout v2</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="helper.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', sans-serif; background: #e8e4dc; color: #1c252d; padding: 24px; }
+  h1 { font-family: 'Playfair Display', serif; font-size: 1.5rem; color: #273640; margin-bottom: 6px; }
+  .subtitle { color: #5d7488; font-size: 0.9rem; margin-bottom: 20px; }
+
+  .note { font-size: 0.78rem; color: #5d7488; margin-bottom: 20px; background: rgba(39,54,64,0.06); padding: 8px 12px; border-radius: 6px; border-left: 3px solid #b98c5b; display: flex; gap: 8px; align-items: flex-start; }
+
+  /* ===== DESKTOP MOCKUP ===== */
+  .desktop-mockup {
+    background: white;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.15);
+    max-width: 860px;
+    margin: 0 auto 28px;
+  }
+
+  /* Top nav bar */
+  .nav-bar {
+    background: #273640;
+    padding: 10px 24px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .nav-logo { width: 28px; height: 28px; background: #b98c5b; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: 'Playfair Display', serif; font-size: 0.75rem; color: #273640; font-weight: 700; }
+  .nav-brand { font-family: 'Playfair Display', serif; font-size: 0.8rem; color: white; font-weight: 600; letter-spacing: 0.06em; }
+
+  /* Two-column body */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; min-height: 480px; }
+
+  /* LEFT: Image + USPs */
+  .col-left { background: #1a2830; position: relative; }
+  .event-img {
+    width: 100%; aspect-ratio: 1/1;
+    background: linear-gradient(135deg, #273640 0%, #3d5a6b 40%, #1a3040 100%);
+    position: relative; overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .event-img::before {
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(circle at 30% 70%, rgba(185,140,91,0.25) 0%, transparent 55%),
+                radial-gradient(circle at 75% 25%, rgba(141,68,70,0.18) 0%, transparent 50%);
+  }
+  .event-img-label { font-size: 0.6rem; color: rgba(255,255,255,0.3); letter-spacing: 0.14em; text-transform: uppercase; position: relative; }
+
+  .usps { padding: 16px 20px; }
+  .usps-title { font-size: 0.62rem; font-weight: 700; color: #b98c5b; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 10px; }
+  .usp-item { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px; }
+  .usp-icon { width: 16px; height: 16px; background: rgba(185,140,91,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+  .usp-icon::after { content: '✓'; font-size: 0.5rem; color: #b98c5b; font-weight: 700; }
+  .usp-text { font-size: 0.65rem; color: rgba(255,255,255,0.75); line-height: 1.45; }
+
+  /* RIGHT: Title + Description + Form */
+  .col-right { background: #f4f1eb; display: flex; flex-direction: column; }
+
+  .event-header { padding: 20px 22px 14px; border-bottom: 1px solid #e0dbd2; }
+  .event-title { font-family: 'Playfair Display', serif; font-size: 1.3rem; color: #273640; font-weight: 700; line-height: 1.3; margin-bottom: 8px; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { background: rgba(39,54,64,0.09); color: #273640; font-size: 0.6rem; font-weight: 600; padding: 3px 8px; border-radius: 4px; }
+
+  .event-desc { padding: 14px 22px; flex: 1; }
+  .desc-teaser { font-size: 0.75rem; color: #273640; font-weight: 500; line-height: 1.55; margin-bottom: 8px; font-style: italic; }
+  .desc-body { font-size: 0.68rem; color: #5d7488; line-height: 1.65; }
+
+  .booking-panel { background: white; border-top: 1px solid #e0dbd2; padding: 16px 22px 20px; }
+  .booking-title { font-size: 0.68rem; font-weight: 700; color: #273640; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; }
+  .qty-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .qty-label { font-size: 0.65rem; color: #5d7488; }
+  .qty-ctrl { display: flex; align-items: center; gap: 10px; }
+  .qty-btn { width: 24px; height: 24px; background: #273640; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; cursor: pointer; }
+  .qty-num { font-size: 0.9rem; font-weight: 700; color: #1c252d; min-width: 16px; text-align: center; }
+  .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px; }
+  .field { background: #f9f7f4; border: 1px solid #ddd8cf; border-radius: 6px; padding: 7px 10px; font-size: 0.62rem; color: #9ea8b1; }
+  .field.full { grid-column: 1/-1; }
+  .book-btn { background: #b98c5b; color: white; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; padding: 11px; border-radius: 6px; text-align: center; }
+
+  /* ===== MOBILE MOCKUP ===== */
+  .mobile-label { text-align: center; font-size: 0.75rem; font-weight: 600; color: #5d7488; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; }
+  .mobile-wrap { display: flex; justify-content: center; gap: 32px; }
+
+  .mobile-frame {
+    width: 200px;
+    background: white;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 6px 30px rgba(0,0,0,0.12);
+  }
+  .mob-nav { background: #273640; padding: 7px 12px; display: flex; align-items: center; gap: 6px; }
+  .mob-logo { width: 18px; height: 18px; background: #b98c5b; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: 'Playfair Display', serif; font-size: 0.5rem; color: #273640; font-weight: 700; }
+  .mob-brand { font-family: 'Playfair Display', serif; font-size: 0.58rem; color: white; font-weight: 600; }
+  .mob-img { width: 100%; aspect-ratio: 1/1; background: linear-gradient(135deg, #273640 0%, #3d5a6b 40%, #1a3040 100%); position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+  .mob-img::before { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at 30% 70%, rgba(185,140,91,0.25) 0%, transparent 55%); }
+  .mob-img-label { font-size: 0.45rem; color: rgba(255,255,255,0.3); letter-spacing: 0.1em; text-transform: uppercase; position: relative; }
+  .mob-details { padding: 8px 10px; }
+  .mob-title { font-family: 'Playfair Display', serif; font-size: 0.82rem; color: #273640; font-weight: 700; margin-bottom: 5px; line-height: 1.3; }
+  .mob-chips { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 6px; }
+  .mob-chip { background: rgba(39,54,64,0.08); color: #273640; font-size: 0.48rem; font-weight: 600; padding: 2px 5px; border-radius: 3px; }
+  .mob-desc { font-size: 0.55rem; color: #5d7488; line-height: 1.5; margin-bottom: 6px; }
+  .mob-usps { background: #1a2830; padding: 6px 10px; }
+  .mob-usp-title { font-size: 0.5rem; font-weight: 700; color: #b98c5b; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 5px; }
+  .mob-usp { display: flex; gap: 5px; margin-bottom: 4px; font-size: 0.52rem; color: rgba(255,255,255,0.7); line-height: 1.4; }
+  .mob-usp::before { content: '✓'; color: #b98c5b; font-weight: 700; flex-shrink: 0; }
+  .mob-form { padding: 8px 10px 10px; background: #f9f7f4; }
+  .mob-form-title { font-size: 0.55rem; font-weight: 700; color: #273640; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+  .mob-qty { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .mob-qty-label { font-size: 0.52rem; color: #5d7488; }
+  .mob-qty-ctrl { display: flex; align-items: center; gap: 5px; }
+  .mob-qty-btn { width: 16px; height: 16px; background: #273640; color: white; border-radius: 50%; font-size: 0.55rem; display: flex; align-items: center; justify-content: center; font-weight: 700; }
+  .mob-qty-num { font-size: 0.65rem; font-weight: 700; }
+  .mob-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; margin-bottom: 5px; }
+  .mob-field { background: white; border: 1px solid #ddd8cf; border-radius: 4px; padding: 4px 6px; font-size: 0.48rem; color: #9ea8b1; }
+  .mob-field.full { grid-column: 1/-1; }
+  .mob-btn { background: #b98c5b; color: white; font-size: 0.55rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; padding: 7px; border-radius: 5px; text-align: center; }
+
+  .scroll-hint { font-size: 0.55rem; color: #9ea8b1; text-align: center; padding: 5px; }
+
+  .section-divider { border: none; border-top: 1px solid #ddd8cf; margin: 28px 0; }
+</style>
+</head>
+<body>
+
+<h1>Desktop &amp; Mobile Layout</h1>
+<p class="subtitle">The same page — desktop shows two columns, mobile stacks everything</p>
+<div class="note">
+  <span>📐</span>
+  <span><strong>Left panel:</strong> Square event image + <code>public_highlights</code> (text[] array — staff enter these as bullet points on the event page) shown as USP ticks.<br><strong>Right panel:</strong> Title, date/venue chips, <code>public_teaser</code> (italic intro), <code>public_description</code> (full body), then booking form.</span>
+</div>
+
+<!-- Desktop mockup -->
+<div class="desktop-mockup">
+  <div class="nav-bar">
+    <div class="nav-logo">B</div>
+    <div class="nav-brand">Barons Pubs</div>
+  </div>
+  <div class="two-col">
+    <!-- Left -->
+    <div class="col-left">
+      <div class="event-img"><span class="event-img-label">Event Image</span></div>
+      <div class="usps">
+        <div class="usps-title">What to expect</div>
+        <div class="usp-item"><div class="usp-icon"></div><div class="usp-text">Two live sets from local jazz artists</div></div>
+        <div class="usp-item"><div class="usp-icon"></div><div class="usp-text">Late-night DJ from 10pm</div></div>
+        <div class="usp-item"><div class="usp-icon"></div><div class="usp-text">Specially curated cocktail menu</div></div>
+        <div class="usp-item"><div class="usp-icon"></div><div class="usp-text">Doors open 6:30pm — arrive early</div></div>
+      </div>
+    </div>
+    <!-- Right -->
+    <div class="col-right">
+      <div class="event-header">
+        <div class="event-title">Jazz &amp; Soul Night</div>
+        <div class="chips">
+          <span class="chip">📅 Friday 20 March</span>
+          <span class="chip">🕗 7:00pm</span>
+          <span class="chip">📍 The Anchor</span>
+        </div>
+      </div>
+      <div class="event-desc">
+        <div class="desc-teaser">An unmissable evening of live jazz and soul in the heart of the pub.</div>
+        <div class="desc-body">Join us for a very special night of live music featuring some of the finest local jazz and soul talent around. The evening kicks off at 7pm with our first live set, followed by a second performance at 9pm, before our resident DJ takes over for a late-night finish. Whether you're a die-hard jazz fan or just looking for a brilliant night out, this one's not to be missed. Complimentary welcome drink for all pre-booked guests.</div>
+      </div>
+      <div class="booking-panel">
+        <div class="booking-title">Reserve Your Seats</div>
+        <div class="qty-row">
+          <span class="qty-label">How many seats?</span>
+          <div class="qty-ctrl">
+            <div class="qty-btn">−</div>
+            <div class="qty-num">2</div>
+            <div class="qty-btn">+</div>
+          </div>
+        </div>
+        <div class="fields">
+          <div class="field">First name *</div>
+          <div class="field">Last name</div>
+          <div class="field full">Mobile number *</div>
+          <div class="field full">Email (optional)</div>
+        </div>
+        <div class="book-btn">Book Now — Free Entry</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<hr class="section-divider">
+
+<!-- Mobile mockups -->
+<div class="mobile-label">📱 Mobile — scrolls top to bottom</div>
+<div class="mobile-wrap">
+  <div>
+    <div style="font-size:0.65rem;color:#5d7488;text-align:center;margin-bottom:8px;font-weight:600">Top of page</div>
+    <div class="mobile-frame">
+      <div class="mob-nav">
+        <div class="mob-logo">B</div>
+        <div class="mob-brand">Barons Pubs</div>
+      </div>
+      <div class="mob-img"><span class="mob-img-label">Event Image</span></div>
+      <div class="mob-details">
+        <div class="mob-title">Jazz &amp; Soul Night</div>
+        <div class="mob-chips">
+          <span class="mob-chip">📅 Fri 20 Mar</span>
+          <span class="mob-chip">🕗 7:00pm</span>
+          <span class="mob-chip">📍 The Anchor</span>
+        </div>
+        <div class="mob-desc">An unmissable evening of live jazz and soul. Join us for two live sets, a late-night DJ, and a specially curated cocktail menu.</div>
+      </div>
+      <div class="mob-usps">
+        <div class="mob-usp-title">What to expect</div>
+        <div class="mob-usp">Two live sets from local jazz artists</div>
+        <div class="mob-usp">Late-night DJ from 10pm</div>
+        <div class="mob-usp">Specially curated cocktail menu</div>
+      </div>
+    </div>
+    <div class="scroll-hint">↓ scroll</div>
+  </div>
+  <div>
+    <div style="font-size:0.65rem;color:#5d7488;text-align:center;margin-bottom:8px;font-weight:600">Scrolled down</div>
+    <div class="mobile-frame">
+      <div class="mob-form" style="padding-top:10px">
+        <div class="mob-form-title">Reserve Your Seats</div>
+        <div class="mob-qty">
+          <span class="mob-qty-label">How many seats?</span>
+          <div class="mob-qty-ctrl">
+            <div class="mob-qty-btn">−</div>
+            <div class="mob-qty-num">2</div>
+            <div class="mob-qty-btn">+</div>
+          </div>
+        </div>
+        <div class="mob-fields">
+          <div class="mob-field">First name *</div>
+          <div class="mob-field">Last name</div>
+          <div class="mob-field full">Mobile number *</div>
+          <div class="mob-field full">Email (optional)</div>
+        </div>
+        <div class="mob-btn">Book Now — Free Entry</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

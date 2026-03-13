@@ -1,0 +1,159 @@
+<h2>Bookings & Customers — Updated Design</h2>
+<p class="subtitle">Reflects all changes discussed: unchecked opt-in, correct company name, privacy link, standalone nav items</p>
+
+<div class="section">
+  <h3>1. <code>customers</code> table — unchanged</h3>
+  <div style="background:#f8f8f8;border-radius:8px;padding:16px;font-size:12px;font-family:monospace;line-height:1.7;">
+    customers (<br>
+    &nbsp;&nbsp;id &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; uuid primary key,<br>
+    &nbsp;&nbsp;first_name &nbsp;&nbsp;&nbsp;&nbsp; text not null,<br>
+    &nbsp;&nbsp;last_name &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; text,<br>
+    &nbsp;&nbsp;mobile &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; text unique not null,<br>
+    &nbsp;&nbsp;email &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; text,<br>
+    &nbsp;&nbsp;marketing_opt_in boolean not null default false,<br>
+    &nbsp;&nbsp;created_at &nbsp;&nbsp;&nbsp;&nbsp; timestamptz default now(),<br>
+    &nbsp;&nbsp;updated_at &nbsp;&nbsp;&nbsp;&nbsp; timestamptz default now()<br>
+    )<br><br>
+    event_bookings.customer_id → customers.id
+  </div>
+</div>
+
+<div class="section">
+  <h3>2. Booking form — updated</h3>
+  <div style="max-width:340px;background:white;border:1px solid #cbd5db;border-radius:8px;padding:16px;">
+    <p style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#273640;margin:0 0 10px;">Reserve Your Seats</p>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+      <span style="font-size:11px;color:#637c8c;">How many seats?</span>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div style="width:22px;height:22px;border-radius:50%;background:#273640;display:flex;align-items:center;justify-content:center;color:white;font-size:13px;font-weight:bold;">−</div>
+        <span style="font-size:14px;font-weight:bold;color:#273640;">1</span>
+        <div style="width:22px;height:22px;border-radius:50%;background:#273640;display:flex;align-items:center;justify-content:center;color:white;font-size:13px;font-weight:bold;">+</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;">
+      <div style="background:white;border:1px solid #cbd5db;border-radius:5px;padding:6px 8px;font-size:11px;color:#aaa;">First name *</div>
+      <div style="background:white;border:1px solid #cbd5db;border-radius:5px;padding:6px 8px;font-size:11px;color:#aaa;">Last name</div>
+    </div>
+    <div style="background:white;border:1px solid #cbd5db;border-radius:5px;padding:6px 8px;margin-bottom:6px;font-size:11px;color:#aaa;">Mobile number *</div>
+    <div style="background:white;border:1px solid #cbd5db;border-radius:5px;padding:6px 8px;margin-bottom:10px;font-size:11px;color:#aaa;">Email (optional)</div>
+
+    <!-- Marketing opt-in — UNCHECKED -->
+    <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:10px;padding:8px;background:#f5f8f5;border-radius:5px;border:1px solid #93ab97;">
+      <div style="width:14px;height:14px;border:2px solid #cbd5db;border-radius:3px;flex-shrink:0;margin-top:1px;background:white;"></div>
+      <label style="font-size:10px;color:#273640;line-height:1.4;">Keep me updated with events, offers and news from <strong>Barons Pub Company</strong>. You can unsubscribe at any time.</label>
+    </div>
+
+    <!-- Privacy policy link -->
+    <p style="font-size:10px;color:#637c8c;margin-bottom:10px;">By booking you agree to our <a href="#" style="color:#637c8c;text-decoration:underline;">privacy policy</a>.</p>
+
+    <div style="background:#c8a005;color:white;font-weight:700;font-size:11px;text-align:center;padding:9px;border-radius:5px;">Book Now — Free Entry</div>
+  </div>
+  <div style="margin-top:10px;padding:10px 14px;background:#fff8e1;border:1px solid #f0d060;border-radius:6px;font-size:11px;color:#7a5c00;">
+    ⚠️ <strong>Opt-in defaults to unchecked</strong> — required for valid UK GDPR consent (ICO guidance). Pre-ticked boxes are not permitted.
+  </div>
+</div>
+
+<div class="section">
+  <h3>3. All Bookings page — <code>/bookings</code> — unchanged</h3>
+  <div style="border:1px solid #ddd;border-radius:8px;overflow:hidden;font-size:12px;">
+    <div style="background:#f5f5f5;padding:10px 14px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #ddd;flex-wrap:wrap;">
+      <input style="border:1px solid #cbd5db;border-radius:4px;padding:5px 8px;font-size:11px;width:160px;" placeholder="🔍 Search name, mobile…" />
+      <select style="border:1px solid #cbd5db;border-radius:4px;padding:5px 8px;font-size:11px;"><option>All venues</option></select>
+      <select style="border:1px solid #cbd5db;border-radius:4px;padding:5px 8px;font-size:11px;"><option>All statuses</option><option>Confirmed</option><option>Cancelled</option></select>
+      <select style="border:1px solid #cbd5db;border-radius:4px;padding:5px 8px;font-size:11px;"><option>All time</option><option>This month</option><option>Next 30 days</option></select>
+      <span style="margin-left:auto;font-size:11px;color:#888;">47 bookings · 112 tickets</span>
+    </div>
+    <div style="border-bottom:1px solid #eee;">
+      <div style="padding:8px 14px;background:#f9f9f9;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #eee;">
+        <div>
+          <strong style="font-size:12px;color:#273640;">Save The Rhino Charity Quiz</strong>
+          <span style="color:#888;font-size:11px;margin-left:8px;">Tue 24 Feb · The Cricketers</span>
+        </div>
+        <span style="font-size:11px;color:#637c8c;">8 bookings · 14 tickets</span>
+      </div>
+      <table style="width:100%;border-collapse:collapse;">
+        <tr style="background:#fafafa;">
+          <th style="padding:5px 14px;text-align:left;font-size:10px;color:#888;text-transform:uppercase;font-weight:600;">Name</th>
+          <th style="padding:5px 14px;text-align:left;font-size:10px;color:#888;text-transform:uppercase;font-weight:600;">Mobile</th>
+          <th style="padding:5px 14px;text-align:left;font-size:10px;color:#888;text-transform:uppercase;font-weight:600;">Tickets</th>
+          <th style="padding:5px 14px;text-align:left;font-size:10px;color:#888;text-transform:uppercase;font-weight:600;">Booked</th>
+          <th style="padding:5px 14px;text-align:left;font-size:10px;color:#888;text-transform:uppercase;font-weight:600;">Status</th>
+        </tr>
+        <tr style="border-bottom:1px solid #f5f5f5;">
+          <td style="padding:6px 14px;font-size:11px;">Peter Pitcher</td>
+          <td style="padding:6px 14px;font-size:11px;color:#637c8c;">+44 7700 900123</td>
+          <td style="padding:6px 14px;font-size:11px;">2</td>
+          <td style="padding:6px 14px;font-size:11px;color:#888;">13 Mar</td>
+          <td style="padding:6px 14px;"><span style="background:#d1fae5;color:#065f46;font-size:10px;font-weight:600;padding:2px 7px;border-radius:999px;">Confirmed</span></td>
+        </tr>
+        <tr>
+          <td style="padding:6px 14px;font-size:11px;">Jane Smith</td>
+          <td style="padding:6px 14px;font-size:11px;color:#637c8c;">+44 7700 900456</td>
+          <td style="padding:6px 14px;font-size:11px;">4</td>
+          <td style="padding:6px 14px;font-size:11px;color:#888;">12 Mar</td>
+          <td style="padding:6px 14px;"><span style="background:#fee2e2;color:#991b1b;font-size:10px;font-weight:600;padding:2px 7px;border-radius:999px;">Cancelled</span></td>
+        </tr>
+      </table>
+    </div>
+    <div style="padding:8px 14px;background:#f9f9f9;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #eee;">
+      <div><strong style="font-size:12px;color:#273640;">Jazz Night at The Cricketers</strong><span style="color:#888;font-size:11px;margin-left:8px;">Mon 23 Feb</span></div>
+      <span style="font-size:11px;color:#637c8c;">12 bookings · 24 tickets</span>
+    </div>
+    <div style="padding:8px 14px;text-align:center;color:#888;font-size:11px;">+ 3 more events…</div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>4. Customers page — <code>/customers</code> — unchanged</h3>
+  <div style="border:1px solid #ddd;border-radius:8px;overflow:hidden;font-size:12px;">
+    <div style="background:#f5f5f5;padding:10px 14px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #ddd;flex-wrap:wrap;">
+      <input style="border:1px solid #cbd5db;border-radius:4px;padding:5px 8px;font-size:11px;width:160px;" placeholder="🔍 Search name, mobile…" />
+      <select style="border:1px solid #cbd5db;border-radius:4px;padding:5px 8px;font-size:11px;"><option>All venues</option></select>
+      <label style="font-size:11px;color:#273640;display:flex;align-items:center;gap:5px;"><input type="checkbox" /> Marketing opt-in only</label>
+      <span style="margin-left:auto;font-size:11px;color:#888;">38 customers</span>
+    </div>
+    <table style="width:100%;border-collapse:collapse;">
+      <tr style="background:#fafafa;">
+        <th style="padding:6px 14px;text-align:left;font-size:10px;color:#888;text-transform:uppercase;font-weight:600;">Name</th>
+        <th style="padding:6px 14px;text-align:left;font-size:10px;color:#888;text-transform:uppercase;font-weight:600;">Mobile</th>
+        <th style="padding:6px 14px;text-align:left;font-size:10px;color:#888;text-transform:uppercase;font-weight:600;">Email</th>
+        <th style="padding:6px 14px;text-align:left;font-size:10px;color:#888;text-transform:uppercase;font-weight:600;">Bookings</th>
+        <th style="padding:6px 14px;text-align:left;font-size:10px;color:#888;text-transform:uppercase;font-weight:600;">Mktg</th>
+        <th style="padding:6px 14px;text-align:left;font-size:10px;color:#888;text-transform:uppercase;font-weight:600;">First seen</th>
+      </tr>
+      <tr style="border-bottom:1px solid #f5f5f5;">
+        <td style="padding:7px 14px;font-size:11px;font-weight:600;">Peter Pitcher</td>
+        <td style="padding:7px 14px;font-size:11px;color:#637c8c;">+44 7700 900123</td>
+        <td style="padding:7px 14px;font-size:11px;color:#637c8c;">peter@…</td>
+        <td style="padding:7px 14px;font-size:11px;">3 bookings · 6 tickets</td>
+        <td style="padding:7px 14px;"><span style="color:#c8a005;font-size:13px;">✓</span></td>
+        <td style="padding:7px 14px;font-size:11px;color:#888;">10 Jan 2026</td>
+      </tr>
+      <tr style="border-bottom:1px solid #f5f5f5;">
+        <td style="padding:7px 14px;font-size:11px;font-weight:600;">Jane Smith</td>
+        <td style="padding:7px 14px;font-size:11px;color:#637c8c;">+44 7700 900456</td>
+        <td style="padding:7px 14px;font-size:11px;color:#888;">—</td>
+        <td style="padding:7px 14px;font-size:11px;">1 booking · 4 tickets</td>
+        <td style="padding:7px 14px;font-size:11px;color:#888;">—</td>
+        <td style="padding:7px 14px;font-size:11px;color:#888;">12 Mar 2026</td>
+      </tr>
+    </table>
+    <div style="padding:10px 14px;background:#f0f5f0;border-top:1px solid #ddd;font-size:11px;color:#637c8c;">
+      → Click any row to open customer profile: booking history, opt-in status, edit name/email
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>5. Navigation — updated (standalone items)</h3>
+  <div style="display:inline-block;background:#273640;color:white;border-radius:8px;padding:12px 16px;font-size:12px;min-width:200px;">
+    <div style="font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:rgba(255,255,255,0.4);margin-bottom:8px;">Core Workspace</div>
+    <div style="padding:5px 8px;border-radius:4px;margin-bottom:2px;">Dashboard</div>
+    <div style="padding:5px 8px;border-radius:4px;margin-bottom:2px;">Events</div>
+    <div style="padding:5px 8px;border-radius:4px;margin-bottom:2px;">Bookings</div>
+    <div style="padding:5px 8px;border-radius:4px;margin-bottom:6px;">Customers</div>
+    <div style="padding:5px 8px;border-radius:4px;margin-bottom:2px;">Artists</div>
+    <div style="padding:5px 8px;border-radius:4px;">Reviews</div>
+  </div>
+  <p style="font-size:12px;color:#666;margin-top:8px;">Bookings and Customers sit as peers of Events in the Core Workspace section. Visible to <code>central_planner</code> and <code>venue_manager</code>.</p>
+</div>

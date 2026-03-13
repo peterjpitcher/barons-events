@@ -1,0 +1,41 @@
+<h2>Three Approaches</h2>
+<p class="subtitle">How should the event landing pages be built and where should they live?</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Within this app — new public route <code style="font-size:0.85em;background:rgba(0,0,0,0.1);padding:2px 6px;border-radius:4px">/l/[slug]</code></h3>
+      <p>Add a public-facing <code>/l/[slug]</code> route to BaronsHub. Point <code>l.baronspubs.com</code> as an additional custom domain on the same Vercel deployment. Shares the database and all existing infrastructure directly.</p>
+      <div class="pros-cons" style="margin-top:12px">
+        <div class="pros"><h4>Pros</h4><ul><li>Single codebase &amp; deployment</li><li>Zero data-sync complexity</li><li>Reuses existing event data, slug logic, venue details</li><li>Custom domain is a one-click Vercel config</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Public routes live alongside admin routes (mitigated by middleware)</li></ul></div>
+      </div>
+      <p style="margin-top:10px;font-weight:600;color:#4f7a69">⭐ Recommended</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Extend the existing short-link handler <code style="font-size:0.85em;background:rgba(0,0,0,0.1);padding:2px 6px;border-radius:4px">/[code]</code></h3>
+      <p>The project already has a <code>short_links</code> table and <code>/[code]</code> route. Extend it to render landing pages instead of just redirecting — detect when a code belongs to an event and show the booking page inline.</p>
+      <div class="pros-cons" style="margin-top:12px">
+        <div class="pros"><h4>Pros</h4><ul><li>Builds on existing infrastructure</li><li>One URL pattern for all short links</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Overloads the redirect handler with full page rendering</li><li>Muddies the short-link abstraction</li><li>Harder to reason about as it grows</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Separate Next.js app</h3>
+      <p>A brand new, standalone Next.js project just for public event landing pages. Connects to the same Supabase database. Deployed independently to Vercel.</p>
+      <div class="pros-cons" style="margin-top:12px">
+        <div class="pros"><h4>Pros</h4><ul><li>Clean separation — public site never touches admin code</li><li>Can be styled/branded completely independently</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Second deployment to maintain</li><li>Duplicates shared types and utilities</li><li>More work to set up, no immediate benefit at this scale</li></ul></div>
+      </div>
+    </div>
+  </div>
+</div>

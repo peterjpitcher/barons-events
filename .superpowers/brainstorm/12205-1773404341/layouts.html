@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Landing Page Layout Options</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="helper.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', sans-serif; background: #f0ede6; color: #1c252d; padding: 24px; }
+  h1 { font-family: 'Playfair Display', serif; font-size: 1.6rem; color: #273640; margin-bottom: 6px; }
+  .subtitle { color: #5d7488; font-size: 0.95rem; margin-bottom: 28px; }
+
+  .layouts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+
+  .layout-card {
+    background: white;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 3px solid transparent;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  }
+  .layout-card:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(0,0,0,0.12); }
+  .layout-card.selected { border-color: #b98c5b; box-shadow: 0 0 0 2px #b98c5b40; }
+
+  .card-label {
+    background: #273640;
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 8px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .card-label .rec { background: #b98c5b; color: white; font-size: 0.65rem; padding: 2px 7px; border-radius: 20px; }
+
+  .mockup { background: #f4f1eb; }
+
+  /* ---- Layout A: Hero First ---- */
+  .la-hero { height: 120px; background: linear-gradient(160deg, #273640 0%, #4a6070 100%); position: relative; overflow: hidden; }
+  .la-hero::after { content: ''; position: absolute; inset: 0; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Ccircle cx='30' cy='30' r='20' fill='none' stroke='rgba(185,140,91,0.15)' stroke-width='1'/%3E%3C/svg%3E") repeat; }
+  .la-hero-badge { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); background: rgba(255,255,255,0.12); backdrop-filter: blur(4px); border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; padding: 5px 14px; font-size: 0.65rem; color: white; letter-spacing: 0.08em; font-weight: 600; white-space: nowrap; }
+  .la-hero-title { position: absolute; bottom: 14px; left: 0; right: 0; text-align: center; font-family: 'Playfair Display', serif; font-size: 1.05rem; color: white; font-weight: 700; padding: 0 16px; text-shadow: 0 2px 8px rgba(0,0,0,0.4); }
+  .la-meta { display: flex; gap: 6px; justify-content: center; padding: 10px 14px 6px; flex-wrap: wrap; }
+  .la-chip { background: #273640; color: #b98c5b; font-size: 0.6rem; font-weight: 600; padding: 3px 8px; border-radius: 20px; letter-spacing: 0.04em; }
+  .la-desc { font-size: 0.62rem; color: #5d7488; line-height: 1.5; padding: 4px 14px 10px; }
+  .la-divider { height: 1px; background: #e8e2d8; margin: 0 14px; }
+  .la-form { padding: 10px 14px 14px; }
+  .la-form-title { font-size: 0.65rem; font-weight: 700; color: #273640; margin-bottom: 8px; letter-spacing: 0.04em; text-transform: uppercase; }
+  .la-qty { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .la-qty-label { font-size: 0.6rem; color: #5d7488; flex: 1; }
+  .la-qty-ctrl { display: flex; align-items: center; gap: 6px; }
+  .la-qty-btn { width: 18px; height: 18px; background: #273640; color: white; border-radius: 50%; font-size: 0.65rem; display: flex; align-items: center; justify-content: center; font-weight: 700; }
+  .la-qty-num { font-size: 0.75rem; font-weight: 600; color: #1c252d; }
+  .la-seats { font-size: 0.58rem; color: #4f7a69; font-weight: 600; margin-bottom: 8px; }
+  .la-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-bottom: 6px; }
+  .la-field { background: white; border: 1px solid #ddd8cf; border-radius: 5px; padding: 5px 7px; font-size: 0.58rem; color: #9ea8b1; }
+  .la-field.full { grid-column: 1 / -1; }
+  .la-btn { background: #b98c5b; color: white; font-size: 0.65rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 9px; border-radius: 6px; text-align: center; margin-top: 4px; }
+
+  /* ---- Layout B: Split ---- */
+  .lb-wrap { display: grid; grid-template-columns: 1fr 1fr; min-height: 320px; }
+  .lb-left { padding: 12px; border-right: 1px solid #e8e2d8; }
+  .lb-img { height: 80px; background: linear-gradient(160deg, #273640 0%, #4a6070 100%); border-radius: 6px; margin-bottom: 8px; position: relative; overflow: hidden; }
+  .lb-img::after { content: ''; position: absolute; inset: 0; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Ccircle cx='30' cy='30' r='20' fill='none' stroke='rgba(185,140,91,0.15)' stroke-width='1'/%3E%3C/svg%3E") repeat; }
+  .lb-logo { font-family: 'Playfair Display', serif; font-size: 0.6rem; color: #5d7488; text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 4px; }
+  .lb-title { font-family: 'Playfair Display', serif; font-size: 0.9rem; color: #273640; font-weight: 700; line-height: 1.3; margin-bottom: 6px; }
+  .lb-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+  .lb-chip { background: rgba(39,54,64,0.08); color: #273640; font-size: 0.55rem; font-weight: 600; padding: 2px 6px; border-radius: 3px; }
+  .lb-desc { font-size: 0.58rem; color: #5d7488; line-height: 1.5; }
+  .lb-right { padding: 12px; background: white; display: flex; flex-direction: column; }
+  .lb-card-title { font-size: 0.65rem; font-weight: 700; color: #273640; margin-bottom: 2px; letter-spacing: 0.04em; text-transform: uppercase; }
+  .lb-event-mini { font-size: 0.6rem; color: #5d7488; margin-bottom: 8px; }
+  .lb-seats { font-size: 0.58rem; color: #4f7a69; font-weight: 600; background: #eef5f2; padding: 4px 7px; border-radius: 4px; margin-bottom: 8px; }
+  .lb-qty { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .lb-qty-label { font-size: 0.6rem; color: #5d7488; }
+  .lb-qty-ctrl { display: flex; align-items: center; gap: 6px; }
+  .lb-qty-btn { width: 18px; height: 18px; background: #273640; color: white; border-radius: 50%; font-size: 0.65rem; display: flex; align-items: center; justify-content: center; }
+  .lb-qty-num { font-size: 0.75rem; font-weight: 600; }
+  .lb-fields { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; flex: 1; }
+  .lb-field { background: #f9f7f4; border: 1px solid #ddd8cf; border-radius: 5px; padding: 5px 7px; font-size: 0.58rem; color: #9ea8b1; }
+  .lb-btn { background: #b98c5b; color: white; font-size: 0.65rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 9px; border-radius: 6px; text-align: center; margin-top: auto; }
+
+  /* ---- Layout C: Minimal ---- */
+  .lc-wrap { padding: 14px; }
+  .lc-logo { text-align: center; font-family: 'Playfair Display', serif; font-size: 0.65rem; color: #b98c5b; text-transform: uppercase; letter-spacing: 0.14em; font-weight: 600; margin-bottom: 12px; }
+  .lc-img { height: 80px; background: linear-gradient(160deg, #273640 0%, #4a6070 100%); border-radius: 8px; margin-bottom: 10px; position: relative; overflow: hidden; }
+  .lc-img::after { content: ''; position: absolute; inset: 0; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Ccircle cx='30' cy='30' r='20' fill='none' stroke='rgba(185,140,91,0.15)' stroke-width='1'/%3E%3C/svg%3E") repeat; }
+  .lc-title { font-family: 'Playfair Display', serif; font-size: 1rem; color: #273640; font-weight: 700; text-align: center; line-height: 1.3; margin-bottom: 6px; }
+  .lc-meta { display: flex; gap: 5px; justify-content: center; flex-wrap: wrap; margin-bottom: 6px; }
+  .lc-chip { border: 1px solid #b98c5b; color: #b98c5b; font-size: 0.58rem; font-weight: 600; padding: 2px 7px; border-radius: 20px; }
+  .lc-desc { font-size: 0.6rem; color: #5d7488; text-align: center; line-height: 1.5; margin-bottom: 12px; }
+  .lc-form { background: white; border-radius: 8px; border: 1px solid #e8e2d8; padding: 10px; }
+  .lc-form-title { font-size: 0.65rem; font-weight: 700; color: #273640; margin-bottom: 6px; text-align: center; }
+  .lc-seats { font-size: 0.58rem; color: #4f7a69; font-weight: 600; text-align: center; margin-bottom: 8px; }
+  .lc-qty { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 8px; }
+  .lc-qty-btn { width: 22px; height: 22px; background: #273640; color: white; border-radius: 50%; font-size: 0.7rem; display: flex; align-items: center; justify-content: center; font-weight: 700; }
+  .lc-qty-num { font-size: 0.9rem; font-weight: 700; color: #1c252d; }
+  .lc-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 6px; }
+  .lc-field { background: #f9f7f4; border: 1px solid #ddd8cf; border-radius: 5px; padding: 5px 7px; font-size: 0.58rem; color: #9ea8b1; }
+  .lc-field.full { grid-column: 1 / -1; }
+  .lc-btn { background: #273640; color: white; font-size: 0.65rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 9px; border-radius: 6px; text-align: center; }
+
+  .sel-indicator { position: fixed; bottom: 20px; right: 20px; background: #273640; color: white; padding: 10px 18px; border-radius: 30px; font-size: 0.8rem; font-weight: 600; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
+  .sel-indicator.visible { opacity: 1; }
+</style>
+</head>
+<body>
+<h1>Landing Page Layout</h1>
+<p class="subtitle">Three layout options — click to select your preferred direction</p>
+
+<div class="layouts">
+
+  <!-- Layout A: Hero First -->
+  <div class="layout-card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-label">
+      <span>A — Hero First</span>
+      <span class="rec">⭐ Recommended</span>
+    </div>
+    <div class="mockup">
+      <div class="la-hero">
+        <div class="la-hero-badge">BARONS PUBS</div>
+        <div class="la-hero-title">Jazz &amp; Soul Night</div>
+      </div>
+      <div class="la-meta">
+        <span class="la-chip">📅 Fri 20 Mar</span>
+        <span class="la-chip">🕗 7:00pm</span>
+        <span class="la-chip">📍 The Anchor</span>
+      </div>
+      <div class="la-desc">An unmissable evening of live jazz and soul. Featuring local artists with two sets and a special late-night DJ finish…</div>
+      <div class="la-divider"></div>
+      <div class="la-form">
+        <div class="la-form-title">Reserve Your Seats</div>
+        <div class="la-qty">
+          <span class="la-qty-label">How many seats?</span>
+          <div class="la-qty-ctrl">
+            <div class="la-qty-btn">−</div>
+            <div class="la-qty-num">2</div>
+            <div class="la-qty-btn">+</div>
+          </div>
+        </div>
+        <div class="la-seats">✓ 34 seats remaining</div>
+        <div class="la-fields">
+          <div class="la-field">First name *</div>
+          <div class="la-field">Last name</div>
+          <div class="la-field full">Mobile number *</div>
+          <div class="la-field full">Email (optional)</div>
+        </div>
+        <div class="la-btn">Book Now</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Layout B: Split -->
+  <div class="layout-card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-label"><span>B — Split View</span></div>
+    <div class="mockup">
+      <div class="lb-wrap">
+        <div class="lb-left">
+          <div class="lb-img"></div>
+          <div class="lb-logo">Barons Pubs</div>
+          <div class="lb-title">Jazz &amp; Soul Night</div>
+          <div class="lb-chips">
+            <span class="lb-chip">📅 Fri 20 Mar</span>
+            <span class="lb-chip">🕗 7:00pm</span>
+            <span class="lb-chip">📍 The Anchor</span>
+          </div>
+          <div class="lb-desc">An unmissable evening of live jazz and soul. Featuring local artists with two sets and a special late-night DJ finish. Doors open 6:30pm.</div>
+        </div>
+        <div class="lb-right">
+          <div class="lb-card-title">Reserve Seats</div>
+          <div class="lb-event-mini">Jazz &amp; Soul Night · 20 Mar</div>
+          <div class="lb-seats">✓ 34 seats remaining</div>
+          <div class="lb-qty">
+            <span class="lb-qty-label">Seats</span>
+            <div class="lb-qty-ctrl">
+              <div class="lb-qty-btn">−</div>
+              <div class="lb-qty-num">2</div>
+              <div class="lb-qty-btn">+</div>
+            </div>
+          </div>
+          <div class="lb-fields">
+            <div class="lb-field">First name *</div>
+            <div class="lb-field">Last name</div>
+            <div class="lb-field">Mobile *</div>
+            <div class="lb-field">Email</div>
+          </div>
+          <div class="lb-btn">Book Now</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Layout C: Minimal -->
+  <div class="layout-card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-label"><span>C — Minimal / Card</span></div>
+    <div class="mockup">
+      <div class="lc-wrap">
+        <div class="lc-logo">★ Barons Pubs ★</div>
+        <div class="lc-img"></div>
+        <div class="lc-title">Jazz &amp; Soul Night</div>
+        <div class="lc-meta">
+          <span class="lc-chip">📅 Fri 20 Mar</span>
+          <span class="lc-chip">🕗 7:00pm</span>
+          <span class="lc-chip">📍 The Anchor</span>
+        </div>
+        <div class="lc-desc">An unmissable evening of live jazz and soul…</div>
+        <div class="lc-form">
+          <div class="lc-form-title">Reserve Your Seats</div>
+          <div class="lc-seats">✓ 34 seats remaining</div>
+          <div class="lc-qty">
+            <div class="lc-qty-btn">−</div>
+            <div class="lc-qty-num">2</div>
+            <div class="lc-qty-btn">+</div>
+          </div>
+          <div class="lc-fields">
+            <div class="lc-field">First name *</div>
+            <div class="lc-field">Last name</div>
+            <div class="lc-field full">Mobile *</div>
+            <div class="lc-field full">Email</div>
+          </div>
+          <div class="lc-btn">Book Now</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="sel-indicator" id="selIndicator">Selected</div>
+
+<script>
+function toggleSelect(el) {
+  document.querySelectorAll('.layout-card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  const ind = document.getElementById('selIndicator');
+  ind.textContent = 'Selected: Layout ' + el.dataset.choice.toUpperCase();
+  ind.classList.add('visible');
+  setTimeout(() => ind.classList.remove('visible'), 2000);
+  if (window.recordChoice) recordChoice(el.dataset.choice, el.querySelector('.card-label span').textContent);
+}
+</script>
+</body>
+</html>

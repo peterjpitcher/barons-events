@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Desktop Treatment</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="helper.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', sans-serif; background: #f0ede6; color: #1c252d; padding: 24px; }
+  h1 { font-family: 'Playfair Display', serif; font-size: 1.5rem; color: #273640; margin-bottom: 6px; }
+  .subtitle { color: #5d7488; font-size: 0.9rem; margin-bottom: 24px; }
+  .note { font-size: 0.8rem; color: #5d7488; margin-bottom: 20px; background: rgba(39,54,64,0.06); padding: 8px 12px; border-radius: 6px; border-left: 3px solid #b98c5b; }
+
+  .options-row { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+
+  .opt-wrap {
+    border: 3px solid transparent;
+    border-radius: 12px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    background: white;
+  }
+  .opt-wrap:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(0,0,0,0.12); }
+  .opt-wrap.selected { border-color: #b98c5b; }
+
+  .opt-label {
+    background: #273640; color: white;
+    font-size: 0.7rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+    padding: 8px 14px; display: flex; justify-content: space-between; align-items: center;
+  }
+  .rec { background: #b98c5b; color: white; font-size: 0.65rem; padding: 2px 8px; border-radius: 20px; }
+
+  /* ---- Shared mini components ---- */
+  .sq-img {
+    background: linear-gradient(135deg, #273640 0%, #3d5a6b 40%, #1a3040 100%);
+    position: relative; overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .sq-img::before {
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(circle at 30% 70%, rgba(185,140,91,0.2) 0%, transparent 50%),
+                radial-gradient(circle at 70% 30%, rgba(141,68,70,0.15) 0%, transparent 50%);
+  }
+  .sq-img-label { font-size: 0.55rem; color: rgba(255,255,255,0.35); letter-spacing: 0.12em; text-transform: uppercase; position: relative; }
+
+  .topbar { background: #f4f1eb; padding: 6px 12px; display: flex; align-items: center; gap: 7px; border-bottom: 1px solid #e8e2d8; }
+  .logo-mark { width: 20px; height: 20px; background: #273640; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: 'Playfair Display', serif; font-size: 0.55rem; color: #b98c5b; font-weight: 700; }
+  .brand { font-family: 'Playfair Display', serif; font-size: 0.6rem; color: #273640; font-weight: 600; letter-spacing: 0.06em; }
+
+  .ev-title { font-family: 'Playfair Display', serif; font-size: 0.85rem; color: #273640; font-weight: 700; line-height: 1.3; }
+  .chips { display: flex; gap: 4px; flex-wrap: wrap; margin: 4px 0; }
+  .chip { background: rgba(39,54,64,0.08); color: #273640; font-size: 0.5rem; font-weight: 600; padding: 2px 6px; border-radius: 3px; }
+  .desc { font-size: 0.55rem; color: #5d7488; line-height: 1.5; }
+  .divider { height: 1px; background: #e8e2d8; }
+  .form-panel { background: #f9f7f4; padding: 8px 12px 12px; }
+  .form-title { font-size: 0.6rem; font-weight: 700; color: #273640; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 7px; }
+  .qty-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; }
+  .qty-label { font-size: 0.56rem; color: #5d7488; }
+  .qty-ctrl { display: flex; align-items: center; gap: 5px; }
+  .qty-btn { width: 16px; height: 16px; background: #273640; color: white; border-radius: 50%; font-size: 0.6rem; display: flex; align-items: center; justify-content: center; font-weight: 700; }
+  .qty-num { font-size: 0.7rem; font-weight: 600; }
+  .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 6px; }
+  .field { background: white; border: 1px solid #ddd8cf; border-radius: 4px; padding: 4px 6px; font-size: 0.52rem; color: #9ea8b1; }
+  .field.full { grid-column: 1/-1; }
+  .btn { background: #b98c5b; color: white; font-size: 0.6rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 8px; border-radius: 5px; text-align: center; }
+
+  /* ---- Option A: Centred narrow card ---- */
+  .oa-page { background: #1a2830; padding: 12px; display: flex; justify-content: center; }
+  .oa-card { width: 180px; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 8px 40px rgba(0,0,0,0.4); }
+  .oa-card .sq-img { width: 180px; height: 180px; }
+  .oa-card .topbar { padding: 6px 10px; }
+  .oa-card .ev-title { font-size: 0.8rem; }
+  .oa-details { padding: 8px 10px 6px; }
+  .oa-card .form-panel { padding: 8px 10px 10px; }
+  .oa-aside { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); display: flex; align-items: center; gap: 8px; }
+
+  /* ---- Option B: Two-column on desktop ---- */
+  .ob-page { background: #f4f1eb; }
+  .ob-topbar { background: #273640; padding: 6px 12px; display: flex; align-items: center; gap: 7px; }
+  .ob-brand { font-family: 'Playfair Display', serif; font-size: 0.65rem; color: #b98c5b; font-weight: 600; letter-spacing: 0.08em; }
+  .ob-layout { display: grid; grid-template-columns: 1fr 1fr; }
+  .ob-left { }
+  .ob-left .sq-img { width: 100%; aspect-ratio: 1/1; }
+  .ob-details { padding: 8px 10px; }
+  .ob-right { background: white; padding: 10px; display: flex; flex-direction: column; gap: 5px; }
+  .ob-right .form-title { margin-bottom: 5px; }
+  .ob-right .btn { margin-top: auto; }
+  .ob-note { font-size: 0.5rem; color: #9ea8b1; text-align: center; margin-top: 4px; }
+
+  .sel-bar { position: fixed; bottom: 20px; right: 20px; background: #273640; color: white; padding: 10px 18px; border-radius: 30px; font-size: 0.8rem; font-weight: 600; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
+  .sel-bar.show { opacity: 1; }
+</style>
+</head>
+<body>
+<h1>Desktop Treatment</h1>
+<p class="subtitle">Mobile is identical for both — this is how it looks on a wider screen</p>
+<div class="note">📱 On mobile: both options show a full-width single column (Layout A). This only affects screens wider than ~640px.</div>
+
+<div class="options-row">
+
+  <!-- Option A: Centred card on dark bg -->
+  <div class="opt-wrap" data-choice="a" onclick="toggleSelect(this)">
+    <div class="opt-label">
+      <span>A — Centred card on branded background</span>
+      <span class="rec">⭐ Recommended</span>
+    </div>
+    <div class="oa-page">
+      <div class="oa-card">
+        <div class="topbar">
+          <div class="logo-mark">B</div>
+          <div class="brand">Barons Pubs</div>
+        </div>
+        <div class="sq-img" style="width:100%;aspect-ratio:1/1"><span class="sq-img-label">Event Image</span></div>
+        <div class="oa-details">
+          <div class="ev-title">Jazz &amp; Soul Night</div>
+          <div class="chips">
+            <span class="chip">📅 Fri 20 Mar</span>
+            <span class="chip">🕗 7:00pm</span>
+            <span class="chip">📍 The Anchor</span>
+          </div>
+          <div class="desc">An unmissable evening of live jazz and soul with local artists and a late-night DJ finish.</div>
+        </div>
+        <div class="divider"></div>
+        <div class="form-panel">
+          <div class="form-title">Reserve Your Seats</div>
+          <div class="qty-row">
+            <span class="qty-label">How many seats?</span>
+            <div class="qty-ctrl">
+              <div class="qty-btn">−</div>
+              <div class="qty-num">2</div>
+              <div class="qty-btn">+</div>
+            </div>
+          </div>
+          <div class="fields">
+            <div class="field">First name *</div>
+            <div class="field">Last name</div>
+            <div class="field full">Mobile *</div>
+            <div class="field full">Email (optional)</div>
+          </div>
+          <div class="btn">Book Now — Free Entry</div>
+        </div>
+      </div>
+    </div>
+    <div style="padding:10px 14px;background:white;border-top:1px solid #e8e2d8">
+      <p style="font-size:0.72rem;color:#5d7488;line-height:1.5">The page content is constrained to ~480px and centred on a dark navy background. Clean, focused, feels like a proper event ticket page. Works great when shared as a link.</p>
+    </div>
+  </div>
+
+  <!-- Option B: Two column on desktop -->
+  <div class="opt-wrap" data-choice="b" onclick="toggleSelect(this)">
+    <div class="opt-label"><span>B — Two columns on desktop</span></div>
+    <div class="ob-page">
+      <div class="ob-topbar">
+        <div class="logo-mark" style="background:#b98c5b;color:#273640">B</div>
+        <div class="ob-brand">Barons Pubs</div>
+      </div>
+      <div class="ob-layout">
+        <div class="ob-left">
+          <div class="sq-img" style="width:100%;aspect-ratio:1/1"><span class="sq-img-label">Event Image</span></div>
+          <div class="ob-details">
+            <div class="ev-title">Jazz &amp; Soul Night</div>
+            <div class="chips" style="margin:4px 0">
+              <span class="chip">📅 Fri 20 Mar</span>
+              <span class="chip">🕗 7:00pm</span>
+              <span class="chip">📍 The Anchor</span>
+            </div>
+            <div class="desc">An unmissable evening of live jazz and soul with local artists and a late-night DJ finish. Doors open 6:30pm.</div>
+          </div>
+        </div>
+        <div class="ob-right">
+          <div class="form-title">Reserve Your Seats</div>
+          <div class="qty-row">
+            <span class="qty-label">How many seats?</span>
+            <div class="qty-ctrl">
+              <div class="qty-btn">−</div>
+              <div class="qty-num">2</div>
+              <div class="qty-btn">+</div>
+            </div>
+          </div>
+          <div class="fields">
+            <div class="field">First name *</div>
+            <div class="field">Last name</div>
+            <div class="field full">Mobile *</div>
+            <div class="field full">Email (optional)</div>
+          </div>
+          <div class="btn">Book Now — Free Entry</div>
+          <div class="ob-note">Free entry · pay on the night</div>
+        </div>
+      </div>
+    </div>
+    <div style="padding:10px 14px;background:white;border-top:1px solid #e8e2d8">
+      <p style="font-size:0.72rem;color:#5d7488;line-height:1.5">On desktop, image takes the left half and the booking form sits permanently on the right. More editorial feel, keeps the form visible without scrolling.</p>
+    </div>
+  </div>
+
+</div>
+
+<div class="sel-bar" id="sel">Selected</div>
+<script>
+function toggleSelect(el) {
+  document.querySelectorAll('.opt-wrap').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  const s = document.getElementById('sel');
+  s.textContent = 'Selected: Option ' + el.dataset.choice.toUpperCase();
+  s.classList.add('show');
+  setTimeout(() => s.classList.remove('show'), 2000);
+  if (window.recordChoice) recordChoice(el.dataset.choice, el.querySelector('.opt-label span').textContent);
+}
+</script>
+</body>
+</html>
