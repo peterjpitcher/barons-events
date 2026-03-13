@@ -14,6 +14,7 @@ const {
   mockRevalidatePath,
   mockLogAuthEvent,
   mockHashEmailForAudit,
+  mockGetUserById,
   state
 } = vi.hoisted(() => {
   const INVITE_ACTION_LINK =
@@ -32,7 +33,11 @@ const {
       error: null as { status?: number; message: string } | null
     },
     upsertError: null as { message: string } | null,
-    sendInviteEmailResult: true as boolean
+    sendInviteEmailResult: true as boolean,
+    getUserByIdResult: {
+      data: { user: { email_confirmed_at: null as string | null } },
+      error: null as { message: string } | null
+    }
   };
 
   const mockGenerateLink = vi.fn().mockImplementation(() => Promise.resolve(state.generateLinkResult));
@@ -46,6 +51,7 @@ const {
   const mockRevalidatePath = vi.fn();
   const mockLogAuthEvent = vi.fn().mockResolvedValue(undefined);
   const mockHashEmailForAudit = vi.fn().mockResolvedValue("mock-email-hash-64-char-hex-aabbcc");
+  const mockGetUserById = vi.fn().mockImplementation(() => Promise.resolve(state.getUserByIdResult));
 
   return {
     mockGenerateLink,
@@ -56,6 +62,7 @@ const {
     mockRevalidatePath,
     mockLogAuthEvent,
     mockHashEmailForAudit,
+    mockGetUserById,
     state
   };
 });
@@ -67,7 +74,8 @@ vi.mock("@/lib/supabase/admin", () => ({
     auth: {
       admin: {
         generateLink: mockGenerateLink,
-        deleteUser: mockDeleteUser
+        deleteUser: mockDeleteUser,
+        getUserById: mockGetUserById
       }
     },
     from: vi.fn().mockReturnValue({ upsert: mockUpsert })
@@ -106,7 +114,7 @@ vi.mock("@/lib/users", () => ({
 
 // ─── Subject under test (imported after all mocks are declared) ──────────────
 
-import { inviteUserAction } from "@/actions/users";
+import { inviteUserAction, resendInviteAction } from "@/actions/users";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -289,5 +297,123 @@ describe("inviteUserAction", () => {
     expect(mockUpsert).toHaveBeenCalledOnce();
     const upsertPayload = mockUpsert.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(upsertPayload).toHaveProperty("role", "executive");
+  });
+});
+
+describe("resendInviteAction", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    state.generateLinkResult = {
+      data: {
+        user: { id: "new-user-uuid" },
+        properties: { action_link: "https://project.supabase.co/auth/v1/verify?token=abc123&type=invite&redirect_to=https://app.example.com/auth/confirm" }
+      },
+      error: null
+    };
+    state.getUserByIdResult = {
+      data: { user: { email_confirmed_at: null } },
+      error: null
+    };
+    state.sendInviteEmailResult = true;
+
+    mockGetCurrentUser.mockResolvedValue(PLANNER_USER);
+    mockGenerateLink.mockImplementation(() => Promise.resolve(state.generateLinkResult));
+    mockGetUserById.mockImplementation(() => Promise.resolve(state.getUserByIdResult));
+    mockSendInviteEmail.mockImplementation(() => Promise.resolve(state.sendInviteEmailResult));
+    mockLogAuthEvent.mockResolvedValue(undefined);
+    mockHashEmailForAudit.mockResolvedValue("mock-email-hash-64-char-hex-aabbcc");
+  });
+
+  // RFC 4122 v4 UUIDs for all resendInviteAction tests (Zod schema requires valid UUIDs)
+  const SOME_USER_UUID      = "a0000000-0000-4000-8000-000000000001";
+  const CONFIRMED_USER_UUID = "a0000000-0000-4000-8000-000000000002";
+  const PENDING_USER_UUID   = "a0000000-0000-4000-8000-000000000003";
+
+  // 1. Non-planner rejected
+  it("should return an error when the current user is not a central_planner", async () => {
+    mockGetCurrentUser.mockResolvedValue({ ...PLANNER_USER, role: "reviewer" });
+
+    const result = await resendInviteAction(
+      undefined,
+      createFormData({ userId: SOME_USER_UUID, email: "user@example.com", fullName: "Test User" })
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/only planners/i);
+    expect(mockGetUserById).not.toHaveBeenCalled();
+  });
+
+  // 2. Active user rejected
+  it("should return an error when the user has already confirmed their email", async () => {
+    state.getUserByIdResult = {
+      data: { user: { email_confirmed_at: "2026-01-01T00:00:00Z" } },
+      error: null
+    };
+    mockGetUserById.mockImplementation(() => Promise.resolve(state.getUserByIdResult));
+
+    const result = await resendInviteAction(
+      undefined,
+      createFormData({ userId: CONFIRMED_USER_UUID, email: "active@example.com", fullName: "" })
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/already accepted/i);
+    expect(mockGenerateLink).not.toHaveBeenCalled();
+  });
+
+  // 3. Happy path
+  it("should call generateLink, send invite email, log auth.invite.resent, and return success", async () => {
+    const result = await resendInviteAction(
+      undefined,
+      createFormData({ userId: PENDING_USER_UUID, email: "pending@example.com", fullName: "Pending User" })
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.message).toMatch(/invite resent/i);
+
+    expect(mockGetUserById).toHaveBeenCalledWith(PENDING_USER_UUID);
+    expect(mockGenerateLink).toHaveBeenCalledOnce();
+    expect(mockSendInviteEmail).toHaveBeenCalledOnce();
+    expect(mockSendInviteEmail).toHaveBeenCalledWith(
+      "pending@example.com",
+      expect.stringContaining("supabase.co"),
+      "Pending User"
+    );
+    expect(mockLogAuthEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ event: "auth.invite.resent" })
+    );
+  });
+
+  // 4. Email delivery failure
+  it("should return an error when Resend fails to deliver the resent invite email", async () => {
+    state.sendInviteEmailResult = false;
+    mockSendInviteEmail.mockResolvedValue(false);
+
+    const result = await resendInviteAction(
+      undefined,
+      createFormData({ userId: PENDING_USER_UUID, email: "noemail@example.com", fullName: "" })
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/email/i);
+  });
+
+  // 5. generateLink failure
+  it("should return an error when generateLink fails and should not call sendInviteEmail", async () => {
+    state.generateLinkResult = {
+      data: null,
+      error: { status: 500, message: "Internal server error" }
+    };
+    mockGenerateLink.mockImplementation(() => Promise.resolve(state.generateLinkResult));
+
+    const result = await resendInviteAction(
+      undefined,
+      createFormData({ userId: PENDING_USER_UUID, email: "fail@example.com", fullName: "" })
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/invitation failed/i);
+    expect(mockSendInviteEmail).not.toHaveBeenCalled();
   });
 });
