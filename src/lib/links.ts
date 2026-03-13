@@ -31,7 +31,7 @@ export type CreateLinkInput = {
   destination: string;
   link_type:   LinkType;
   expires_at:  string | null;
-  created_by:  string;
+  created_by:  string | null; // null for system-generated links
 };
 
 export type UpdateLinkInput = {
