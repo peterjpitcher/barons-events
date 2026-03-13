@@ -3,6 +3,14 @@
     {
       "path": "/api/cron/refresh-inspiration",
       "schedule": "0 6 1 * *"
+    },
+    {
+      "path": "/api/cron/sms-reminders",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/sms-post-event",
+      "schedule": "0 10 * * *"
     }
   ]
 }
