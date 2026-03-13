@@ -51,7 +51,7 @@ export async function listUsersWithAuthData(): Promise<EnrichedUser[]> {
     const { data, error } = await adminClient.auth.admin.listUsers({ page, perPage: 1000 });
     if (error) throw new Error(`Could not fetch auth users: ${error.message}`);
     allAuthUsers.push(...data.users);
-    if (!data.nextPage) break; // null on last page; also guards undefined
+    if (data.nextPage === null) break; // Supabase sets nextPage to null on the last page
     page = data.nextPage;
   } while (true);
 
