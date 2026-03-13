@@ -34,3 +34,35 @@ export type ActionResult = {
   message?: string;
   fieldErrors?: FieldErrors;
 };
+
+/** Status of a customer booking. */
+export type BookingStatus = "confirmed" | "cancelled";
+
+/** A customer booking for an event. camelCase — convert from DB snake_case using fromDb(). */
+export interface EventBooking {
+  id: string;
+  eventId: string;
+  firstName: string;
+  lastName: string | null;
+  mobile: string;          // E.164
+  email: string | null;
+  ticketCount: number;
+  status: BookingStatus;
+  createdAt: Date;
+  smsConfirmationSentAt: Date | null;
+  smsReminderSentAt: Date | null;
+  smsPostEventSentAt: Date | null;
+}
+
+/** Booking settings embedded on an Event (from new DB columns). */
+export interface EventBookingSettings {
+  bookingEnabled: boolean;
+  totalCapacity: number | null;   // null = unlimited
+  maxTicketsPerBooking: number;
+  seoSlug: string | null;
+}
+
+/** Result from the create_booking Postgres RPC. */
+export type BookingRpcResult =
+  | { ok: true; bookingId: string }
+  | { ok: false; reason: "not_found" | "sold_out" };
