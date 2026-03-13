@@ -140,3 +140,33 @@ export function toLondonDateTimeInputValue(value?: string | null): string {
 
   return toInputString(londonPartsFromUtcMillis(parsed.getTime()));
 }
+
+/**
+ * Returns a human-readable relative time string for display (e.g. "3 days ago", "yesterday").
+ * Returns "Never signed in" when date is null.
+ * Value is computed at call time (SSR) — it does not live-update in the browser.
+ */
+export function formatRelativeTime(date: Date | null): string {
+  if (!date) return "Never signed in";
+
+  const rtf = new Intl.RelativeTimeFormat("en-GB", { numeric: "auto" });
+  const diffMs = date.getTime() - Date.now();
+  const absDiffMs = Math.abs(diffMs);
+
+  if (absDiffMs < 60_000) {
+    return rtf.format(Math.round(diffMs / 1000), "second");
+  }
+  if (absDiffMs < 3_600_000) {
+    return rtf.format(Math.round(diffMs / 60_000), "minute");
+  }
+  if (absDiffMs < 86_400_000) {
+    return rtf.format(Math.round(diffMs / 3_600_000), "hour");
+  }
+  if (absDiffMs < 2_592_000_000) {
+    return rtf.format(Math.round(diffMs / 86_400_000), "day");
+  }
+  if (absDiffMs < 31_536_000_000) {
+    return rtf.format(Math.round(diffMs / 2_592_000_000), "month");
+  }
+  return rtf.format(Math.round(diffMs / 31_536_000_000), "year");
+}
