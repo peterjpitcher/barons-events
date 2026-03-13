@@ -7,6 +7,7 @@ import { createSupabaseActionClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth";
 import { appendEventVersion, createEventDraft, recordApproval, softDeleteEvent, updateEventDraft, updateEventAssignee } from "@/lib/events";
+import { generateUniqueEventSlug } from "@/lib/bookings";
 import { cleanupOrphanArtists, parseArtistNames, syncEventArtists } from "@/lib/artists";
 import { eventDraftSchema, eventFormSchema } from "@/lib/validation";
 import { getFieldErrors } from "@/lib/form-errors";
@@ -1723,4 +1724,85 @@ export async function revertToDraftAction(
     console.error(error);
     return { success: false, message: "Could not revert event to draft." };
   }
+}
+
+
+const bookingSettingsSchema = z.object({
+  eventId: z.string().uuid("Invalid event ID"),
+  bookingEnabled: z.boolean(),
+  totalCapacity: z.number().int().positive().nullable(),
+  maxTicketsPerBooking: z.number().int().min(1).max(50),
+});
+
+export type UpdateBookingSettingsInput = z.infer<typeof bookingSettingsSchema>;
+export type UpdateBookingSettingsResult = ActionResult & { seoSlug?: string | null };
+
+/**
+ * Save booking settings (booking_enabled, total_capacity, max_tickets_per_booking).
+ * Auto-generates seo_slug when booking is first enabled and no slug exists yet.
+ * Only central_planner and venue_manager (for their own venue's events) may call this.
+ */
+export async function updateBookingSettingsAction(
+  input: UpdateBookingSettingsInput,
+): Promise<UpdateBookingSettingsResult> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  if (user.role !== "central_planner" && user.role !== "venue_manager") {
+    return { success: false, message: "You don't have permission to update booking settings." };
+  }
+
+  const parsed = bookingSettingsSchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, message: "Invalid booking settings." };
+  }
+
+  const { eventId, bookingEnabled, totalCapacity, maxTicketsPerBooking } = parsed.data;
+
+  const supabase = createSupabaseAdminClient();
+
+  // Fetch the current event to check permissions and existing slug
+  const { data: event, error: fetchError } = await supabase
+    .from("events")
+    .select("id, title, start_at, venue_id, seo_slug")
+    .eq("id", eventId)
+    .maybeSingle();
+
+  if (fetchError || !event) {
+    return { success: false, message: "Event not found." };
+  }
+
+  // Venue managers can only modify events at their own venue
+  if (user.role === "venue_manager" && event.venue_id !== user.venueId) {
+    return { success: false, message: "You can only manage booking settings for your own venue's events." };
+  }
+
+  // Auto-generate slug when enabling bookings for the first time
+  let seoSlug: string | null = event.seo_slug ?? null;
+  if (bookingEnabled && !seoSlug) {
+    try {
+      seoSlug = await generateUniqueEventSlug(event.title, new Date(event.start_at));
+    } catch (err) {
+      console.error("Failed to generate event slug:", err);
+      return { success: false, message: "Could not generate booking page URL. Please try again." };
+    }
+  }
+
+  const { error: updateError } = await supabase
+    .from("events")
+    .update({
+      booking_enabled: bookingEnabled,
+      total_capacity: totalCapacity,
+      max_tickets_per_booking: maxTicketsPerBooking,
+      seo_slug: seoSlug,
+    })
+    .eq("id", eventId);
+
+  if (updateError) {
+    console.error("updateBookingSettings failed:", updateError);
+    return { success: false, message: "Could not save booking settings." };
+  }
+
+  revalidatePath(`/events/${eventId}`);
+  return { success: true, message: "Booking settings saved.", seoSlug };
 }
