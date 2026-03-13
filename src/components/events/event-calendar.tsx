@@ -74,7 +74,7 @@ function EventListItem({
         <img
           src={imageUrl}
           alt=""
-          className="w-full h-20 object-cover"
+          className="w-full aspect-square object-cover"
           aria-hidden="true"
         />
       )}
