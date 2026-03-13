@@ -59,6 +59,7 @@ type AuthEventType =
   | "auth.password_updated"
   | "auth.invite.sent"
   | "auth.invite.accepted"
+  | "auth.invite.resent"
   | "auth.role.changed"
   | "auth.session.expired.idle"
   | "auth.session.expired.absolute";
