@@ -103,7 +103,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const imageUrl = buildImageUrl(event.event_image_path);
 
   return {
-    title: `${title} — Barons Pubs`,
+    title: `${title} — Barons Pub Company`,
     description: event.public_teaser ?? undefined,
     openGraph: {
       title,
@@ -180,7 +180,7 @@ export default async function EventLandingPage({ params }: PageProps) {
           {/* Top bar */}
           <div className="bg-[#273640] px-4 py-3 flex items-center gap-3 border-b border-white/10">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.png" alt="Barons Pubs" className="h-8 w-auto flex-shrink-0" />
+            <img src="/logo.png" alt="Barons Pub Company" className="h-8 w-auto flex-shrink-0" />
           </div>
 
           {/* Event image — mobile only */}
