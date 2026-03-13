@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { createBookingAction } from "@/actions/bookings";
 import type { CreateBookingInput } from "@/actions/bookings";
+import { MARKETING_CONSENT_WORDING } from "@/lib/booking-consent";
 
 interface BookingFormProps {
   eventId: string;
@@ -20,6 +21,7 @@ export function BookingForm({ eventId, maxTickets, isSoldOut }: BookingFormProps
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [bookedMobile, setBookedMobile] = useState("");
+  const [marketingOptIn, setMarketingOptIn] = useState(false);
 
   if (isSoldOut) {
     return (
@@ -54,6 +56,7 @@ export function BookingForm({ eventId, maxTickets, isSoldOut }: BookingFormProps
       mobile: mobile.trim(),
       email: email.trim() || null,
       ticketCount,
+      marketingOptIn,
     };
 
     const result = await createBookingAction(input);
@@ -173,6 +176,21 @@ export function BookingForm({ eventId, maxTickets, isSoldOut }: BookingFormProps
             className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm
                        placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-[#273640]"
           />
+        </div>
+
+        {/* Marketing opt-in — unchecked by default (UK GDPR: pre-ticked boxes not permitted) */}
+        <div className="flex items-start gap-3 rounded-md border border-[#93ab97] bg-[#f5f8f5] p-3">
+          <input
+            id="marketingOptIn"
+            type="checkbox"
+            checked={marketingOptIn}
+            onChange={(e) => setMarketingOptIn(e.target.checked)}
+            className="mt-0.5 h-4 w-4 flex-shrink-0 rounded border-[#cbd5db] text-[#273640]
+                       focus:ring-2 focus:ring-[#273640] focus:ring-offset-1"
+          />
+          <label htmlFor="marketingOptIn" className="text-[0.68rem] leading-relaxed text-[#273640]">
+            {MARKETING_CONSENT_WORDING}
+          </label>
         </div>
 
         {/* Error message */}
