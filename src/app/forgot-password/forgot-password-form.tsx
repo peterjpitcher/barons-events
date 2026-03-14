@@ -39,6 +39,7 @@ export function ForgotPasswordForm({ nonce }: { nonce?: string }) {
       <div
         className="cf-turnstile"
         data-sitekey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY}
+        data-action="password_reset"
       />
       <SubmitButton label="Send reset link" pendingLabel="Sending link..." />
       <p className="text-sm text-muted">
@@ -49,7 +50,7 @@ export function ForgotPasswordForm({ nonce }: { nonce?: string }) {
         .
       </p>
     </form>
-    <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js" strategy="lazyOnload" nonce={nonce} />
+    <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js" strategy="afterInteractive" nonce={nonce} />
     </>
   );
 }

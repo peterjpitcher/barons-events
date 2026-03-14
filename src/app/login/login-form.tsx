@@ -61,10 +61,11 @@ export function LoginForm({ redirectTo, nonce }: LoginFormProps) {
       <div
         className="cf-turnstile"
         data-sitekey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY}
+        data-action="login"
       />
       <SubmitButton label="Sign in" />
     </form>
-    <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js" strategy="lazyOnload" nonce={nonce} />
+    <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js" strategy="afterInteractive" nonce={nonce} />
     </>
   );
 }

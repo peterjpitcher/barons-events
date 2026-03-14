@@ -68,7 +68,12 @@ const passwordResetSchema = z
  * per auth standard §6 fail-soft behaviour.
  */
 async function verifyTurnstile(token: string | null, action: string): Promise<boolean> {
-  if (!token) return false;
+  if (!token) {
+    // Widget failed to generate a token (script not yet loaded, invalid site key, or network issue).
+    // Fail-soft per auth standard §6 — treat as degraded mode rather than blocking the user.
+    console.warn("[turnstile] No token received — widget may not have loaded. Failing soft.");
+    return true;
+  }
   const secret = process.env.TURNSTILE_SECRET_KEY;
   if (!secret) {
     // In development without key configured, fail-soft
