@@ -21,7 +21,7 @@ export default async function LinksPage() {
           <code className="rounded bg-[var(--color-muted-surface)] px-1.5 py-0.5 text-xs font-mono">
             l.baronspubs.com/[code]
           </code>{" "}
-          and redirect via the Cloudflare Worker. Click counts update automatically on each visit.
+          and redirect automatically. Click counts update on each visit.
         </p>
       </header>
 

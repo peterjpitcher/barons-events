@@ -1,7 +1,7 @@
 -- ── Short links ──────────────────────────────────────────────────────────────
 --
 -- Stores baronspubs.com/l/[8-hex-char] short links.
--- Click counts are incremented by the Cloudflare Worker via the
+-- Click counts are incremented by the Next.js route handler via the
 -- increment_link_clicks() RPC (service_role only).
 
 create table public.short_links (
@@ -46,7 +46,7 @@ create policy "Central planners can manage short links"
 
 -- ── increment_link_clicks RPC ─────────────────────────────────────────────────
 --
--- Called by the Cloudflare redirect Worker (service_role key) after each
+-- Called by the Next.js route handler (service_role key) after each
 -- successful redirect. Atomically increments the counter and updates updated_at.
 
 create or replace function public.increment_link_clicks(p_code text)

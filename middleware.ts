@@ -4,7 +4,7 @@ import { createSession, validateSession, renewSession, SESSION_COOKIE_NAME, make
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
-const SHORT_LINK_HOST = process.env.SHORT_LINK_HOST ?? "l.baronspubs.com";
+import { SHORT_LINK_HOST } from "@/lib/short-link-config";
 
 /**
  * Public paths: bypass auth gate. Each entry documented with its reason.
@@ -114,6 +114,10 @@ export async function middleware(req: NextRequest) {
   // Must run before the public path check and auth gate.
   const host = req.headers.get("host");
   if (host === SHORT_LINK_HOST) {
+    // Root path — redirect to main site
+    if (pathname === "/") {
+      return NextResponse.redirect("https://baronspubs.com");
+    }
     // 8-hex-char paths are existing short links — let them fall through to [code] handler
     const isShortLink = /^\/[0-9a-f]{8}$/.test(pathname);
     // Static assets (_next, images, fonts, etc.) must not be rewritten
@@ -124,7 +128,16 @@ export async function middleware(req: NextRequest) {
       rewriteUrl.pathname = `/l${pathname}`;
       return NextResponse.rewrite(rewriteUrl);
     }
-    // Short link paths (8-hex-char) and static assets continue through middleware normally
+    if (isShortLink) {
+      // Short links are public — skip auth gate entirely and let [code]/route.ts handle the redirect.
+      const nonce = generateNonce();
+      const shortLinkRes = NextResponse.next({
+        request: { headers: new Headers(req.headers) }
+      });
+      applySecurityHeaders(shortLinkRes, nonce);
+      return shortLinkRes;
+    }
+    // Static assets continue through middleware normally
   }
 
   // Generate a per-request CSP nonce and forward it to the app via a request header.

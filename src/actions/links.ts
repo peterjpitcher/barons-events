@@ -59,7 +59,7 @@ async function ensurePlanner(): Promise<
 
 const createLinkSchema = z.object({
   name:        z.string().min(2, "Name must be at least 2 characters").max(NAME_MAX),
-  destination: z.string().url("Must be a valid URL including https://").max(URL_MAX),
+  destination: z.string().url("Must be a valid URL").startsWith("https://", "URL must start with https://").max(URL_MAX),
   link_type:   LINK_TYPE_ENUM,
   expires_at:  z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD").nullable().optional(),
 });
@@ -67,7 +67,7 @@ const createLinkSchema = z.object({
 const updateLinkSchema = z.object({
   id:          z.string().uuid(),
   name:        z.string().min(2, "Name must be at least 2 characters").max(NAME_MAX),
-  destination: z.string().url("Must be a valid URL including https://").max(URL_MAX),
+  destination: z.string().url("Must be a valid URL").startsWith("https://", "URL must start with https://").max(URL_MAX),
   link_type:   LINK_TYPE_ENUM,
   expires_at:  z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD").nullable().optional(),
 });

@@ -173,10 +173,10 @@ export function LinkRow({
           </div>
         ) : (
           <div className="flex items-center gap-1 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-            <UtmDropdown link={link} mode="share" disabled={isPending} onNewVariant={onNewVariant} />
-            <UtmDropdown link={link} mode="print" disabled={isPending} onNewVariant={onNewVariant} />
             {canEdit && (
               <>
+                <UtmDropdown link={link} mode="share" disabled={isPending} onNewVariant={onNewVariant} />
+                <UtmDropdown link={link} mode="print" disabled={isPending} onNewVariant={onNewVariant} />
                 <button
                   type="button"
                   onClick={onEdit}
