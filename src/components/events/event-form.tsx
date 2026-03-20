@@ -1293,7 +1293,15 @@ export function EventForm({
   // ─── Modals ───────────────────────────────────────────────────────────────
 
   const artistModal = showArtistModal ? (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-[rgba(39,54,64,0.55)] p-4">
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-[rgba(39,54,64,0.55)] p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Select artists"
+      tabIndex={-1}
+      onKeyDown={(e) => { if (e.key === "Escape") setShowArtistModal(false); }}
+      ref={(el) => { if (el) el.focus(); }}
+    >
       <div className="w-full max-w-5xl rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-white shadow-soft">
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--color-border)] p-5">
           <div className="space-y-1">
@@ -1499,7 +1507,15 @@ export function EventForm({
   ) : null;
 
   const termsModal = showTermsModal ? (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(39,54,64,0.5)] p-4">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(39,54,64,0.5)] p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Generate terms and conditions"
+      tabIndex={-1}
+      onKeyDown={(e) => { if (e.key === "Escape") setShowTermsModal(false); }}
+      ref={(el) => { if (el) el.focus(); }}
+    >
       <div className="w-full max-w-2xl rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-white shadow-soft">
         <div className="flex items-start justify-between border-b border-[var(--color-border)] p-5">
           <div>
@@ -1594,6 +1610,11 @@ export function EventForm({
           <div className="min-w-0">
             <form ref={formRef} action={draftAction} noValidate onSubmit={handleSubmit} onChange={() => setIsDirty(true)}>
               <input type="hidden" name="eventId" defaultValue={defaultValues?.id} />
+              {activeState && !activeState.success && activeState.message && !activeState.fieldErrors && (
+                <div className="mb-4 rounded-lg border border-[var(--color-danger)] bg-[var(--color-danger)]/10 p-4 text-sm text-[var(--color-danger)]" role="alert">
+                  <strong>Something went wrong:</strong> {activeState.message}
+                </div>
+              )}
               {/* Proxy buttons — sr-only, clicked programmatically from sidebar */}
               <button
                 ref={proxyDraftRef}
@@ -1712,7 +1733,7 @@ export function EventForm({
         <ConfirmDialog
           open={autoApproveConfirmOpen}
           title="Auto-approve this event?"
-          description="Submitting as a central planner will approve this event instantly."
+          description={`Submitting "${titleValue || "this event"}" as a central planner will approve it instantly. Continue?`}
           confirmLabel="Submit & Approve"
           onConfirm={handleAutoApproveConfirm}
           onCancel={() => setAutoApproveConfirmOpen(false)}
@@ -1729,6 +1750,11 @@ export function EventForm({
         <form action={draftAction} className="space-y-6" noValidate onSubmit={handleSubmit} onChange={() => setIsDirty(true)}>
           <input type="hidden" name="eventId" defaultValue={defaultValues?.id} />
           <button ref={legacySubmitRef} type="submit" formAction={submitAction} data-intent="submit" className="sr-only" aria-hidden tabIndex={-1} />
+          {activeState && !activeState.success && activeState.message && !activeState.fieldErrors && (
+            <div className="rounded-lg border border-[var(--color-danger)] bg-[var(--color-danger)]/10 p-4 text-sm text-[var(--color-danger)]" role="alert">
+              <strong>Something went wrong:</strong> {activeState.message}
+            </div>
+          )}
           <fieldset disabled={isPending} className="space-y-6 disabled:opacity-60">
 
           <Card>
@@ -1912,7 +1938,7 @@ export function EventForm({
         <ConfirmDialog
           open={autoApproveConfirmOpen}
           title="Auto-approve this event?"
-          description="Submitting as a central planner will approve this event instantly."
+          description={`Submitting "${titleValue || "this event"}" as a central planner will approve it instantly. Continue?`}
           confirmLabel="Submit & Approve"
           onConfirm={handleAutoApproveConfirm}
           onCancel={() => setAutoApproveConfirmOpen(false)}
