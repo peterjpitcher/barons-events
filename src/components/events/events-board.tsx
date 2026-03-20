@@ -705,7 +705,7 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
           createScopeVenueId={createScopeVenueId}
         />
       ) : (
-        <EventsListTable events={listEvents} />
+        <EventsListTable events={listEvents} allFilteredCount={filteredEvents.length} hidePastEvents={hidePastEvents} />
       )}
     </div>
   );
@@ -728,7 +728,7 @@ function StatusLegend({
   );
 }
 
-function EventsListTable({ events }: { events: EventWithDates[] }) {
+function EventsListTable({ events, allFilteredCount, hidePastEvents }: { events: EventWithDates[]; allFilteredCount: number; hidePastEvents: boolean }) {
   const [sortBy, setSortBy] = useState<{ key: ListSortKey; direction: ListSortDirection }>({
     key: "date",
     direction: "asc"
@@ -851,7 +851,9 @@ function EventsListTable({ events }: { events: EventWithDates[] }) {
           {events.length === 0 ? (
             <tr>
               <td colSpan={7} className="px-6 py-10 text-center text-sm text-subtle">
-                No events match this filter.
+                {hidePastEvents && allFilteredCount > 0
+                  ? "All events are in the past. Toggle \u2018Past hidden\u2019 to show them."
+                  : "No events match your current filters."}
               </td>
             </tr>
           ) : (

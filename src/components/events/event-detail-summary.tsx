@@ -70,7 +70,7 @@ export function EventDetailSummary({ event }: EventDetailSummaryProps) {
         .map((item) => item.replace(/^\s*[-*•]\s*/, "").trim())
         .filter(Boolean)
     : [];
-  const artistNames = event.artists
+  const artistNames = (Array.isArray(event.artists) ? event.artists : [])
     .map((entry) => entry.artist?.name?.trim())
     .filter((name): name is string => Boolean(name && name.length));
   const eventImageUrl = buildEventImageUrl(event.event_image_path);

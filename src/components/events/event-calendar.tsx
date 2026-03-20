@@ -59,7 +59,10 @@ function EventListItem({
     const path = event.event_image_path;
     if (!path) return null;
     const base = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/\/+$/, "");
-    if (!base) return null;
+    if (!base) {
+      console.warn("[event-calendar] NEXT_PUBLIC_SUPABASE_URL is not set — event images will not load");
+      return null;
+    }
     const encoded = path.split("/").map(encodeURIComponent).join("/");
     return `${base}/storage/v1/object/public/event-images/${encoded}`;
   })();
