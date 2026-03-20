@@ -6,6 +6,7 @@ import { z } from "zod";
 import { createSupabaseActionClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth";
+import { canManageEvents, canReviewEvents } from "@/lib/roles";
 import { appendEventVersion, createEventDraft, recordApproval, softDeleteEvent, updateEventDraft, updateEventAssignee } from "@/lib/events";
 import { generateUniqueEventSlug } from "@/lib/bookings";
 import { cleanupOrphanArtists, parseArtistNames, syncEventArtists } from "@/lib/artists";
@@ -504,7 +505,8 @@ async function autoApproveEvent(params: {
   actorId: string;
   previousStatus: string | null;
   previousAssignee: string | null;
-}) {
+}): Promise<{ warnings: string[] }> {
+  const warnings: string[] = [];
   const supabase = await createSupabaseActionClient();
   const nowIso = new Date().toISOString();
 
@@ -516,6 +518,7 @@ async function autoApproveEvent(params: {
   const websiteCopyPayload = generatedWebsiteCopy ? buildWebsiteCopyUpdatePayload(generatedWebsiteCopy) : null;
   if (!generatedWebsiteCopy) {
     console.warn("Auto-approval continuing without AI website copy.");
+    warnings.push("Website copy could not be generated automatically");
   }
 
   await updateEventWithFallback({
@@ -581,6 +584,8 @@ async function autoApproveEvent(params: {
   }
 
   await appendEventVersion(params.eventId, params.actorId, versionPayload);
+
+  return { warnings };
 }
 
 export async function saveEventDraftAction(_: ActionResult | undefined, formData: FormData): Promise<ActionResult> {
@@ -588,7 +593,7 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
   if (!user) {
     redirect("/login");
   }
-  if (user.role !== "central_planner" && user.role !== "venue_manager") {
+  if (!canManageEvents(user.role)) {
     return { success: false, message: "You don't have permission to save events." };
   }
 
@@ -876,8 +881,9 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
     if (error instanceof Error && error.message === "NEXT_REDIRECT") {
       throw error;
     }
-    console.error(error);
-    return { success: false, message: "Could not save the draft just now." };
+    const detail = error instanceof Error ? error.message : "Unknown error";
+    console.error("saveEventDraftAction failed:", detail, error);
+    return { success: false, message: `Could not save the draft: ${detail.slice(0, 120)}` };
   }
 }
 
@@ -889,7 +895,7 @@ export async function submitEventForReviewAction(
   if (!user) {
     redirect("/login");
   }
-  if (user.role !== "central_planner" && user.role !== "venue_manager") {
+  if (!canManageEvents(user.role)) {
     return { success: false, message: "You don't have permission to submit events." };
   }
   if (user.role === "venue_manager" && !user.venueId) {
@@ -1143,7 +1149,7 @@ export async function submitEventForReviewAction(
 
     if (user.role === "central_planner") {
 
-      await autoApproveEvent({
+      const approvalResult = await autoApproveEvent({
         eventId: targetEventId,
         actorId: user.id,
         previousStatus: (existingEvent.status as string | null) ?? null,
@@ -1155,7 +1161,10 @@ export async function submitEventForReviewAction(
       revalidatePath(`/events/${targetEventId}`);
       revalidatePath("/events");
       revalidatePath("/reviews");
-      return { success: true, message: "Event approved instantly." };
+      const warningText = approvalResult.warnings.length
+        ? ` Note: ${approvalResult.warnings.join("; ")}.`
+        : "";
+      return { success: true, message: `Event approved instantly.${warningText}` };
     }
 
     if (existingEvent?.created_by !== user.id) {
@@ -1243,8 +1252,9 @@ export async function submitEventForReviewAction(
     revalidatePath("/reviews");
     return { success: true, message: "Sent to review." };
   } catch (error) {
-    console.error(error);
-    return { success: false, message: "Could not submit right now." };
+    const detail = error instanceof Error ? error.message : "Unknown error";
+    console.error("submitEventForReviewAction failed:", detail, error);
+    return { success: false, message: `Could not submit right now: ${detail.slice(0, 120)}` };
   }
 }
 
@@ -1256,7 +1266,7 @@ export async function reviewerDecisionAction(
   if (!user) {
     redirect("/login");
   }
-  if (user.role !== "reviewer" && user.role !== "central_planner") {
+  if (!canReviewEvents(user.role)) {
     return { success: false, message: "Only reviewers or planners can record decisions." };
   }
 
@@ -1406,8 +1416,9 @@ export async function reviewerDecisionAction(
       message: websiteCopyPayload ? "Decision recorded and website copy generated." : "Decision recorded."
     };
   } catch (error) {
-    console.error("reviewerDecisionAction failed:", error);
-    return { success: false, message: "Could not save the decision." };
+    const detail = error instanceof Error ? error.message : "Unknown error";
+    console.error("reviewerDecisionAction failed:", detail, error);
+    return { success: false, message: `Could not save the decision: ${detail.slice(0, 120)}` };
   }
 }
 
@@ -1420,7 +1431,7 @@ export async function generateWebsiteCopyAction(
     redirect("/login");
   }
 
-  if (user.role !== "reviewer" && user.role !== "central_planner") {
+  if (!canReviewEvents(user.role)) {
     return { success: false, message: "Only reviewers or planners can generate website copy." };
   }
 
@@ -1465,8 +1476,9 @@ export async function generateWebsiteCopyAction(
       values: toWebsiteCopyValues(generated)
     };
   } catch (error) {
-    console.error(error);
-    return { success: false, message: "Could not generate website copy right now." };
+    const detail = error instanceof Error ? error.message : "Unknown error";
+    console.error("generateWebsiteCopyAction failed:", detail, error);
+    return { success: false, message: `Could not generate website copy right now: ${detail.slice(0, 120)}` };
   }
 }
 
@@ -1479,7 +1491,7 @@ export async function generateTermsAndConditionsAction(
     redirect("/login");
   }
 
-  if (user.role !== "central_planner" && user.role !== "venue_manager") {
+  if (!canManageEvents(user.role)) {
     return { success: false, message: "Only planners or venue managers can generate terms." };
   }
 
@@ -1524,8 +1536,9 @@ export async function generateTermsAndConditionsAction(
       terms
     };
   } catch (error) {
-    console.error(error);
-    return { success: false, message: "Could not generate terms right now." };
+    const detail = error instanceof Error ? error.message : "Unknown error";
+    console.error("generateTermsAndConditionsAction failed:", detail, error);
+    return { success: false, message: `Could not generate terms right now: ${detail.slice(0, 120)}` };
   }
 }
 
@@ -1581,8 +1594,9 @@ export async function updateAssigneeAction(formData: FormData) {
     revalidatePath("/reviews");
     return { success: true, message: "Assignee updated." };
   } catch (error) {
-    console.error(error);
-    return { success: false, message: "Could not update assignee." };
+    const detail = error instanceof Error ? error.message : "Unknown error";
+    console.error("updateAssigneeAction failed:", detail, error);
+    return { success: false, message: `Could not update assignee: ${detail.slice(0, 120)}` };
   }
 }
 
@@ -1591,7 +1605,7 @@ export async function deleteEventAction(_: ActionResult | undefined, formData: F
   if (!user) {
     redirect("/login");
   }
-  if (user.role !== "central_planner" && user.role !== "venue_manager") {
+  if (!canManageEvents(user.role)) {
     return { success: false, message: "You don't have permission to delete events." };
   }
 
@@ -1646,8 +1660,9 @@ export async function deleteEventAction(_: ActionResult | undefined, formData: F
     if (error instanceof Error && error.message === "NEXT_REDIRECT") {
       throw error;
     }
-    console.error(error);
-    return { success: false, message: "Could not delete the event." };
+    const detail = error instanceof Error ? error.message : "Unknown error";
+    console.error("deleteEventAction failed:", detail, error);
+    return { success: false, message: `Could not delete the event: ${detail.slice(0, 120)}` };
   }
 }
 
@@ -1718,11 +1733,9 @@ export async function revertToDraftAction(
 
     return { success: true, message: "Event reverted to draft." };
   } catch (error) {
-    if (error instanceof Error && error.message === "NEXT_REDIRECT") {
-      throw error;
-    }
-    console.error(error);
-    return { success: false, message: "Could not revert event to draft." };
+    const detail = error instanceof Error ? error.message : "Unknown error";
+    console.error("revertToDraftAction failed:", detail, error);
+    return { success: false, message: `Could not revert event to draft: ${detail.slice(0, 120)}` };
   }
 }
 
@@ -1748,7 +1761,7 @@ export async function updateBookingSettingsAction(
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  if (user.role !== "central_planner" && user.role !== "venue_manager") {
+  if (!canManageEvents(user.role)) {
     return { success: false, message: "You don't have permission to update booking settings." };
   }
 
