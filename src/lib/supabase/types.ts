@@ -104,6 +104,8 @@ export interface Database {
           submitted_at: string | null;
           cost_total: number | null;
           cost_details: string | null;
+          deleted_at: string | null;
+          deleted_by: string | null;
           created_at: string;
           updated_at: string;
         };

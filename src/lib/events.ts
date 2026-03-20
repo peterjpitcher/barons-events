@@ -454,6 +454,7 @@ export async function createEventDraft(payload: {
       break;
     }
 
+    console.warn(`[schema-drift] Column "${missingColumn}" not found in events table — stripped from payload`);
     delete insertPayload[missingColumn];
   }
 
@@ -585,6 +586,7 @@ export async function updateEventDraft(eventId: string, updates: Partial<EventRo
       break;
     }
 
+    console.warn(`[schema-drift] Column "${missingColumn}" not found in events table — stripped from payload`);
     delete updatePayload[missingColumn];
   }
 

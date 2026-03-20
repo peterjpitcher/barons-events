@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { z } from "zod";
 import { createSupabaseActionClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -873,7 +874,7 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
     revalidatePath("/events");
     redirect(`/events/${created.id}`);
   } catch (error) {
-    if (error instanceof Error && error.message === "NEXT_REDIRECT") {
+    if (isRedirectError(error)) {
       throw error;
     }
     console.error(error);
@@ -1518,6 +1519,17 @@ export async function generateTermsAndConditionsAction(
       return { success: false, message: "Could not generate terms right now." };
     }
 
+    const parsedEventId = z.string().uuid().safeParse(formData.get("eventId"));
+    if (parsedEventId.success) {
+      await recordAuditLogEntry({
+        entity: "event",
+        entityId: parsedEventId.data,
+        action: "event.terms_generated",
+        actorId: user.id,
+        meta: { changes: ["Terms and conditions"] }
+      });
+    }
+
     return {
       success: true,
       message: "Terms generated.",
@@ -1643,7 +1655,7 @@ export async function deleteEventAction(_: ActionResult | undefined, formData: F
     revalidatePath("/reviews");
     redirect("/events");
   } catch (error) {
-    if (error instanceof Error && error.message === "NEXT_REDIRECT") {
+    if (isRedirectError(error)) {
       throw error;
     }
     console.error(error);
@@ -1718,9 +1730,6 @@ export async function revertToDraftAction(
 
     return { success: true, message: "Event reverted to draft." };
   } catch (error) {
-    if (error instanceof Error && error.message === "NEXT_REDIRECT") {
-      throw error;
-    }
     console.error(error);
     return { success: false, message: "Could not revert event to draft." };
   }
