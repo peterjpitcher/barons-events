@@ -6,6 +6,8 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import dayjs from "dayjs";
 import advancedFormat from "dayjs/plugin/advancedFormat";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
 import { startOfIsoWeek, endOfIsoWeek, minutesAfterMidnight, endsInEarlyHoursNextDay } from "@/lib/utils/date";
 import {
   ArrowDown,
@@ -31,6 +33,8 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 
 dayjs.extend(advancedFormat);
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 type ViewMode = "month" | "matrix" | "list";
 type ListSortKey = "date" | "time" | "event" | "venue" | "artist" | "space" | "status";
@@ -106,8 +110,8 @@ function normaliseEvents(events: EventSummary[]): EventWithDates[] {
   return events
     .map((event) => ({
       ...event,
-      start: dayjs(event.start_at),
-      end: dayjs(event.end_at)
+      start: dayjs.utc(event.start_at).tz("Europe/London"),
+      end: dayjs.utc(event.end_at).tz("Europe/London")
     }))
     .sort((a, b) => a.start.valueOf() - b.start.valueOf());
 }
@@ -368,8 +372,19 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
   const listEvents = useMemo(() => {
     if (!hidePastEvents) return filteredEvents;
     const now = dayjs();
-    return filteredEvents.filter((event) => event.end.isAfter(now));
+    const oneDayAgo = now.subtract(24, "hours");
+    return filteredEvents.filter(
+      (event) =>
+        event.end.isAfter(now) ||
+        event.status === "draft" ||
+        dayjs.utc(event.created_at).isAfter(oneDayAgo)
+    );
   }, [filteredEvents, hidePastEvents]);
+
+  const hiddenPastCount = useMemo(() => {
+    if (!hidePastEvents) return 0;
+    return filteredEvents.length - listEvents.length;
+  }, [filteredEvents, listEvents, hidePastEvents]);
 
   const viewOptions: { mode: ViewMode; icon: typeof CalendarDays; label: string }[] = [
     { mode: "month", icon: CalendarDays, label: "Month" },

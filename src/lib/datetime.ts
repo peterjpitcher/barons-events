@@ -1,5 +1,7 @@
 const LONDON_TIME_ZONE = "Europe/London";
 
+export const DISPLAY_TIMEZONE = LONDON_TIME_ZONE;
+
 type DateTimeParts = {
   year: number;
   month: number;
