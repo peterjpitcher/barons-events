@@ -6,6 +6,7 @@ import { createArtistAction } from "@/actions/artists";
 import {
   generateTermsAndConditionsAction,
   generateWebsiteCopyAction,
+  generateWebsiteCopyFromFormAction,
   saveEventDraftAction,
   submitEventForReviewAction
 } from "@/actions/events";
@@ -156,7 +157,10 @@ export function EventForm({
 }: EventFormProps) {
   const [draftState, draftAction, isSavingPending] = useActionState(saveEventDraftAction, undefined);
   const [submitState, submitAction, isSubmittingPending] = useActionState(submitEventForReviewAction, undefined);
-  const [websiteCopyState, websiteCopyAction, isGeneratingPending] = useActionState(generateWebsiteCopyAction, undefined);
+  const [websiteCopyState, websiteCopyAction, isGeneratingEditPending] = useActionState(generateWebsiteCopyAction, undefined);
+  const [websiteCopyFormState, websiteCopyFormAction, isGeneratingFormPending] = useActionState(generateWebsiteCopyFromFormAction, undefined);
+  const isGeneratingPending = isGeneratingEditPending || isGeneratingFormPending;
+  const activeWebsiteCopyAction = mode === "create" ? websiteCopyFormAction : websiteCopyAction;
   const [termsState, termsAction] = useActionState(generateTermsAndConditionsAction, undefined);
   const [artistCreateState, createArtistFormAction] = useActionState(createArtistAction, undefined);
   const [intent, setIntent] = useState<"draft" | "submit" | "generate">("draft");
@@ -227,6 +231,16 @@ export function EventForm({
       }
     }
   }, [websiteCopyState]);
+
+  useEffect(() => {
+    if (websiteCopyFormState?.message) {
+      if (websiteCopyFormState.success) {
+        toast.success(websiteCopyFormState.message);
+      } else if (!websiteCopyFormState.fieldErrors) {
+        toast.error(websiteCopyFormState.message);
+      }
+    }
+  }, [websiteCopyFormState]);
 
   useEffect(() => {
     if (!termsState?.message) return;
@@ -372,6 +386,17 @@ export function EventForm({
     setSeoSlug(websiteCopyState.values.seoSlug ?? "");
   }, [websiteCopyState]);
 
+  useEffect(() => {
+    if (!websiteCopyFormState?.success || !websiteCopyFormState.values) return;
+    setPublicTitle(websiteCopyFormState.values.publicTitle ?? "");
+    setPublicTeaser(websiteCopyFormState.values.publicTeaser ?? "");
+    setPublicDescription(websiteCopyFormState.values.publicDescription ?? "");
+    setPublicHighlights((websiteCopyFormState.values.publicHighlights ?? []).join("\n"));
+    setSeoTitle(websiteCopyFormState.values.seoTitle ?? "");
+    setSeoDescription(websiteCopyFormState.values.seoDescription ?? "");
+    setSeoSlug(websiteCopyFormState.values.seoSlug ?? "");
+  }, [websiteCopyFormState]);
+
   const selectedVenue = useMemo(
     () => venues.find((venue) => venue.id === selectedVenueId) ?? venues.find((venue) => venue.id === defaultVenueId) ?? venues[0],
     [selectedVenueId, venues, defaultVenueId]
@@ -402,8 +427,9 @@ export function EventForm({
   const createArtistFieldErrors = artistCreateState?.fieldErrors ?? {};
 
   const typeOptions = eventTypes.length ? eventTypes : ["General"];
-  const canGenerateWebsiteCopy =
-    mode === "edit" && Boolean(defaultValues?.id) && ["approved", "completed"].includes(defaultValues?.status ?? "");
+  const canGenerateWebsiteCopy = mode === "edit"
+    ? Boolean(defaultValues?.id) && ["approved", "completed"].includes(defaultValues?.status ?? "")
+    : true;
 
   function handleVenueChange(value: string) {
     setSelectedVenueId(value);
@@ -1636,7 +1662,7 @@ export function EventForm({
               <button
                 ref={proxyGenerateRef}
                 type="submit"
-                formAction={websiteCopyAction}
+                formAction={activeWebsiteCopyAction}
                 data-intent="generate"
                 aria-hidden="true"
                 tabIndex={-1}
@@ -1707,7 +1733,7 @@ export function EventForm({
                           </p>
                         )}
                         <SubmitButton
-                          formAction={websiteCopyAction}
+                          formAction={activeWebsiteCopyAction}
                           label="Generate with AI"
                           pendingLabel="Generating..."
                           variant="secondary"
@@ -1885,7 +1911,7 @@ export function EventForm({
             </CardContent>
             <CardFooter className="justify-end">
               <SubmitButton
-                formAction={websiteCopyAction}
+                formAction={activeWebsiteCopyAction}
                 label="Generate with AI"
                 pendingLabel="Generating..."
                 variant="secondary"

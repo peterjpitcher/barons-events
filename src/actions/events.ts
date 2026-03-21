@@ -1483,6 +1483,102 @@ export async function generateWebsiteCopyAction(
   }
 }
 
+export async function generateWebsiteCopyFromFormAction(
+  _: WebsiteCopyActionResult | undefined,
+  formData: FormData
+): Promise<WebsiteCopyActionResult> {
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect("/login");
+  }
+
+  if (!canManageEvents(user.role)) {
+    return { success: false, message: "Only planners or venue managers can generate website copy." };
+  }
+
+  try {
+    const venueIdValue = formData.get("venueId");
+    const parsedVenueId = z.string().uuid().safeParse(typeof venueIdValue === "string" ? venueIdValue : "");
+
+    let venueName: string | null = null;
+    let venueAddress: string | null = null;
+    if (parsedVenueId.success) {
+      const supabase = await createSupabaseActionClient();
+      const { data: venue } = await supabase
+        .from("venues")
+        .select("name,address")
+        .eq("id", parsedVenueId.data)
+        .maybeSingle();
+      if (venue) {
+        venueName = typeof venue.name === "string" ? venue.name : null;
+        venueAddress = typeof venue.address === "string" ? venue.address : null;
+      }
+    }
+
+    const venueSpaces = normaliseVenueSpacesField(getFormValue(formData, "venueSpace"))
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+
+    const goalFocus = getFormValues(formData, "goalFocus")
+      .filter((value): value is string => typeof value === "string")
+      .map((value) => value.trim())
+      .filter(Boolean);
+
+    const artistNames = normaliseArtistNameList(getFormValue(formData, "artistNames"));
+    const bookingType = normaliseOptionalBookingTypeField(getFormValue(formData, "bookingType"));
+    const publicHighlights = normaliseOptionalHighlightsField(getFormValue(formData, "publicHighlights"));
+
+    const startAtRaw = normaliseOptionalTextField(getFormValue(formData, "startAt")) ?? "";
+    const endAtRaw = normaliseOptionalTextField(getFormValue(formData, "endAt")) ?? "";
+
+    const input = {
+      title: normaliseOptionalTextField(getFormValue(formData, "title")) ?? "",
+      eventType: normaliseOptionalTextField(getFormValue(formData, "eventType")) ?? "",
+      startAt: startAtRaw ? normaliseEventDateTimeForStorage(startAtRaw) : "",
+      endAt: endAtRaw ? normaliseEventDateTimeForStorage(endAtRaw) : "",
+      artistNames,
+      venueName,
+      venueAddress,
+      venueSpaces,
+      goalFocus,
+      expectedHeadcount: normaliseOptionalNumberField(getFormValue(formData, "expectedHeadcount")) ?? null,
+      wetPromo: normaliseOptionalTextField(getFormValue(formData, "wetPromo")) ?? null,
+      foodPromo: normaliseOptionalTextField(getFormValue(formData, "foodPromo")) ?? null,
+      costTotal: normaliseOptionalNumberField(getFormValue(formData, "costTotal")) ?? null,
+      costDetails: normaliseOptionalTextField(getFormValue(formData, "costDetails")) ?? null,
+      bookingType,
+      ticketPrice: normaliseOptionalNumberField(getFormValue(formData, "ticketPrice")) ?? null,
+      checkInCutoffMinutes: normaliseOptionalIntegerField(getFormValue(formData, "checkInCutoffMinutes")) ?? null,
+      agePolicy: normaliseOptionalTextField(getFormValue(formData, "agePolicy")) ?? null,
+      accessibilityNotes: normaliseOptionalTextField(getFormValue(formData, "accessibilityNotes")) ?? null,
+      cancellationWindowHours: normaliseOptionalIntegerField(getFormValue(formData, "cancellationWindowHours")) ?? null,
+      termsAndConditions: normaliseOptionalTextField(getFormValue(formData, "termsAndConditions")) ?? null,
+      bookingUrl: normaliseOptionalTextField(getFormValue(formData, "bookingUrl")) ?? null,
+      details: normaliseOptionalTextField(getFormValue(formData, "notes")) ?? null,
+      existingPublicTitle: normaliseOptionalTextField(getFormValue(formData, "publicTitle")) ?? null,
+      existingPublicTeaser: normaliseOptionalTextField(getFormValue(formData, "publicTeaser")) ?? null,
+      existingPublicDescription: normaliseOptionalTextField(getFormValue(formData, "publicDescription")) ?? null,
+      existingPublicHighlights: publicHighlights
+    };
+
+    const generated = await generateWebsiteCopy(input);
+    if (!generated) {
+      return { success: false, message: "Could not generate website copy. Check the AI service credentials and try again." };
+    }
+
+    return {
+      success: true,
+      message: "Website copy generated.",
+      values: toWebsiteCopyValues(generated)
+    };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "Unknown error";
+    console.error("generateWebsiteCopyFromFormAction failed:", detail, error);
+    return { success: false, message: `Could not generate website copy right now: ${detail.slice(0, 120)}` };
+  }
+}
+
 export async function generateTermsAndConditionsAction(
   _: TermsActionResult | undefined,
   formData: FormData
