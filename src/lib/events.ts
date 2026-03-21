@@ -602,6 +602,7 @@ export async function updateEventDraft(eventId: string, updates: Partial<EventRo
   }
 
   // Post-save verification of critical fields
+  const DATE_FIELDS = new Set(["start_at", "end_at"]);
   const criticalChecks: Array<[string, unknown]> = [
     ["title", updates.title],
     ["event_type", updates.event_type],
@@ -613,7 +614,16 @@ export async function updateEventDraft(eventId: string, updates: Partial<EventRo
   ];
   const mismatches: string[] = [];
   for (const [field, expected] of criticalChecks) {
-    if (expected !== undefined && (data as Record<string, unknown>)[field] !== expected) {
+    if (expected === undefined) continue;
+    const actual = (data as Record<string, unknown>)[field];
+    if (DATE_FIELDS.has(field)) {
+      // Compare dates by value — Supabase may return a different string format
+      const expectedMs = new Date(expected as string).getTime();
+      const actualMs = new Date(actual as string).getTime();
+      if (Number.isFinite(expectedMs) && Number.isFinite(actualMs) && expectedMs !== actualMs) {
+        mismatches.push(field);
+      }
+    } else if (actual !== expected) {
       mismatches.push(field);
     }
   }
