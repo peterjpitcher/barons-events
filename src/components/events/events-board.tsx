@@ -591,6 +591,11 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
                 <Clock className="mr-1 h-4 w-4" />
                 {hidePastEvents ? "Past hidden" : "Show past"}
               </Button>
+              {hiddenPastCount > 0 && (
+                <span className="text-xs text-[var(--color-text-muted)]">
+                  {hiddenPastCount} past event{hiddenPastCount !== 1 ? "s" : ""} hidden
+                </span>
+              )}
               <div className="rounded-full border border-[var(--color-border)] bg-white px-3 py-2 text-sm text-subtle">
                 {listEvents.length} event{listEvents.length === 1 ? "" : "s"}
               </div>
