@@ -684,36 +684,53 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
   let redirectUrl: string | null = null;
   try {
     if (values.eventId) {
-      const { event: updated, strippedColumns, mismatches } = await updateEventDraft(values.eventId, {
-        venue_id: values.venueId,
-        title: values.title,
-        event_type: values.eventType,
-        start_at: startAtIso,
-        end_at: endAtIso,
-        venue_space: values.venueSpace,
-        expected_headcount: values.expectedHeadcount ?? null,
-        wet_promo: values.wetPromo ?? null,
-        food_promo: values.foodPromo ?? null,
-        booking_type: values.bookingType ?? null,
-        ticket_price: values.ticketPrice ?? null,
-        check_in_cutoff_minutes: values.checkInCutoffMinutes ?? null,
-        age_policy: values.agePolicy ?? null,
-        accessibility_notes: values.accessibilityNotes ?? null,
-        cancellation_window_hours: values.cancellationWindowHours ?? null,
-        terms_and_conditions: values.termsAndConditions ?? null,
-        cost_total: values.costTotal ?? null,
-        cost_details: values.costDetails ?? null,
-        goal_focus: values.goalFocus ?? null,
-        notes: values.notes ?? null,
-        public_title: values.publicTitle ?? null,
-        public_teaser: values.publicTeaser ?? null,
-        public_description: values.publicDescription ?? null,
-        public_highlights: values.publicHighlights ?? null,
-        booking_url: values.bookingUrl ?? null,
-        seo_title: values.seoTitle ?? null,
-        seo_description: values.seoDescription ?? null,
-        seo_slug: values.seoSlug ?? null
-      }, user.id);
+      let updated: Awaited<ReturnType<typeof updateEventDraft>>["event"];
+      let strippedColumns: string[];
+      let mismatches: string[];
+      try {
+        const result = await updateEventDraft(values.eventId, {
+          venue_id: values.venueId,
+          title: values.title,
+          event_type: values.eventType,
+          start_at: startAtIso,
+          end_at: endAtIso,
+          venue_space: values.venueSpace,
+          expected_headcount: values.expectedHeadcount ?? null,
+          wet_promo: values.wetPromo ?? null,
+          food_promo: values.foodPromo ?? null,
+          booking_type: values.bookingType ?? null,
+          ticket_price: values.ticketPrice ?? null,
+          check_in_cutoff_minutes: values.checkInCutoffMinutes ?? null,
+          age_policy: values.agePolicy ?? null,
+          accessibility_notes: values.accessibilityNotes ?? null,
+          cancellation_window_hours: values.cancellationWindowHours ?? null,
+          terms_and_conditions: values.termsAndConditions ?? null,
+          cost_total: values.costTotal ?? null,
+          cost_details: values.costDetails ?? null,
+          goal_focus: values.goalFocus ?? null,
+          notes: values.notes ?? null,
+          public_title: values.publicTitle ?? null,
+          public_teaser: values.publicTeaser ?? null,
+          public_description: values.publicDescription ?? null,
+          public_highlights: values.publicHighlights ?? null,
+          booking_url: values.bookingUrl ?? null,
+          seo_title: values.seoTitle ?? null,
+          seo_description: values.seoDescription ?? null,
+          seo_slug: values.seoSlug ?? null
+        }, user.id);
+        updated = result.event;
+        strippedColumns = result.strippedColumns;
+        mismatches = result.mismatches;
+      } catch (updateError) {
+        const msg = updateError instanceof Error ? updateError.message : "Unknown error";
+        if (msg.includes("no rows were affected")) {
+          return {
+            success: false,
+            message: "Could not save — the event's current status may prevent editing. Try reverting to draft first, then editing."
+          };
+        }
+        throw updateError; // Let outer catch handle
+      }
 
       const artistIds = normaliseArtistIdList(formData.get("artistIds"));
       const artistNames = normaliseArtistNameList(values.artistNames ?? null);

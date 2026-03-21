@@ -180,6 +180,8 @@ export function EventForm({
   const [refundAllowed, setRefundAllowed] = useState<"" | "yes" | "no">("");
   const [rescheduleAllowed, setRescheduleAllowed] = useState<"" | "yes" | "no">("");
   const [termsExtraNotes, setTermsExtraNotes] = useState("");
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const [isSlow, setIsSlow] = useState(false);
 
   // Legacy collapsible sections (create mode only)
   const [sectionOpen, setSectionOpen] = useState({
@@ -261,12 +263,18 @@ export function EventForm({
     return () => window.removeEventListener("beforeunload", handler);
   }, [isDirty]);
 
-  // Reset dirty flag on successful save or submit
+  // Reset dirty flag and record save timestamp on successful save or submit
   useEffect(() => {
-    if (draftState?.success) setIsDirty(false);
+    if (draftState?.success) {
+      setIsDirty(false);
+      setLastSavedAt(new Date());
+    }
   }, [draftState]);
   useEffect(() => {
-    if (submitState?.success) setIsDirty(false);
+    if (submitState?.success) {
+      setIsDirty(false);
+      setLastSavedAt(new Date());
+    }
   }, [submitState]);
 
   useEffect(() => {
@@ -586,6 +594,16 @@ export function EventForm({
   }, [hasFieldErrors, tabErrors.eventDetails, tabErrors.accelerateGrowth, tabErrors.websiteListings]);
 
   const isPending = isSavingPending || isSubmittingPending || isGeneratingPending;
+
+  // Show slow-save warning after 8 seconds
+  useEffect(() => {
+    if (!isPending) {
+      setIsSlow(false);
+      return;
+    }
+    const timer = setTimeout(() => setIsSlow(true), 8000);
+    return () => clearTimeout(timer);
+  }, [isPending]);
 
   const contextValue = {
     saveDraft: () => {
@@ -1641,6 +1659,24 @@ export function EventForm({
                   <strong>Something went wrong:</strong> {activeState.message}
                 </div>
               )}
+              {activeState?.success && activeState?.message && (
+                <div className="mb-4 rounded-lg border border-[var(--color-success)] bg-[var(--color-success)]/10 p-4 text-sm text-[var(--color-success)]" role="status">
+                  {activeState.message}
+                </div>
+              )}
+              <div className="mb-4 flex items-center gap-2">
+                {isPending ? (
+                  <span className="text-xs text-[var(--color-text-muted)] animate-pulse">
+                    {isSlow ? "Still saving — please don\u0027t navigate away..." : "Saving..."}
+                  </span>
+                ) : lastSavedAt ? (
+                  <span className="text-xs text-[var(--color-text-muted)]">
+                    Last saved: {lastSavedAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                ) : isDirty ? (
+                  <span className="text-xs text-[var(--color-warning)]">Unsaved changes</span>
+                ) : null}
+              </div>
               {/* Proxy buttons — sr-only, clicked programmatically from sidebar */}
               <button
                 ref={proxyDraftRef}
@@ -1779,6 +1815,11 @@ export function EventForm({
           {activeState && !activeState.success && activeState.message && !activeState.fieldErrors && (
             <div className="rounded-lg border border-[var(--color-danger)] bg-[var(--color-danger)]/10 p-4 text-sm text-[var(--color-danger)]" role="alert">
               <strong>Something went wrong:</strong> {activeState.message}
+            </div>
+          )}
+          {activeState?.success && activeState?.message && (
+            <div className="rounded-lg border border-[var(--color-success)] bg-[var(--color-success)]/10 p-4 text-sm text-[var(--color-success)]" role="status">
+              {activeState.message}
             </div>
           )}
           <fieldset disabled={isPending} className="space-y-6 disabled:opacity-60">
@@ -1953,6 +1994,17 @@ export function EventForm({
                 data-intent="submit"
               />
               {mode === "edit" && defaultValues?.id ? <DeleteEventButton eventId={defaultValues.id} variant="button" /> : null}
+              {isPending ? (
+                <span className="text-xs text-[var(--color-text-muted)] animate-pulse">
+                  {isSlow ? "Still saving — please don\u0027t navigate away..." : "Saving..."}
+                </span>
+              ) : lastSavedAt ? (
+                <span className="text-xs text-[var(--color-text-muted)]">
+                  Last saved: {lastSavedAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                </span>
+              ) : isDirty ? (
+                <span className="text-xs text-[var(--color-warning)]">Unsaved changes</span>
+              ) : null}
             </CardContent>
           </Card>
           </fieldset>
