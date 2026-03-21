@@ -684,7 +684,7 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
   let redirectUrl: string | null = null;
   try {
     if (values.eventId) {
-      const updated = await updateEventDraft(values.eventId, {
+      const { event: updated, strippedColumns, mismatches } = await updateEventDraft(values.eventId, {
         venue_id: values.venueId,
         title: values.title,
         event_type: values.eventType,
@@ -759,13 +759,14 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
         }
         if (uploadResult.path !== updated.event_image_path) {
           try {
-            await updateEventDraft(
+            const { event: _imageUpdated } = await updateEventDraft(
               values.eventId,
               {
                 event_image_path: uploadResult.path
               },
               user.id
             );
+            void _imageUpdated;
           } catch (error) {
             imageWarning = true;
             console.error("Draft saved but event image path update failed", error);
@@ -791,7 +792,15 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
           message: "Draft updated, but some optional linked data could not be synced."
         };
       }
-      return { success: true, message: "Draft updated." };
+      const warnings: string[] = [];
+      if (strippedColumns.length > 0) {
+        warnings.push(`These fields could not be saved: ${strippedColumns.join(", ")}`);
+      }
+      if (mismatches.length > 0) {
+        warnings.push(`These fields may not have saved correctly: ${mismatches.join(", ")}`);
+      }
+      const warningText = warnings.length ? ` (${warnings.join("; ")})` : "";
+      return { success: true, message: `Draft updated.${warningText}` };
     }
 
     const created = await createEventDraft({
@@ -862,13 +871,14 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
       });
       if (!("error" in uploadResult)) {
         try {
-          await updateEventDraft(
+          const { event: _imgUpdated } = await updateEventDraft(
             created.id,
             {
               event_image_path: uploadResult.path
             },
             user.id
           );
+          void _imgUpdated;
         } catch (error) {
           console.error("Draft created but event image path update failed", error);
         }
@@ -1060,13 +1070,14 @@ export async function submitEventForReviewAction(
           existingPath: null
         });
         if (!("error" in uploadResult)) {
-          await updateEventDraft(
+          const { event: _submitImgUpdated } = await updateEventDraft(
             created.id,
             {
               event_image_path: uploadResult.path
             },
             user.id
           );
+          void _submitImgUpdated;
         } else {
           console.warn("Event image upload failed before submit", uploadResult.error);
         }
@@ -1127,13 +1138,14 @@ export async function submitEventForReviewAction(
         }
 
         if (uploadResult.path !== (existingEvent?.event_image_path ?? null)) {
-          await updateEventDraft(
+          const { event: _resubmitImgUpdated } = await updateEventDraft(
             targetEventId,
             {
               event_image_path: uploadResult.path
             },
             user.id
           );
+          void _resubmitImgUpdated;
         }
       }
     }

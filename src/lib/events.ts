@@ -565,6 +565,7 @@ export async function updateEventDraft(eventId: string, updates: Partial<EventRo
 
   let data: EventRow | null = null;
   let updateError: { code?: string; message: string } | null = null;
+  const strippedColumns: string[] = [];
 
   for (let attempt = 0; attempt < 24; attempt += 1) {
     const result = await supabase
@@ -587,11 +588,37 @@ export async function updateEventDraft(eventId: string, updates: Partial<EventRo
     }
 
     console.warn(`[schema-drift] Column "${missingColumn}" not found in events table — stripped from payload`);
+    strippedColumns.push(missingColumn);
     delete updatePayload[missingColumn];
   }
 
   if (!data || updateError) {
-    throw new Error(`Could not update event: ${updateError?.message ?? "Unknown error"}`);
+    const detail = updateError?.message ?? "Unknown error";
+    throw new Error(
+      detail.includes("0 rows") || !data
+        ? "Update failed — no rows were affected. The event's current status may prevent editing, or the event no longer exists."
+        : `Could not update event: ${detail}`
+    );
+  }
+
+  // Post-save verification of critical fields
+  const criticalChecks: Array<[string, unknown]> = [
+    ["title", updates.title],
+    ["event_type", updates.event_type],
+    ["start_at", updates.start_at],
+    ["end_at", updates.end_at],
+    ["venue_id", updates.venue_id],
+    ["venue_space", updates.venue_space],
+    ["notes", updates.notes],
+  ];
+  const mismatches: string[] = [];
+  for (const [field, expected] of criticalChecks) {
+    if (expected !== undefined && (data as Record<string, unknown>)[field] !== expected) {
+      mismatches.push(field);
+    }
+  }
+  if (mismatches.length > 0) {
+    console.warn(`[save-verify] Field mismatch after update on event ${eventId}:`, mismatches);
   }
 
   if (actorId) {
@@ -607,7 +634,7 @@ export async function updateEventDraft(eventId: string, updates: Partial<EventRo
     }
   }
 
-  return data;
+  return { event: data, strippedColumns, mismatches };
 }
 
 export async function appendEventVersion(eventId: string, actorId: string, versionData: Record<string, unknown>) {
