@@ -2,7 +2,6 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { z } from "zod";
 import { createSupabaseActionClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -594,6 +593,7 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
   if (!user) {
     redirect("/login");
   }
+  console.log("[draft-save] user:", user.id, user.role);
   if (!canManageEvents(user.role)) {
     return { success: false, message: "You don't have permission to save events." };
   }
@@ -681,6 +681,7 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
     };
   }
 
+  let redirectUrl: string | null = null;
   try {
     if (values.eventId) {
       const updated = await updateEventDraft(values.eventId, {
@@ -824,6 +825,7 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
       seoDescription: values.seoDescription ?? null,
       seoSlug: values.seoSlug ?? null
     });
+    console.log("[draft-save] created event:", created.id);
 
     const artistIds = normaliseArtistIdList(formData.get("artistIds"));
     const artistNames = normaliseArtistNameList(values.artistNames ?? null);
@@ -877,15 +879,17 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
 
     revalidatePath(`/events/${created.id}`);
     revalidatePath("/events");
-    redirect(`/events/${created.id}`);
+    redirectUrl = `/events/${created.id}`;
   } catch (error) {
-    if (isRedirectError(error)) {
-      throw error;
-    }
     const detail = error instanceof Error ? error.message : "Unknown error";
     console.error("saveEventDraftAction failed:", detail, error);
     return { success: false, message: `Could not save the draft: ${detail.slice(0, 120)}` };
   }
+  if (redirectUrl) {
+    console.log("[draft-save] redirecting to:", redirectUrl);
+    redirect(redirectUrl);
+  }
+  return { success: true, message: "Draft saved." };
 }
 
 export async function submitEventForReviewAction(
@@ -1630,6 +1634,7 @@ export async function deleteEventAction(_: ActionResult | undefined, formData: F
 
   const supabase = await createSupabaseActionClient();
 
+  let redirectUrl: string | null = null;
   try {
     const { data: event, error: fetchError } = await supabase
       .from("events")
@@ -1667,15 +1672,16 @@ export async function deleteEventAction(_: ActionResult | undefined, formData: F
 
     revalidatePath("/events");
     revalidatePath("/reviews");
-    redirect("/events");
+    redirectUrl = "/events";
   } catch (error) {
-    if (isRedirectError(error)) {
-      throw error;
-    }
     const detail = error instanceof Error ? error.message : "Unknown error";
     console.error("deleteEventAction failed:", detail, error);
     return { success: false, message: `Could not delete the event: ${detail.slice(0, 120)}` };
   }
+  if (redirectUrl) {
+    redirect(redirectUrl);
+  }
+  return { success: true, message: "Event deleted." };
 }
 
 // Permissive UUID format check (8-4-4-4-12 hex groups) without enforcing RFC 4122 version/variant bits.
