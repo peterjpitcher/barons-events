@@ -12,6 +12,9 @@ export type EventFormContextValue = {
   isPending: boolean;
   mode: "create" | "edit";
   canGenerateWebsiteCopy: boolean;
+  primaryLabel: string;
+  secondaryLabel: string;
+  showSecondaryAction: boolean;
 };
 
 export const EventFormContext = createContext<EventFormContextValue | null>(null);

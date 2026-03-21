@@ -11,8 +11,10 @@ type EventFormActionsProps = {
 };
 
 export function EventFormActions({ eventId, canDelete }: EventFormActionsProps) {
-  const { saveDraft, submitForReview, isSaving, isSubmitting, isPending, mode } =
-    useEventFormContext();
+  const {
+    saveDraft, submitForReview, isSaving, isSubmitting, isPending,
+    primaryLabel, secondaryLabel, showSecondaryAction
+  } = useEventFormContext();
 
   return (
     <div className="space-y-4">
@@ -25,20 +27,22 @@ export function EventFormActions({ eventId, canDelete }: EventFormActionsProps) 
           className="w-full justify-center"
         >
           {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" /> : null}
-          {isSaving ? "Saving..." : mode === "create" ? "Save draft" : "Save changes"}
+          {isSaving ? "Saving..." : primaryLabel}
         </Button>
-        <Button
-          type="button"
-          variant="secondary"
-          disabled={isPending}
-          onClick={submitForReview}
-          className="w-full justify-center"
-        >
-          {isSubmitting ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-          ) : null}
-          {isSubmitting ? "Submitting..." : "Submit for review"}
-        </Button>
+        {showSecondaryAction ? (
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={isPending}
+            onClick={submitForReview}
+            className="w-full justify-center"
+          >
+            {isSubmitting ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : null}
+            {isSubmitting ? "Submitting..." : secondaryLabel}
+          </Button>
+        ) : null}
       </div>
 
       {canDelete && eventId ? (

@@ -19,7 +19,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
 import { FieldError } from "@/components/ui/field-error";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { EventFormContext } from "@/components/events/event-form-context";
 import { EVENT_GOALS } from "@/lib/event-goals";
@@ -192,10 +191,6 @@ export function EventForm({
     website: true,
     save: true
   });
-
-  // Auto-approve confirmation dialog (central planner submitting)
-  const [autoApproveConfirmOpen, setAutoApproveConfirmOpen] = useState(false);
-  const confirmBypassRef = useRef(false);
 
   // Refs for proxy buttons and form (tabbed mode)
   const formRef = useRef<HTMLFormElement>(null);
@@ -475,28 +470,7 @@ export function EventForm({
     const actionIntent = submitter?.getAttribute?.("data-intent");
     const nextIntent = actionIntent === "submit" ? "submit" : actionIntent === "generate" ? "generate" : "draft";
 
-    const willAutoApprove = role === "central_planner" && nextIntent === "submit";
-    if (willAutoApprove) {
-      if (confirmBypassRef.current) {
-        confirmBypassRef.current = false;
-      } else {
-        event.preventDefault();
-        setAutoApproveConfirmOpen(true);
-        return;
-      }
-    }
-
     setIntent(nextIntent);
-  }
-
-  function handleAutoApproveConfirm() {
-    setAutoApproveConfirmOpen(false);
-    confirmBypassRef.current = true;
-    if (sidebar) {
-      proxySubmitRef.current?.click();
-    } else {
-      legacySubmitRef.current?.click();
-    }
   }
 
   const completionPercent = (checks: boolean[]): number => {
@@ -605,6 +579,35 @@ export function EventForm({
     return () => clearTimeout(timer);
   }, [isPending]);
 
+  // ─── Button labels per role + status ──────────────────────────────────────
+  const eventStatus = defaultValues?.status ?? "draft";
+
+  const primaryLabel = (() => {
+    if (mode === "create") return "Save draft";
+    if (role === "central_planner" && eventStatus === "approved") return "Save & re-publish";
+    return "Save changes";
+  })();
+
+  const showSecondaryAction = (() => {
+    if (role === "central_planner") {
+      // No secondary for approved or completed — primary handles it
+      return eventStatus !== "approved" && eventStatus !== "completed";
+    }
+    if (role === "venue_manager") {
+      // Can only submit drafts or revisions
+      return eventStatus === "draft" || eventStatus === "needs_revisions";
+    }
+    return false;
+  })();
+
+  const secondaryLabel = (() => {
+    if (role === "central_planner") {
+      if (mode === "create") return "Save & publish";
+      return "Publish";
+    }
+    return "Submit for review";
+  })();
+
   const contextValue = {
     saveDraft: () => {
       if (formRef.current && proxyDraftRef.current) {
@@ -626,7 +629,10 @@ export function EventForm({
     isGenerating: isGeneratingPending,
     isPending,
     mode,
-    canGenerateWebsiteCopy
+    canGenerateWebsiteCopy,
+    primaryLabel,
+    secondaryLabel,
+    showSecondaryAction
   };
 
   // ─── Shared field blocks (used in both tabbed and legacy layouts) ──────────
@@ -1791,15 +1797,6 @@ export function EventForm({
 
         {artistModal}
         {termsModal}
-
-        <ConfirmDialog
-          open={autoApproveConfirmOpen}
-          title="Auto-approve this event?"
-          description={`Submitting "${titleValue || "this event"}" as a central planner will approve it instantly. Continue?`}
-          confirmLabel="Submit & Approve"
-          onConfirm={handleAutoApproveConfirm}
-          onCancel={() => setAutoApproveConfirmOpen(false)}
-        />
       </EventFormContext.Provider>
     );
   }
@@ -1981,18 +1978,20 @@ export function EventForm({
             </CardHeader>
             <CardContent className={cn("flex flex-wrap items-center gap-3", !sectionOpen.save && "hidden")}>
               <SubmitButton
-                label={mode === "create" ? "Save draft" : "Save changes"}
+                label={primaryLabel}
                 pendingLabel="Saving..."
                 variant="primary"
                 data-intent="draft"
               />
-              <SubmitButton
-                formAction={submitAction}
-                label="Submit for review"
-                pendingLabel="Sending..."
-                variant="secondary"
-                data-intent="submit"
-              />
+              {showSecondaryAction ? (
+                <SubmitButton
+                  formAction={submitAction}
+                  label={secondaryLabel}
+                  pendingLabel={role === "central_planner" ? "Publishing..." : "Sending..."}
+                  variant="secondary"
+                  data-intent="submit"
+                />
+              ) : null}
               {mode === "edit" && defaultValues?.id ? <DeleteEventButton eventId={defaultValues.id} variant="button" /> : null}
               {isPending ? (
                 <span className="text-xs text-[var(--color-text-muted)] animate-pulse">
@@ -2012,15 +2011,6 @@ export function EventForm({
 
         {artistModal}
         {termsModal}
-
-        <ConfirmDialog
-          open={autoApproveConfirmOpen}
-          title="Auto-approve this event?"
-          description={`Submitting "${titleValue || "this event"}" as a central planner will approve it instantly. Continue?`}
-          confirmLabel="Submit & Approve"
-          onConfirm={handleAutoApproveConfirm}
-          onCancel={() => setAutoApproveConfirmOpen(false)}
-        />
       </>
     </EventFormContext.Provider>
   );
