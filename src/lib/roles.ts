@@ -67,3 +67,13 @@ export function canViewAllEvents(role: UserRole): boolean {
 export function canManageLinks(role: UserRole): boolean {
   return role === "central_planner";
 }
+
+/** Can view the SOP template configuration */
+export function canViewSopTemplate(role: UserRole): boolean {
+  return role === "central_planner" || role === "executive";
+}
+
+/** Can create, edit, or delete SOP template sections and tasks */
+export function canEditSopTemplate(role: UserRole): boolean {
+  return role === "central_planner";
+}
