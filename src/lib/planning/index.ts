@@ -120,6 +120,9 @@ function toPlanningTask(task: any): PlanningTask {
     sopTemplateTaskId: task.sop_template_task_id ?? null,
     isBlocked: task.is_blocked ?? false,
     dueDateManuallyOverridden: task.due_date_manually_overridden ?? false,
+    dependsOnTaskIds: Array.isArray(task?.dependencies)
+      ? task.dependencies.map((d: any) => d.depends_on_task_id).filter(Boolean)
+      : [],
   };
 }
 
@@ -479,7 +482,8 @@ export async function listPlanningBoardData(params?: {
         is_blocked,
         due_date_manually_overridden,
         assignee:users!planning_tasks_assignee_id_fkey(id,full_name,email),
-        assignees:planning_task_assignees(user:users(id,full_name,email))
+        assignees:planning_task_assignees(user:users(id,full_name,email)),
+        dependencies:planning_task_dependencies!planning_task_dependencies_task_id_fkey(depends_on_task_id)
       )
     `
     )

@@ -194,6 +194,7 @@ export function SopChecklistView({ tasks, users, itemId, currentUserId, onChange
               <SopTaskRow
                 key={task.id}
                 task={task}
+                allTasks={tasks}
                 currentUserId={currentUserId}
                 users={users}
                 onStatusChange={handleStatusChange}

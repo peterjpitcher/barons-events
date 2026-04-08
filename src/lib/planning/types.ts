@@ -36,6 +36,7 @@ export type PlanningTask = {
   sopTemplateTaskId: string | null;
   isBlocked: boolean;
   dueDateManuallyOverridden: boolean;
+  dependsOnTaskIds: string[];
 };
 
 export type PlanningItem = {

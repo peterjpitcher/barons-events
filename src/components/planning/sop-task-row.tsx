@@ -10,6 +10,7 @@ import type { PlanningPerson, PlanningTask, PlanningTaskStatus } from "@/lib/pla
 
 type SopTaskRowProps = {
   task: PlanningTask;
+  allTasks: PlanningTask[];
   currentUserId?: string;
   users: PlanningPerson[];
   onStatusChange: (taskId: string, status: PlanningTaskStatus) => void;
@@ -53,7 +54,7 @@ function formatCompletedDate(completedAt: string | null): string {
   }).format(parsed);
 }
 
-export function SopTaskRow({ task, users, onStatusChange, onChanged }: SopTaskRowProps) {
+export function SopTaskRow({ task, allTasks, users, onStatusChange, onChanged }: SopTaskRowProps) {
   const [isPending, startTransition] = useTransition();
   const [menuOpen, setMenuOpen] = useState(false);
   const [reassignOpen, setReassignOpen] = useState(false);
@@ -164,11 +165,19 @@ export function SopTaskRow({ task, users, onStatusChange, onChanged }: SopTaskRo
       <div className="min-w-0 flex-1">
         <span className={cn("text-sm", titleStyle)}>{task.title}</span>
 
-        {isBlocked && (
-          <p className="mt-0.5 text-xs text-[var(--color-warning)]">
-            Waiting on dependencies
-          </p>
-        )}
+        {isBlocked && (() => {
+          const blockerNames = task.dependsOnTaskIds
+            .map((depId) => {
+              const dep = allTasks.find((t) => t.id === depId);
+              return dep && dep.status === "open" ? dep.title : null;
+            })
+            .filter(Boolean);
+          return (
+            <p className="mt-0.5 text-xs text-[var(--color-warning)]">
+              Waiting on: {blockerNames.length > 0 ? blockerNames.join(", ") : "dependencies"}
+            </p>
+          );
+        })()}
 
         {isDone && task.completedAt && (
           <p className="mt-0.5 text-xs text-subtle">
