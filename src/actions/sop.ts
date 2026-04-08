@@ -40,7 +40,7 @@ const sopSectionSchema = z.object({
   defaultAssigneeIds: z.array(z.string().uuid()).max(10).default([]),
 });
 
-const sopSectionUpdateSchema = sopSectionSchema.extend({
+const sopSectionUpdateSchema = sopSectionSchema.partial().extend({
   id: z.string().uuid(),
 });
 
@@ -139,13 +139,14 @@ export async function updateSopSectionAction(
     }
 
     const db = createSupabaseAdminClient();
+    const updates: Record<string, unknown> = {};
+    if (parsed.data.label !== undefined) updates.label = parsed.data.label;
+    if (parsed.data.sortOrder !== undefined) updates.sort_order = parsed.data.sortOrder;
+    if (parsed.data.defaultAssigneeIds !== undefined) updates.default_assignee_ids = parsed.data.defaultAssigneeIds;
+
     const { error } = await db
       .from("sop_sections")
-      .update({
-        label: parsed.data.label,
-        sort_order: parsed.data.sortOrder,
-        default_assignee_ids: parsed.data.defaultAssigneeIds,
-      })
+      .update(updates)
       .eq("id", parsed.data.id);
 
     if (error) {
