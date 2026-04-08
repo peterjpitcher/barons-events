@@ -116,7 +116,7 @@ export async function loadSopTemplate(): Promise<SopTemplateTree> {
       id, label, sort_order, default_assignee_ids, created_at, updated_at,
       tasks:sop_task_templates(
         id, section_id, title, sort_order, default_assignee_ids, t_minus_days, created_at, updated_at,
-        dependencies:sop_task_dependencies(depends_on_template_id)
+        dependencies:sop_task_dependencies!sop_task_dependencies_task_template_id_fkey(depends_on_template_id)
       )
     `)
     .order("sort_order", { ascending: true });
