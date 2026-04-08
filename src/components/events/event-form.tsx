@@ -2013,7 +2013,7 @@ export function EventForm({
                   data-intent="submit"
                 />
               ) : null}
-              {mode === "edit" && defaultValues?.id ? <DeleteEventButton eventId={defaultValues.id} variant="button" /> : null}
+              {mode === "edit" && defaultValues?.id ? <DeleteEventButton eventId={defaultValues.id} /> : null}
               {isPending ? (
                 <span className="text-xs text-[var(--color-text-muted)] animate-pulse">
                   {isSlow ? "Still saving — please don\u0027t navigate away..." : "Saving..."}
