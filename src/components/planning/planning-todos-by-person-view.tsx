@@ -45,10 +45,7 @@ export function PlanningTodosByPersonView({ items, onOpenPlanningItem }: Plannin
         // Skip tasks that are already done (from server data) or optimistically marked done
         if (task.status === "done" || task.status === "not_required" || optimisticallyDone.has(task.id)) return;
 
-        const key = task.assigneeId ?? "tbd";
-        const label = task.assigneeName || "To be determined";
-        const bucket = result.get(key) ?? { label, tasks: [] };
-        bucket.tasks.push({
+        const row: PersonTaskRow = {
           taskId: task.id,
           title: task.title,
           dueDate: task.dueDate,
@@ -56,8 +53,23 @@ export function PlanningTodosByPersonView({ items, onOpenPlanningItem }: Plannin
           assigneeId: task.assigneeId,
           assigneeName: task.assigneeName,
           planningItem: item
-        });
-        result.set(key, bucket);
+        };
+
+        if (task.assignees.length === 0) {
+          // Fall back to legacy single-assignee field
+          const key = task.assigneeId ?? "tbd";
+          const label = task.assigneeName || "To be determined";
+          const bucket = result.get(key) ?? { label, tasks: [] };
+          bucket.tasks.push(row);
+          result.set(key, bucket);
+        } else {
+          // Place the task under each assignee
+          for (const assignee of task.assignees) {
+            const bucket = result.get(assignee.id) ?? { label: assignee.name, tasks: [] };
+            bucket.tasks.push(row);
+            result.set(assignee.id, bucket);
+          }
+        }
       });
     });
 
