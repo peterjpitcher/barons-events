@@ -783,6 +783,13 @@ export async function softDeleteEvent(eventId: string, actorId: string): Promise
   if (error) {
     throw new Error(`Could not delete event: ${error.message}`);
   }
+
+  // Cancel the linked planning item so it disappears from the planning board
+  const admin = createSupabaseAdminClient();
+  await admin
+    .from("planning_items")
+    .update({ status: "cancelled" })
+    .eq("event_id", eventId);
 }
 
 export async function findConflicts(): Promise<Array<{ event: EventSummary; conflictingWith: EventSummary }>> {
