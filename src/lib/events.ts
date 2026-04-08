@@ -773,23 +773,19 @@ export async function getStatusCounts(): Promise<Record<EventStatus, number>> {
  * The event remains in the database for audit purposes and can be recovered by an admin.
  * RLS policies and public API queries filter out soft-deleted events automatically.
  */
-export async function softDeleteEvent(eventId: string, actorId: string): Promise<void> {
-  const supabase = await createSupabaseActionClient();
-  const { error } = await supabase
+export async function softDeleteEvent(eventId: string, _actorId: string): Promise<void> {
+  // Hard delete: completely removes the event and all related records.
+  // FK cascades handle: planning_items → planning_tasks → assignees/dependencies,
+  // event_versions, approvals, event_artists, debriefs.
+  const admin = createSupabaseAdminClient();
+  const { error } = await admin
     .from("events")
-    .update({ deleted_at: new Date().toISOString(), deleted_by: actorId })
+    .delete()
     .eq("id", eventId);
 
   if (error) {
     throw new Error(`Could not delete event: ${error.message}`);
   }
-
-  // Cancel the linked planning item so it disappears from the planning board
-  const admin = createSupabaseAdminClient();
-  await admin
-    .from("planning_items")
-    .update({ status: "cancelled" })
-    .eq("event_id", eventId);
 }
 
 export async function findConflicts(): Promise<Array<{ event: EventSummary; conflictingWith: EventSummary }>> {

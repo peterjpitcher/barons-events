@@ -1798,10 +1798,7 @@ export async function deleteEventAction(_: ActionResult | undefined, formData: F
       return { success: false, message: "You don't have permission to delete this event." };
     }
 
-    // Soft delete: sets deleted_at and deleted_by; the event is preserved for audit purposes
-    // and can be recovered by an admin. Artist links and images are retained.
-    await softDeleteEvent(event.id, user.id);
-
+    // Record audit entry before deletion so the event ID is captured
     await recordAuditLogEntry({
       entity: "event",
       entityId: event.id,
@@ -1812,6 +1809,9 @@ export async function deleteEventAction(_: ActionResult | undefined, formData: F
         changes: ["Event"]
       }
     });
+
+    // Hard delete: removes event and all related records via FK cascades
+    await softDeleteEvent(event.id, user.id);
 
     revalidatePath("/events");
     revalidatePath("/reviews");
