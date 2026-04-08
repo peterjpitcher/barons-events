@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { Check, Minus, MoreHorizontal, Users } from "lucide-react";
+import { Check, Minus, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -203,7 +203,11 @@ export function SopTaskRow({ task, users, onStatusChange, onChanged }: SopTaskRo
             aria-label="More actions"
             className="h-7 w-7 p-0 border border-[var(--color-border)] bg-white hover:bg-[var(--color-muted-surface)]"
           >
-            <MoreHorizontal className="h-4 w-4 text-[var(--color-text)]" aria-hidden="true" />
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[#273640]" aria-hidden="true">
+              <circle cx="12" cy="12" r="1" fill="currentColor" />
+              <circle cx="19" cy="12" r="1" fill="currentColor" />
+              <circle cx="5" cy="12" r="1" fill="currentColor" />
+            </svg>
           </Button>
 
           {menuOpen && !reassignOpen && (
