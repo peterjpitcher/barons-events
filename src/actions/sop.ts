@@ -61,6 +61,17 @@ const sopDependencySchema = z.object({
   dependsOnTemplateId: z.string().uuid(),
 });
 
+// ─── User list for assignee selection ────────────────────────────────────────
+
+export async function loadSopAssignableUsersAction(): Promise<
+  Array<{ id: string; name: string }>
+> {
+  await ensureSopUser(false);
+  const { listAssignableUsers } = await import("@/lib/users");
+  const users = await listAssignableUsers();
+  return users.map((u) => ({ id: u.id, name: u.name }));
+}
+
 // ─── Actions ─────────────────────────────────────────────────────────────────
 
 /**
@@ -382,6 +393,55 @@ export async function createSopDependencyAction(
       success: false,
       message:
         error instanceof Error ? error.message : "Could not create dependency.",
+    };
+  }
+}
+
+/**
+ * Delete a dependency by its composite key (taskTemplateId + dependsOnTemplateId).
+ * Useful when the UI only has the composite key, not the row ID.
+ */
+export async function deleteSopDependencyByCompositeAction(
+  input: unknown
+): Promise<SopActionResult> {
+  try {
+    const user = await ensureSopUser(true);
+    const parsed = sopDependencySchema.safeParse(input);
+    if (!parsed.success) {
+      return { success: false, message: "Invalid dependency data." };
+    }
+
+    const db = createSupabaseAdminClient();
+    const { error } = await db
+      .from("sop_task_dependencies")
+      .delete()
+      .eq("task_template_id", parsed.data.taskTemplateId)
+      .eq("depends_on_template_id", parsed.data.dependsOnTemplateId);
+
+    if (error) {
+      console.error("deleteSopDependencyByCompositeAction: delete failed", error);
+      return { success: false, message: "Could not delete dependency." };
+    }
+
+    await recordAuditLogEntry({
+      entity: "sop_template",
+      entityId: "global",
+      action: "sop_dependency.deleted",
+      actorId: user.id,
+      meta: {
+        taskTemplateId: parsed.data.taskTemplateId,
+        dependsOnTemplateId: parsed.data.dependsOnTemplateId,
+      },
+    });
+
+    revalidatePath("/settings");
+    return { success: true, message: "Dependency removed." };
+  } catch (error) {
+    console.error("deleteSopDependencyByCompositeAction:", error);
+    return {
+      success: false,
+      message:
+        error instanceof Error ? error.message : "Could not delete dependency.",
     };
   }
 }

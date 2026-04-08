@@ -2,11 +2,13 @@ import { redirect } from "next/navigation";
 import { ArchivedArtistsManager } from "@/components/settings/archived-artists-manager";
 import { EventTypesManager } from "@/components/settings/event-types-manager";
 import { ServiceTypesManager } from "@/components/settings/service-types-manager";
+import { SopTemplateEditor } from "@/components/settings/sop-template-editor";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCurrentUser } from "@/lib/auth";
 import { listArchivedArtists } from "@/lib/artists";
 import { listEventTypes } from "@/lib/event-types";
 import { listServiceTypes } from "@/lib/opening-hours";
+import { canViewSopTemplate } from "@/lib/roles";
 
 export const metadata = {
   title: "Settings · BaronsHub",
@@ -61,6 +63,20 @@ export default async function SettingsPage() {
           <ServiceTypesManager serviceTypes={serviceTypes} />
         </CardContent>
       </Card>
+
+      {canViewSopTemplate(user.role) && (
+        <Card>
+          <CardHeader>
+            <CardTitle>SOP template</CardTitle>
+            <CardDescription>
+              Define the default checklist sections and tasks that get applied to each planning item.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <SopTemplateEditor />
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
