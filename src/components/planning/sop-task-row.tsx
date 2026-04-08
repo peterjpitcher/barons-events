@@ -235,6 +235,32 @@ export function SopTaskRow({ task, users, onStatusChange, onChanged }: SopTaskRo
                   Mark not required
                 </button>
               )}
+              {isNotRequired && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="w-full px-3 py-1.5 text-left text-sm text-[var(--color-text)] hover:bg-[var(--color-muted-surface)] transition-colors"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    handleStatusChange("open");
+                  }}
+                >
+                  Mark required
+                </button>
+              )}
+              {isDone && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="w-full px-3 py-1.5 text-left text-sm text-[var(--color-text)] hover:bg-[var(--color-muted-surface)] transition-colors"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    handleStatusChange("open");
+                  }}
+                >
+                  Reopen
+                </button>
+              )}
             </div>
           )}
 
