@@ -40,8 +40,11 @@ const sopSectionSchema = z.object({
   defaultAssigneeIds: z.array(z.string().uuid()).max(10).default([]),
 });
 
-const sopSectionUpdateSchema = sopSectionSchema.partial().extend({
+const sopSectionUpdateSchema = z.object({
   id: z.string().uuid(),
+  label: z.string().min(1).max(100).optional(),
+  sortOrder: z.number().int().min(0).optional(),
+  defaultAssigneeIds: z.array(z.string().uuid()).max(10).optional(),
 });
 
 const sopTaskTemplateSchema = z.object({
@@ -135,8 +138,9 @@ export async function updateSopSectionAction(
     const user = await ensureSopUser(true);
     const parsed = sopSectionUpdateSchema.safeParse(input);
     if (!parsed.success) {
-      console.error("updateSopSectionAction: validation failed", JSON.stringify(parsed.error.issues, null, 2), "input:", JSON.stringify(input));
-      return { success: false, message: "Invalid section data." };
+      const issues = parsed.error.issues.map(i => `${i.path.join(".")}: ${i.message}`).join("; ");
+      console.error("updateSopSectionAction: validation failed", issues, "input:", JSON.stringify(input));
+      return { success: false, message: `Invalid section data: ${issues}` };
     }
 
     const db = createSupabaseAdminClient();
