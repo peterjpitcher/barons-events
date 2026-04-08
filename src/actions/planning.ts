@@ -20,7 +20,7 @@ import type { PlanningItemStatus, PlanningTaskStatus, RecurrenceFrequency } from
 import { canUsePlanning, canViewPlanning } from "@/lib/roles";
 import { createSupabaseActionClient } from "@/lib/supabase/server";
 import { generateInspirationItems } from "@/lib/planning/inspiration";
-import { generateSopChecklist, recalculateSopDates } from "@/lib/planning/sop";
+import { generateSopChecklist, recalculateSopDates, updateBlockedStatus } from "@/lib/planning/sop";
 
 export type PlanningActionResult = {
   success: boolean;
@@ -448,6 +448,11 @@ export async function togglePlanningTaskStatusAction(input: unknown): Promise<Pl
   if (!parsed.success) return { success: false, fieldErrors: zodFieldErrors(parsed.error) };
   try {
     await togglePlanningTaskStatus(parsed.data.taskId, parsed.data.status, user.id);
+    try {
+      await updateBlockedStatus(parsed.data.taskId, parsed.data.status);
+    } catch (blockErr) {
+      console.error("Failed to update blocked status:", blockErr);
+    }
     revalidatePath("/planning");
     return { success: true };
   } catch (err: unknown) {
