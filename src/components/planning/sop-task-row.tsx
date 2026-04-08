@@ -201,9 +201,9 @@ export function SopTaskRow({ task, users, onStatusChange, onChanged }: SopTaskRo
               setReassignOpen(false);
             }}
             aria-label="More actions"
-            className="h-7 w-7 p-0 text-subtle hover:text-[var(--color-text)]"
+            className="h-7 w-7 p-0 border border-[var(--color-border)] bg-white hover:bg-[var(--color-muted-surface)]"
           >
-            <MoreHorizontal className="h-4 w-4 text-current" aria-hidden="true" />
+            <MoreHorizontal className="h-4 w-4 text-[var(--color-text)]" aria-hidden="true" />
           </Button>
 
           {menuOpen && !reassignOpen && (
