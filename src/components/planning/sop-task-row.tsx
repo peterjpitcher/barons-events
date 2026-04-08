@@ -124,7 +124,10 @@ export function SopTaskRow({ task, users, onStatusChange, onChanged }: SopTaskRo
     }
   }
 
-  const rowOpacity = isDone ? "opacity-50" : isNotRequired ? "opacity-40" : isBlocked ? "opacity-60" : "";
+  // Only dim the row when the menu is closed — dropdown inherits parent opacity and becomes unreadable
+  const rowOpacity = (menuOpen || reassignOpen)
+    ? ""
+    : isDone ? "opacity-50" : isNotRequired ? "opacity-40" : isBlocked ? "opacity-60" : "";
   const titleStyle = isDone || isNotRequired ? "line-through text-subtle" : "font-medium text-[var(--color-text)]";
 
   return (
