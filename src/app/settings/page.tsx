@@ -4,7 +4,7 @@ import { EventTypesManager } from "@/components/settings/event-types-manager";
 import { ServiceTypesManager } from "@/components/settings/service-types-manager";
 import { SopTemplateEditor } from "@/components/settings/sop-template-editor";
 import { SettingsTabs } from "@/components/settings/settings-tabs";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCurrentUser } from "@/lib/auth";
 import { listArchivedArtists } from "@/lib/artists";
 import { listEventTypes } from "@/lib/event-types";
@@ -33,55 +33,33 @@ export default async function SettingsPage() {
 
   const tabs = [
     {
-      value: "general",
-      label: "General",
-      content: (
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Event types</CardTitle>
-              <CardDescription>Keep this list focused on the programming that fits your pubs.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <EventTypesManager eventTypes={eventTypes} />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Opening hours service types</CardTitle>
-              <CardDescription>These categories appear as rows in the weekly opening hours grid for each venue.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <ServiceTypesManager serviceTypes={serviceTypes} />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Archived artists</CardTitle>
-              <CardDescription>
-                Archived artists are hidden from planning flows but can be restored here.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <ArchivedArtistsManager artists={archivedArtists} />
-            </CardContent>
-          </Card>
-        </div>
-      ),
+      value: "event-types",
+      label: "Event Types",
+      description: "Keep this list focused on the programming that fits your pubs.",
+      content: <EventTypesManager eventTypes={eventTypes} />,
+    },
+    {
+      value: "service-types",
+      label: "Service Types",
+      description: "These categories appear as rows in the weekly opening hours grid for each venue.",
+      content: <ServiceTypesManager serviceTypes={serviceTypes} />,
     },
     ...(canViewSopTemplate(user.role)
       ? [
           {
             value: "sop",
             label: "SOP Checklist",
-            content: (
-              <SopTemplateEditor />
-            ),
+            description: "Define the default checklist sections and tasks that get applied to each event and planning item.",
+            content: <SopTemplateEditor />,
           },
         ]
       : []),
+    {
+      value: "archived-artists",
+      label: "Archived Artists",
+      description: "Archived artists are hidden from planning flows but can be restored here.",
+      content: <ArchivedArtistsManager artists={archivedArtists} />,
+    },
   ];
 
   return (
@@ -89,7 +67,6 @@ export default async function SettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Settings</CardTitle>
-          <CardDescription>Fine-tune the tools your teams use to plan events.</CardDescription>
         </CardHeader>
       </Card>
 

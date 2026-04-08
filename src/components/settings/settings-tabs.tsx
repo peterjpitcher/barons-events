@@ -6,6 +6,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 interface SettingsTab {
   value: string;
   label: string;
+  description: string;
   content: ReactNode;
 }
 
@@ -21,6 +22,7 @@ export function SettingsTabs({ tabs }: { tabs: SettingsTab[] }) {
       </TabsList>
       {tabs.map((tab) => (
         <TabsContent key={tab.value} value={tab.value}>
+          <p className="text-sm text-subtle mb-6">{tab.description}</p>
           {tab.content}
         </TabsContent>
       ))}
