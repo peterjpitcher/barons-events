@@ -7,7 +7,7 @@ import { createSupabaseActionClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth";
 import { canManageEvents, canReviewEvents } from "@/lib/roles";
-import { appendEventVersion, createEventDraft, recordApproval, softDeleteEvent, updateEventDraft, updateEventAssignee } from "@/lib/events";
+import { appendEventVersion, createEventDraft, createEventPlanningItem, recordApproval, softDeleteEvent, updateEventDraft, updateEventAssignee } from "@/lib/events";
 import { generateUniqueEventSlug } from "@/lib/bookings";
 import { cleanupOrphanArtists, parseArtistNames, syncEventArtists } from "@/lib/artists";
 import { eventDraftSchema, eventFormSchema } from "@/lib/validation";
@@ -852,6 +852,19 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
       seoSlug: values.seoSlug ?? null
     });
     console.log("[draft-save] created event:", created.id);
+
+    // Create linked planning item and generate SOP checklist
+    try {
+      await createEventPlanningItem(
+        created.id,
+        created.title,
+        created.start_at,
+        created.venue_id,
+        user.id
+      );
+    } catch (sopError) {
+      console.error("SOP checklist generation failed:", sopError);
+    }
 
     const artistIds = normaliseArtistIdList(formData.get("artistIds"));
     const artistNames = normaliseArtistNameList(values.artistNames ?? null);

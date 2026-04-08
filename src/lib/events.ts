@@ -5,6 +5,7 @@ import type { Database } from "@/lib/supabase/types";
 import type { AppUser, EventStatus } from "@/lib/types";
 import { recordAuditLogEntry } from "@/lib/audit-log";
 import { parseVenueSpaces } from "@/lib/venue-spaces";
+import { generateSopChecklist } from "@/lib/planning/sop";
 
 type EventRow = Database["public"]["Tables"]["events"]["Row"];
 type VenueRow = Database["public"]["Tables"]["venues"]["Row"];
@@ -511,6 +512,39 @@ export async function createEventDraft(payload: {
   });
 
   return data;
+}
+
+/**
+ * Create a linked planning item for an event and generate SOP checklist.
+ * Called after event creation.
+ */
+export async function createEventPlanningItem(
+  eventId: string,
+  eventTitle: string,
+  startAt: string,
+  venueId: string | null,
+  createdBy: string
+): Promise<void> {
+  const db = createSupabaseAdminClient();
+  const targetDate = startAt.slice(0, 10); // Extract YYYY-MM-DD from ISO timestamp
+
+  const { data: planningItem, error } = await db
+    .from("planning_items")
+    .insert({
+      event_id: eventId,
+      title: eventTitle,
+      type_label: "Event",
+      venue_id: venueId,
+      target_date: targetDate,
+      status: "planned",
+      created_by: createdBy,
+    })
+    .select("id")
+    .single();
+
+  if (error) throw error;
+
+  await generateSopChecklist(planningItem.id, targetDate, createdBy);
 }
 
 export async function updateEventDraft(eventId: string, updates: Partial<EventRow>, actorId?: string | null) {

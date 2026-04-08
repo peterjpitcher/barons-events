@@ -5,6 +5,7 @@ import {
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/types";
 import { normaliseOptionalText } from "@/lib/normalise";
+import { generateSopChecklist } from "@/lib/planning/sop";
 import type {
   CreatePlanningItemInput,
   CreatePlanningSeriesInput,
@@ -325,6 +326,15 @@ async function generateOccurrencesForSeries(series: PlanningSeriesRow, throughDa
       templates,
       insertedItems: insertedRows
     });
+
+    // Generate SOP checklist for each new planning item
+    for (const item of insertedRows) {
+      try {
+        await generateSopChecklist(item.id, item.target_date, series.created_by);
+      } catch (sopError) {
+        console.error(`SOP generation failed for occurrence ${item.id}:`, sopError);
+      }
+    }
   }
 
   const { error: updateError } = await admin

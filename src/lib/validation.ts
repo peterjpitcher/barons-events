@@ -126,7 +126,8 @@ const eventDraftBaseSchema = z.object({
   bookingUrl: bookingUrlSchema,
   seoTitle: optionalText(80),
   seoDescription: optionalText(200),
-  seoSlug: seoSlugSchema
+  seoSlug: seoSlugSchema,
+  managerResponsible: z.string().max(200).optional().nullable()
 });
 
 export const eventDraftSchema = eventDraftBaseSchema.refine(

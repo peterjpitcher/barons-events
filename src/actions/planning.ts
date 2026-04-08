@@ -20,6 +20,7 @@ import type { PlanningItemStatus, PlanningTaskStatus, RecurrenceFrequency } from
 import { canUsePlanning, canViewPlanning } from "@/lib/roles";
 import { createSupabaseActionClient } from "@/lib/supabase/server";
 import { generateInspirationItems } from "@/lib/planning/inspiration";
+import { generateSopChecklist, recalculateSopDates } from "@/lib/planning/sop";
 
 export type PlanningActionResult = {
   success: boolean;
@@ -78,7 +79,7 @@ export async function createPlanningItemAction(input: unknown): Promise<Planning
       };
     }
 
-    await createPlanningItem({
+    const item = await createPlanningItem({
       title: parsed.data.title,
       description: parsed.data.description ?? null,
       typeLabel: parsed.data.typeLabel,
@@ -88,6 +89,12 @@ export async function createPlanningItemAction(input: unknown): Promise<Planning
       status: (parsed.data.status ?? "planned") as PlanningItemStatus,
       createdBy: user.id
     });
+
+    try {
+      await generateSopChecklist(item.id, item.target_date, user.id);
+    } catch (sopError) {
+      console.error("SOP checklist generation failed:", sopError);
+    }
 
     revalidatePath("/planning");
     return { success: true, message: "Planning item created." };
@@ -156,6 +163,12 @@ export async function movePlanningItemDateAction(input: unknown): Promise<Planni
     }
 
     await movePlanningItemDate(parsed.data.itemId, parsed.data.targetDate);
+
+    try {
+      await recalculateSopDates(parsed.data.itemId, parsed.data.targetDate);
+    } catch (sopError) {
+      console.error("SOP date recalculation failed:", sopError);
+    }
 
     revalidatePath("/planning");
     return { success: true, message: "Planning date moved." };
