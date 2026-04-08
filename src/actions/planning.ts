@@ -11,6 +11,7 @@ import {
   deletePlanningTask,
   movePlanningItemDate,
   pausePlanningSeries,
+  togglePlanningTaskStatus,
   updatePlanningItem,
   updatePlanningSeries,
   updatePlanningTask
@@ -30,7 +31,7 @@ const uuidSchema = z.string().uuid();
 const optionalUuidSchema = z.union([z.string().uuid(), z.literal(""), z.null(), z.undefined()]);
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD");
 const planningStatusSchema = z.enum(["planned", "in_progress", "blocked", "done", "cancelled"]);
-const taskStatusSchema = z.enum(["open", "done"]);
+const taskStatusSchema = z.enum(["open", "done", "not_required"]);
 const frequencySchema = z.enum(["daily", "weekly", "monthly"]);
 
 function zodFieldErrors(error: z.ZodError): Record<string, string> {
@@ -428,32 +429,16 @@ export async function updatePlanningTaskAction(input: unknown): Promise<Planning
   }
 }
 
-const toggleTaskSchema = z.object({
-  taskId: uuidSchema,
-  done: z.boolean()
-});
-
 export async function togglePlanningTaskStatusAction(input: unknown): Promise<PlanningActionResult> {
+  const user = await ensureUser();
+  const parsed = z.object({ taskId: uuidSchema, status: taskStatusSchema }).safeParse(input);
+  if (!parsed.success) return { success: false, fieldErrors: zodFieldErrors(parsed.error) };
   try {
-    await ensureUser();
-    const parsed = toggleTaskSchema.safeParse(input);
-    if (!parsed.success) {
-      return {
-        success: false,
-        message: "Task toggle payload is invalid.",
-        fieldErrors: zodFieldErrors(parsed.error)
-      };
-    }
-
-    await updatePlanningTask(parsed.data.taskId, {
-      status: (parsed.data.done ? "done" : "open") as PlanningTaskStatus
-    });
-
+    await togglePlanningTaskStatus(parsed.data.taskId, parsed.data.status, user.id);
     revalidatePath("/planning");
-    return { success: true, message: "Task status updated." };
-  } catch (error) {
-    console.error("Failed to toggle planning task status", error);
-    return { success: false, message: "Could not toggle task status." };
+    return { success: true };
+  } catch (err: unknown) {
+    return { success: false, message: err instanceof Error ? err.message : "Failed to update task status" };
   }
 }
 

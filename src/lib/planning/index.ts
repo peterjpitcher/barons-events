@@ -93,16 +93,32 @@ function resolveSingleRelation<T>(value: T | T[] | null | undefined): T | null {
 
 function toPlanningTask(task: any): PlanningTask {
   const assignee = resolveSingleRelation(task?.assignee as any);
+  const assigneesRaw = Array.isArray(task?.assignees) ? task.assignees : [];
+  const assignees = assigneesRaw.map((a: any) => {
+    const user = a?.user ?? a;
+    return {
+      id: user?.id ?? "",
+      name: user?.full_name ?? user?.email ?? "Unknown",
+      email: user?.email ?? "",
+    };
+  });
+
   return {
     id: task.id,
     planningItemId: task.planning_item_id,
     title: task.title,
     assigneeId: task.assignee_id ?? null,
     assigneeName: assignee?.full_name ?? assignee?.email ?? "To be determined",
+    assignees,
     dueDate: task.due_date,
     status: task.status as PlanningTaskStatus,
-    completedAt: task.completed_at,
-    sortOrder: task.sort_order ?? 0
+    completedAt: task.completed_at ?? null,
+    completedBy: task.completed_by ?? null,
+    sortOrder: task.sort_order ?? 0,
+    sopSection: task.sop_section ?? null,
+    sopTemplateTaskId: task.sop_template_task_id ?? null,
+    isBlocked: task.is_blocked ?? false,
+    dueDateManuallyOverridden: task.due_date_manually_overridden ?? false,
   };
 }
 
@@ -446,8 +462,14 @@ export async function listPlanningBoardData(params?: {
         due_date,
         status,
         completed_at,
+        completed_by,
         sort_order,
-        assignee:users!planning_tasks_assignee_id_fkey(id,full_name,email)
+        sop_section,
+        sop_template_task_id,
+        is_blocked,
+        due_date_manually_overridden,
+        assignee:users!planning_tasks_assignee_id_fkey(id,full_name,email),
+        assignees:planning_task_assignees(user:users(id,full_name,email))
       )
     `
     )
@@ -823,8 +845,28 @@ export async function updatePlanningTask(taskId: string, updates: UpdatePlanning
   return data as PlanningTaskRow;
 }
 
-export async function togglePlanningTaskStatus(taskId: string, isDone: boolean): Promise<PlanningTaskRow> {
-  return updatePlanningTask(taskId, { status: isDone ? "done" : "open" });
+export async function togglePlanningTaskStatus(
+  taskId: string,
+  newStatus: PlanningTaskStatus,
+  userId?: string
+): Promise<PlanningTaskRow> {
+  const supabase = await createSupabaseActionClient();
+  const updates: Record<string, unknown> = { status: newStatus };
+  if (newStatus === "done" || newStatus === "not_required") {
+    updates.completed_at = new Date().toISOString();
+    updates.completed_by = userId ?? null;
+  } else {
+    updates.completed_at = null;
+    updates.completed_by = null;
+  }
+  const { data, error } = await supabase
+    .from("planning_tasks")
+    .update(updates)
+    .eq("id", taskId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data as PlanningTaskRow;
 }
 
 export async function deletePlanningTask(taskId: string): Promise<void> {

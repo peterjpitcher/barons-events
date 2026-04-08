@@ -16,7 +16,7 @@ type PersonTaskRow = {
   taskId: string;
   title: string;
   dueDate: string;
-  status: "open" | "done";
+  status: "open" | "done" | "not_required";
   assigneeId: string | null;
   assigneeName: string;
   planningItem: PlanningItem;
@@ -43,7 +43,7 @@ export function PlanningTodosByPersonView({ items, onOpenPlanningItem }: Plannin
     items.forEach((item) => {
       item.tasks.forEach((task) => {
         // Skip tasks that are already done (from server data) or optimistically marked done
-        if (task.status === "done" || optimisticallyDone.has(task.id)) return;
+        if (task.status === "done" || task.status === "not_required" || optimisticallyDone.has(task.id)) return;
 
         const key = task.assigneeId ?? "tbd";
         const label = task.assigneeName || "To be determined";
@@ -82,7 +82,7 @@ export function PlanningTodosByPersonView({ items, onOpenPlanningItem }: Plannin
     setOptimisticallyDone((current) => new Set(current).add(taskId));
 
     startTransition(async () => {
-      const result = await togglePlanningTaskStatusAction({ taskId, done: true });
+      const result = await togglePlanningTaskStatusAction({ taskId, status: "done" });
       if (!result.success) {
         // Revert optimistic update on failure
         setOptimisticallyDone((current) => {
