@@ -222,6 +222,25 @@ function SectionPanel({
   const [savingLabel, setSavingLabel] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [sectionAssigneeIds, setSectionAssigneeIds] = useState<string[]>(section.defaultAssigneeIds);
+  const [savingSectionAssignees, setSavingSectionAssignees] = useState(false);
+
+  async function handleSectionAssigneesChange(newIds: string[]): Promise<void> {
+    setSectionAssigneeIds(newIds);
+    setSavingSectionAssignees(true);
+    const result = await updateSopSectionAction({
+      id: section.id,
+      defaultAssigneeIds: newIds,
+    });
+    setSavingSectionAssignees(false);
+    if (result.success) {
+      toast.success("Section default assignees updated.");
+      await onChanged();
+    } else {
+      toast.error(result.message ?? "Could not update section assignees.");
+      setSectionAssigneeIds(section.defaultAssigneeIds);
+    }
+  }
 
   // Collect all task templates across all sections for dependency selection
   const allTasks = allSections.flatMap((s) => s.tasks);
@@ -363,6 +382,33 @@ function SectionPanel({
 
         {expanded && (
           <CardContent className="space-y-3 border-t border-[var(--color-border)] pt-4">
+            {/* Section-level default assignees */}
+            <div className="space-y-1 rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-muted-surface)] p-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-subtle">
+                  Section default assignees
+                </span>
+                {sectionAssigneeIds.length > 0 && (
+                  <span className="text-xs text-subtle">
+                    Applies to all tasks without an override
+                  </span>
+                )}
+              </div>
+              <MultiSelect
+                options={users}
+                selectedIds={sectionAssigneeIds}
+                onChange={(ids) => void handleSectionAssigneesChange(ids)}
+                disabled={!canEdit || savingSectionAssignees}
+                placeholder="Assign people to all tasks in this section..."
+              />
+              {savingSectionAssignees && (
+                <p className="text-xs text-subtle flex items-center gap-1">
+                  <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                  Saving...
+                </p>
+              )}
+            </div>
+
             {section.tasks.length === 0 ? (
               <p className="text-sm text-subtle">No tasks in this section yet.</p>
             ) : (
@@ -505,9 +551,13 @@ function TaskRow({
             <span className="text-sm font-medium text-[var(--color-text)]">{task.title}</span>
             <Badge variant="info">T-{task.tMinusDays}d</Badge>
           </div>
-          {assigneeNames.length > 0 && (
+          {assigneeNames.length > 0 ? (
             <p className="text-xs text-subtle">
-              Assignees: {assigneeNames.join(", ")}
+              Assignees: {assigneeNames.join(", ")} <span className="text-[var(--color-primary-400)]">(task override)</span>
+            </p>
+          ) : (
+            <p className="text-xs text-subtle italic">
+              Assignees: section default
             </p>
           )}
           {depNames.length > 0 && (
