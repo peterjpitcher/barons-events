@@ -421,6 +421,7 @@ function SectionPanel({
                     users={users}
                     canEdit={canEdit}
                     onChanged={onChanged}
+                    sectionAssigneeIds={section.defaultAssigneeIds}
                   />
                 ))}
               </div>
@@ -453,12 +454,14 @@ function TaskRow({
   users,
   canEdit,
   onChanged,
+  sectionAssigneeIds,
 }: {
   task: TaskWithDeps;
   allTasks: TaskWithDeps[];
   users: AssignableUser[];
   canEdit: boolean;
   onChanged: () => Promise<void>;
+  sectionAssigneeIds: string[];
 }): React.ReactElement {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(task.title);
@@ -540,7 +543,10 @@ function TaskRow({
       .map((depId) => allTasks.find((t) => t.id === depId)?.title ?? "Unknown")
       .filter(Boolean);
 
-    const assigneeNames = assigneeIds
+    // Resolve displayed assignees: task override → section default → none
+    const hasTaskOverride = assigneeIds.length > 0;
+    const resolvedIds = hasTaskOverride ? assigneeIds : sectionAssigneeIds;
+    const resolvedNames = resolvedIds
       .map((uid) => users.find((u) => u.id === uid)?.name ?? "Unknown")
       .filter(Boolean);
 
@@ -551,13 +557,19 @@ function TaskRow({
             <span className="text-sm font-medium text-[var(--color-text)]">{task.title}</span>
             <Badge variant="info">T-{task.tMinusDays}d</Badge>
           </div>
-          {assigneeNames.length > 0 ? (
+          {resolvedNames.length > 0 ? (
             <p className="text-xs text-subtle">
-              Assignees: {assigneeNames.join(", ")} <span className="text-[var(--color-primary-400)]">(task override)</span>
+              Assignees: {resolvedNames.join(", ")}
+              {!hasTaskOverride && (
+                <span className="italic text-[var(--color-primary-400)]"> (from section)</span>
+              )}
+              {hasTaskOverride && (
+                <span className="text-[var(--color-primary-400)]"> (task override)</span>
+              )}
             </p>
           ) : (
             <p className="text-xs text-subtle italic">
-              Assignees: section default
+              Assignees: none set
             </p>
           )}
           {depNames.length > 0 && (
