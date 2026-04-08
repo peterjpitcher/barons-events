@@ -3,6 +3,7 @@ import { ArchivedArtistsManager } from "@/components/settings/archived-artists-m
 import { EventTypesManager } from "@/components/settings/event-types-manager";
 import { ServiceTypesManager } from "@/components/settings/service-types-manager";
 import { SopTemplateEditor } from "@/components/settings/sop-template-editor";
+import { SettingsTabs } from "@/components/settings/settings-tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCurrentUser } from "@/lib/auth";
 import { listArchivedArtists } from "@/lib/artists";
@@ -30,6 +31,59 @@ export default async function SettingsPage() {
     listServiceTypes()
   ]);
 
+  const tabs = [
+    {
+      value: "general",
+      label: "General",
+      content: (
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Event types</CardTitle>
+              <CardDescription>Keep this list focused on the programming that fits your pubs.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <EventTypesManager eventTypes={eventTypes} />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Opening hours service types</CardTitle>
+              <CardDescription>These categories appear as rows in the weekly opening hours grid for each venue.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <ServiceTypesManager serviceTypes={serviceTypes} />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Archived artists</CardTitle>
+              <CardDescription>
+                Archived artists are hidden from planning flows but can be restored here.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <ArchivedArtistsManager artists={archivedArtists} />
+            </CardContent>
+          </Card>
+        </div>
+      ),
+    },
+    ...(canViewSopTemplate(user.role)
+      ? [
+          {
+            value: "sop",
+            label: "SOP Checklist",
+            content: (
+              <SopTemplateEditor />
+            ),
+          },
+        ]
+      : []),
+  ];
+
   return (
     <div className="space-y-6">
       <Card>
@@ -37,58 +91,9 @@ export default async function SettingsPage() {
           <CardTitle>Settings</CardTitle>
           <CardDescription>Fine-tune the tools your teams use to plan events.</CardDescription>
         </CardHeader>
-        <CardContent>
-          <p className="text-sm text-subtle">
-            Adjust picklists and defaults so requests stay consistent across the estate.
-          </p>
-        </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Event types</CardTitle>
-          <CardDescription>Keep this list focused on the programming that fits your pubs.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <EventTypesManager eventTypes={eventTypes} />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Opening hours service types</CardTitle>
-          <CardDescription>These categories appear as rows in the weekly opening hours grid for each venue.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <ServiceTypesManager serviceTypes={serviceTypes} />
-        </CardContent>
-      </Card>
-
-      {canViewSopTemplate(user.role) && (
-        <Card>
-          <CardHeader>
-            <CardTitle>SOP template</CardTitle>
-            <CardDescription>
-              Define the default checklist sections and tasks that get applied to each planning item.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <SopTemplateEditor />
-          </CardContent>
-        </Card>
-      )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Archived artists</CardTitle>
-          <CardDescription>
-            Archived artists are hidden from planning flows but can be restored here.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <ArchivedArtistsManager artists={archivedArtists} />
-        </CardContent>
-      </Card>
+      <SettingsTabs tabs={tabs} />
     </div>
   );
 }

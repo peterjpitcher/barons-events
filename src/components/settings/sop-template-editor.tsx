@@ -386,13 +386,8 @@ function SectionPanel({
             <div className="space-y-1 rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-muted-surface)] p-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-medium text-subtle">
-                  Section default assignees
+                  Pick names from the list to assign all todos in this section to them
                 </span>
-                {sectionAssigneeIds.length > 0 && (
-                  <span className="text-xs text-subtle">
-                    Applies to all tasks without an override
-                  </span>
-                )}
               </div>
               <MultiSelect
                 options={users}
