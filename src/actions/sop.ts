@@ -37,31 +37,31 @@ async function ensureSopUser(requireWrite = false) {
 const sopSectionSchema = z.object({
   label: z.string().min(1).max(100),
   sortOrder: z.number().int().min(0),
-  defaultAssigneeIds: z.array(z.string().uuid()).max(10).default([]),
+  defaultAssigneeIds: z.array(z.string().min(1)).max(10).default([]),
 });
 
 const sopSectionUpdateSchema = z.object({
-  id: z.string().uuid(),
+  id: z.string().min(1),
   label: z.string().min(1).max(100).optional(),
   sortOrder: z.number().int().min(0).optional(),
-  defaultAssigneeIds: z.array(z.string().uuid()).max(10).optional(),
+  defaultAssigneeIds: z.array(z.string().min(1)).max(10).optional(),
 });
 
 const sopTaskTemplateSchema = z.object({
-  sectionId: z.string().uuid(),
+  sectionId: z.string().min(1),
   title: z.string().min(1).max(200),
   sortOrder: z.number().int().min(0),
-  defaultAssigneeIds: z.array(z.string().uuid()).max(10).default([]),
+  defaultAssigneeIds: z.array(z.string().min(1)).max(10).default([]),
   tMinusDays: z.number().int().min(0),
 });
 
 const sopTaskTemplateUpdateSchema = sopTaskTemplateSchema.extend({
-  id: z.string().uuid(),
+  id: z.string().min(1),
 });
 
 const sopDependencySchema = z.object({
-  taskTemplateId: z.string().uuid(),
-  dependsOnTemplateId: z.string().uuid(),
+  taskTemplateId: z.string().min(1),
+  dependsOnTemplateId: z.string().min(1),
 });
 
 // ─── User list for assignee selection ────────────────────────────────────────
@@ -183,7 +183,7 @@ export async function deleteSopSectionAction(
 ): Promise<SopActionResult> {
   try {
     const user = await ensureSopUser(true);
-    const idParsed = z.string().uuid().safeParse(sectionId);
+    const idParsed = z.string().min(1).safeParse(sectionId);
     if (!idParsed.success) {
       return { success: false, message: "Invalid section ID." };
     }
@@ -316,7 +316,7 @@ export async function deleteSopTaskTemplateAction(
 ): Promise<SopActionResult> {
   try {
     const user = await ensureSopUser(true);
-    const idParsed = z.string().uuid().safeParse(taskTemplateId);
+    const idParsed = z.string().min(1).safeParse(taskTemplateId);
     if (!idParsed.success) {
       return { success: false, message: "Invalid task template ID." };
     }
@@ -457,7 +457,7 @@ export async function deleteSopDependencyAction(
 ): Promise<SopActionResult> {
   try {
     const user = await ensureSopUser(true);
-    const idParsed = z.string().uuid().safeParse(dependencyId);
+    const idParsed = z.string().min(1).safeParse(dependencyId);
     if (!idParsed.success) {
       return { success: false, message: "Invalid dependency ID." };
     }
