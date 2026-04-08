@@ -1,14 +1,17 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { Check, Minus, MoreHorizontal } from "lucide-react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { Check, Minus, MoreHorizontal, Users } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { PlanningTask, PlanningTaskStatus } from "@/lib/planning/types";
+import { reassignPlanningTaskAction } from "@/actions/planning";
+import type { PlanningPerson, PlanningTask, PlanningTaskStatus } from "@/lib/planning/types";
 
 type SopTaskRowProps = {
   task: PlanningTask;
   currentUserId?: string;
+  users: PlanningPerson[];
   onStatusChange: (taskId: string, status: PlanningTaskStatus) => void;
   onChanged?: () => void;
 };
@@ -50,9 +53,15 @@ function formatCompletedDate(completedAt: string | null): string {
   }).format(parsed);
 }
 
-export function SopTaskRow({ task, onStatusChange }: SopTaskRowProps) {
+export function SopTaskRow({ task, users, onStatusChange, onChanged }: SopTaskRowProps) {
   const [isPending, startTransition] = useTransition();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [reassignOpen, setReassignOpen] = useState(false);
+  const [selectedAssigneeIds, setSelectedAssigneeIds] = useState<string[]>(
+    task.assignees.map((a) => a.id)
+  );
+  const [savingAssignees, setSavingAssignees] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const isOpen = task.status === "open";
   const isDone = task.status === "done";
@@ -63,6 +72,19 @@ export function SopTaskRow({ task, onStatusChange }: SopTaskRowProps) {
   const assigneeNames = task.assignees.length > 0
     ? task.assignees.map((a) => a.name).join(", ")
     : task.assigneeName || "Unassigned";
+
+  // Close menu/reassign on outside click
+  useEffect(() => {
+    if (!menuOpen && !reassignOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+        setReassignOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [menuOpen, reassignOpen]);
 
   function handleStatusChange(status: PlanningTaskStatus): void {
     startTransition(() => {
@@ -79,7 +101,29 @@ export function SopTaskRow({ task, onStatusChange }: SopTaskRowProps) {
     }
   }
 
-  // Determine row opacity and styling
+  function toggleAssignee(userId: string): void {
+    setSelectedAssigneeIds((prev) =>
+      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
+    );
+  }
+
+  async function handleSaveAssignees(): Promise<void> {
+    setSavingAssignees(true);
+    const result = await reassignPlanningTaskAction({
+      taskId: task.id,
+      assigneeIds: selectedAssigneeIds,
+    });
+    setSavingAssignees(false);
+    if (result.success) {
+      toast.success("Task reassigned.");
+      setReassignOpen(false);
+      setMenuOpen(false);
+      onChanged?.();
+    } else {
+      toast.error(result.message ?? "Could not reassign task.");
+    }
+  }
+
   const rowOpacity = isDone ? "opacity-50" : isNotRequired ? "opacity-40" : isBlocked ? "opacity-60" : "";
   const titleStyle = isDone || isNotRequired ? "line-through text-subtle" : "font-medium text-[var(--color-text)]";
 
@@ -144,36 +188,99 @@ export function SopTaskRow({ task, onStatusChange }: SopTaskRowProps) {
         )}
       </div>
 
-      {/* Actions dropdown for "not required" option */}
-      {isActionable && (
-        <div className="relative shrink-0">
+      {/* Actions dropdown */}
+      {(isActionable || isDone || isNotRequired) && (
+        <div className="relative shrink-0" ref={menuRef}>
           <Button
             type="button"
             variant="ghost"
             size="sm"
             disabled={isPending}
-            onClick={() => setMenuOpen(!menuOpen)}
+            onClick={() => {
+              setMenuOpen(!menuOpen);
+              setReassignOpen(false);
+            }}
             aria-label="More actions"
             className="h-7 w-7 p-0"
           >
             <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
           </Button>
-          {menuOpen && (
+
+          {menuOpen && !reassignOpen && (
             <div
-              className="absolute right-0 top-full z-10 mt-1 min-w-[160px] rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-white py-1 shadow-soft"
+              className="absolute right-0 top-full z-10 mt-1 min-w-[180px] rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-white py-1 shadow-soft"
               role="menu"
             >
               <button
                 type="button"
                 role="menuitem"
-                className="w-full px-3 py-1.5 text-left text-sm text-[var(--color-text)] hover:bg-[var(--color-muted-surface)] transition-colors"
-                onClick={() => {
-                  setMenuOpen(false);
-                  handleStatusChange("not_required");
-                }}
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-[var(--color-text)] hover:bg-[var(--color-muted-surface)] transition-colors"
+                onClick={() => setReassignOpen(true)}
               >
-                Mark not required
+                <Users className="h-3.5 w-3.5" aria-hidden="true" />
+                Reassign
               </button>
+              {isActionable && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="w-full px-3 py-1.5 text-left text-sm text-[var(--color-text)] hover:bg-[var(--color-muted-surface)] transition-colors"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    handleStatusChange("not_required");
+                  }}
+                >
+                  Mark not required
+                </button>
+              )}
+            </div>
+          )}
+
+          {reassignOpen && (
+            <div
+              className="absolute right-0 top-full z-10 mt-1 w-64 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-white shadow-soft"
+            >
+              <div className="border-b border-[var(--color-border)] px-3 py-2">
+                <p className="text-xs font-medium text-[var(--color-text)]">Assign to</p>
+              </div>
+              <div className="max-h-48 overflow-auto py-1">
+                {users.map((user) => (
+                  <label
+                    key={user.id}
+                    className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm hover:bg-[var(--color-muted-surface)] transition-colors"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedAssigneeIds.includes(user.id)}
+                      onChange={() => toggleAssignee(user.id)}
+                      className="rounded border-[var(--color-border)]"
+                    />
+                    <span className="text-[var(--color-text)]">{user.name}</span>
+                  </label>
+                ))}
+                {users.length === 0 && (
+                  <p className="px-3 py-2 text-xs text-subtle">No users available.</p>
+                )}
+              </div>
+              <div className="flex justify-end gap-2 border-t border-[var(--color-border)] px-3 py-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setReassignOpen(false);
+                    setSelectedAssigneeIds(task.assignees.map((a) => a.id));
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={savingAssignees}
+                  onClick={() => void handleSaveAssignees()}
+                >
+                  {savingAssignees ? "Saving..." : "Save"}
+                </Button>
+              </div>
             </div>
           )}
         </div>

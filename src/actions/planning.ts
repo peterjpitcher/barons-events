@@ -460,6 +460,61 @@ export async function togglePlanningTaskStatusAction(input: unknown): Promise<Pl
   }
 }
 
+// ─── Reassign task assignees (multi-assignee) ────────────────────────────────
+
+export async function reassignPlanningTaskAction(input: unknown): Promise<PlanningActionResult> {
+  try {
+    await ensureUser();
+    const parsed = z.object({
+      taskId: z.string().min(1),
+      assigneeIds: z.array(z.string().min(1)),
+    }).safeParse(input);
+    if (!parsed.success) {
+      return { success: false, message: "Invalid input.", fieldErrors: zodFieldErrors(parsed.error) };
+    }
+
+    const { createSupabaseAdminClient } = await import("@/lib/supabase/admin");
+    const db = createSupabaseAdminClient();
+
+    // Remove existing assignees
+    const { error: delError } = await db
+      .from("planning_task_assignees")
+      .delete()
+      .eq("task_id", parsed.data.taskId);
+    if (delError) throw delError;
+
+    // Insert new assignees
+    if (parsed.data.assigneeIds.length > 0) {
+      const rows = parsed.data.assigneeIds.map((userId) => ({
+        task_id: parsed.data.taskId,
+        user_id: userId,
+      }));
+      const { error: insError } = await db
+        .from("planning_task_assignees")
+        .insert(rows);
+      if (insError) throw insError;
+
+      // Update the primary assignee_id to the first assignee
+      await db
+        .from("planning_tasks")
+        .update({ assignee_id: parsed.data.assigneeIds[0] })
+        .eq("id", parsed.data.taskId);
+    } else {
+      // Clear primary assignee
+      await db
+        .from("planning_tasks")
+        .update({ assignee_id: null })
+        .eq("id", parsed.data.taskId);
+    }
+
+    revalidatePath("/planning");
+    return { success: true, message: "Task reassigned." };
+  } catch (error) {
+    console.error("Failed to reassign planning task", error);
+    return { success: false, message: "Could not reassign task." };
+  }
+}
+
 const deleteTaskSchema = z.object({ taskId: uuidSchema });
 
 export async function deletePlanningTaskAction(input: unknown): Promise<PlanningActionResult> {
