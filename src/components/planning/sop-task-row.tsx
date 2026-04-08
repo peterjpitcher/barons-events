@@ -191,24 +191,22 @@ export function SopTaskRow({ task, users, onStatusChange, onChanged }: SopTaskRo
       {/* Actions dropdown */}
       {(isActionable || isDone || isNotRequired) && (
         <div className="relative shrink-0" ref={menuRef}>
-          <Button
+          <button
             type="button"
-            variant="ghost"
-            size="sm"
             disabled={isPending}
             onClick={() => {
               setMenuOpen(!menuOpen);
               setReassignOpen(false);
             }}
             aria-label="More actions"
-            className="h-7 w-7 p-0 border border-[var(--color-border)] bg-white hover:bg-[var(--color-muted-surface)]"
+            className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-[rgba(39,54,64,0.12)] disabled:opacity-60"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[#273640]" aria-hidden="true">
-              <circle cx="12" cy="12" r="1" fill="currentColor" />
-              <circle cx="19" cy="12" r="1" fill="currentColor" />
-              <circle cx="5" cy="12" r="1" fill="currentColor" />
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+              <circle cx="3" cy="8" r="1.5" fill="#273640" />
+              <circle cx="8" cy="8" r="1.5" fill="#273640" />
+              <circle cx="13" cy="8" r="1.5" fill="#273640" />
             </svg>
-          </Button>
+          </button>
 
           {menuOpen && !reassignOpen && (
             <div
