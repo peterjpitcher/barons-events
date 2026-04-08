@@ -138,7 +138,7 @@ export function PlanningTaskList({ itemId, tasks, users, onChanged }: PlanningTa
                         () =>
                           togglePlanningTaskStatusAction({
                             taskId: task.id,
-                            done: event.currentTarget.checked
+                            status: event.currentTarget.checked ? "done" : "open"
                           }),
                         event.currentTarget.checked ? "Task completed." : "Task reopened."
                       )

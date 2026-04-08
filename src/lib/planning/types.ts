@@ -1,6 +1,6 @@
 export type PlanningItemStatus = "planned" | "in_progress" | "blocked" | "done" | "cancelled";
 
-export type PlanningTaskStatus = "open" | "done";
+export type PlanningTaskStatus = "open" | "done" | "not_required";
 
 export type RecurrenceFrequency = "daily" | "weekly" | "monthly";
 
@@ -30,6 +30,12 @@ export type PlanningTask = {
   status: PlanningTaskStatus;
   completedAt: string | null;
   sortOrder: number;
+  assignees: Array<{ id: string; name: string; email: string }>;
+  completedBy: string | null;
+  sopSection: string | null;
+  sopTemplateTaskId: string | null;
+  isBlocked: boolean;
+  dueDateManuallyOverridden: boolean;
 };
 
 export type PlanningItem = {

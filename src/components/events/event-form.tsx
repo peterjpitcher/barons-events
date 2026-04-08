@@ -319,6 +319,7 @@ export function EventForm({
   const [endValue, setEndValue] = useState(toLocalInputValue(defaultValues?.end_at ?? initialEndAt));
   const [endDirty, setEndDirty] = useState(Boolean(defaultValues?.end_at ?? initialEndAt));
   const [eventNotes, setEventNotes] = useState(defaultValues?.notes ?? "");
+  const [managerResponsible, setManagerResponsible] = useState((defaultValues as any)?.manager_responsible ?? "");
   const [bookingType, setBookingType] = useState(defaultValues?.booking_type ?? "");
   const [ticketPrice, setTicketPrice] = useState(defaultValues?.ticket_price != null ? String(defaultValues.ticket_price) : "");
   const [selectedGoals, setSelectedGoals] = useState<Set<string>>(new Set(defaultGoalValues));
@@ -348,6 +349,7 @@ export function EventForm({
     setEventTypeValue(defaultValues?.event_type ?? eventTypes[0] ?? "");
     setVenueSpaceValue(defaultValues?.venue_space ?? "");
     setEventNotes(defaultValues?.notes ?? "");
+    setManagerResponsible((defaultValues as any)?.manager_responsible ?? "");
     setTicketPrice(defaultValues?.ticket_price != null ? String(defaultValues.ticket_price) : "");
     setSelectedArtistIds(getLinkedArtistSelection(defaultValues).ids);
     setSelectedGoals(
@@ -756,6 +758,23 @@ export function EventForm({
       <FieldError id="event-details-error" message={fieldErrors.notes} />
       <p className="text-xs text-subtle">
         Include anything a guest would want to know (what&apos;s happening, timings, promos, key moments).
+      </p>
+    </div>
+  );
+
+  const managerResponsibleField = (
+    <div className="space-y-2">
+      <Label htmlFor="managerResponsible">Manager Responsible</Label>
+      <Input
+        id="managerResponsible"
+        name="managerResponsible"
+        maxLength={200}
+        value={managerResponsible}
+        onChange={(event) => setManagerResponsible(event.target.value)}
+        placeholder="Enter manager name"
+      />
+      <p className="text-xs text-subtle">
+        The on-site manager accountable for this event.
       </p>
     </div>
   );
@@ -1743,6 +1762,7 @@ export function EventForm({
                       {titleAndVenueFields}
                       {eventTypeField}
                       {notesField}
+                      {managerResponsibleField}
                       {artistsField}
                       {timingFields}
                       {spacesField}
@@ -1842,6 +1862,7 @@ export function EventForm({
               {titleAndVenueFields}
               {eventTypeField}
               {notesField}
+              {managerResponsibleField}
               {artistsField}
             </CardContent>
           </Card>

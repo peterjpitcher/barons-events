@@ -5,6 +5,7 @@ import type { Database } from "@/lib/supabase/types";
 import type { AppUser, EventStatus } from "@/lib/types";
 import { recordAuditLogEntry } from "@/lib/audit-log";
 import { parseVenueSpaces } from "@/lib/venue-spaces";
+import { generateSopChecklist } from "@/lib/planning/sop";
 
 type EventRow = Database["public"]["Tables"]["events"]["Row"];
 type VenueRow = Database["public"]["Tables"]["venues"]["Row"];
@@ -379,6 +380,7 @@ export async function createEventDraft(payload: {
   termsAndConditions?: string | null;
   goalFocus?: string | null;
   notes?: string | null;
+  managerResponsible?: string | null;
   publicTitle?: string | null;
   publicTeaser?: string | null;
   publicDescription?: string | null;
@@ -418,6 +420,7 @@ export async function createEventDraft(payload: {
     terms_and_conditions: termsAndConditions,
     goal_focus: payload.goalFocus ?? null,
     notes: payload.notes ?? null,
+    manager_responsible: payload.managerResponsible ?? null,
     public_title: payload.publicTitle ?? null,
     public_teaser: payload.publicTeaser ?? null,
     public_description: payload.publicDescription ?? null,
@@ -513,7 +516,40 @@ export async function createEventDraft(payload: {
   return data;
 }
 
-export async function updateEventDraft(eventId: string, updates: Partial<EventRow>, actorId?: string | null) {
+/**
+ * Create a linked planning item for an event and generate SOP checklist.
+ * Called after event creation.
+ */
+export async function createEventPlanningItem(
+  eventId: string,
+  eventTitle: string,
+  startAt: string,
+  venueId: string | null,
+  createdBy: string
+): Promise<void> {
+  const db = createSupabaseAdminClient();
+  const targetDate = startAt.slice(0, 10); // Extract YYYY-MM-DD from ISO timestamp
+
+  const { data: planningItem, error } = await db
+    .from("planning_items")
+    .insert({
+      event_id: eventId,
+      title: eventTitle,
+      type_label: "Event",
+      venue_id: venueId,
+      target_date: targetDate,
+      status: "planned",
+      created_by: createdBy,
+    })
+    .select("id")
+    .single();
+
+  if (error) throw error;
+
+  await generateSopChecklist(planningItem.id, targetDate, createdBy);
+}
+
+export async function updateEventDraft(eventId: string, updates: Partial<EventRow> & Record<string, unknown>, actorId?: string | null) {
   const supabase = await createSupabaseActionClient();
 
   const { data: existing, error: fetchError } = await supabase

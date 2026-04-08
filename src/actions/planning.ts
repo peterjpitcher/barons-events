@@ -11,6 +11,7 @@ import {
   deletePlanningTask,
   movePlanningItemDate,
   pausePlanningSeries,
+  togglePlanningTaskStatus,
   updatePlanningItem,
   updatePlanningSeries,
   updatePlanningTask
@@ -19,6 +20,7 @@ import type { PlanningItemStatus, PlanningTaskStatus, RecurrenceFrequency } from
 import { canUsePlanning, canViewPlanning } from "@/lib/roles";
 import { createSupabaseActionClient } from "@/lib/supabase/server";
 import { generateInspirationItems } from "@/lib/planning/inspiration";
+import { generateSopChecklist, recalculateSopDates, updateBlockedStatus } from "@/lib/planning/sop";
 
 export type PlanningActionResult = {
   success: boolean;
@@ -30,7 +32,7 @@ const uuidSchema = z.string().uuid();
 const optionalUuidSchema = z.union([z.string().uuid(), z.literal(""), z.null(), z.undefined()]);
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD");
 const planningStatusSchema = z.enum(["planned", "in_progress", "blocked", "done", "cancelled"]);
-const taskStatusSchema = z.enum(["open", "done"]);
+const taskStatusSchema = z.enum(["open", "done", "not_required"]);
 const frequencySchema = z.enum(["daily", "weekly", "monthly"]);
 
 function zodFieldErrors(error: z.ZodError): Record<string, string> {
@@ -77,7 +79,7 @@ export async function createPlanningItemAction(input: unknown): Promise<Planning
       };
     }
 
-    await createPlanningItem({
+    const item = await createPlanningItem({
       title: parsed.data.title,
       description: parsed.data.description ?? null,
       typeLabel: parsed.data.typeLabel,
@@ -87,6 +89,12 @@ export async function createPlanningItemAction(input: unknown): Promise<Planning
       status: (parsed.data.status ?? "planned") as PlanningItemStatus,
       createdBy: user.id
     });
+
+    try {
+      await generateSopChecklist(item.id, item.target_date, user.id);
+    } catch (sopError) {
+      console.error("SOP checklist generation failed:", sopError);
+    }
 
     revalidatePath("/planning");
     return { success: true, message: "Planning item created." };
@@ -155,6 +163,12 @@ export async function movePlanningItemDateAction(input: unknown): Promise<Planni
     }
 
     await movePlanningItemDate(parsed.data.itemId, parsed.data.targetDate);
+
+    try {
+      await recalculateSopDates(parsed.data.itemId, parsed.data.targetDate);
+    } catch (sopError) {
+      console.error("SOP date recalculation failed:", sopError);
+    }
 
     revalidatePath("/planning");
     return { success: true, message: "Planning date moved." };
@@ -428,32 +442,21 @@ export async function updatePlanningTaskAction(input: unknown): Promise<Planning
   }
 }
 
-const toggleTaskSchema = z.object({
-  taskId: uuidSchema,
-  done: z.boolean()
-});
-
 export async function togglePlanningTaskStatusAction(input: unknown): Promise<PlanningActionResult> {
+  const user = await ensureUser();
+  const parsed = z.object({ taskId: uuidSchema, status: taskStatusSchema }).safeParse(input);
+  if (!parsed.success) return { success: false, fieldErrors: zodFieldErrors(parsed.error) };
   try {
-    await ensureUser();
-    const parsed = toggleTaskSchema.safeParse(input);
-    if (!parsed.success) {
-      return {
-        success: false,
-        message: "Task toggle payload is invalid.",
-        fieldErrors: zodFieldErrors(parsed.error)
-      };
+    await togglePlanningTaskStatus(parsed.data.taskId, parsed.data.status, user.id);
+    try {
+      await updateBlockedStatus(parsed.data.taskId, parsed.data.status);
+    } catch (blockErr) {
+      console.error("Failed to update blocked status:", blockErr);
     }
-
-    await updatePlanningTask(parsed.data.taskId, {
-      status: (parsed.data.done ? "done" : "open") as PlanningTaskStatus
-    });
-
     revalidatePath("/planning");
-    return { success: true, message: "Task status updated." };
-  } catch (error) {
-    console.error("Failed to toggle planning task status", error);
-    return { success: false, message: "Could not toggle task status." };
+    return { success: true };
+  } catch (err: unknown) {
+    return { success: false, message: err instanceof Error ? err.message : "Failed to update task status" };
   }
 }
 

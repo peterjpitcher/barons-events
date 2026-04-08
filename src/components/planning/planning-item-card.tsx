@@ -7,12 +7,13 @@ import { Check, GripVertical, Pencil, Trash2, X } from "lucide-react";
 import { ApproveEventButton } from "@/components/events/approve-event-button";
 import { convertInspirationItemAction, deletePlanningItemAction, dismissInspirationItemAction, updatePlanningItemAction } from "@/actions/planning";
 import { PlanningTaskList } from "@/components/planning/planning-task-list";
+import { SopChecklistView } from "@/components/planning/sop-checklist-view";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import type { PlanningEventOverlay, PlanningInspirationItem, PlanningItem, PlanningPerson, PlanningVenueOption } from "@/lib/planning/types";
+import type { PlanningEventOverlay, PlanningInspirationItem, PlanningItem, PlanningPerson, PlanningTask, PlanningVenueOption } from "@/lib/planning/types";
 import { formatDate } from "@/lib/utils/format";
 
 type PlanningItemCardProps = {
@@ -45,6 +46,38 @@ const STATUS_BADGE_VARIANT: Record<PlanningItem["status"], "neutral" | "info" | 
 
 function formatStatus(value: PlanningItem["status"]): string {
   return value.replace(/_/g, " ");
+}
+
+type TaskProgressBarProps = {
+  tasks: PlanningTask[];
+};
+
+function TaskProgressBar({ tasks }: TaskProgressBarProps) {
+  const total = tasks.length;
+  const resolved = tasks.filter((t) => t.status === "done" || t.status === "not_required").length;
+  const pct = total > 0 ? Math.round((resolved / total) * 100) : 0;
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs text-subtle">
+          Tasks: {resolved}/{total}
+        </p>
+        <p className="text-xs font-medium text-[var(--color-text)]">{pct}%</p>
+      </div>
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--color-muted-surface)]">
+        <div
+          className="h-full rounded-full bg-[var(--color-primary-400)] transition-[width]"
+          style={{ width: `${pct}%` }}
+          role="progressbar"
+          aria-valuenow={pct}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={`${resolved} of ${total} tasks resolved`}
+        />
+      </div>
+    </div>
+  );
 }
 
 export function PlanningItemCard({
@@ -288,6 +321,10 @@ export function PlanningItemCard({
         </div>
 
         {item.description ? <p className="text-sm text-[var(--color-text)]">{item.description}</p> : null}
+
+        {item.tasks.length > 0 ? (
+          <TaskProgressBar tasks={item.tasks} />
+        ) : null}
 
         {onOpenDetails ? (
           <div className="flex flex-wrap items-center justify-end gap-1.5">
@@ -547,7 +584,28 @@ export function PlanningItemCard({
         </div>
       </div>
 
-      <PlanningTaskList itemId={item.id} tasks={item.tasks} users={users} onChanged={onChanged} />
+      {(() => {
+        const sopTasks = item.tasks.filter((t) => t.sopSection !== null);
+        const regularTasks = item.tasks.filter((t) => t.sopSection === null);
+        return (
+          <>
+            {sopTasks.length > 0 && (
+              <SopChecklistView
+                tasks={sopTasks}
+                users={users}
+                itemId={item.id}
+                onChanged={onChanged}
+              />
+            )}
+            {regularTasks.length > 0 && (
+              <PlanningTaskList itemId={item.id} tasks={regularTasks} users={users} onChanged={onChanged} />
+            )}
+            {sopTasks.length === 0 && regularTasks.length === 0 && (
+              <PlanningTaskList itemId={item.id} tasks={[]} users={users} onChanged={onChanged} />
+            )}
+          </>
+        );
+      })()}
     </article>
   );
 }

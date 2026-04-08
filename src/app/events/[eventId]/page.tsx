@@ -23,6 +23,9 @@ import { listAssignableUsers, getUsersByIds } from "@/lib/users";
 import { updateAssigneeAction } from "@/actions/events";
 import { parseVenueSpaces } from "@/lib/venue-spaces";
 import { formatCurrency, formatPercent } from "@/lib/utils/format";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { SopChecklistView } from "@/components/planning/sop-checklist-view";
+import type { PlanningTask, PlanningPerson, PlanningTaskStatus } from "@/lib/planning/types";
 
 const statusCopy: Record<string, { label: string; tone: "neutral" | "info" | "success" | "warning" | "danger" }> = {
   draft: { label: "Draft", tone: "neutral" },
@@ -105,6 +108,56 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
     listAuditLogForEvent(event.id),
     listArtists()
   ]);
+
+  // ─── Fetch linked planning item & SOP tasks for this event ────────────────
+  let sopTasks: PlanningTask[] = [];
+  let sopPlanningItemId: string | null = null;
+  {
+    const db = createSupabaseAdminClient();
+    const { data: planningItem } = await db
+      .from("planning_items")
+      .select(`
+        id, target_date,
+        tasks:planning_tasks(
+          id, planning_item_id, title, assignee_id, due_date, status, completed_at, completed_by,
+          sort_order, sop_section, sop_template_task_id, is_blocked, due_date_manually_overridden,
+          assignee:users!planning_tasks_assignee_id_fkey(id, full_name, email),
+          assignees:planning_task_assignees(user:users(id, full_name, email))
+        )
+      `)
+      .eq("event_id", eventId)
+      .maybeSingle();
+
+    if (planningItem) {
+      sopPlanningItemId = planningItem.id;
+      const rawTasks = Array.isArray(planningItem.tasks) ? planningItem.tasks : [];
+      sopTasks = rawTasks.map((task: any): PlanningTask => {
+        const assignee = Array.isArray(task.assignee) ? task.assignee[0] : task.assignee;
+        const assigneesRaw = Array.isArray(task.assignees) ? task.assignees : [];
+        const assignees = assigneesRaw.map((a: any) => {
+          const u = a?.user ?? a;
+          return { id: u?.id ?? "", name: u?.full_name ?? u?.email ?? "Unknown", email: u?.email ?? "" };
+        });
+        return {
+          id: task.id,
+          planningItemId: task.planning_item_id,
+          title: task.title,
+          assigneeId: task.assignee_id ?? null,
+          assigneeName: assignee?.full_name ?? assignee?.email ?? "To be determined",
+          assignees,
+          dueDate: task.due_date,
+          status: task.status as PlanningTaskStatus,
+          completedAt: task.completed_at ?? null,
+          completedBy: task.completed_by ?? null,
+          sortOrder: task.sort_order ?? 0,
+          sopSection: task.sop_section ?? null,
+          sopTemplateTaskId: task.sop_template_task_id ?? null,
+          isBlocked: task.is_blocked ?? false,
+          dueDateManuallyOverridden: task.due_date_manually_overridden ?? false,
+        };
+      });
+    }
+  }
 
   const actorIds = new Set<string>();
   actorIds.add(event.created_by);
@@ -445,6 +498,23 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
     </Card>
   ) : null;
 
+  const sopChecklistCard = sopPlanningItemId && sopTasks.length > 0 ? (
+    <Card>
+      <CardHeader>
+        <CardTitle>SOP Checklist</CardTitle>
+        <CardDescription>Pre-event tasks linked to this event&apos;s planning item.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <SopChecklistView
+          tasks={sopTasks}
+          users={assignableUsers.map((u) => ({ id: u.id, name: u.name, email: u.email, role: u.role }))}
+          itemId={sopPlanningItemId}
+          currentUserId={user.id}
+        />
+      </CardContent>
+    </Card>
+  ) : null;
+
   return (
     <div className="space-y-6">
       <Link
@@ -526,6 +596,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
                 seoSlug={event.seo_slug ?? null}
               />
 
+              {sopChecklistCard}
               {reviewDecisionCard}
               {assignmentCard}
               {reviewerTimelineCard}
@@ -543,6 +614,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
 
             {debriefSubmitCard}
             {debriefSnapshotCard}
+            {sopChecklistCard}
 
             {canRevertToDraft ? (
               <Card>
