@@ -135,6 +135,7 @@ export async function updateSopSectionAction(
     const user = await ensureSopUser(true);
     const parsed = sopSectionUpdateSchema.safeParse(input);
     if (!parsed.success) {
+      console.error("updateSopSectionAction: validation failed", JSON.stringify(parsed.error.issues, null, 2), "input:", JSON.stringify(input));
       return { success: false, message: "Invalid section data." };
     }
 
