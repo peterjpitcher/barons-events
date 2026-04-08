@@ -380,6 +380,7 @@ export async function createEventDraft(payload: {
   termsAndConditions?: string | null;
   goalFocus?: string | null;
   notes?: string | null;
+  managerResponsible?: string | null;
   publicTitle?: string | null;
   publicTeaser?: string | null;
   publicDescription?: string | null;
@@ -419,6 +420,7 @@ export async function createEventDraft(payload: {
     terms_and_conditions: termsAndConditions,
     goal_focus: payload.goalFocus ?? null,
     notes: payload.notes ?? null,
+    manager_responsible: payload.managerResponsible ?? null,
     public_title: payload.publicTitle ?? null,
     public_teaser: payload.publicTeaser ?? null,
     public_description: payload.publicDescription ?? null,
@@ -547,7 +549,7 @@ export async function createEventPlanningItem(
   await generateSopChecklist(planningItem.id, targetDate, createdBy);
 }
 
-export async function updateEventDraft(eventId: string, updates: Partial<EventRow>, actorId?: string | null) {
+export async function updateEventDraft(eventId: string, updates: Partial<EventRow> & Record<string, unknown>, actorId?: string | null) {
   const supabase = await createSupabaseActionClient();
 
   const { data: existing, error: fetchError } = await supabase
