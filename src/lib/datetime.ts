@@ -167,6 +167,32 @@ export function toLondonDateTimeInputValue(value?: string | null): string {
  * Returns "Never signed in" when date is null.
  * Value is computed at call time (SSR) — it does not live-update in the browser.
  */
+const londonDateChipFormatter = new Intl.DateTimeFormat("en-GB", {
+  timeZone: LONDON_TIME_ZONE,
+  weekday: "short",
+  day: "numeric",
+  month: "short"
+});
+
+const londonTimeChipFormatter = new Intl.DateTimeFormat("en-GB", {
+  timeZone: LONDON_TIME_ZONE,
+  hour: "numeric",
+  minute: "2-digit",
+  hour12: true
+});
+
+/**
+ * Format a UTC/ISO date string into London-local display strings.
+ * Returns { date: "Thu 28 May", time: "7:30pm" }.
+ */
+export function formatInLondon(isoString: string): { date: string; time: string } {
+  const d = new Date(isoString);
+  return {
+    date: londonDateChipFormatter.format(d),
+    time: londonTimeChipFormatter.format(d).toLowerCase().replace(/\s/g, "")
+  };
+}
+
 export function formatRelativeTime(date: Date | null): string {
   if (!date) return "Never signed in";
 

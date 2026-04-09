@@ -9,12 +9,14 @@ const formatter = new Intl.DateTimeFormat("en-GB", {
   day: "numeric",
   month: "long",
   hour: "2-digit",
-  minute: "2-digit"
+  minute: "2-digit",
+  timeZone: "Europe/London"
 });
 
 const cutoffTimeFormatter = new Intl.DateTimeFormat("en-GB", {
   hour: "2-digit",
-  minute: "2-digit"
+  minute: "2-digit",
+  timeZone: "Europe/London"
 });
 
 const bookingTypeLabel: Record<string, string> = {

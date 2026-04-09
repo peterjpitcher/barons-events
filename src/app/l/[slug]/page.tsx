@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import dayjs from "dayjs";
+import { formatInLondon } from "@/lib/datetime";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getConfirmedTicketCount } from "@/lib/bookings";
 import { BookingForm } from "./BookingForm";
@@ -126,9 +126,7 @@ export default async function EventLandingPage({ params }: PageProps) {
   const isSoldOut =
     event.total_capacity != null && confirmedCount >= event.total_capacity;
 
-  const startDate = dayjs(event.start_at);
-  const dateStr = startDate.format("ddd D MMM");
-  const timeStr = startDate.format("h:mma");
+  const { date: dateStr, time: timeStr } = formatInLondon(event.start_at);
 
   const highlights: string[] =
     Array.isArray(event.public_highlights) && event.public_highlights.length > 0
