@@ -225,9 +225,11 @@ export default async function EventLandingPage({ params }: PageProps) {
               </p>
             )}
             {event.public_description && (
-              <p className="text-[#273640] text-sm leading-relaxed mb-4">
-                {event.public_description}
-              </p>
+              <div className="text-[#273640] text-sm leading-relaxed mb-4 space-y-3">
+                {event.public_description.split(/\n{2,}/).map((paragraph, i) => (
+                  <p key={i}>{paragraph}</p>
+                ))}
+              </div>
             )}
           </div>
 
