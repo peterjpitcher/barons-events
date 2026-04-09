@@ -695,7 +695,12 @@ export async function generateWebsiteCopy(input: WebsiteCopyInput): Promise<Gene
           "- publicTitle: catchy guest-facing event name, 5 words maximum.",
           "- publicTeaser: short conversion hook for cards/social (<= 160 chars).",
           "- publicHighlights: array of 3-5 concise bullets (no markdown bullets), each <= 90 chars, focused on USP/value.",
-          "- publicDescription: 260-340 words, 2-4 short paragraphs, booking-focused; MUST include the venue name and UK date + time range.",
+          "- publicDescription: 260-340 words, 3-4 SHORT paragraphs separated by \\n\\n (double newline). Each paragraph should have a clear focus:",
+          "    Paragraph 1: Opening hook — venue, date, time, and what the event is.",
+          "    Paragraph 2: What guests can expect — entertainment, food, drinks, atmosphere.",
+          "    Paragraph 3: Practical details — booking info, age policy, accessibility, check-in cutoff (if provided).",
+          "    Paragraph 4 (optional): Closing CTA — urgency, why they should book now.",
+          "  MUST include the venue name and UK date + time range. Do NOT output as one continuous block.",
           "- If artist lineup is provided, mention the artist/host names naturally in the highlights or description.",
           "- If provided in the brief, include check-in cutoff, age policy, accessibility notes, and cancellation window in clear guest language.",
           "- seoTitle: <= 60 characters and MUST include the event date.",
@@ -748,7 +753,7 @@ export async function generateWebsiteCopy(input: WebsiteCopyInput): Promise<Gene
             },
             publicDescription: {
               type: "string",
-              description: "Guest-facing description (~300 words), urgency-driven, no URLs."
+              description: "Guest-facing description (~300 words), 3-4 paragraphs separated by \\n\\n. Urgency-driven, no URLs."
             },
             seoTitle: {
               type: "string",
