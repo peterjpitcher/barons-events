@@ -6,7 +6,8 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth";
 import { canEditSopTemplate, canViewSopTemplate } from "@/lib/roles";
 import { recordAuditLogEntry } from "@/lib/audit-log";
-import { loadSopTemplate } from "@/lib/planning/sop";
+import { generateSopChecklist, loadSopTemplate } from "@/lib/planning/sop";
+import { createEventPlanningItem } from "@/lib/events";
 import type { SopTemplateTree } from "@/lib/planning/sop-types";
 
 // ─── Result type ─────────────────────────────────────────────────────────────
@@ -489,6 +490,131 @@ export async function deleteSopDependencyAction(
       success: false,
       message:
         error instanceof Error ? error.message : "Could not delete dependency.",
+    };
+  }
+}
+
+// ─── Backfill: ensure all events and planning items have SOP checklists ──────
+
+export interface BackfillSopResult {
+  success: boolean;
+  message?: string;
+  eventsLinked: number;
+  checklistsGenerated: number;
+  skipped: number;
+  errors: string[];
+}
+
+/**
+ * Backfill SOP checklists for all events and planning items.
+ *
+ * 1. Find events without a linked planning item → create one
+ * 2. Find planning items without any SOP tasks → generate checklist
+ *
+ * The RPC is idempotent so this is safe to run multiple times.
+ */
+export async function backfillSopChecklistsAction(): Promise<BackfillSopResult> {
+  try {
+    const user = await ensureSopUser(true);
+    const db = createSupabaseAdminClient();
+
+    let eventsLinked = 0;
+    let checklistsGenerated = 0;
+    let skipped = 0;
+    const errors: string[] = [];
+
+    // ── Step 1: Events without a linked planning item ──────────────────────
+    const { data: allEvents, error: eventsError } = await db
+      .from("events")
+      .select("id, title, start_at, venue_id")
+      .is("deleted_at", null);
+
+    if (eventsError) throw new Error(`Failed to fetch events: ${eventsError.message}`);
+
+    const { data: linkedItems, error: linkedError } = await db
+      .from("planning_items")
+      .select("event_id")
+      .not("event_id", "is", null);
+
+    if (linkedError) throw new Error(`Failed to fetch linked planning items: ${linkedError.message}`);
+
+    const linkedEventIds = new Set(
+      (linkedItems ?? []).map((row: { event_id: string | null }) => row.event_id)
+    );
+
+    for (const event of allEvents ?? []) {
+      if (linkedEventIds.has(event.id)) continue;
+      try {
+        await createEventPlanningItem(
+          event.id,
+          event.title,
+          event.start_at,
+          event.venue_id,
+          user.id
+        );
+        eventsLinked++;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        errors.push(`Event "${event.title}" (${event.id}): ${msg}`);
+      }
+    }
+
+    // ── Step 2: Planning items without SOP tasks ───────────────────────────
+    // generateSopChecklist is idempotent — returns 0 if already generated
+    const { data: allItems, error: itemsError } = await db
+      .from("planning_items")
+      .select("id, target_date")
+      .neq("status", "cancelled");
+
+    if (itemsError) throw new Error(`Failed to fetch planning items: ${itemsError.message}`);
+
+    for (const item of allItems ?? []) {
+      if (!item.target_date) {
+        skipped++;
+        continue;
+      }
+
+      try {
+        const count = await generateSopChecklist(item.id, item.target_date, user.id);
+        if (count > 0) {
+          checklistsGenerated++;
+        } else {
+          skipped++;
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        errors.push(`Planning item ${item.id}: ${msg}`);
+      }
+    }
+
+    await recordAuditLogEntry({
+      entity: "sop_template",
+      entityId: "backfill",
+      action: "sop_backfill_completed",
+      actorId: user.id,
+      meta: { eventsLinked, checklistsGenerated, skipped, errorCount: errors.length },
+    });
+
+    revalidatePath("/planning");
+    revalidatePath("/events");
+
+    return {
+      success: true,
+      message: `Backfill complete: ${eventsLinked} events linked, ${checklistsGenerated} checklists generated, ${skipped} already had checklists.${errors.length > 0 ? ` ${errors.length} errors.` : ""}`,
+      eventsLinked,
+      checklistsGenerated,
+      skipped,
+      errors,
+    };
+  } catch (error) {
+    console.error("backfillSopChecklistsAction:", error);
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : "Backfill failed.",
+      eventsLinked: 0,
+      checklistsGenerated: 0,
+      skipped: 0,
+      errors: [error instanceof Error ? error.message : String(error)],
     };
   }
 }

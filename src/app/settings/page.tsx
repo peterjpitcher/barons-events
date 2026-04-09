@@ -3,6 +3,7 @@ import { ArchivedArtistsManager } from "@/components/settings/archived-artists-m
 import { EventTypesManager } from "@/components/settings/event-types-manager";
 import { ServiceTypesManager } from "@/components/settings/service-types-manager";
 import { SopTemplateEditor } from "@/components/settings/sop-template-editor";
+import { SopBackfillButton } from "@/components/settings/sop-backfill-button";
 import { SettingsTabs } from "@/components/settings/settings-tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCurrentUser } from "@/lib/auth";
@@ -50,7 +51,12 @@ export default async function SettingsPage() {
             value: "sop",
             label: "SOP Checklist",
             description: "Define the default checklist sections and tasks that get applied to each event and planning item.",
-            content: <SopTemplateEditor />,
+            content: (
+              <div className="space-y-6">
+                <SopTemplateEditor />
+                <SopBackfillButton />
+              </div>
+            ),
           },
         ]
       : []),

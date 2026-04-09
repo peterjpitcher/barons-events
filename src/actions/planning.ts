@@ -565,7 +565,7 @@ export async function convertInspirationItemAction(
     }
 
     // Create the planning item
-    const { error: insertItemError } = await db
+    const { data: newItem, error: insertItemError } = await db
       .from("planning_items")
       .insert({
         title: item.event_name,
@@ -573,11 +573,20 @@ export async function convertInspirationItemAction(
         type_label: "Occasion",
         status: "planned",
         created_by: user.id,
-      });
+      })
+      .select("id, target_date")
+      .single();
 
-    if (insertItemError) {
+    if (insertItemError || !newItem) {
       console.error("convertInspirationItemAction: insert planning_item failed", insertItemError);
       return { success: false, message: "Failed to add to plan." };
+    }
+
+    // Generate SOP checklist for the new planning item
+    try {
+      await generateSopChecklist(newItem.id, newItem.target_date, user.id);
+    } catch (sopError) {
+      console.error("convertInspirationItemAction: SOP generation failed (item still created):", sopError);
     }
 
     // Record the dismissal (with reason = 'converted')
