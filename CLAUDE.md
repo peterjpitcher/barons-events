@@ -29,8 +29,7 @@ npm run supabase:reset   # Reset database (linked, requires confirmation)
 **Route Structure**: App Router with event management focus. Key sections:
 - `/events` — Event browsing, listing (public and authenticated)
 - `/admin` — Event creation, management, setup
-- `/api/events` — Public event API with rate limiting and auth
-- `/api/webhooks` — Incoming webhooks from external systems
+- `/api/v1/events` — Public event API with rate limiting and auth
 
 **Auth**: Supabase Auth with JWT + HTTP-only cookies. User context available in server and client components. Permission checks via `src/lib/` helpers.
 
@@ -42,7 +41,7 @@ npm run supabase:reset   # Reset database (linked, requires confirmation)
 - **Public API**: `src/lib/public-api/` — rate-limited REST API for events
 - **Notifications**: `src/lib/notifications.ts` — event alerts and reminders
 
-**Data Flow**: Server actions for mutations (create/update/delete events). React Query for data fetching. All API responses validated with Zod. RLS enforces permission at database level.
+**Data Flow**: Server actions for mutations (create/update/delete events). Server components for data fetching. All API responses validated with Zod. RLS enforces permission at database level.
 
 ## Key Files
 
@@ -57,7 +56,7 @@ npm run supabase:reset   # Reset database (linked, requires confirmation)
 | `src/lib/artists.ts` | Artist/performer data helpers |
 | `src/lib/reviewers.ts` | Event reviewer/moderator logic |
 | `src/lib/notifications.ts` | Email and notification dispatch |
-| `src/app/api/events` | Public event REST API |
+| `src/app/api/v1/events` | Public event REST API |
 | `src/actions/` | Server actions for mutations |
 | `supabase/migrations/` | Database schema migrations |
 | `supabase/seed.sql` | Database seed for testing |

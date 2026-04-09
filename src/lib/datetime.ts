@@ -122,6 +122,25 @@ export function normaliseEventDateTimeForStorage(value: string): string {
     guessUtcMillis += deltaMillis;
   }
 
+  // Round-trip check: convert the resolved UTC time back to London local time
+  // and verify it matches the original input. If it doesn't, the input time
+  // falls inside a DST spring-forward gap (e.g. 01:30 on the last Sunday of
+  // March in the UK, when clocks jump from 01:00 straight to 02:00).
+  const roundTripped = londonPartsFromUtcMillis(guessUtcMillis);
+  if (
+    roundTripped.hour !== localParts.hour ||
+    roundTripped.minute !== localParts.minute ||
+    roundTripped.day !== localParts.day ||
+    roundTripped.month !== localParts.month ||
+    roundTripped.year !== localParts.year
+  ) {
+    const inputTime = `${pad(localParts.hour)}:${pad(localParts.minute)}`;
+    throw new Error(
+      `The time ${inputTime} does not exist in London timezone due to daylight saving time. ` +
+      `Clocks spring forward from 01:00 to 02:00 on this date.`
+    );
+  }
+
   return new Date(guessUtcMillis).toISOString();
 }
 

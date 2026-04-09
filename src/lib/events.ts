@@ -153,7 +153,7 @@ export async function listReviewQueue(user: AppUser): Promise<EventSummary[]> {
     throw new Error(`Unable to load review queue: ${error.message}`);
   }
 
-  const rows = (data ?? []) as any[];
+  const rows = (data ?? []) as Array<EventRow & { venue: EventSummary["venue"] | EventSummary["venue"][] }>;
 
   return rows.map((item) => ({
     ...item,
@@ -191,14 +191,22 @@ export async function listEventsForUser(user: AppUser): Promise<EventSummary[]> 
     throw new Error(`Unable to load events: ${error.message}`);
   }
 
-  const rows = (data ?? []) as any[];
+  type RawArtistEntry = Pick<EventArtistRow, "id" | "artist_id" | "billing_order"> & {
+    artist: Pick<ArtistRow, "id" | "name"> | Pick<ArtistRow, "id" | "name">[] | null;
+  };
+  type RawEventRow = EventRow & {
+    venue: EventSummary["venue"] | EventSummary["venue"][];
+    artists: RawArtistEntry[] | null;
+  };
+
+  const rows = (data ?? []) as RawEventRow[];
 
   return rows.map((item) => ({
     ...item,
     venue: Array.isArray(item.venue) ? item.venue[0] : (item.venue as EventSummary["venue"]),
     artists: Array.isArray(item.artists)
       ? item.artists
-          .map((entry: any) => {
+          .map((entry: RawArtistEntry) => {
             const artistValue = Array.isArray(entry?.artist) ? entry.artist[0] : entry?.artist;
             return {
               ...(entry as Pick<EventArtistRow, "id" | "artist_id" | "billing_order">),
@@ -208,7 +216,7 @@ export async function listEventsForUser(user: AppUser): Promise<EventSummary[]> 
                   : null
             };
           })
-          .sort((left: any, right: any) => {
+          .sort((left, right) => {
             const leftOrder = typeof left.billing_order === "number" ? left.billing_order : 9999;
             const rightOrder = typeof right.billing_order === "number" ? right.billing_order : 9999;
             if (leftOrder !== rightOrder) return leftOrder - rightOrder;
@@ -245,11 +253,19 @@ export async function getEventDetail(eventId: string): Promise<EventDetail | nul
     return null;
   }
 
-  const record = data as any;
+  type RawDetailRecord = EventRow & {
+    venue: VenueRow | VenueRow[] | null;
+    versions: VersionRow[] | null;
+    approvals: ApprovalRow[] | null;
+    debrief: DebriefRow | DebriefRow[] | null;
+    artists: Array<EventArtistRow & { artist: ArtistRow | ArtistRow[] | null }> | null;
+  };
 
-  const versions: any[] = Array.isArray(record.versions) ? record.versions : [];
+  const record = data as RawDetailRecord;
 
-  const latestVersion = versions.reduce((current: any | null, candidate: any) => {
+  const versions: VersionRow[] = Array.isArray(record.versions) ? record.versions : [];
+
+  const latestVersion = versions.reduce((current: VersionRow | null, candidate: VersionRow) => {
     if (!candidate) return current;
     const candidateVersion = typeof candidate.version === "number" ? candidate.version : Number(candidate.version);
     if (!Number.isFinite(candidateVersion)) return current;
@@ -281,11 +297,11 @@ export async function getEventDetail(eventId: string): Promise<EventDetail | nul
 
   const costDetails = hasCostDetails
     ? normaliseOptionalText(record.cost_details)
-    : normaliseOptionalText(latestPayload?.cost_details as any) ?? normaliseOptionalText(latestPayload?.costDetails as any);
+    : normaliseOptionalText(latestPayload?.cost_details) ?? normaliseOptionalText(latestPayload?.costDetails);
 
   const bookingType = hasBookingType
     ? normaliseOptionalText(record.booking_type)
-    : normaliseOptionalText(latestPayload?.booking_type as any) ?? normaliseOptionalText(latestPayload?.bookingType as any);
+    : normaliseOptionalText(latestPayload?.booking_type) ?? normaliseOptionalText(latestPayload?.bookingType);
 
   const ticketPrice = hasTicketPrice
     ? normaliseOptionalNumber(record.ticket_price)
@@ -298,12 +314,12 @@ export async function getEventDetail(eventId: string): Promise<EventDetail | nul
 
   const agePolicy = hasAgePolicy
     ? normaliseOptionalText(record.age_policy)
-    : normaliseOptionalText(latestPayload?.age_policy as any) ?? normaliseOptionalText(latestPayload?.agePolicy as any);
+    : normaliseOptionalText(latestPayload?.age_policy) ?? normaliseOptionalText(latestPayload?.agePolicy);
 
   const accessibilityNotes = hasAccessibilityNotes
     ? normaliseOptionalText(record.accessibility_notes)
-    : normaliseOptionalText(latestPayload?.accessibility_notes as any) ??
-      normaliseOptionalText(latestPayload?.accessibilityNotes as any);
+    : normaliseOptionalText(latestPayload?.accessibility_notes) ??
+      normaliseOptionalText(latestPayload?.accessibilityNotes);
 
   const cancellationWindowHours = hasCancellationWindowHours
     ? normaliseOptionalInteger(record.cancellation_window_hours)
@@ -312,13 +328,13 @@ export async function getEventDetail(eventId: string): Promise<EventDetail | nul
 
   const termsAndConditions = hasTermsAndConditions
     ? normaliseOptionalText(record.terms_and_conditions)
-    : normaliseOptionalText(latestPayload?.terms_and_conditions as any) ??
-      normaliseOptionalText(latestPayload?.termsAndConditions as any);
+    : normaliseOptionalText(latestPayload?.terms_and_conditions) ??
+      normaliseOptionalText(latestPayload?.termsAndConditions);
 
   const publicHighlights = hasPublicHighlights
     ? normaliseOptionalHighlights(record.public_highlights)
-    : normaliseOptionalHighlights(latestPayload?.public_highlights as any) ??
-      normaliseOptionalHighlights(latestPayload?.publicHighlights as any);
+    : normaliseOptionalHighlights(latestPayload?.public_highlights) ??
+      normaliseOptionalHighlights(latestPayload?.publicHighlights);
 
   return {
     ...record,
@@ -328,14 +344,14 @@ export async function getEventDetail(eventId: string): Promise<EventDetail | nul
     debrief: Array.isArray(record.debrief) ? record.debrief[0] ?? null : (record.debrief as DebriefRow | null),
     artists: Array.isArray(record.artists)
       ? record.artists
-          .map((entry: any) => {
+          .map((entry) => {
             const artistValue = Array.isArray(entry?.artist) ? entry.artist[0] : entry?.artist;
             return {
               ...(entry as EventArtistRow),
               artist: artistValue && typeof artistValue === "object" ? (artistValue as ArtistRow) : null
             };
           })
-          .sort((a: any, b: any) => {
+          .sort((a, b) => {
             const left = typeof a.billing_order === "number" ? a.billing_order : 9999;
             const right = typeof b.billing_order === "number" ? b.billing_order : 9999;
             if (left !== right) return left - right;
@@ -444,6 +460,7 @@ export async function createEventDraft(payload: {
   let insertError: { code?: string; message: string } | null = null;
 
   for (let attempt = 0; attempt < 24; attempt += 1) {
+    // any: dynamic payload for schema-drift resilience — columns are stripped at runtime if DB doesn't have them yet
     const result = await supabase.from("events").insert(insertPayload as any).select().single();
     if (!result.error) {
       data = result.data as EventRow;
@@ -567,15 +584,15 @@ export async function updateEventDraft(eventId: string, updates: Partial<EventRo
   const updatePayload: Record<string, unknown> = { ...updates };
 
   if ("cost_details" in updatePayload) {
-    const normalised = normaliseOptionalText(updatePayload["cost_details"] as any);
+    const normalised = normaliseOptionalText(updatePayload["cost_details"]);
     updatePayload["cost_details"] = normalised;
   }
   if ("age_policy" in updatePayload) {
-    const normalised = normaliseOptionalText(updatePayload["age_policy"] as any);
+    const normalised = normaliseOptionalText(updatePayload["age_policy"]);
     updatePayload["age_policy"] = normalised;
   }
   if ("accessibility_notes" in updatePayload) {
-    const normalised = normaliseOptionalText(updatePayload["accessibility_notes"] as any);
+    const normalised = normaliseOptionalText(updatePayload["accessibility_notes"]);
     updatePayload["accessibility_notes"] = normalised;
   }
   if ("check_in_cutoff_minutes" in updatePayload) {
@@ -587,11 +604,11 @@ export async function updateEventDraft(eventId: string, updates: Partial<EventRo
     updatePayload["cancellation_window_hours"] = normalised;
   }
   if ("terms_and_conditions" in updatePayload) {
-    const normalised = normaliseOptionalText(updatePayload["terms_and_conditions"] as any);
+    const normalised = normaliseOptionalText(updatePayload["terms_and_conditions"]);
     updatePayload["terms_and_conditions"] = normalised;
   }
   if ("event_image_path" in updatePayload) {
-    const normalised = normaliseOptionalText(updatePayload["event_image_path"] as any);
+    const normalised = normaliseOptionalText(updatePayload["event_image_path"]);
     updatePayload["event_image_path"] = normalised;
   }
   if ("public_highlights" in updatePayload) {
@@ -606,6 +623,7 @@ export async function updateEventDraft(eventId: string, updates: Partial<EventRo
   for (let attempt = 0; attempt < 24; attempt += 1) {
     const result = await supabase
       .from("events")
+      // any: dynamic payload for schema-drift resilience — columns are stripped at runtime
       .update(updatePayload as any)
       .eq("id", eventId)
       .select()
@@ -806,7 +824,7 @@ export async function findConflicts(): Promise<Array<{ event: EventSummary; conf
     throw new Error(`Could not load events for conflict check: ${error.message}`);
   }
 
-  const events = ((data ?? []) as any[]).map((row) => ({
+  const events = ((data ?? []) as Array<EventRow & { venue: EventSummary["venue"] | EventSummary["venue"][] }>).map((row) => ({
     ...row,
     venue: Array.isArray(row.venue) ? row.venue[0] : (row.venue as EventSummary["venue"])
   }));

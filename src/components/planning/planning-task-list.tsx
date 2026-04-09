@@ -78,10 +78,10 @@ export function PlanningTaskList({ itemId, tasks, users, onChanged }: PlanningTa
 
   function runTaskAction<T>(work: () => Promise<T>, successMessage?: string) {
     startTransition(async () => {
-      const result: any = await work();
+      const result: unknown = await work();
       if (result && typeof result === "object" && "success" in result) {
-        if (!result.success) {
-          toast.error(result.message ?? "Could not update task.");
+        if (!(result as { success: boolean }).success) {
+          toast.error((result as { message?: string }).message ?? "Could not update task.");
           return;
         }
       }

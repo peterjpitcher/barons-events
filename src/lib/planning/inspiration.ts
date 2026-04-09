@@ -216,7 +216,7 @@ export async function generateInspirationItems(
 
   const db = createSupabaseAdminClient();
 
-  // Step 1: Fetch current inspiration item IDs before deleting
+  // Step 1: Fetch current inspiration item IDs (needed later to clean up old rows)
   const { data: currentItems, error: selectError } = await db
     .from('planning_inspiration_items')
     .select('id');
@@ -224,27 +224,10 @@ export async function generateInspirationItems(
     console.error('generateInspirationItems: could not read current IDs', selectError);
     throw new Error(`Failed to read inspiration items: ${selectError.message}`);
   }
-  const currentIds = (currentItems ?? []).map((r: { id: string }) => r.id);
+  const oldIds = (currentItems ?? []).map((r: { id: string }) => r.id);
 
-  // Step 2: Delete dismissals pointing at items about to be replaced
-  if (currentIds.length > 0) {
-    await db
-      .from('planning_inspiration_dismissals')
-      .delete()
-      .in('inspiration_item_id', currentIds);
-  }
-
-  // Step 3: Delete all existing inspiration items (replaced with fresh batch)
-  // Supabase requires a filter on DELETE — this dummy neq filter deletes all rows
-  // (no real ID can match this nil UUID) while satisfying the SDK constraint.
-  await db
-    .from('planning_inspiration_items')
-    .delete()
-    .neq('id', '00000000-0000-0000-0000-000000000000');
-
-  if (all.length === 0) return 0;
-
-  // Step 4: Insert fresh batch
+  // Step 2: Insert new batch FIRST — old rows remain untouched until insert succeeds.
+  // If this fails, users see stale-but-valid data rather than an empty feed.
   const rows = all.map(item => ({
     event_name: item.eventName,
     event_date: item.eventDate,
@@ -254,10 +237,35 @@ export async function generateInspirationItems(
     generated_at: generatedAt,
   }));
 
-  const { error } = await db.from('planning_inspiration_items').insert(rows);
-  if (error) {
-    console.error('generateInspirationItems: insert failed', error);
-    throw new Error(`Failed to insert inspiration items: ${error.message}`);
+  if (rows.length > 0) {
+    const { error: insertError } = await db.from('planning_inspiration_items').insert(rows);
+    if (insertError) {
+      console.error('generateInspirationItems: insert failed — old data preserved', insertError);
+      throw new Error(`Failed to insert inspiration items: ${insertError.message}`);
+    }
+  }
+
+  // Step 3: Delete old rows now that new rows are safely inserted.
+  // Delete dismissals first (FK reference), then old items.
+  if (oldIds.length > 0) {
+    const { error: dismissalError } = await db
+      .from('planning_inspiration_dismissals')
+      .delete()
+      .in('inspiration_item_id', oldIds);
+    if (dismissalError) {
+      console.warn('generateInspirationItems: failed to delete old dismissals', dismissalError);
+      // Non-fatal — orphaned dismissals are harmless
+    }
+
+    const { error: deleteError } = await db
+      .from('planning_inspiration_items')
+      .delete()
+      .in('id', oldIds);
+    if (deleteError) {
+      console.warn('generateInspirationItems: failed to delete old items', deleteError);
+      // Non-fatal — duplicates are preferable to data loss.
+      // Old rows will be cleaned up on the next successful refresh.
+    }
   }
 
   return all.length;

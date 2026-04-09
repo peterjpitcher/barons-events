@@ -18,6 +18,7 @@ import type {
   PlanningPerson,
   PlanningTask,
   PlanningTaskStatus,
+  RecurrenceFrequency,
   UpdatePlanningItemInput,
   UpdatePlanningSeriesInput,
   UpdatePlanningTaskInput
@@ -92,11 +93,26 @@ function resolveSingleRelation<T>(value: T | T[] | null | undefined): T | null {
   return value ?? null;
 }
 
-function toPlanningTask(task: any): PlanningTask {
-  const assignee = resolveSingleRelation(task?.assignee as any);
+type RawUserRelation = { id: string; full_name: string | null; email: string } | null;
+type RawAssigneeJunction = { user: RawUserRelation | RawUserRelation[] | null };
+type RawDependencyRelation = { depends_on_task_id: string };
+type RawPlanningTaskRow = PlanningTaskRow & {
+  assignee?: RawUserRelation | RawUserRelation[] | null;
+  assignees?: RawAssigneeJunction[];
+  dependencies?: RawDependencyRelation[];
+  sop_section?: string | null;
+  sop_template_task_id?: string | null;
+  is_blocked?: boolean;
+  due_date_manually_overridden?: boolean;
+  completed_by?: string | null;
+};
+
+function toPlanningTask(task: RawPlanningTaskRow): PlanningTask {
+  const assignee = resolveSingleRelation(task?.assignee);
   const assigneesRaw = Array.isArray(task?.assignees) ? task.assignees : [];
-  const assignees = assigneesRaw.map((a: any) => {
-    const user = a?.user ?? a;
+  const assignees = assigneesRaw.map((a: RawAssigneeJunction) => {
+    const rawUser = a?.user;
+    const user = Array.isArray(rawUser) ? rawUser[0] : rawUser;
     return {
       id: user?.id ?? "",
       name: user?.full_name ?? user?.email ?? "Unknown",
@@ -121,16 +137,22 @@ function toPlanningTask(task: any): PlanningTask {
     isBlocked: task.is_blocked ?? false,
     dueDateManuallyOverridden: task.due_date_manually_overridden ?? false,
     dependsOnTaskIds: Array.isArray(task?.dependencies)
-      ? task.dependencies.map((d: any) => d.depends_on_task_id).filter(Boolean)
+      ? task.dependencies.map((d: RawDependencyRelation) => d.depends_on_task_id).filter(Boolean)
       : [],
   };
 }
 
-function toPlanningItem(row: any): PlanningItem {
-  const owner = resolveSingleRelation(row?.owner as any);
-  const venue = resolveSingleRelation(row?.venue as any);
+type RawPlanningItemRow = PlanningItemRow & {
+  owner?: RawUserRelation | RawUserRelation[] | null;
+  venue?: { id: string; name: string } | Array<{ id: string; name: string }> | null;
+  tasks?: RawPlanningTaskRow[] | null;
+};
+
+function toPlanningItem(row: RawPlanningItemRow): PlanningItem {
+  const owner = resolveSingleRelation(row?.owner);
+  const venue = resolveSingleRelation(row?.venue);
   const tasks = Array.isArray(row?.tasks)
-    ? row.tasks.map((task: any) => toPlanningTask(task)).sort((left: PlanningTask, right: PlanningTask) => {
+    ? row.tasks.map((task: RawPlanningTaskRow) => toPlanningTask(task)).sort((left: PlanningTask, right: PlanningTask) => {
         if (left.sortOrder !== right.sortOrder) return left.sortOrder - right.sortOrder;
         if (left.dueDate !== right.dueDate) return left.dueDate.localeCompare(right.dueDate);
         return left.title.localeCompare(right.title);
@@ -165,8 +187,14 @@ function eventTargetDateFromStart(startAt: string): string {
   return londonDateString(parsed);
 }
 
-function toPlanningEventOverlay(row: any): PlanningEventOverlay {
-  const venue = resolveSingleRelation(row?.venue as any);
+type RawEventOverlayRow = EventOverlayRow & {
+  venue?: { name: string | null } | Array<{ name: string | null }> | null;
+  public_title?: string | null;
+  public_teaser?: string | null;
+};
+
+function toPlanningEventOverlay(row: RawEventOverlayRow): PlanningEventOverlay {
+  const venue = resolveSingleRelation(row?.venue);
   return {
     id: `event-${row.id}`,
     source: "event",
@@ -222,6 +250,7 @@ async function createTasksFromTemplates(params: {
     return;
   }
 
+  // any: taskRows built dynamically from templates; Supabase generics don't cover extended columns
   const { error } = await admin.from("planning_tasks").insert(taskRows as any);
   if (error) {
     throw new Error(`Could not create recurring tasks: ${error.message}`);
@@ -259,7 +288,7 @@ async function generateOccurrencesForSeries(series: PlanningSeriesRow, throughDa
 
   const occurrenceDates = generateOccurrenceDates({
     rule: {
-      recurrenceFrequency: series.recurrence_frequency as any,
+      recurrenceFrequency: series.recurrence_frequency as RecurrenceFrequency,
       recurrenceInterval: series.recurrence_interval,
       recurrenceWeekdays: series.recurrence_weekdays,
       recurrenceMonthday: series.recurrence_monthday,
@@ -312,6 +341,7 @@ async function generateOccurrencesForSeries(series: PlanningSeriesRow, throughDa
 
     const { data: inserted, error: insertError } = await admin
       .from("planning_items")
+      // any: insertPayload built dynamically from series config; Supabase generics don't cover extended columns
       .insert(insertPayload as any)
       .select("id,target_date");
 
@@ -510,7 +540,7 @@ export async function listPlanningBoardData(params?: {
       throw new Error(`Could not load planning items: ${itemsError.message}`);
     }
   } else {
-    planningItems = ((itemData ?? []) as any[]).map((row) => toPlanningItem(row));
+    planningItems = ((itemData ?? []) as RawPlanningItemRow[]).map((row) => toPlanningItem(row));
   }
 
   const startLowerIso = `${today}T00:00:00.000Z`;
@@ -578,6 +608,7 @@ export async function createPlanningItem(payload: CreatePlanningItemInput): Prom
     created_by: payload.createdBy
   };
 
+  // any: Supabase generics don't cover extended columns (e.g. event_id)
   const { data, error } = await supabase.from("planning_items").insert(insertPayload as any).select("*").single();
 
   if (error || !data) {
@@ -632,6 +663,7 @@ export async function updatePlanningItem(itemId: string, updates: UpdatePlanning
 
   const { data, error } = await supabase
     .from("planning_items")
+    // any: dynamic payload built from camelCase→snake_case mapping; Supabase generics don't cover extended columns
     .update(updatePayload as any)
     .eq("id", itemId)
     .select("*")
@@ -679,6 +711,7 @@ export async function createPlanningSeries(payload: CreatePlanningSeriesInput): 
 
   const { data, error } = await supabase
     .from("planning_series")
+    // any: Supabase generics don't cover all planning_series columns in generated types
     .insert(insertPayload as any)
     .select("*")
     .single();
@@ -700,6 +733,7 @@ export async function createPlanningSeries(payload: CreatePlanningSeriesInput): 
       .filter((template) => template.title.length > 0);
 
     if (templateRows.length > 0) {
+      // any: templateRows built dynamically; Supabase generics incomplete for this table
       const { error: templateError } = await supabase.from("planning_series_task_templates").insert(templateRows as any);
       if (templateError) {
         throw new Error(`Could not create series task templates: ${templateError.message}`);
@@ -757,6 +791,7 @@ export async function updatePlanningSeries(seriesId: string, updates: UpdatePlan
 
   const { data, error } = await supabase
     .from("planning_series")
+    // any: dynamic payload built from camelCase→snake_case mapping
     .update(updatePayload as any)
     .eq("id", seriesId)
     .select("*")
@@ -787,6 +822,7 @@ export async function updatePlanningSeries(seriesId: string, updates: UpdatePlan
       .filter((template) => template.title.length > 0);
 
     if (templateRows.length > 0) {
+      // any: templateRows built dynamically; Supabase generics incomplete for this table
       const { error: insertError } = await supabase.from("planning_series_task_templates").insert(templateRows as any);
       if (insertError) {
         throw new Error(`Could not save series task templates: ${insertError.message}`);
@@ -814,6 +850,7 @@ export async function createPlanningTask(payload: CreatePlanningTaskInput): Prom
     created_by: payload.createdBy
   };
 
+  // any: Supabase generics don't cover all planning_tasks columns in generated types
   const { data, error } = await supabase.from("planning_tasks").insert(insertPayload as any).select("*").single();
 
   if (error || !data) {
@@ -847,6 +884,7 @@ export async function updatePlanningTask(taskId: string, updates: UpdatePlanning
 
   const { data, error } = await supabase
     .from("planning_tasks")
+    // any: dynamic payload built from camelCase→snake_case mapping
     .update(updatePayload as any)
     .eq("id", taskId)
     .select("*")

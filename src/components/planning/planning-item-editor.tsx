@@ -76,9 +76,9 @@ export function PlanningItemEditor({ today, users, venues, onChanged }: Planning
 
   function runAction<T>(work: () => Promise<T>, successMessage: string) {
     startTransition(async () => {
-      const result: any = await work();
-      if (result && typeof result === "object" && "success" in result && !result.success) {
-        toast.error(result.message ?? "Could not save planning data.");
+      const result: unknown = await work();
+      if (result && typeof result === "object" && "success" in result && !(result as { success: boolean }).success) {
+        toast.error((result as { message?: string }).message ?? "Could not save planning data.");
         return;
       }
 

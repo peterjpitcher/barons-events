@@ -132,11 +132,33 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
     if (planningItem) {
       sopPlanningItemId = planningItem.id;
       const rawTasks = Array.isArray(planningItem.tasks) ? planningItem.tasks : [];
-      sopTasks = rawTasks.map((task: any): PlanningTask => {
+      type RawUser = { id: string; full_name: string | null; email: string } | null;
+      type RawAssigneeJunction = { user: RawUser | RawUser[] | null };
+      type RawDep = { depends_on_task_id: string };
+      type RawTask = {
+        id: string;
+        planning_item_id: string;
+        title: string;
+        assignee_id: string | null;
+        due_date: string;
+        status: string;
+        completed_at: string | null;
+        completed_by: string | null;
+        sort_order: number;
+        sop_section: string | null;
+        sop_template_task_id: string | null;
+        is_blocked: boolean;
+        due_date_manually_overridden: boolean;
+        assignee: RawUser | RawUser[] | null;
+        assignees: RawAssigneeJunction[];
+        dependencies: RawDep[];
+      };
+      sopTasks = rawTasks.map((task: RawTask): PlanningTask => {
         const assignee = Array.isArray(task.assignee) ? task.assignee[0] : task.assignee;
         const assigneesRaw = Array.isArray(task.assignees) ? task.assignees : [];
-        const assignees = assigneesRaw.map((a: any) => {
-          const u = a?.user ?? a;
+        const assignees = assigneesRaw.map((a: RawAssigneeJunction) => {
+          const rawUser = a?.user;
+          const u = Array.isArray(rawUser) ? rawUser[0] : rawUser;
           return { id: u?.id ?? "", name: u?.full_name ?? u?.email ?? "Unknown", email: u?.email ?? "" };
         });
         return {
@@ -156,7 +178,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
           isBlocked: task.is_blocked ?? false,
           dueDateManuallyOverridden: task.due_date_manually_overridden ?? false,
           dependsOnTaskIds: Array.isArray(task?.dependencies)
-            ? task.dependencies.map((d: any) => d.depends_on_task_id).filter(Boolean)
+            ? task.dependencies.map((d: RawDep) => d.depends_on_task_id).filter(Boolean)
             : [],
         };
       });
@@ -594,9 +616,9 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
 
               <BookingSettingsCard
                 eventId={event.id}
-                bookingEnabled={Boolean((event as any).booking_enabled)}
-                totalCapacity={(event as any).total_capacity ?? null}
-                maxTicketsPerBooking={(event as any).max_tickets_per_booking ?? 10}
+                bookingEnabled={Boolean(event.booking_enabled)}
+                totalCapacity={event.total_capacity ?? null}
+                maxTicketsPerBooking={event.max_tickets_per_booking ?? 10}
                 seoSlug={event.seo_slug ?? null}
               />
 

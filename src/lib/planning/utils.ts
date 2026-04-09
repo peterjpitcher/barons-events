@@ -1,10 +1,10 @@
 import type { PlanningBucketKey, RecurrenceFrequency } from "@/lib/planning/types";
+import { DISPLAY_TIMEZONE } from "@/lib/datetime";
 
-const LONDON_TIME_ZONE = "Europe/London";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const londonDateFormatter = new Intl.DateTimeFormat("en-CA", {
-  timeZone: LONDON_TIME_ZONE,
+  timeZone: DISPLAY_TIMEZONE,
   year: "numeric",
   month: "2-digit",
   day: "2-digit"
@@ -19,6 +19,26 @@ export function parseDateOnly(value: string): Date {
   if (Number.isNaN(parsed.getTime())) {
     throw new Error(`Invalid date: ${value}`);
   }
+
+  // Validate that the parsed date components match the input components.
+  // new Date() silently normalises impossible dates (e.g. Feb 31 → Mar 3),
+  // so we must reject inputs where the round-tripped components diverge.
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (match) {
+    const inputYear = Number(match[1]);
+    const inputMonth = Number(match[2]);
+    const inputDay = Number(match[3]);
+    if (
+      parsed.getUTCFullYear() !== inputYear ||
+      parsed.getUTCMonth() + 1 !== inputMonth ||
+      parsed.getUTCDate() !== inputDay
+    ) {
+      throw new Error(
+        `Invalid date: ${value} — day ${inputDay} does not exist in month ${inputMonth}`
+      );
+    }
+  }
+
   return parsed;
 }
 

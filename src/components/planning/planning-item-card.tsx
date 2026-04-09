@@ -114,9 +114,9 @@ export function PlanningItemCard({
 
   function runAction<T>(work: () => Promise<T>, successMessage: string, onSuccess?: () => void) {
     startTransition(async () => {
-      const result: any = await work();
-      if (result && typeof result === "object" && "success" in result && !result.success) {
-        toast.error(result.message ?? "Could not update planning item.");
+      const result: unknown = await work();
+      if (result && typeof result === "object" && "success" in result && !(result as { success: boolean }).success) {
+        toast.error((result as { message?: string }).message ?? "Could not update planning item.");
         return;
       }
       toast.success(successMessage);

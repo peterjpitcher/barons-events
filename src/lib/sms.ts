@@ -124,7 +124,6 @@ export async function sendBookingConfirmationSms(bookingId: string): Promise<voi
     return;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const event = (data.events as unknown) as { title: string; start_at: string; venues: { name: string } };
   const { dayDate, time } = formatEventDateTime(new Date(event.start_at));
 
@@ -143,6 +142,10 @@ export async function sendBookingConfirmationSms(bookingId: string): Promise<voi
 
 /**
  * Sends day-before reminder SMS. Called by the sms-reminders cron.
+ *
+ * Uses claim-before-send pattern: marks the row as sent BEFORE calling Twilio
+ * to prevent concurrent cron runs from double-sending. If the Twilio call
+ * fails, the timestamp is reset to null so the next cron run retries.
  */
 export async function sendReminderSms(params: {
   bookingId: string;
@@ -152,22 +155,57 @@ export async function sendReminderSms(params: {
   eventStart: Date;
   venueName: string;
 }): Promise<void> {
-  const { time } = formatEventDateTime(params.eventStart);
-  const body =
-    `Just a reminder — ${params.eventTitle} is tomorrow at ${time} at ${params.venueName}. ` +
-    `Looking forward to seeing you! — Barons Pubs`;
-  await sendSms(params.mobile, body);
-
   const db = createSupabaseAdminClient();
-  await db
+
+  // Claim: mark as sent BEFORE calling Twilio to prevent concurrent double-send.
+  // The .is("sms_reminder_sent_at", null) filter ensures only one caller can claim
+  // a given row — concurrent runs get back zero rows from .select().
+  const claimTimestamp = new Date().toISOString();
+  const { data: claimed, error: claimError } = await db
     .from("event_bookings")
-    .update({ sms_reminder_sent_at: new Date().toISOString() })
-    .eq("id", params.bookingId);
+    .update({ sms_reminder_sent_at: claimTimestamp })
+    .eq("id", params.bookingId)
+    .is("sms_reminder_sent_at", null)
+    .select("id");
+
+  if (claimError) {
+    console.error("sendReminderSms: failed to claim booking", params.bookingId, claimError);
+    throw new Error(`Failed to claim booking ${params.bookingId}: ${claimError.message}`);
+  }
+
+  if (!claimed || claimed.length === 0) {
+    // Another process already claimed this booking — skip to prevent double-send
+    console.info("sendReminderSms: booking already claimed, skipping", params.bookingId);
+    return;
+  }
+
+  // Send the SMS
+  try {
+    const { time } = formatEventDateTime(params.eventStart);
+    const body =
+      `Just a reminder — ${params.eventTitle} is tomorrow at ${time} at ${params.venueName}. ` +
+      `Looking forward to seeing you! — Barons Pubs`;
+    await sendSms(params.mobile, body);
+  } catch (sendError) {
+    // Twilio failed — reset claim so the next cron run retries
+    const { error: resetError } = await db
+      .from("event_bookings")
+      .update({ sms_reminder_sent_at: null })
+      .eq("id", params.bookingId);
+    if (resetError) {
+      console.error("sendReminderSms: failed to reset claim after send failure", params.bookingId, resetError);
+    }
+    throw sendError;
+  }
 }
 
 /**
  * Sends post-event thank-you SMS with optional Google Review tracked link.
  * Called by the sms-post-event cron.
+ *
+ * Uses claim-before-send pattern: marks the row as sent BEFORE calling Twilio
+ * to prevent concurrent cron runs from double-sending. If the Twilio call
+ * fails, the timestamp is reset to null so the next cron run retries.
  */
 export async function sendPostEventSms(params: {
   bookingId: string;
@@ -179,41 +217,72 @@ export async function sendPostEventSms(params: {
   googleReviewUrl: string | null;
   eventSlug: string;
 }): Promise<void> {
-  let reviewPart = "";
+  const db = createSupabaseAdminClient();
 
-  if (params.googleReviewUrl) {
-    try {
-      // Append UTM params to the review URL
-      const url = new URL(params.googleReviewUrl);
-      url.searchParams.set("utm_source", "sms");
-      url.searchParams.set("utm_medium", "text");
-      url.searchParams.set("utm_campaign", "post-event-review");
-      url.searchParams.set("utm_content", params.eventSlug);
+  // Claim: mark as sent BEFORE calling Twilio to prevent concurrent double-send.
+  // The .is("sms_post_event_sent_at", null) filter ensures only one caller can claim
+  // a given row — concurrent runs get back zero rows from .select().
+  const claimTimestamp = new Date().toISOString();
+  const { data: claimed, error: claimError } = await db
+    .from("event_bookings")
+    .update({ sms_post_event_sent_at: claimTimestamp })
+    .eq("id", params.bookingId)
+    .is("sms_post_event_sent_at", null)
+    .select("id");
 
-      // Create a tracked short link via admin client (no auth cookie required in cron context)
-      const shortUrl = await createSystemShortLink({
-        name: `Post-event review — ${params.eventTitle}`,
-        destination: url.toString(),
-      });
-
-      if (shortUrl) {
-        reviewPart = ` We'd love to hear what you thought — leave us a Google review: ${shortUrl}`;
-      }
-    } catch (err) {
-      console.warn("sendPostEventSms: failed to create review short link", err);
-    }
+  if (claimError) {
+    console.error("sendPostEventSms: failed to claim booking", params.bookingId, claimError);
+    throw new Error(`Failed to claim booking ${params.bookingId}: ${claimError.message}`);
   }
 
-  const body =
-    `Thanks for coming to ${params.eventTitle} yesterday! We hope you had a great time.` +
-    reviewPart +
-    ` — Barons Pubs`;
+  if (!claimed || claimed.length === 0) {
+    // Another process already claimed this booking — skip to prevent double-send
+    console.info("sendPostEventSms: booking already claimed, skipping", params.bookingId);
+    return;
+  }
 
-  await sendSms(params.mobile, body);
+  // Build the message and send
+  try {
+    let reviewPart = "";
 
-  const db = createSupabaseAdminClient();
-  await db
-    .from("event_bookings")
-    .update({ sms_post_event_sent_at: new Date().toISOString() })
-    .eq("id", params.bookingId);
+    if (params.googleReviewUrl) {
+      try {
+        // Append UTM params to the review URL
+        const url = new URL(params.googleReviewUrl);
+        url.searchParams.set("utm_source", "sms");
+        url.searchParams.set("utm_medium", "text");
+        url.searchParams.set("utm_campaign", "post-event-review");
+        url.searchParams.set("utm_content", params.eventSlug);
+
+        // Create a tracked short link via admin client (no auth cookie required in cron context)
+        const shortUrl = await createSystemShortLink({
+          name: `Post-event review — ${params.eventTitle}`,
+          destination: url.toString(),
+        });
+
+        if (shortUrl) {
+          reviewPart = ` We'd love to hear what you thought — leave us a Google review: ${shortUrl}`;
+        }
+      } catch (err) {
+        console.warn("sendPostEventSms: failed to create review short link", err);
+      }
+    }
+
+    const body =
+      `Thanks for coming to ${params.eventTitle} yesterday! We hope you had a great time.` +
+      reviewPart +
+      ` — Barons Pubs`;
+
+    await sendSms(params.mobile, body);
+  } catch (sendError) {
+    // Twilio failed — reset claim so the next cron run retries
+    const { error: resetError } = await db
+      .from("event_bookings")
+      .update({ sms_post_event_sent_at: null })
+      .eq("id", params.bookingId);
+    if (resetError) {
+      console.error("sendPostEventSms: failed to reset claim after send failure", params.bookingId, resetError);
+    }
+    throw sendError;
+  }
 }

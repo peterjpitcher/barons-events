@@ -37,7 +37,8 @@ export async function GET(request: Request) {
     return jsonError(500, "internal_error", "Unable to load venues");
   }
 
-  const venues = (data ?? []).map((venue: any) => ({
+  type VenueSelectRow = { id: string; name: string; address: string | null; capacity: number | null };
+  const venues = (data ?? []).map((venue: VenueSelectRow) => ({
     id: venue.id,
     name: venue.name,
     address: venue.address ?? null,

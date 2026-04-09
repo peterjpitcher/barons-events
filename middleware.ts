@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import { createSession, validateSession, renewSession, SESSION_COOKIE_NAME, makeSessionCookieOptions } from "@/lib/auth/session";
+import { validateSession, renewSession, SESSION_COOKIE_NAME, makeSessionCookieOptions } from "@/lib/auth/session";
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
@@ -31,7 +31,12 @@ function isPublicPath(pathname: string): boolean {
     return true;
   }
   for (const prefix of PUBLIC_PATH_PREFIXES) {
-    if (pathname.startsWith(prefix)) return true;
+    if (prefix === "/l") {
+      // Match exact "/l" or segment boundary "/l/" to avoid matching "/links", "/logout", etc.
+      if (pathname === "/l" || pathname.startsWith("/l/")) return true;
+    } else {
+      if (pathname.startsWith(prefix)) return true;
+    }
   }
   return false;
 }
@@ -73,7 +78,6 @@ function applySecurityHeaders(response: NextResponse, nonce: string): void {
 // ─── Nonce / CSRF helpers ──────────────────────────────────────────────────────
 
 const CSRF_COOKIE_NAME = "csrf-token";
-const MUTATION_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 /**
  * Generates a random base64-encoded nonce for CSP.
@@ -93,18 +97,6 @@ function generateCsrfToken(): string {
     .join("");
 }
 
-/**
- * Constant-time string comparison to prevent timing attacks.
- */
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let result = 0;
-  for (let i = 0; i < a.length; i++) {
-    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return result === 0;
-}
-
 // ─── Middleware ───────────────────────────────────────────────────────────────
 
 export async function middleware(req: NextRequest) {
@@ -116,7 +108,10 @@ export async function middleware(req: NextRequest) {
   if (host === SHORT_LINK_HOST) {
     // Root path — redirect to main site
     if (pathname === "/") {
-      return NextResponse.redirect("https://baronspubs.com");
+      const redirectNonce = generateNonce();
+      const redirectRes = NextResponse.redirect("https://baronspubs.com");
+      applySecurityHeaders(redirectRes, redirectNonce);
+      return redirectRes;
     }
     // 8-hex-char paths are existing short links — let them fall through to [code] handler
     const isShortLink = /^\/[0-9a-f]{8}$/.test(pathname);
@@ -124,9 +119,16 @@ export async function middleware(req: NextRequest) {
     const isStaticAsset = pathname.startsWith("/_next") || STATIC_ASSET_PATTERN.test(pathname);
     if (!isShortLink && !isStaticAsset) {
       // Rewrite slug-style paths (e.g. /jazz-night-20-mar-2026) to /l/[path]
+      const rewriteNonce = generateNonce();
       const rewriteUrl = req.nextUrl.clone();
       rewriteUrl.pathname = `/l${pathname}`;
-      return NextResponse.rewrite(rewriteUrl);
+      const rewriteHeaders = new Headers(req.headers);
+      rewriteHeaders.set("x-nonce", rewriteNonce);
+      const rewriteRes = NextResponse.rewrite(rewriteUrl, {
+        request: { headers: rewriteHeaders }
+      });
+      applySecurityHeaders(rewriteRes, rewriteNonce);
+      return rewriteRes;
     }
     if (isShortLink) {
       // Short links are public — skip auth gate entirely and let [code]/route.ts handle the redirect.
@@ -211,60 +213,63 @@ export async function middleware(req: NextRequest) {
   // Fail-closed: any session store error redirects to login.
   const appSessionId = req.cookies.get(SESSION_COOKIE_NAME)?.value;
 
-  // Heartbeat endpoint is exempt from session layer validation —
-  // it is the mechanism that keeps the session alive.
-  const isHeartbeat = pathname === "/api/auth/heartbeat";
-
-  if (!isHeartbeat) {
-    let resolvedSessionId = appSessionId;
-
-    if (!resolvedSessionId) {
-      // No app-session-id cookie but user has a valid Supabase JWT.
-      // This happens when: (a) the user was already logged in before the session
-      // layer was deployed, or (b) session creation failed at sign-in time.
-      // Create a new session now rather than redirect-looping.
-      try {
-        resolvedSessionId = await createSession(user.id, {
-          userAgent: req.headers.get("user-agent"),
-          ipAddress: req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null
-        });
-        res.cookies.set(SESSION_COOKIE_NAME, resolvedSessionId, makeSessionCookieOptions());
-      } catch (err) {
-        // Session store unavailable (e.g. migration not yet applied).
-        // Fall through rather than redirect-loop — Supabase JWT still provides auth.
-        console.error("Session layer unavailable, serving request without app session:", err);
-      }
-    }
-
-    const session = resolvedSessionId ? await validateSession(resolvedSessionId) : null;
-
-    if (!session && resolvedSessionId) {
-      // resolvedSessionId was set but validateSession returned null — the session
-      // is genuinely expired or invalid (not a DB availability issue, since
-      // createSession above would also have failed). Fail closed.
-      const redirectUrl = req.nextUrl.clone();
-      redirectUrl.pathname = "/login";
-      redirectUrl.searchParams.set("reason", "session_expired");
-      const redirectRes = NextResponse.redirect(redirectUrl);
-      redirectRes.cookies.set(SESSION_COOKIE_NAME, "", {
-        ...makeSessionCookieOptions(),
-        maxAge: 0
-      });
-      applySecurityHeaders(redirectRes, nonce);
-      return redirectRes;
-    }
-
-    // Renew session activity (non-blocking — don't await in the critical path)
-    renewSession(resolvedSessionId ?? "").catch((err: unknown) => {
-      console.error("Session renewal failed (non-fatal):", err);
-    });
+  if (!appSessionId) {
+    // No app-session-id cookie but user has a valid Supabase JWT.
+    // The migration window for pre-session-layer logins is over.
+    // Redirect to login so a fresh session is created via the sign-in flow.
+    const redirectUrl = req.nextUrl.clone();
+    redirectUrl.pathname = "/login";
+    redirectUrl.searchParams.set("reason", "session_missing");
+    const redirectRes = NextResponse.redirect(redirectUrl);
+    applySecurityHeaders(redirectRes, nonce);
+    return redirectRes;
   }
 
-  // Step 6: CSRF token — generate if absent, then validate mutations on API routes
+  const session = await validateSession(appSessionId);
+
+  if (!session) {
+    // Session is expired, invalid, or DB unavailable. Fail closed.
+    const redirectUrl = req.nextUrl.clone();
+    redirectUrl.pathname = "/login";
+    redirectUrl.searchParams.set("reason", "session_expired");
+    const redirectRes = NextResponse.redirect(redirectUrl);
+    redirectRes.cookies.set(SESSION_COOKIE_NAME, "", {
+      ...makeSessionCookieOptions(),
+      maxAge: 0
+    });
+    applySecurityHeaders(redirectRes, nonce);
+    return redirectRes;
+  }
+
+  // Verify the app session belongs to the same user as the Supabase JWT.
+  // Prevents session fixation where a stolen session cookie is used by a different account.
+  if (session.userId !== user.id) {
+    const redirectUrl = req.nextUrl.clone();
+    redirectUrl.pathname = "/login";
+    redirectUrl.searchParams.set("reason", "session_mismatch");
+    const redirectRes = NextResponse.redirect(redirectUrl);
+    redirectRes.cookies.set(SESSION_COOKIE_NAME, "", {
+      ...makeSessionCookieOptions(),
+      maxAge: 0
+    });
+    applySecurityHeaders(redirectRes, nonce);
+    return redirectRes;
+  }
+
+  // Renew session activity (non-blocking — don't await in the critical path)
+  renewSession(appSessionId).catch((err: unknown) => {
+    console.error("Session renewal failed (non-fatal):", err);
+  });
+
+  // Step 6: Set verified user ID header for downstream Server Components.
+  // This avoids a redundant getUser() round-trip in getCurrentUser() — the JWT
+  // has already been validated above via supabase.auth.getUser().
+  requestHeaders.set("x-user-id", user.id);
+
+  // Step 7: CSRF token — generate if absent
   const existingCsrf = req.cookies.get(CSRF_COOKIE_NAME)?.value;
-  const csrfToken = existingCsrf ?? generateCsrfToken();
   if (!existingCsrf) {
-    res.cookies.set(CSRF_COOKIE_NAME, csrfToken, {
+    res.cookies.set(CSRF_COOKIE_NAME, generateCsrfToken(), {
       httpOnly: false, // Must be JS-readable for client to send in header
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
@@ -272,22 +277,8 @@ export async function middleware(req: NextRequest) {
     });
   }
 
-  // CSRF validation on mutations to explicit API routes.
-  // Next.js server actions are protected by SameSite=lax + Next.js built-in CSRF mitigation.
-  // Heartbeat is exempt: same-origin only, no app data mutation (SameSite=lax is sufficient).
-  if (
-    MUTATION_METHODS.has(req.method) &&
-    pathname.startsWith("/api/") &&
-    !isHeartbeat
-  ) {
-    const csrfHeader = req.headers.get("x-csrf-token");
-    if (!csrfHeader || !timingSafeEqual(csrfToken, csrfHeader)) {
-      return new NextResponse(JSON.stringify({ error: "CSRF validation failed" }), {
-        status: 403,
-        headers: { "Content-Type": "application/json" }
-      });
-    }
-  }
+  // NOTE: /api/* routes are excluded from middleware by the matcher config below.
+  // API routes handle their own auth via withAuth()/withAdminAuth() wrappers.
 
   return res;
 }

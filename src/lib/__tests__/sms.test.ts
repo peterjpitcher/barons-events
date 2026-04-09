@@ -11,7 +11,15 @@ vi.mock("twilio", () => ({
 }));
 
 const mockUpdate = vi.fn(() => ({
-  eq: vi.fn().mockResolvedValue({ error: null }),
+  eq: vi.fn(() => ({
+    is: vi.fn(() => ({
+      select: vi.fn().mockResolvedValue({ data: [{ id: "booking-1" }], error: null }),
+    })),
+    // Direct .eq() resolve for non-claim updates (e.g., reset, confirmation)
+    ...{ then: undefined },
+  })),
+  // Fallback for simple .update().eq() chains without .is()
+  ...({} as Record<string, unknown>),
 }));
 
 const mockInsertSelect = vi.fn(() => ({

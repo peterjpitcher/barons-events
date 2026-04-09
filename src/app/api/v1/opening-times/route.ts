@@ -119,7 +119,20 @@ export async function GET(request: Request) {
   }
 
   // Flatten override junction table rows into venue_ids[]
-  const overrides: OpeningOverrideRow[] = (overridesResult.data ?? []).map((row: any) => ({
+  type RawOverrideRow = {
+    id: string;
+    override_date: string;
+    service_type_id: string;
+    open_time: string | null;
+    close_time: string | null;
+    is_closed: boolean;
+    note: string | null;
+    created_by: string | null;
+    created_at: string;
+    updated_at: string;
+    venue_opening_override_venues: Array<{ venue_id: string }> | null;
+  };
+  const overrides: OpeningOverrideRow[] = (overridesResult.data ?? []).map((row: RawOverrideRow) => ({
     id: row.id,
     override_date: row.override_date,
     service_type_id: row.service_type_id,
@@ -130,7 +143,7 @@ export async function GET(request: Request) {
     created_by: row.created_by ?? null,
     created_at: row.created_at,
     updated_at: row.updated_at,
-    venue_ids: (row.venue_opening_override_venues ?? []).map((v: any) => v.venue_id as string),
+    venue_ids: (row.venue_opening_override_venues ?? []).map((v) => v.venue_id),
   }));
 
   // When filtering to one venue, restrict overrides to those that include it
