@@ -41,8 +41,7 @@ const formatter = new Intl.DateTimeFormat("en-GB", {
   day: "numeric",
   month: "long",
   hour: "2-digit",
-  minute: "2-digit",
-  timeZone: "Europe/London"
+  minute: "2-digit"
 });
 
 const auditTimestampFormatter = new Intl.DateTimeFormat("en-GB", {
