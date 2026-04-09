@@ -312,7 +312,7 @@ export function EventForm({
   const [availableArtists, setAvailableArtists] = useState<ArtistOption[]>(() => sortArtistOptions(artists));
   const [selectedArtistIds, setSelectedArtistIds] = useState<string[]>(defaultArtistSelection.ids);
   const [titleValue, setTitleValue] = useState(defaultValues?.title ?? "");
-  const [eventTypeValue, setEventTypeValue] = useState(defaultValues?.event_type ?? eventTypes[0] ?? "");
+  const [eventTypeValue, setEventTypeValue] = useState(defaultValues?.event_type ?? "");
   const [selectedVenueId, setSelectedVenueId] = useState(defaultVenueId);
   const [venueSpaceValue, setVenueSpaceValue] = useState(defaultValues?.venue_space ?? "");
   const [startValue, setStartValue] = useState(toLocalInputValue(defaultValues?.start_at ?? initialStartAt));
@@ -723,6 +723,7 @@ export function EventForm({
               : undefined
           )}
         >
+          <option value="">Choose event type</option>
           {typeOptions.map((type) => (
             <option key={type} value={type}>{type}</option>
           ))}
