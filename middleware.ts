@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import { validateSession, renewSession, SESSION_COOKIE_NAME, makeSessionCookieOptions } from "@/lib/auth/session";
+import { validateSession, SESSION_COOKIE_NAME, makeSessionCookieOptions } from "@/lib/auth/session";
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
@@ -255,11 +255,6 @@ export async function middleware(req: NextRequest) {
     applySecurityHeaders(redirectRes, nonce);
     return redirectRes;
   }
-
-  // Renew session activity (non-blocking — don't await in the critical path)
-  renewSession(appSessionId).catch((err: unknown) => {
-    console.error("Session renewal failed (non-fatal):", err);
-  });
 
   // Step 6: Set verified user ID header for downstream Server Components.
   // This avoids a redundant getUser() round-trip in getCurrentUser() — the JWT

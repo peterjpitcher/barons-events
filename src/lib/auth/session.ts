@@ -4,7 +4,6 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { logAuthEvent } from "@/lib/audit-log";
 
 export const SESSION_COOKIE_NAME = "app-session-id";
-const IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 const ABSOLUTE_TIMEOUT_HOURS = 24;
 const MAX_SESSIONS_PER_USER = 5;
 
@@ -92,23 +91,13 @@ export async function validateSession(sessionId: string): Promise<SessionRecord 
 
     const now = new Date();
     const expiresAt = new Date(data.expires_at);
-    const lastActivityAt = new Date(data.last_activity_at);
-    const idleDeadline = new Date(lastActivityAt.getTime() + IDLE_TIMEOUT_MS);
 
-    // Check absolute and idle timeouts separately so we can log the correct event type
-    const isAbsoluteExpired = now > expiresAt;
-    const isIdleExpired = now > idleDeadline;
-
-    if (isAbsoluteExpired || isIdleExpired) {
+    if (now > expiresAt) {
       // Session expired — destroy it asynchronously (don't block the response)
       db.from("app_sessions").delete().eq("session_id", sessionId).then(() => {});
 
-      // Fire-and-forget audit log — non-blocking, non-fatal
-      const eventType = isAbsoluteExpired
-        ? "auth.session.expired.absolute"
-        : "auth.session.expired.idle";
       logAuthEvent({
-        event: eventType,
+        event: "auth.session.expired.absolute",
         userId: data.user_id
       }).catch(() => {});
 
@@ -119,7 +108,7 @@ export async function validateSession(sessionId: string): Promise<SessionRecord 
       sessionId: data.session_id,
       userId: data.user_id,
       createdAt: new Date(data.created_at),
-      lastActivityAt,
+      lastActivityAt: new Date(data.last_activity_at),
       expiresAt,
       metadata: {
         userAgent: data.user_agent,
@@ -130,36 +119,6 @@ export async function validateSession(sessionId: string): Promise<SessionRecord 
     console.error("Session validation error (fail-closed):", error);
     return null;
   }
-}
-
-/**
- * Updates lastActivityAt for a session (heartbeat/renewal).
- * Also renews expiresAt if within the renewal threshold (5 min before absolute expiry).
- */
-export async function renewSession(sessionId: string): Promise<void> {
-  const db = createSupabaseAdminClient();
-  const now = new Date();
-
-  const { data } = await db
-    .from("app_sessions")
-    .select("expires_at")
-    .eq("session_id", sessionId)
-    .single();
-
-  const updates: Record<string, string> = {
-    last_activity_at: now.toISOString()
-  };
-
-  // Renew absolute expiry if within 5 minutes of expiry
-  if (data) {
-    const expiresAt = new Date(data.expires_at);
-    const renewalThreshold = 5 * 60 * 1000;
-    if (expiresAt.getTime() - now.getTime() < renewalThreshold) {
-      updates.expires_at = new Date(now.getTime() + ABSOLUTE_TIMEOUT_HOURS * 3600 * 1000).toISOString();
-    }
-  }
-
-  await db.from("app_sessions").update(updates).eq("session_id", sessionId);
 }
 
 /**
@@ -185,10 +144,8 @@ export async function destroyAllSessionsForUser(userId: string): Promise<void> {
 export async function cleanupExpiredSessions(): Promise<void> {
   const db = createSupabaseAdminClient();
   const now = new Date().toISOString();
-  const idleCutoff = new Date(Date.now() - IDLE_TIMEOUT_MS).toISOString();
 
   await db.from("app_sessions").delete().lt("expires_at", now);
-  await db.from("app_sessions").delete().lt("last_activity_at", idleCutoff);
 
   // Clean up stale login_attempts (older than lockout duration)
   const attemptCutoff = new Date(Date.now() - LOCKOUT_DURATION_MINUTES * 60 * 1000).toISOString();

@@ -5,7 +5,7 @@ import { cleanupExpiredSessions } from "@/lib/auth/session";
 /**
  * GET /api/cron/cleanup-auth
  *
- * Removes expired and idle app_sessions (and any stale login_attempts) from
+ * Removes expired app_sessions (and any stale login_attempts) from
  * the database. Called by Vercel Cron on a scheduled basis.
  * Secured by CRON_SECRET bearer token.
  */

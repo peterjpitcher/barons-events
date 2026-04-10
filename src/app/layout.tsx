@@ -5,7 +5,7 @@ import { Geist, Geist_Mono, Playfair_Display } from "next/font/google";
 import "./globals.css";
 import { getCurrentUser } from "@/lib/auth";
 import { AppShell } from "@/components/shell/app-shell";
-import { IdleTimeoutProvider } from "@/components/shell/idle-timeout-provider";
+
 import { Toaster } from "@/components/ui/toaster";
 
 const geistSans = Geist({
@@ -166,9 +166,7 @@ export default async function RootLayout({
         </Script>
         <Toaster />
         {user ? (
-          <IdleTimeoutProvider>
-            <AppShell user={user}>{children}</AppShell>
-          </IdleTimeoutProvider>
+          <AppShell user={user}>{children}</AppShell>
         ) : (
           children
         )}

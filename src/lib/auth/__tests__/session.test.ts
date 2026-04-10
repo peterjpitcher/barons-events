@@ -108,7 +108,6 @@ vi.mock("@/lib/supabase/admin", () => ({
 import {
   createSession,
   validateSession,
-  renewSession,
   destroySession,
   destroyAllSessionsForUser,
   cleanupExpiredSessions,
@@ -307,26 +306,6 @@ describe("validateSession", () => {
     expect(result).toBeNull();
   });
 
-  it("returns null if idle timeout exceeded (now > lastActivityAt + 30min)", async () => {
-    const staleActivity = new Date(Date.now() - 31 * 60 * 1000).toISOString(); // 31 min ago
-    const row = makeSessionRow({ last_activity_at: staleActivity });
-
-    const deleteMock = vi.fn(() => ({ eq: vi.fn(() => Promise.resolve({ data: null, error: null })) }));
-
-    mockAdminClient.fromSpy.mockImplementation(() => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          single: vi.fn(() => Promise.resolve({ data: row, error: null }))
-        }))
-      })),
-      delete: deleteMock
-    }));
-
-    const result = await validateSession("idle-expired-session");
-
-    expect(result).toBeNull();
-  });
-
   it("returns null on DB error (fail-closed)", async () => {
     mockAdminClient.fromSpy.mockImplementation(() => ({
       select: vi.fn(() => ({
@@ -339,64 +318,6 @@ describe("validateSession", () => {
     const result = await validateSession("any-session-id");
 
     expect(result).toBeNull();
-  });
-});
-
-// ── renewSession ──────────────────────────────────────────────────────────────
-
-describe("renewSession", () => {
-  it("updates lastActivityAt", async () => {
-    const futureExpiry = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hour away
-    const updateFn = vi.fn(() => ({
-      eq: vi.fn(() => Promise.resolve({ data: null, error: null }))
-    }));
-
-    mockAdminClient.fromSpy.mockImplementation(() => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          single: vi.fn(() => Promise.resolve({ data: { expires_at: futureExpiry }, error: null }))
-        }))
-      })),
-      update: updateFn
-    }));
-
-    await renewSession("session-id");
-
-    expect(updateFn).toHaveBeenCalledWith(
-      expect.objectContaining({ last_activity_at: expect.any(String) })
-    );
-  });
-
-  it("also updates expiresAt if within 5 minutes of expiry", async () => {
-    // Expires in 4 minutes (within 5-minute threshold)
-    const nearExpiry = new Date(Date.now() + 4 * 60 * 1000).toISOString();
-    const updateFn = vi.fn(() => ({
-      eq: vi.fn(() => Promise.resolve({ data: null, error: null }))
-    }));
-
-    mockAdminClient.fromSpy.mockImplementation(() => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          single: vi.fn(() => Promise.resolve({ data: { expires_at: nearExpiry }, error: null }))
-        }))
-      })),
-      update: updateFn
-    }));
-
-    await renewSession("session-near-expiry");
-
-    expect(updateFn).toHaveBeenCalledWith(
-      expect.objectContaining({
-        last_activity_at: expect.any(String),
-        expires_at: expect.any(String)
-      })
-    );
-
-    // Verify the new expiresAt is approximately 24 hours from now
-    const [updateArg] = updateFn.mock.calls[0] as unknown as [{ expires_at: string }];
-    const newExpiry = new Date(updateArg.expires_at).getTime();
-    const expectedExpiry = Date.now() + 24 * 3600 * 1000;
-    expect(Math.abs(newExpiry - expectedExpiry)).toBeLessThan(2000); // within 2 seconds
   });
 });
 
@@ -443,30 +364,22 @@ describe("cleanupExpiredSessions", () => {
 
     await cleanupExpiredSessions();
 
-    // delete called three times: expires_at, last_activity_at, and login_attempts
-    expect(deleteFn).toHaveBeenCalledTimes(3);
+    // delete called twice: expires_at and login_attempts
+    expect(deleteFn).toHaveBeenCalledTimes(2);
     // First call: expires_at cleanup
     expect(ltFn).toHaveBeenCalledWith("expires_at", expect.any(String));
   });
 
-  it("calls delete with last_activity_at < idleCutoff (idle expiry cleanup)", async () => {
+  it("cleans up stale login_attempts", async () => {
     const ltFn = vi.fn(() => Promise.resolve({ data: null, error: null }));
     const deleteFn = vi.fn(() => ({ lt: ltFn }));
 
     mockAdminClient.fromSpy.mockImplementation(() => ({ delete: deleteFn }));
 
-    const before = Date.now();
     await cleanupExpiredSessions();
-    const after = Date.now();
 
-    // Second call: idle cleanup
-    expect(ltFn).toHaveBeenCalledWith("last_activity_at", expect.any(String));
-
-    // Verify the idle cutoff is approximately 30 minutes ago
-    const cutoffStr = (ltFn.mock.calls[1] as unknown as [string, string])[1];
-    const cutoff = new Date(cutoffStr).getTime();
-    const expectedCutoff = before - 30 * 60 * 1000;
-    expect(Math.abs(cutoff - expectedCutoff)).toBeLessThan(after - before + 100);
+    // Second call: login_attempts cleanup
+    expect(ltFn).toHaveBeenCalledWith("attempted_at", expect.any(String));
   });
 });
 

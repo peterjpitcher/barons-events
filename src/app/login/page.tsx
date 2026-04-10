@@ -59,9 +59,9 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           </CardDescription>
         </CardHeader>
         <CardContent className={AUTH_CARD_CONTENT_CLASS}>
-          {reason === "idle" ? (
+          {reason === "session_expired" ? (
             <p className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-              You were signed out due to inactivity.
+              Your session has expired. Please sign in again.
             </p>
           ) : null}
           <LoginForm redirectTo={redirectTarget} nonce={nonce} />
