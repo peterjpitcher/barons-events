@@ -142,15 +142,26 @@ export async function signInAction(_: SignInState | undefined, formData: FormDat
     // Non-fatal
   }
 
-  // Create custom app session record
+  // Create custom app session — MUST succeed for protected routes to work
   try {
     const userAgent = headerStore.get("user-agent") ?? undefined;
     const sessionId = await createSession(data.user.id, { userAgent, ipAddress: ip });
     const cookieStore = await cookies();
     cookieStore.set(SESSION_COOKIE_NAME, sessionId, makeSessionCookieOptions());
-  } catch (sessionError) {
-    console.error("Failed to create app session after sign-in:", sessionError);
-    // Non-fatal: fall through — Supabase JWT still provides basic auth
+  } catch (sessionErr) {
+    console.error("[auth] App session creation failed — aborting login:", sessionErr);
+    // Sign out the Supabase session to prevent JWT-without-app-session state
+    await supabase.auth.signOut();
+    await logAuthEvent({
+      event: "auth.login.failure",
+      userId: data.user.id,
+      ipAddress: ip,
+      meta: { reason: "session_creation_failed" }
+    });
+    return {
+      success: false,
+      message: "Sign in failed due to a server error. Please try again."
+    };
   }
 
   await logAuthEvent({
