@@ -9,6 +9,7 @@ import { convertInspirationItemAction, deletePlanningItemAction, dismissInspirat
 import { PlanningTaskList } from "@/components/planning/planning-task-list";
 import { SopChecklistView } from "@/components/planning/sop-checklist-view";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -99,6 +100,23 @@ export function PlanningItemCard({
   const [targetDate, setTargetDate] = useState(item.targetDate);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [isPending, startTransition] = useTransition();
+
+  function handleCompactStatusChange(newStatus: PlanningItem["status"]) {
+    setStatus(newStatus);
+    startTransition(async () => {
+      const result: unknown = await updatePlanningItemAction({
+        itemId: item.id,
+        status: newStatus,
+      });
+      if (result && typeof result === "object" && "success" in result && !(result as { success: boolean }).success) {
+        toast.error((result as { message?: string }).message ?? "Could not update status.");
+        setStatus(item.status);
+        return;
+      }
+      toast.success("Status updated.");
+      onChanged();
+    });
+  }
 
   useEffect(() => {
     setTitle(item.title);
@@ -301,7 +319,26 @@ export function PlanningItemCard({
             <h3 className="text-base font-semibold text-[var(--color-text)]">{item.title}</h3>
             <p className="text-xs text-subtle">{item.typeLabel}</p>
           </div>
-          <Badge variant={STATUS_BADGE_VARIANT[item.status]}>{formatStatus(item.status)}</Badge>
+          <select
+            value={status}
+            disabled={isPending}
+            onChange={(e) => handleCompactStatusChange(e.target.value as PlanningItem["status"])}
+            aria-label="Change status"
+            className={cn(
+              "cursor-pointer appearance-none rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-500)] disabled:cursor-not-allowed disabled:opacity-60",
+              status === "planned" && "border border-[var(--color-primary-400)] bg-[var(--color-primary-100)] text-[var(--color-primary-900)]",
+              status === "in_progress" && "border border-[var(--color-accent-cool-dark)] bg-[var(--color-info)] text-white",
+              status === "blocked" && "border border-[#9a6d2b] bg-[var(--color-warning)] text-[#2f230d]",
+              status === "done" && "border border-[#355849] bg-[var(--color-success)] text-white",
+              status === "cancelled" && "border border-[#6e3032] bg-[var(--color-danger)] text-white"
+            )}
+          >
+            {STATUS_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
         </header>
 
         <div className="grid gap-1.5 text-xs text-subtle md:grid-cols-2">
@@ -692,57 +729,64 @@ type EventOverlayCardProps = {
   canApprove?: boolean;
 };
 
-export function EventOverlayCard({ event, canApprove }: EventOverlayCardProps) {
-  const statusTone: "neutral" | "info" | "warning" | "success" | "danger" =
-    event.status === "submitted"
-      ? "info"
-      : event.status === "needs_revisions"
-        ? "warning"
-        : event.status === "approved" || event.status === "completed"
-          ? "success"
-          : event.status === "rejected"
-            ? "danger"
-            : "neutral";
+const EVENT_STATUS_BADGE_VARIANT: Record<string, "neutral" | "info" | "warning" | "success" | "danger"> = {
+  draft: "neutral",
+  submitted: "info",
+  needs_revisions: "warning",
+  approved: "success",
+  completed: "success",
+  rejected: "danger",
+};
 
+export function EventOverlayCard({ event, canApprove }: EventOverlayCardProps) {
+  const statusTone = EVENT_STATUS_BADGE_VARIANT[event.status] ?? "neutral";
   const hasWebCopy = Boolean(event.publicTitle);
-  const isLiveOnWebsite = event.status === "approved" && hasWebCopy;
 
   return (
-    <article className="space-y-1.5 rounded-[var(--radius)] border border-[rgba(39,54,64,0.14)] bg-[rgba(39,54,64,0.03)] p-2.5">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-xs uppercase tracking-[0.08em] text-subtle">Event (read-only)</p>
-        {isLiveOnWebsite && <Badge variant="success">Live on website</Badge>}
-      </div>
-      <h3 className="text-base font-semibold text-[var(--color-text)]">
-        <Link href={`/events/${event.eventId}`} className="transition-colors hover:text-[var(--color-primary-700)]">
-          {event.publicTitle ?? event.title}
-        </Link>
-      </h3>
-      {event.publicTeaser && (
-        <p className="text-xs text-subtle">{event.publicTeaser}</p>
-      )}
-      <p className="text-xs text-subtle">
-        {event.venueName ?? "Unknown venue"}
-        {event.venueSpace ? ` · ${event.venueSpace}` : ""}
-      </p>
-      <p className="text-xs text-subtle">
-        {new Date(event.startAt).toLocaleString("en-GB", {
-          day: "numeric",
-          month: "short",
-          hour: "2-digit",
-          minute: "2-digit"
-        })}
-      </p>
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <Badge variant={statusTone}>{event.status.replace(/_/g, " ")}</Badge>
-          <Badge variant={hasWebCopy ? "success" : "neutral"}>
-            {hasWebCopy ? "Webpage ready" : "No web copy"}
-          </Badge>
+    <article className="space-y-2 rounded-[var(--radius)] border border-[var(--color-border)] bg-white p-2.5 shadow-soft">
+      <header className="flex items-start justify-between gap-1.5">
+        <div className="space-y-0.5">
+          <p className="text-xs uppercase tracking-[0.08em] text-subtle">Event</p>
+          <h3 className="text-base font-semibold text-[var(--color-text)]">{event.publicTitle ?? event.title}</h3>
+          {event.publicTeaser && (
+            <p className="text-xs text-subtle">{event.publicTeaser}</p>
+          )}
         </div>
+        <Badge variant={statusTone}>{event.status.replace(/_/g, " ")}</Badge>
+      </header>
+
+      <div className="grid gap-1.5 text-xs text-subtle md:grid-cols-2">
+        <p>
+          <span className="font-semibold text-[var(--color-text)]">Date:</span>{" "}
+          {new Date(event.startAt).toLocaleString("en-GB", {
+            timeZone: "Europe/London",
+            day: "numeric",
+            month: "short",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
+        </p>
+        <p>
+          <span className="font-semibold text-[var(--color-text)]">Venue:</span>{" "}
+          {event.venueName ?? "Unknown venue"}
+          {event.venueSpace ? ` · ${event.venueSpace}` : ""}
+        </p>
+        <p>
+          <span className="font-semibold text-[var(--color-text)]">Web copy:</span>{" "}
+          {hasWebCopy ? "Ready" : "Not yet"}
+        </p>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-end gap-1.5">
         {canApprove && ["submitted", "draft"].includes(event.status) ? (
           <ApproveEventButton eventId={event.eventId} size="sm" className="h-auto px-3 py-1 text-xs" hasWebCopy={hasWebCopy} />
         ) : null}
+        <Link href={`/events/${event.eventId}`}>
+          <Button type="button" size="sm" variant="subtle">
+            <Pencil className="mr-1 h-4 w-4" aria-hidden="true" /> Manage
+          </Button>
+        </Link>
       </div>
     </article>
   );
