@@ -239,13 +239,6 @@ export async function requestPasswordResetAction(
     console.error("Password reset threw:", error);
   }
 
-  // Clear lockout records for this email (password reset is a valid recovery mechanism)
-  try {
-    await clearLockoutForAllIps(parsed.data.email);
-  } catch {
-    // Non-fatal
-  }
-
   const emailHashForLog = await hashEmailForAudit(parsed.data.email);
   await logAuthEvent({
     event: "auth.password_reset.requested",
@@ -324,6 +317,16 @@ export async function completePasswordResetAction(
         event: "auth.password_updated",
         userId: currentUser.id
       });
+
+      // Clear lockout records now that the user has proved mailbox ownership
+      try {
+        const { data: { user: refreshedUser } } = await supabase.auth.getUser();
+        if (refreshedUser?.email) {
+          await clearLockoutForAllIps(refreshedUser.email);
+        }
+      } catch {
+        // Non-fatal — lockout records are housekeeping
+      }
     }
   } catch (sessionError) {
     console.error("Failed to destroy sessions after password reset:", sessionError);
