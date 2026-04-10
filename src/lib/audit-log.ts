@@ -5,7 +5,7 @@ import type { Database, Json } from "@/lib/supabase/types";
 type AuditLogRow = Database["public"]["Tables"]["audit_log"]["Row"];
 
 type RecordAuditParams = {
-  entity: "event" | "sop_template" | "planning_task";
+  entity: "event" | "sop_template" | "planning_task" | "auth" | "customer" | "booking";
   entityId: string;
   action: string;
   meta?: Record<string, unknown>;
@@ -93,7 +93,7 @@ export async function hashEmailForAudit(email: string): Promise<string> {
 export async function logAuthEvent(params: LogAuthEventParams): Promise<void> {
   try {
     const db = createSupabaseAdminClient();
-    await db.from("audit_log").insert({
+    const { error } = await db.from("audit_log").insert({
       entity: "auth",
       entity_id: params.userId ?? "system",
       action: params.event,
@@ -105,6 +105,9 @@ export async function logAuthEvent(params: LogAuthEventParams): Promise<void> {
         ...(params.meta ?? {})
       })
     });
+    if (error) {
+      console.warn("[audit] Auth event insert failed:", error.message, { event: params.event });
+    }
   } catch (error) {
     console.error("Auth audit log failed:", error);
   }
