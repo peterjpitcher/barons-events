@@ -165,6 +165,27 @@ export async function cancelBookingAction(
     return { success: false, error: "Unauthorized" };
   }
 
+  // Ownership check — only central_planner has unrestricted cancel access;
+  // venue_manager may only cancel bookings for events at their assigned venue.
+  if (user.role === "central_planner") {
+    // allowed — no further check needed
+  } else if (user.role === "venue_manager") {
+    const db = createSupabaseAdminClient();
+    const { data: event, error: eventError } = await db
+      .from("events")
+      .select("venue_id")
+      .eq("id", eventId)
+      .single();
+    if (eventError || !event) {
+      return { success: false, error: "Event not found." };
+    }
+    if (event.venue_id !== user.venueId) {
+      return { success: false, error: "You do not have permission to cancel bookings." };
+    }
+  } else {
+    return { success: false, error: "You do not have permission to cancel bookings." };
+  }
+
   try {
     await cancelBooking(bookingId);
   } catch (err) {
