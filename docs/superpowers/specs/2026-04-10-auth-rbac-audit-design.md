@@ -160,9 +160,9 @@ BaronsHub has a mature, multi-layered auth system:
 
 **Finding:** The events SELECT policy allows access via `created_by` or `assignee_id`, but a venue manager cannot see events at their venue created by another user (e.g. a central planner creating an event for their venue).
 
-**Decision needed:** Is this intentional? If venue managers should see all events at their venue regardless of creator, the RLS policy needs an additional condition.
+**Decision:** Venue managers should see all events at their venue, regardless of who created them.
 
-**Fix (if venue-scoped access desired):** Add to the events SELECT policy: `OR (current_user_role() = 'venue_manager' AND venue_id = (SELECT venue_id FROM public.users WHERE id = auth.uid()))`.
+**Fix:** Add to the events SELECT policy: `OR (current_user_role() = 'venue_manager' AND venue_id = (SELECT venue_id FROM public.users WHERE id = auth.uid()))`.
 
 **File:** New migration in `supabase/migrations/`
 
