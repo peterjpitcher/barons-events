@@ -11,6 +11,7 @@ import { recordAuditLogEntry } from "@/lib/audit-log";
 import { sendBookingConfirmationSms } from "@/lib/sms";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { MARKETING_CONSENT_WORDING } from "@/lib/booking-consent";
+import { verifyTurnstile } from "@/lib/turnstile";
 
 // 10 booking attempts per IP per 10 minutes — separate from the public API limiter
 const bookingLimiter = new RateLimiter({ windowMs: 600_000, maxRequests: 10 });
@@ -23,6 +24,7 @@ const createBookingSchema = z.object({
   email:         z.string().email("Invalid email address").nullable(),
   ticketCount:   z.number().int().min(1).max(50),
   marketingOptIn: z.boolean().default(false),
+  turnstileToken: z.string().optional(),
 });
 
 export type CreateBookingInput = z.infer<typeof createBookingSchema>;
@@ -44,6 +46,12 @@ export async function createBookingAction(
   const rl = bookingLimiter.check(ip);
   if (!rl.allowed) {
     return { success: false, error: "rate_limited" };
+  }
+
+  // Verify Turnstile CAPTCHA — protects the public booking flow from bots
+  const turnstileValid = await verifyTurnstile(input.turnstileToken ?? null, "booking");
+  if (!turnstileValid) {
+    return { success: false, error: "Security check failed. Please try again." };
   }
 
   // Validate input

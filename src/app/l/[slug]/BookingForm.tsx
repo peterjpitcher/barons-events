@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
+import Script from "next/script";
 import { createBookingAction } from "@/actions/bookings";
 import type { CreateBookingInput } from "@/actions/bookings";
 import { MARKETING_CONSENT_WORDING } from "@/lib/booking-consent";
@@ -22,6 +23,7 @@ export function BookingForm({ eventId, maxTickets, isSoldOut }: BookingFormProps
   const [success, setSuccess] = useState(false);
   const [bookedMobile, setBookedMobile] = useState("");
   const [marketingOptIn, setMarketingOptIn] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
 
   if (isSoldOut) {
     return (
@@ -49,6 +51,10 @@ export function BookingForm({ eventId, maxTickets, isSoldOut }: BookingFormProps
     setError(null);
     setLoading(true);
 
+    // Read Turnstile token injected by the widget into the hidden input
+    const turnstileToken =
+      (formRef.current?.querySelector<HTMLInputElement>('[name="cf-turnstile-response"]')?.value) || undefined;
+
     const input: CreateBookingInput = {
       eventId,
       firstName: firstName.trim(),
@@ -57,6 +63,7 @@ export function BookingForm({ eventId, maxTickets, isSoldOut }: BookingFormProps
       email: email.trim() || null,
       ticketCount,
       marketingOptIn,
+      turnstileToken,
     };
 
     const result = await createBookingAction(input);
@@ -83,7 +90,7 @@ export function BookingForm({ eventId, maxTickets, isSoldOut }: BookingFormProps
         Reserve Your Seats
       </h2>
 
-      <form onSubmit={handleSubmit} noValidate className="space-y-4">
+      <form ref={formRef} onSubmit={handleSubmit} noValidate className="space-y-4">
         {/* Ticket count stepper */}
         <div className="flex items-center justify-between">
           <span className="text-sm text-[#637c8c]">How many seats?</span>
@@ -214,6 +221,13 @@ export function BookingForm({ eventId, maxTickets, isSoldOut }: BookingFormProps
           .
         </p>
 
+        {/* Turnstile CAPTCHA widget — injects a hidden cf-turnstile-response input */}
+        <div
+          className="cf-turnstile"
+          data-sitekey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY}
+          data-action="booking"
+        />
+
         {/* Submit */}
         <button
           type="submit"
@@ -225,6 +239,10 @@ export function BookingForm({ eventId, maxTickets, isSoldOut }: BookingFormProps
           {loading ? "Booking…" : "Book Now — Free Entry"}
         </button>
       </form>
+      <Script
+        src="https://challenges.cloudflare.com/turnstile/v0/api.js"
+        strategy="afterInteractive"
+      />
     </div>
   );
 }
