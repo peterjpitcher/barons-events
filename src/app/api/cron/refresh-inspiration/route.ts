@@ -10,6 +10,13 @@ export async function GET(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
   }
 
+  console.log(JSON.stringify({
+    event: "cron.invoked",
+    endpoint: "refresh-inspiration",
+    ip: request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? "unknown",
+    timestamp: new Date().toISOString()
+  }));
+
   try {
     const today = new Date();
     const windowEnd = new Date(today);
@@ -17,6 +24,11 @@ export async function GET(request: Request): Promise<NextResponse> {
 
     const count = await generateInspirationItems(today, windowEnd);
 
+    console.log(JSON.stringify({
+      event: "cron.completed",
+      endpoint: "refresh-inspiration",
+      timestamp: new Date().toISOString()
+    }));
     return NextResponse.json({ success: true, count });
   } catch (error) {
     console.error("cron/refresh-inspiration: failed", error);

@@ -18,6 +18,13 @@ export async function GET(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
   }
 
+  console.log(JSON.stringify({
+    event: "cron.invoked",
+    endpoint: "sms-reminders",
+    ip: request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? "unknown",
+    timestamp: new Date().toISOString()
+  }));
+
   const db = createSupabaseAdminClient();
 
   // Call the cron helper RPC (timezone-aware, returns bookings for events tomorrow)
@@ -48,6 +55,11 @@ export async function GET(request: Request): Promise<NextResponse> {
     }
   }
 
+  console.log(JSON.stringify({
+    event: "cron.completed",
+    endpoint: "sms-reminders",
+    timestamp: new Date().toISOString()
+  }));
   return NextResponse.json({ sent, failed });
 }
 

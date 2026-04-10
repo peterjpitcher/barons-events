@@ -193,6 +193,8 @@ export async function restoreArtistAction(
   if (!user) {
     redirect("/login");
   }
+  // Intentionally planner-only: venue managers can archive but must
+  // escalate to a planner to restore. The restore UI is on /settings (planner-only).
   if (user.role !== "central_planner") {
     return { success: false, message: "Only planners can restore archived artists." };
   }

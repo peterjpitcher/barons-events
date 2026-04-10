@@ -20,6 +20,8 @@ export async function deleteCustomerAction(
 ): Promise<DeleteCustomerResult> {
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "Unauthorized" };
+  // GDPR erasure — intentionally restricted to central_planner only.
+  // No venue scoping needed: this is a privileged administrative action.
   if (user.role !== "central_planner") {
     return { success: false, error: "Only central planners can erase customer data." };
   }

@@ -189,6 +189,10 @@ export async function cleanupExpiredSessions(): Promise<void> {
 
   await db.from("app_sessions").delete().lt("expires_at", now);
   await db.from("app_sessions").delete().lt("last_activity_at", idleCutoff);
+
+  // Clean up stale login_attempts (older than lockout duration)
+  const attemptCutoff = new Date(Date.now() - LOCKOUT_DURATION_MINUTES * 60 * 1000).toISOString();
+  await db.from("login_attempts").delete().lt("attempted_at", attemptCutoff);
 }
 
 // ─── Account lockout helpers ────────────────────────────────────────────────
@@ -243,7 +247,7 @@ export async function recordFailedLoginAttempt(
 export async function isLockedOut(email: string, ip: string): Promise<boolean> {
   const db = createSupabaseAdminClient();
   const emailHash = await hashEmail(email);
-  const windowStart = new Date(Date.now() - LOCKOUT_DURATION_MINUTES * 60 * 1000).toISOString();
+  const windowStart = new Date(Date.now() - LOCKOUT_WINDOW_MINUTES * 60 * 1000).toISOString();
 
   const { count } = await db
     .from("login_attempts")

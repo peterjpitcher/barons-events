@@ -17,8 +17,20 @@ export async function GET(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
   }
 
+  console.log(JSON.stringify({
+    event: "cron.invoked",
+    endpoint: "cleanup-auth",
+    ip: request.headers.get("x-forwarded-for") ?? request.headers.get("x-real-ip") ?? "unknown",
+    timestamp: new Date().toISOString()
+  }));
+
   try {
     await cleanupExpiredSessions();
+    console.log(JSON.stringify({
+      event: "cron.completed",
+      endpoint: "cleanup-auth",
+      timestamp: new Date().toISOString()
+    }));
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error("cleanup-auth cron: error cleaning up expired sessions", err);
