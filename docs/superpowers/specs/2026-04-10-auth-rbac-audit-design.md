@@ -1,8 +1,9 @@
-# Auth & RBAC End-to-End Audit — Remediation Spec
+# Auth & RBAC End-to-End Audit — Remediation Spec (v2)
 
 **Date:** 2026-04-10
 **Scope:** Comprehensive review of authentication, authorisation, RBAC, RLS, and session management in BaronsHub
 **Approach:** Risk-prioritised fix list (Approach A)
+**Revision:** v2 — incorporates Codex adversarial review findings (5 Codex reviewers + 1 Claude architecture reviewer)
 
 ---
 
@@ -18,14 +19,18 @@ BaronsHub has a mature, multi-layered auth system:
 - **Session hardening:** Lockout protection (5 failures / 15 min = 30 min lockout), session destruction on role change and password reset, Turnstile CAPTCHA on login
 - **Password policy:** 12-72 chars, HIBP k-anonymity check, no composition rules (NIST SP 800-63B)
 
+**Key architectural note:** Several code paths use the admin (service-role) Supabase client, which bypasses RLS entirely. For these paths, app-layer auth checks are the primary control — RLS is defence-in-depth only. This affects: booking cancel/read helpers, planning board loader, event version/artist operations, and customer data functions.
+
 ### Role Access Matrix
 
 | Capability | venue_manager | reviewer | central_planner | executive |
 |------------|:---:|:---:|:---:|:---:|
 | Create/edit own events | ✓ | — | ✓ (all) | — |
+| View all events at own venue | ✓ | — | ✓ (all) | — |
 | Review/approve events | — | ✓ | ✓ | — |
 | Submit debriefs | ✓ | — | ✓ | — |
 | Manage artists | ✓ | — | ✓ | — |
+| Restore archived artists | — | — | ✓ | — |
 | Manage venues | — | — | ✓ | — |
 | Manage users | — | — | ✓ | — |
 | Manage settings/event types | — | — | ✓ | — |
@@ -42,73 +47,143 @@ BaronsHub has a mature, multi-layered auth system:
 
 ### Critical Severity
 
-#### C1 — `cancelBookingAction()` missing ownership check
+#### C1 — SECURITY DEFINER RPCs without execute restrictions
 
-**Finding:** Any authenticated user can cancel any booking. The action checks `getCurrentUser()` but performs no role or ownership verification before cancelling.
+**Finding:** Multiple `SECURITY DEFINER` database functions bypass RLS but have no `REVOKE EXECUTE` in the migrations, meaning they can be called directly by any user (including anonymous) via the Supabase REST API, bypassing all app-layer auth.
 
-**Risk:** A reviewer or executive could cancel bookings they have no authority over. RLS allows any authenticated user to UPDATE bookings (see M1).
+**Affected functions:**
+- `create_booking()` — anon users can create bookings directly, bypassing rate limits, validation, and capacity checks
+- `get_reminder_bookings()` / `get_post_event_bookings()` — expose customer PII (names, mobile numbers)
+- `list_customers_with_stats()` — dumps all customer data when called with null venue_id
+- `generate_sop_checklist()` / `recalculate_sop_dates()` — allow non-planners to mutate SOP data
+- `cleanup_auth_records()` — missing `search_path` pinning
 
-**Fix:** Add ownership verification — caller must be `central_planner`, or the booking's event must belong to a venue matching the caller's `venue_id` (for `venue_manager`).
+**Properly hardened examples for reference:** `sync_event_artists()`, `next_event_version()`, `increment_link_clicks()` in `20260225000002_atomic_artist_sync_and_event_version.sql` all have explicit `REVOKE/GRANT` and pinned `search_path`.
+
+**Risk:** Direct database-level exploitation without any authentication. Customer PII exposure.
+
+**Fix:** Create migration to:
+1. `REVOKE EXECUTE ON FUNCTION <name> FROM PUBLIC, anon, authenticated`
+2. `GRANT EXECUTE ON FUNCTION <name> TO service_role`
+3. Add `SET search_path = public` where missing
+
+**File:** New migration in `supabase/migrations/`
+
+---
+
+#### C2 — Audit log system silently broken
+
+**Finding:** The audit log system is failing to record critical security events:
+- `audit_log.entity_id` is `uuid` type, but `logAuthEvent()` writes `entity_id: "system"` (not a valid UUID)
+- SOP actions write `entity_id: "global"` / `"backfill"` (not valid UUIDs)
+- `entity_type` CHECK constraint only allows `event`, `sop_template`, `planning_task` — excludes `auth`, `customer`, `booking`
+- `logAuthEvent()` never checks the Supabase response for insert errors
+- `recordAuditLogEntry()` logs and swallows insert failures
+
+**Risk:** Login failures, lockouts, role changes, password resets, booking cancellations, and customer erasures are NOT being recorded. Security incident review is blind for these events.
+
+**Fix:**
+1. Migration: extend `entity_type` CHECK to include `auth`, `customer`, `booking`
+2. Migration: change `entity_id` from `uuid` to `text` (or use a proper UUID for system entries)
+3. Code: fix `logAuthEvent()` to check for insert errors and log warnings on failure
+
+**Files:** New migration in `supabase/migrations/`, `src/lib/audit-log.ts`
+
+---
+
+#### C3 — `cancelBookingAction()` missing ownership check
+
+**Finding:** Any authenticated user can cancel any booking. The action checks `getCurrentUser()` but performs no role or ownership verification. The `cancelBooking()` helper uses the admin client (service-role), bypassing RLS entirely — making app-layer auth the only control.
+
+**Risk:** A reviewer or executive could cancel bookings they have no authority over. Since the helper bypasses RLS, tightening RLS alone does not fix this.
+
+**Fix:** Add ownership verification before calling `cancelBooking()`:
+- `central_planner` → can cancel any booking
+- `venue_manager` → can cancel bookings for events at their venue (fetch event, check `venue_id` matches `user.venue_id`)
+- All other roles → reject
 
 **File:** `src/actions/bookings.ts`
 
 ---
 
-#### C2 — Public booking endpoint lacks CAPTCHA
+#### C4 — Public booking endpoint lacks CAPTCHA
 
-**Finding:** `createBookingAction()` accepts anonymous submissions with only IP-based rate limiting (10 per 10 min). No bot protection.
+**Finding:** `createBookingAction()` accepts anonymous submissions with only IP-based rate limiting (10 per 10 min). No bot protection. The `BookingForm.tsx` client component renders no Turnstile widget.
 
 **Risk:** Automated spam bookings. IP rate limiting is trivially bypassed with rotating proxies.
 
-**Fix:** Add Turnstile verification using the same pattern as `signInAction()`. Accept `turnstileToken` parameter and call `verifyTurnstile()` before processing.
+**Fix:**
+1. Extract `verifyTurnstile()` from `src/actions/auth.ts` into a shared helper (currently private)
+2. Add `turnstileToken` to the booking action's Zod schema
+3. Call `verifyTurnstile()` before processing the booking
+4. Add Turnstile widget to `src/app/l/[slug]/BookingForm.tsx`
 
-**File:** `src/actions/bookings.ts`
+**Files:** `src/actions/bookings.ts`, `src/app/l/[slug]/BookingForm.tsx`, new shared Turnstile helper
 
 ---
 
 ### High Severity
 
-#### H1 — Planning page missing server-side role check
+#### H1 — Planning page missing role check + loader exposes data and performs writes
 
-**Finding:** `/app/planning/page.tsx` calls `getCurrentUser()` and redirects if null, but does not check the user's role. Any authenticated user (including `venue_manager` and `reviewer`) can load the planning page. Data writes are blocked by RLS, but the page itself exposes planning data.
+**Finding:** `/app/planning/page.tsx` checks authentication but not role. Any authenticated user can load the planning page. The planning loader (`listPlanningBoardData()` in `src/lib/planning/index.ts`) uses the admin client and:
+- Reads all planning users (including emails and roles), items, tasks, events, and inspiration data
+- **Writes during page load**: `ensurePlanningOccurrencesThrough()` creates new `planning_items`, `planning_tasks`, and SOP checklists via the admin client
 
-**Risk:** Unauthorised users see planning information. While RLS prevents mutations, read access to planning_items and planning_series is granted to all authenticated users via `using (true)` SELECT policies.
+Additionally, the event detail page (`src/app/events/[eventId]/page.tsx:116`) fetches planning/SOP data via admin client after only event-level auth checks, leaking planning information to reviewers and venue managers.
 
-**Fix:** Add `if (!canViewPlanning(user.role)) redirect("/unauthorized")` after the auth check. This restricts the page to `central_planner` and `executive` roles.
+**Risk:** Unauthorised users see planning information and trigger database writes by simply loading a page.
 
-**File:** `src/app/planning/page.tsx`
+**Fix (three parts):**
+1. Add `if (!canViewPlanning(user.role)) redirect("/unauthorized")` to `src/app/planning/page.tsx` — **before** calling the loader
+2. Gate planning/SOP data on event detail page behind `canViewPlanning()` check
+3. Document the loader's write-on-read as tech debt (future: move occurrence generation to a scheduled job or explicit action)
 
----
-
-#### H2 — Artist restore inconsistent with archive permissions
-
-**Finding:** `archiveArtistAction()` uses `canManageArtists()` (allows `venue_manager` + `central_planner`), but `restoreArtistAction()` hardcodes `user.role !== "central_planner"`. A venue manager can archive an artist but cannot restore one.
-
-**Risk:** Operational inconsistency. A venue manager who accidentally archives an artist must escalate to a central planner to undo it.
-
-**Fix:** Replace `user.role !== "central_planner"` with `!canManageArtists(user.role)` in `restoreArtistAction()`.
-
-**File:** `src/actions/artists.ts`
+**Files:** `src/app/planning/page.tsx`, `src/app/events/[eventId]/page.tsx`
 
 ---
 
-#### H3 — Email case sensitivity in lockout tracking
+#### H2 — Password reset clears lockout before mailbox ownership proved
 
-**Finding:** Lockout tracking hashes emails with SHA-256. The `recordFailedLoginAttempt()` function lowercases email before hashing, but `isLockedOut()` and `clearLockoutForIp()` must also lowercase to ensure consistent matching. If any function skips normalisation, `User@Example.com` and `user@example.com` create separate lockout counters.
+**Finding:** `requestPasswordResetAction()` (`src/actions/auth.ts:280`) calls `clearLockoutForAllIps()` immediately when a password reset is requested — before the user has clicked the reset link and proved they own the mailbox. Turnstile on the reset form is fail-open.
 
-**Risk:** Lockout bypass by varying email casing.
+**Risk:** An attacker can alternate failed logins with password-reset requests for the same email, indefinitely resetting the lockout counter. The 5-attempt lockout becomes bypassable on demand.
 
-**Fix:** Verify all lockout functions in `src/lib/auth/session.ts` normalise email to lowercase before hashing. Add `.toLowerCase()` to any function missing it.
+**Fix:** Move `clearLockoutForAllIps()` from `requestPasswordResetAction()` to `completePasswordResetAction()`, so lockout is only cleared after the user proves mailbox ownership by completing the reset.
 
-**File:** `src/lib/auth/session.ts`
+**File:** `src/actions/auth.ts`
 
 ---
 
-#### H4 — Role normalisation silent failure
+#### H3 — Event submit ordering bug — side effects before validation
+
+**Finding:** `submitEventForReviewAction()` (`src/actions/events.ts:1144`) syncs artists via a service-role RPC and may update images BEFORE checking whether the event is in a submittable status (line 1192). The artist sync uses `sync_event_artists()` which is atomic but still mutates data.
+
+**Risk:** A failed submit (event already approved/rejected/completed) leaves changed artist links and potentially updated images on an event whose status never moved.
+
+**Fix:** Move the status validation check (`status in ['draft', 'needs_revisions']`) to before the artist sync and image operations.
+
+**File:** `src/actions/events.ts`
+
+---
+
+#### H4 — Sign-in session creation failure creates redirect loop
+
+**Finding:** `signInAction()` (`src/actions/auth.ts:183`) treats `createSession()` failure as non-fatal and still redirects to the app. But middleware hard-requires `app-session-id` (`middleware.ts:216`). This creates a redirect loop: the user has a valid JWT (so `/login` thinks they're authenticated and redirects to `/`), but every protected route bounces them back to `/login` because `app-session-id` is missing.
+
+**Risk:** Users see an infinite redirect loop instead of a clear error message when session creation fails.
+
+**Fix:** Make `createSession()` failure a login failure — return an error to the user instead of redirecting. Sign out the Supabase session to clean up the JWT.
+
+**File:** `src/actions/auth.ts`
+
+---
+
+#### H5 — Role normalisation silent failure
 
 **Finding:** `getCurrentUser()` in `src/lib/auth.ts` calls `normalizeRole()` which returns null for unrecognised roles. When null, `getCurrentUser()` returns null — treating the user as unauthenticated with no logging.
 
-**Risk:** If a user's role is corrupted in the database, they silently lose access with no error trail. Debugging is difficult.
+**Risk:** If a user's role is corrupted in the database, they silently lose access with no error trail.
 
 **Fix:** Add `console.warn()` when `normalizeRole()` returns null, including the user ID and the invalid role value.
 
@@ -120,23 +195,71 @@ BaronsHub has a mature, multi-layered auth system:
 
 #### M1 — Event bookings RLS overly broad for authenticated users
 
-**Finding:** The `event_bookings` table has SELECT and UPDATE policies using `to authenticated using (true)`. Any authenticated user can read and modify all bookings regardless of role or venue.
-
-**Risk:** A reviewer or executive can see and modify bookings they shouldn't have access to. The application layer scopes queries correctly, but RLS should be the enforcement backstop.
+**Finding:** The `event_bookings` table has SELECT and UPDATE policies using `to authenticated using (true)`. Any authenticated user can read and modify all bookings regardless of role or venue. **Note:** The cancel helper uses the admin client, so RLS tightening is defence-in-depth — the app-layer fix in C3 is the primary control.
 
 **Fix:** Create a new migration that replaces the overly permissive policies:
 - **SELECT:** `central_planner` sees all; `venue_manager` sees bookings for events at their venue; `reviewer` sees bookings for events they're assigned to
-- **UPDATE:** Same scoping as SELECT (cancellation requires access to the booking)
+- **UPDATE:** Same scoping as SELECT
 
 **File:** New migration in `supabase/migrations/`
 
 ---
 
-#### M2 — Cron endpoints lack request logging
+#### M2 — Executive can dismiss planning inspiration items for all users
+
+**Finding:** `dismissInspirationItemAction()` (`src/actions/planning.ts:610`) allows any `canViewPlanning()` user, including executives. Dismissals are organisation-wide in the board loader — an executive can hide inspiration items for every planner. This contradicts the role model's "read-only observer" description of the executive role.
+
+**Fix:** Change `dismissInspirationItemAction()` to require `canUsePlanning()` instead of `canViewPlanning()`, restricting dismissal to central planners only.
+
+**File:** `src/actions/planning.ts`
+
+---
+
+#### M3 — Lockout window mismatch and cleanup gap
+
+**Finding:** Two issues:
+1. Failed login attempts are recorded with a 15-minute window (`session.ts:214`) but `isLockedOut()` checks a 30-minute window (`session.ts:243`). The actual lockout behaviour doesn't match the documented "5 failures in 15 minutes = 30 minute lockout" rule.
+2. `cleanupExpiredSessions()` only deletes `app_sessions` but never cleans up stale `login_attempts` records, despite the cron route comment implying it does. The SQL `cleanup_auth_records()` RPC handles both, but the TypeScript function doesn't call it.
+
+**Fix:**
+1. Align the windows — use the same interval for both recording and checking
+2. Add `login_attempts` cleanup to `cleanupExpiredSessions()` or call the `cleanup_auth_records()` RPC instead
+
+**File:** `src/lib/auth/session.ts`
+
+---
+
+#### M4 — Public API leaks internal notes
+
+**Finding:** `toPublicEvent()` (`src/lib/public-api/events.ts:186`) falls back to the `notes` field when `public_description` is missing. Internal staff notes could be exposed via the website API for events without completed web copy.
+
+**Risk:** Anyone with the API bearer key can see internal event notes for events that haven't had their public description written.
+
+**Fix:** Never expose `notes` in the public API. Return null/empty for `description` when `public_description` is missing.
+
+**File:** `src/lib/public-api/events.ts`
+
+---
+
+#### M5 — Booking double-submit creates duplicate bookings
+
+**Finding:** `createBookingAction()` has no idempotency key. The `create_booking` RPC locks the event row for capacity checking but always inserts a new booking row. Two quick form submits create duplicate bookings, duplicate SMS sends, and double capacity consumption.
+
+**Risk:** Users get double-charged capacity; duplicate SMS notifications sent.
+
+**Fix:** Add an idempotency mechanism — either:
+- A unique constraint on (event_id, customer phone/email, booking window) to prevent duplicates, or
+- A client-side idempotency key passed through and stored as a unique column
+
+**File:** `src/actions/bookings.ts` and/or new migration in `supabase/migrations/`
+
+---
+
+#### M6 — Cron endpoints lack request logging
 
 **Finding:** The 4 cron routes authenticate via `CRON_SECRET` bearer token but produce no audit trail of invocation.
 
-**Risk:** If the cron secret is compromised, there's no log of when cron endpoints were called or by whom.
+**Risk:** If the cron secret is compromised, there's no log of when cron endpoints were called.
 
 **Fix:** Add a structured log entry at the start of each cron handler: timestamp, endpoint name, IP (from headers), and outcome (success/error). Use `console.log()` with JSON structure (captured by Vercel logs).
 
@@ -144,21 +267,9 @@ BaronsHub has a mature, multi-layered auth system:
 
 ---
 
-#### M3 — `deleteCustomerAction()` ownership scoping (documentation only)
+#### M7 — Venue manager event visibility not venue-scoped in RLS
 
-**Finding:** Only checks `central_planner` role. No ownership verification beyond that.
-
-**Assessment:** This is correct behaviour — GDPR erasure is a privileged administrative action that should only be performed by central planners. The RLS policy already scopes customer visibility.
-
-**Fix:** No code change. Add a comment in the function documenting the intent: "GDPR erasure — intentionally restricted to central_planner only, no venue scoping needed."
-
-**File:** `src/actions/customers.ts`
-
----
-
-#### M4 — Venue manager event visibility not venue-scoped in RLS
-
-**Finding:** The events SELECT policy allows access via `created_by` or `assignee_id`, but a venue manager cannot see events at their venue created by another user (e.g. a central planner creating an event for their venue).
+**Finding:** The events SELECT policy allows venue managers to see only events they created (`created_by`) or are assigned to (`assignee_id`). They cannot see events at their venue created by a central planner.
 
 **Decision:** Venue managers should see all events at their venue, regardless of who created them.
 
@@ -168,65 +279,60 @@ BaronsHub has a mature, multi-layered auth system:
 
 ---
 
-#### M5 — In-process rate limiter resets on cold start (documentation only)
+#### M8 — `deleteCustomerAction()` documentation (no code change)
 
-**Finding:** The public API rate limiter uses an in-memory `Map`. Each serverless cold start resets counters.
+**Finding:** Only checks `central_planner` role. No ownership verification beyond that. Uses admin client.
 
-**Assessment:** The API key requirement is the primary defence. Rate limiting is a secondary measure. Acceptable for current traffic levels.
+**Assessment:** Correct behaviour — GDPR erasure is a privileged administrative action that should only be performed by central planners.
 
-**Fix:** No code change. Document as known limitation in code comments. Add to future work: migrate to Upstash Redis for persistent rate limiting.
+**Fix:** No code change. Add a comment documenting the intent: "GDPR erasure — intentionally restricted to central_planner only, no venue scoping needed."
 
-**File:** `src/lib/public-api/rate-limit.ts` (comment only)
+**File:** `src/actions/customers.ts`
 
 ---
 
 ### Low Severity
 
-#### L1 — HIBP fail-open behaviour (observability)
+#### L1 — Artist restore intentionally planner-only (no change)
 
-**Finding:** `validatePassword()` accepts passwords when HIBP API is unreachable (3-second timeout). Intentional per NIST SP 800-63B.
+**Finding:** `restoreArtistAction()` hardcodes `central_planner` while `archiveArtistAction()` uses `canManageArtists()`. The restore UI lives on the planner-only `/settings` page.
 
-**Fix:** Add `console.warn("HIBP check unavailable — password accepted without breach check")` when the API returns "unavailable".
+**Assessment:** Intentionally planner-only per product decision. Venue managers can archive but must escalate to a planner to restore — this is the desired workflow.
 
-**File:** `src/lib/auth/password-policy.ts`
+**Fix:** No code change. Add a comment documenting the intent.
+
+**File:** `src/actions/artists.ts`
 
 ---
 
-#### L2 — Turnstile fail-open behaviour (observability) — ALREADY FIXED
+#### L2 — Reference data SELECT policies (no change)
 
-**Finding:** `verifyTurnstile()` returns true when token is missing or Cloudflare is unreachable. Intentional per auth standard §6.
+**Finding:** `venues`, `venue_areas`, `event_types`, `artists` have `using (true)` SELECT policies without `TO authenticated` — readable by anon role too. `venue_service_types`, `venue_opening_hours`, `venue_opening_overrides`, `short_links` scope to authenticated users.
 
-**Status:** Already implemented. The private `verifyTurnstile()` function in `src/actions/auth.ts` (lines 70-102) already has `console.warn` on all three fail-open paths: no token (line 74), no secret key (line 80), and API unavailable (lines 90, 99).
+**Assessment:** Reference/lookup tables. The mixed auth/anon scoping reflects that some data (venues, event types) is needed by public-facing pages. Intentional.
 
 **Fix:** No change needed.
 
 ---
 
-#### L3 — Public API single shared key (documentation only)
+#### L3 — Public API single shared key (future work)
 
 **Finding:** `BARONSHUB_WEBSITE_API_KEY` is a single static key with no rotation or expiry.
 
-**Fix:** No code change. Document as future work: multi-key support with versioned keys and expiry dates.
+**Fix:** No code change. Document as future work.
 
 ---
 
-#### L4 — Async session cleanup (no change)
+## Removed Findings (from v1)
 
-**Finding:** Expired sessions cleaned up asynchronously with swallowed errors.
+These findings from the original spec were removed after adversarial review found them to be already fixed or inaccurate:
 
-**Assessment:** Acceptable — the session is already invalidated in the response. Cleanup is housekeeping.
-
-**Fix:** No change needed.
-
----
-
-#### L5 — Reference data SELECT policies use `true` (no change)
-
-**Finding:** `venues`, `venue_areas`, `event_types`, `artists`, `venue_service_types`, `venue_opening_hours`, `venue_opening_overrides`, `short_links` have `using (true)` SELECT policies for authenticated users.
-
-**Assessment:** These are reference/lookup tables. All authenticated staff need read access to display dropdowns, event details, and scheduling information. This is intentional.
-
-**Fix:** No change needed.
+| Original ID | Reason for removal |
+|-------------|-------------------|
+| H3 (email casing) | Already centralised in `hashEmail()` — all lockout paths lowercase before SHA-256 |
+| L1 (HIBP logging) | Already implemented at `password-policy.ts:83,100` |
+| L2 (Turnstile logging) | Already implemented in `auth.ts:70-102` |
+| M5 (rate limiter comment) | Already documented at `rate-limit.ts:4` |
 
 ---
 
@@ -240,21 +346,29 @@ BaronsHub has a mature, multi-layered auth system:
 | Shared `ensurePermission()` wrapper | Low | Standardise auth pattern across all server actions |
 | Automated auth boundary tests | Medium | Integration tests verifying each role's access to each action |
 | HIBP fail-closed mode with user notification | Low | Block password on HIBP failure, notify user to retry |
+| Move planning occurrence generation to scheduled job | Medium | Remove write-on-read from planning board loader |
+| Heartbeat endpoint session ownership verification | Low | Currently renews any session ID without ownership check |
 
 ---
 
 ## Implementation Order
 
-1. **C1 + C2** — Booking action fixes (highest risk, same file)
-2. **H1** — Planning page role gate (quick fix, high impact)
-3. **H2** — Artist restore permission fix (one-liner)
-4. **H3** — Lockout email normalisation verification
-5. **H4** — Role normalisation logging
-6. **M1** — Event bookings RLS migration
-7. **M2** — Cron endpoint logging
-8. **M4** — Venue manager event visibility RLS (pending decision)
-9. **L1 + L2** — Observability warnings
-10. **M3 + M5** — Documentation comments
+1. **C1** — SECURITY DEFINER RPC hardening migration (Critical — exploitable without auth)
+2. **C2** — Audit log constraint + error handling fix (Critical — blind audit trail)
+3. **C3 + C4** — Booking action fixes: ownership check + Turnstile (Critical — same file)
+4. **H1** — Planning page role gate + event detail planning leak (High — three-part fix)
+5. **H2** — Password reset lockout clearing fix (High)
+6. **H3** — Event submit ordering fix (High)
+7. **H4** — Sign-in session creation must be fatal on failure (High)
+8. **H5** — Role normalisation logging (High)
+9. **M1** — Event bookings RLS migration (Medium — defence in depth)
+10. **M2** — Executive inspiration dismissal fix (Medium)
+11. **M3** — Lockout window alignment + cleanup (Medium)
+12. **M4** — Public API notes leak fix (Medium)
+13. **M5** — Booking idempotency (Medium)
+14. **M6** — Cron endpoint logging (Medium)
+15. **M7** — Venue manager event visibility RLS (Medium)
+16. **L1 + M8** — Documentation comments
 
 ---
 
@@ -262,14 +376,35 @@ BaronsHub has a mature, multi-layered auth system:
 
 | File | Changes |
 |------|---------|
-| `src/actions/bookings.ts` | C1: ownership check, C2: Turnstile |
+| `supabase/migrations/` (new) | C1: REVOKE/GRANT on SECURITY DEFINER RPCs |
+| `supabase/migrations/` (new) | C2: audit log entity_type + entity_id fix |
+| `src/lib/audit-log.ts` | C2: error handling in logAuthEvent |
+| `src/actions/bookings.ts` | C3: ownership check, C4: Turnstile |
+| `src/app/l/[slug]/BookingForm.tsx` | C4: Turnstile widget |
+| `src/actions/auth.ts` | C4: extract verifyTurnstile to shared helper; H2: move lockout clear; H4: fatal session creation |
 | `src/app/planning/page.tsx` | H1: role gate |
-| `src/actions/artists.ts` | H2: `canManageArtists()` for restore |
-| `src/lib/auth/session.ts` | H3: email normalisation |
-| `src/lib/auth.ts` | H4: role warning log |
-| `supabase/migrations/` (new) | M1: bookings RLS, M4: venue event visibility |
-| `src/app/api/cron/*/route.ts` | M2: audit logging (4 files) |
-| `src/actions/customers.ts` | M3: documentation comment |
-| `src/lib/auth/password-policy.ts` | L1: HIBP warning |
-| `src/actions/auth.ts` | L2: already has warnings — no change |
-| `src/lib/public-api/rate-limit.ts` | M5: limitation comment |
+| `src/app/events/[eventId]/page.tsx` | H1: gate planning/SOP data |
+| `src/actions/events.ts` | H3: status check before artist sync |
+| `src/lib/auth.ts` | H5: role warning log |
+| `supabase/migrations/` (new) | M1: bookings RLS, M7: venue event visibility |
+| `src/actions/planning.ts` | M2: canUsePlanning() for dismissal |
+| `src/lib/auth/session.ts` | M3: window alignment + cleanup |
+| `src/lib/public-api/events.ts` | M4: remove notes fallback |
+| `src/actions/bookings.ts` or migration | M5: idempotency |
+| `src/app/api/cron/*/route.ts` | M6: structured logging (4 files) |
+| `src/actions/customers.ts` | M8: documentation comment |
+| `src/actions/artists.ts` | L1: documentation comment |
+
+---
+
+## Adversarial Review Provenance
+
+This spec was validated by a 6-reviewer adversarial review system:
+- **Codex Repo Reality Mapper** — ground-truth codebase mapping
+- **Codex Assumption Breaker** — challenged every finding, identified 7 new issues
+- **Codex Spec Trace Auditor** — traced requirements to code, found 4 spec defects
+- **Codex Security & Data Risk Reviewer** — found 10 exploitable vulnerabilities
+- **Codex Workflow & Failure-Path Reviewer** — found 8 failure-path issues
+- **Claude Integration & Architecture Reviewer** — found 9 architectural concerns
+
+Reports: `tasks/codex-qa-review/2026-04-10-auth-rbac-audit-*.md`
