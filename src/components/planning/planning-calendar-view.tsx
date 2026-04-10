@@ -122,6 +122,7 @@ export function PlanningCalendarView({ today, entries, onOpenPlanningItem, onMov
           const inActiveMonth = dateKey.slice(0, 7) === activeMonth.slice(0, 7);
           const rows = entriesByDate.get(dateKey) ?? [];
           const isDropCandidate = draggedPlanningItem ? draggedPlanningItem.sourceDate !== dateKey : false;
+          const isToday = dateKey === today;
           return (
             <article
               key={dateKey}
@@ -137,12 +138,14 @@ export function PlanningCalendarView({ today, entries, onOpenPlanningItem, onMov
                 onMovePlanningItem(itemId, dateKey);
               }}
               className={`min-h-[7.5rem] rounded-[var(--radius-sm)] border p-2 ${
-                inActiveMonth
-                  ? "border-[var(--color-border)] bg-white"
-                  : "border-[rgba(39,54,64,0.12)] bg-[var(--color-muted-surface)]"
+                isToday
+                  ? "border-[var(--color-primary-600)] bg-[rgba(39,54,64,0.04)] ring-1 ring-[var(--color-primary-500)]"
+                  : inActiveMonth
+                    ? "border-[var(--color-border)] bg-white"
+                    : "border-[rgba(39,54,64,0.12)] bg-[var(--color-muted-surface)]"
               } ${isDropCandidate ? "ring-1 ring-[var(--color-primary-500)]" : ""}`}
             >
-              <p className={`text-xs font-semibold ${inActiveMonth ? "text-[var(--color-text)]" : "text-subtle"}`}>{formatDayNumber(dateKey)}</p>
+              <p className={`text-xs font-semibold ${isToday ? "text-[var(--color-primary-700)]" : inActiveMonth ? "text-[var(--color-text)]" : "text-subtle"}`}>{formatDayNumber(dateKey)}</p>
               <div className="mt-2 space-y-1">
                 {rows.slice(0, 3).map((entry) => {
                   if (entry.source === "planning") {
