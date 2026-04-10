@@ -443,8 +443,8 @@ describe("cleanupExpiredSessions", () => {
 
     await cleanupExpiredSessions();
 
-    // delete called twice: once for expires_at, once for last_activity_at
-    expect(deleteFn).toHaveBeenCalledTimes(2);
+    // delete called three times: expires_at, last_activity_at, and login_attempts
+    expect(deleteFn).toHaveBeenCalledTimes(3);
     // First call: expires_at cleanup
     expect(ltFn).toHaveBeenCalledWith("expires_at", expect.any(String));
   });
