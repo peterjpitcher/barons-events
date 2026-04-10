@@ -186,7 +186,7 @@ export function toPublicEvent(row: RawEventRow): PublicEvent {
   const internalTitle = typeof row.title === "string" ? row.title.trim() : "";
   const title = normaliseOptionalText(row.public_title) ?? internalTitle;
   const teaser = normaliseOptionalText(row.public_teaser);
-  const description = normaliseOptionalText(row.public_description) ?? normaliseOptionalText(row.notes);
+  const description = normaliseOptionalText(row.public_description) ?? null;
   const highlights = normaliseHighlights(row.public_highlights);
   const bookingUrl = normaliseOptionalText(row.booking_url);
   const bookingType =
