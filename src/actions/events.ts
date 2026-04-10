@@ -1141,6 +1141,20 @@ export async function submitEventForReviewAction(
       return { success: false, message: "You can only submit events you created." };
     }
 
+    if (!existingEvent) {
+      throw new Error("Event not found.");
+    }
+
+    if (!["draft", "needs_revisions"].includes(existingEvent.status)) {
+      if (existingEvent.status === "approved") {
+        revalidatePath(`/events/${targetEventId}`);
+        revalidatePath("/events");
+        revalidatePath("/reviews");
+        return { success: true, message: "Event already approved." };
+      }
+      return { success: false, message: "This event cannot be submitted in its current state." };
+    }
+
     if (rawEventId) {
       const artistSync = await syncEventArtists({
         eventId: targetEventId,
@@ -1183,20 +1197,6 @@ export async function submitEventForReviewAction(
           void _resubmitImgUpdated;
         }
       }
-    }
-
-    if (!existingEvent) {
-      throw new Error("Event not found.");
-    }
-
-    if (!["draft", "needs_revisions"].includes(existingEvent.status)) {
-      if (existingEvent.status === "approved") {
-        revalidatePath(`/events/${targetEventId}`);
-        revalidatePath("/events");
-        revalidatePath("/reviews");
-        return { success: true, message: "Event already approved." };
-      }
-      return { success: false, message: "This event cannot be submitted in its current state." };
     }
 
     if (user.role === "central_planner") {
