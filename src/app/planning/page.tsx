@@ -3,7 +3,7 @@ import { PlanningBoard } from "@/components/planning/planning-board";
 import { getCurrentUser } from "@/lib/auth";
 import { listPlanningBoardData } from "@/lib/planning";
 import { listVenues } from "@/lib/venues";
-import { canReviewEvents } from "@/lib/roles";
+import { canReviewEvents, canViewPlanning } from "@/lib/roles";
 
 export const metadata = {
   title: "Planning · BaronsHub",
@@ -14,6 +14,10 @@ export default async function PlanningPage() {
   const user = await getCurrentUser();
   if (!user) {
     redirect("/login");
+  }
+
+  if (!canViewPlanning(user.role)) {
+    redirect("/unauthorized");
   }
 
   const [venues, boardData] = await Promise.all([

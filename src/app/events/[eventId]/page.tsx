@@ -24,6 +24,7 @@ import { updateAssigneeAction } from "@/actions/events";
 import { parseVenueSpaces } from "@/lib/venue-spaces";
 import { formatCurrency, formatPercent } from "@/lib/utils/format";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { canViewPlanning } from "@/lib/roles";
 import { SopChecklistView } from "@/components/planning/sop-checklist-view";
 import type { PlanningTask, PlanningPerson, PlanningTaskStatus } from "@/lib/planning/types";
 
@@ -112,7 +113,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
   // ─── Fetch linked planning item & SOP tasks for this event ────────────────
   let sopTasks: PlanningTask[] = [];
   let sopPlanningItemId: string | null = null;
-  {
+  if (canViewPlanning(user.role)) {
     const db = createSupabaseAdminClient();
     const { data: planningItem } = await db
       .from("planning_items")
