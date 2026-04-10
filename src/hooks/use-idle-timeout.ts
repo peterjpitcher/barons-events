@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useCallback } from "react";
-import { useRouter } from "next/navigation";
 
 const IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 const WARNING_THRESHOLD_MS = 25 * 60 * 1000; // 25 minutes
@@ -21,7 +20,6 @@ type Options = {
  * Mount once at root layout level only.
  */
 export function useIdleTimeout({ onWarning, onSignOut }: Options = {}) {
-  const router = useRouter();
   const lastActivityRef = useRef(Date.now());
   const warningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const signOutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -57,9 +55,8 @@ export function useIdleTimeout({ onWarning, onSignOut }: Options = {}) {
 
     signOutTimerRef.current = setTimeout(() => {
       onSignOut?.();
-      router.push("/login?reason=idle");
     }, IDLE_TIMEOUT_MS);
-  }, [clearTimers, onWarning, onSignOut, router]);
+  }, [clearTimers, onWarning, onSignOut]);
 
   const handleActivity = useCallback(() => {
     resetTimers();

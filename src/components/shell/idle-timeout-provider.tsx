@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { useIdleTimeout } from "@/hooks/use-idle-timeout";
+import { signOutAction } from "@/actions/auth";
 
 /**
  * Client component that mounts the idle timeout hook.
@@ -18,6 +19,7 @@ export function IdleTimeoutProvider({ children }: { children: React.ReactNode })
 
   const handleSignOut = useCallback(() => {
     setShowWarning(false);
+    signOutAction("idle");
   }, []);
 
   useIdleTimeout({ onWarning: handleWarning, onSignOut: handleSignOut });

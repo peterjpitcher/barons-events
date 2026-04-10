@@ -174,7 +174,8 @@ export async function signInAction(_: SignInState | undefined, formData: FormDat
   redirect(redirectTarget);
 }
 
-export async function signOutAction() {
+export async function signOutAction(reasonOrFormData?: string | FormData) {
+  const reason = typeof reasonOrFormData === "string" ? reasonOrFormData : undefined;
   const supabase = await createSupabaseActionClient();
 
   // Capture user before destroying session
@@ -199,7 +200,8 @@ export async function signOutAction() {
   });
 
   await supabase.auth.signOut();
-  redirect("/login");
+  const url = reason ? `/login?reason=${encodeURIComponent(reason)}` : "/login";
+  redirect(url);
 }
 
 export async function requestPasswordResetAction(
