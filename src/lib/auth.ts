@@ -85,6 +85,7 @@ export async function getCurrentUser(): Promise<AppUser | null> {
 
   const role = normalizeRole(profile.role);
   if (!role) {
+    console.warn(`[auth] User ${userId} has unrecognised role "${profile.role}" — treating as unauthenticated`);
     return null;
   }
 
