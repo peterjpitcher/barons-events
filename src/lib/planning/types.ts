@@ -6,7 +6,7 @@ export type RecurrenceFrequency = "daily" | "weekly" | "monthly";
 
 export type PlannerCardSource = "planning" | "event";
 
-export type PlanningBucketKey = "0_30" | "31_60" | "61_90" | "later";
+export type PlanningBucketKey = "past" | "0_30" | "31_60" | "61_90" | "later";
 
 export type PlanningPerson = {
   id: string;

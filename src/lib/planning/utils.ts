@@ -75,6 +75,8 @@ export function bucketForDayOffset(dayOffset: number): PlanningBucketKey {
 
 export function bucketStartOffset(bucket: PlanningBucketKey): number {
   switch (bucket) {
+    case "past":
+      return -Infinity;
     case "0_30":
       return 0;
     case "31_60":

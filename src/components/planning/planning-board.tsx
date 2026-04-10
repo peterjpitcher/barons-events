@@ -40,6 +40,7 @@ type BucketConfig = {
 };
 
 const BUCKETS: BucketConfig[] = [
+  { key: "past", label: "Past / Overdue", helper: "Target date has passed" },
   { key: "0_30", label: "0–30 days", helper: "Immediate priorities" },
   { key: "31_60", label: "31–60 days", helper: "Mid-horizon actions" },
   { key: "61_90", label: "61–90 days", helper: "Forward planning" },
@@ -48,7 +49,7 @@ const BUCKETS: BucketConfig[] = [
 
 function bucketForPlanningOffset(dayOffset: number): PlanningBucketKey {
   if (dayOffset < 0) {
-    return "0_30";
+    return "past";
   }
   return bucketForDayOffset(dayOffset);
 }
@@ -147,6 +148,7 @@ export function PlanningBoard({ data, venues, canApproveEvents, userRole }: Plan
 
   const planningByBucket = useMemo(() => {
     const grouped: Record<PlanningBucketKey, PlanningItem[]> = {
+      past: [],
       "0_30": [],
       "31_60": [],
       "61_90": [],
@@ -160,6 +162,7 @@ export function PlanningBoard({ data, venues, canApproveEvents, userRole }: Plan
     });
 
     return {
+      past: sortByDateThenTitle(grouped.past),
       "0_30": sortByDateThenTitle(grouped["0_30"]),
       "31_60": sortByDateThenTitle(grouped["31_60"]),
       "61_90": sortByDateThenTitle(grouped["61_90"]),
@@ -169,6 +172,7 @@ export function PlanningBoard({ data, venues, canApproveEvents, userRole }: Plan
 
   const eventsByBucket = useMemo(() => {
     const grouped: Record<PlanningBucketKey, PlanningEventOverlay[]> = {
+      past: [],
       "0_30": [],
       "31_60": [],
       "61_90": [],
@@ -182,6 +186,7 @@ export function PlanningBoard({ data, venues, canApproveEvents, userRole }: Plan
     });
 
     return {
+      past: sortByDateThenTitle(grouped.past),
       "0_30": sortByDateThenTitle(grouped["0_30"]),
       "31_60": sortByDateThenTitle(grouped["31_60"]),
       "61_90": sortByDateThenTitle(grouped["61_90"]),
@@ -191,7 +196,7 @@ export function PlanningBoard({ data, venues, canApproveEvents, userRole }: Plan
 
   const inspirationByBucket = useMemo(() => {
     const map: Record<PlanningBucketKey, PlanningInspirationItem[]> = {
-      '0_30': [], '31_60': [], '61_90': [], later: [],
+      past: [], '0_30': [], '31_60': [], '61_90': [], later: [],
     };
     for (const item of data.inspirationItems) {
       const offset = daysBetween(data.today, item.eventDate);
@@ -207,9 +212,9 @@ export function PlanningBoard({ data, venues, canApproveEvents, userRole }: Plan
       | { type: "planning"; item: PlanningItem }
       | { type: "event"; event: PlanningEventOverlay }
       | { type: "inspiration"; item: PlanningInspirationItem }
-    >> = { "0_30": [], "31_60": [], "61_90": [], later: [] };
+    >> = { past: [], "0_30": [], "31_60": [], "61_90": [], later: [] };
 
-    for (const key of ["0_30", "31_60", "61_90", "later"] as PlanningBucketKey[]) {
+    for (const key of ["past", "0_30", "31_60", "61_90", "later"] as PlanningBucketKey[]) {
       const merged = [
         ...planningByBucket[key].map((item) => ({ type: "planning" as const, item, targetDate: item.targetDate, title: item.title })),
         ...eventsByBucket[key].map((event) => ({ type: "event" as const, event, targetDate: event.targetDate, title: event.title })),
@@ -228,7 +233,11 @@ export function PlanningBoard({ data, venues, canApproveEvents, userRole }: Plan
     return result;
   }, [planningByBucket, eventsByBucket, inspirationByBucket]);
 
-  const visibleBuckets = showLater ? BUCKETS : BUCKETS.slice(0, 3);
+  // Core buckets: past (if non-empty) + 0-30 + 31-60 + 61-90. "Later" toggled separately.
+  const CORE_BUCKETS = BUCKETS.slice(0, 4); // past, 0_30, 31_60, 61_90
+  const hasPastItems = combinedByBucket.past.length > 0;
+  const baseBuckets = hasPastItems ? CORE_BUCKETS : CORE_BUCKETS.slice(1);
+  const visibleBuckets = showLater ? [...baseBuckets, BUCKETS[4]] : baseBuckets;
   const activeItem = useMemo(
     () => data.planningItems.find((item) => item.id === activeItemId) ?? null,
     [activeItemId, data.planningItems]
@@ -392,7 +401,11 @@ export function PlanningBoard({ data, venues, canApproveEvents, userRole }: Plan
       </section>
 
       {viewMode === "board" ? (
-        <section className={`grid gap-4 ${showLater ? "xl:grid-cols-4" : "xl:grid-cols-3"}`}>
+        <section className={`grid gap-4 ${
+          visibleBuckets.length === 5 ? "xl:grid-cols-5" :
+          visibleBuckets.length === 4 ? "xl:grid-cols-4" :
+          "xl:grid-cols-3"
+        }`}>
           {visibleBuckets.map((bucket) => {
             const rows = combinedByBucket[bucket.key];
             return (
