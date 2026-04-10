@@ -613,7 +613,7 @@ export async function dismissInspirationItemAction(
   try {
     const user = await getCurrentUser();
     if (!user) return { success: false, message: "You must be signed in." };
-    if (!canViewPlanning(user.role)) {
+    if (!canUsePlanning(user.role)) {
       return { success: false, message: "You do not have permission to perform this action." };
     }
 
