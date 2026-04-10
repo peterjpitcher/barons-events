@@ -68,6 +68,9 @@ alter table public.audit_log
       -- SOP checklist actions
       'sop_checklist.generated',
       'sop_checklist.dates_recalculated',
+      'sop_backfill_completed',
+      -- event additional actions
+      'event.terms_generated',
       -- planning task actions
       'planning_task.status_changed',
       'planning_task.reassigned',

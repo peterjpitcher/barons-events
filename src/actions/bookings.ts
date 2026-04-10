@@ -173,25 +173,31 @@ export async function cancelBookingAction(
     return { success: false, error: "Unauthorized" };
   }
 
-  // Ownership check — only central_planner has unrestricted cancel access;
+  // Ownership check — derive the event from the BOOKING (not caller-supplied eventId)
+  // to prevent spoofing. central_planner has unrestricted cancel access;
   // venue_manager may only cancel bookings for events at their assigned venue.
-  if (user.role === "central_planner") {
-    // allowed — no further check needed
-  } else if (user.role === "venue_manager") {
+  if (user.role !== "central_planner") {
+    if (user.role !== "venue_manager") {
+      return { success: false, error: "You do not have permission to cancel bookings." };
+    }
+    // Venue manager — look up the booking's actual event, not the caller-supplied eventId
     const db = createSupabaseAdminClient();
+    const { data: booking, error: bookingError } = await db
+      .from("event_bookings")
+      .select("event_id")
+      .eq("id", bookingId)
+      .single();
+    if (bookingError || !booking) {
+      return { success: false, error: "Booking not found." };
+    }
     const { data: event, error: eventError } = await db
       .from("events")
       .select("venue_id")
-      .eq("id", eventId)
+      .eq("id", booking.event_id)
       .single();
-    if (eventError || !event) {
-      return { success: false, error: "Event not found." };
+    if (eventError || !event || event.venue_id !== user.venueId) {
+      return { success: false, error: "You can only cancel bookings for events at your venue." };
     }
-    if (event.venue_id !== user.venueId) {
-      return { success: false, error: "You do not have permission to cancel bookings." };
-    }
-  } else {
-    return { success: false, error: "You do not have permission to cancel bookings." };
   }
 
   try {

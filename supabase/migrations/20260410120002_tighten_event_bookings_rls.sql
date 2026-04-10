@@ -25,6 +25,18 @@ create policy "venue_manager_read_bookings" on public.event_bookings
     )
   );
 
+-- Reviewers see bookings for events they are assigned to review
+create policy "reviewer_read_bookings" on public.event_bookings
+  for select to authenticated
+  using (
+    public.current_user_role() = 'reviewer'
+    and exists (
+      select 1 from public.events e
+      where e.id = event_bookings.event_id
+        and e.assignee_id = auth.uid()
+    )
+  );
+
 -- Central planners can update any booking
 create policy "planner_update_bookings" on public.event_bookings
   for update to authenticated
