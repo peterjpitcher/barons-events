@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Check, GripVertical, Pencil, Trash2, X } from "lucide-react";
+import { Calendar, Check, ClipboardList, GripVertical, Pencil, Trash2, X } from "lucide-react";
 import { ApproveEventButton } from "@/components/events/approve-event-button";
 import { convertInspirationItemAction, deletePlanningItemAction, dismissInspirationItemAction, updatePlanningItemAction } from "@/actions/planning";
 import { PlanningTaskList } from "@/components/planning/planning-task-list";
@@ -309,12 +309,15 @@ export function PlanningItemCard({
       <article
         draggable={canDrag}
         onDragStart={canDrag ? () => onDragStart(item) : undefined}
-        className="space-y-2 rounded-[var(--radius)] border border-[var(--color-border)] bg-white p-2.5 shadow-soft"
+        aria-label={`Planning item: ${item.title}`}
+        className="space-y-2 rounded-[var(--radius)] border border-[var(--color-border)] border-l-4 border-l-[var(--color-primary-400)] bg-white p-2.5 shadow-soft"
       >
         <header className="flex items-start justify-between gap-1.5">
           <div className="space-y-0.5">
             <p className="flex items-center gap-1 text-xs uppercase tracking-[0.08em] text-subtle">
-              {canDrag ? <GripVertical className="h-3.5 w-3.5" aria-hidden="true" /> : null} Planning item
+              {canDrag ? <GripVertical className="h-3.5 w-3.5" aria-hidden="true" /> : null}
+              <ClipboardList className="h-3.5 w-3.5" aria-hidden="true" />
+              Planning item
             </p>
             <h3 className="text-base font-semibold text-[var(--color-text)]">{item.title}</h3>
             <p className="text-xs text-subtle">{item.typeLabel}</p>
@@ -378,12 +381,15 @@ export function PlanningItemCard({
     <article
       draggable={canDrag}
       onDragStart={canDrag ? () => onDragStart(item) : undefined}
-      className="space-y-2 rounded-[var(--radius)] border border-[var(--color-border)] bg-white p-2.5 shadow-soft"
+      aria-label={`Planning item: ${title}`}
+      className="space-y-2 rounded-[var(--radius)] border border-[var(--color-border)] border-l-4 border-l-[var(--color-primary-400)] bg-white p-2.5 shadow-soft"
     >
       <header className="flex items-start justify-between gap-1.5">
         <div className="space-y-0.5">
           <p className="flex items-center gap-1 text-xs uppercase tracking-[0.08em] text-subtle">
-            {canDrag ? <GripVertical className="h-3.5 w-3.5" aria-hidden="true" /> : null} Planning item
+            {canDrag ? <GripVertical className="h-3.5 w-3.5" aria-hidden="true" /> : null}
+            <ClipboardList className="h-3.5 w-3.5" aria-hidden="true" />
+            Planning item
           </p>
           {editingField === "title" ? (
             <div className="flex items-center gap-2">
@@ -743,10 +749,13 @@ export function EventOverlayCard({ event, canApprove }: EventOverlayCardProps) {
   const hasWebCopy = Boolean(event.publicTitle);
 
   return (
-    <article className="space-y-2 rounded-[var(--radius)] border border-[var(--color-border)] bg-white p-2.5 shadow-soft">
+    <article aria-label={`Event: ${event.publicTitle ?? event.title}`} className="space-y-2 rounded-[var(--radius)] border border-[var(--color-border)] border-l-4 border-l-[var(--color-accent-cool-dark)] bg-white p-2.5 shadow-soft">
       <header className="flex items-start justify-between gap-1.5">
         <div className="space-y-0.5">
-          <p className="text-xs uppercase tracking-[0.08em] text-subtle">Event</p>
+          <p className="flex items-center gap-1 text-xs uppercase tracking-[0.08em] text-subtle">
+            <Calendar className="h-3.5 w-3.5" aria-hidden="true" />
+            Event
+          </p>
           <h3 className="text-base font-semibold text-[var(--color-text)]">{event.publicTitle ?? event.title}</h3>
           {event.publicTeaser && (
             <p className="text-xs text-subtle">{event.publicTeaser}</p>
