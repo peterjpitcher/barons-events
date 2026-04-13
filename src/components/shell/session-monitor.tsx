@@ -17,7 +17,7 @@ export function SessionMonitor(): React.ReactNode {
         credentials: "same-origin",
       });
       if (response.status === 401) {
-        const redirectedFrom = encodeURIComponent(window.location.pathname);
+        const redirectedFrom = encodeURIComponent(window.location.pathname + window.location.search);
         window.location.href = `/login?reason=session_expired&redirectedFrom=${redirectedFrom}`;
         return; // Keep overlay visible during redirect
       }

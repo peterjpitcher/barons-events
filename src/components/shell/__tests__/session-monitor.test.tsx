@@ -9,7 +9,7 @@ const locationAssignMock = vi.fn();
 let originalLocation: Location;
 
 function createMockLocation(): Location {
-  const mock = { ...originalLocation, pathname: "/events" } as Location;
+  const mock = { ...originalLocation, pathname: "/events", search: "" } as Location;
   Object.defineProperty(mock, "href", {
     get() {
       return "http://localhost/events";

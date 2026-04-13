@@ -224,6 +224,10 @@ export async function middleware(req: NextRequest) {
     const originalPath = `${pathname}${req.nextUrl.search ?? ""}`;
     redirectUrl.searchParams.set("redirectedFrom", originalPath);
     const redirectRes = NextResponse.redirect(redirectUrl);
+    // Transfer Supabase cookie clears from res (where signOut wrote them) to redirectRes
+    for (const cookie of res.headers.getSetCookie()) {
+      redirectRes.headers.append("set-cookie", cookie);
+    }
     applySecurityHeaders(redirectRes, nonce);
     return redirectRes;
   }
@@ -244,6 +248,10 @@ export async function middleware(req: NextRequest) {
       ...makeSessionCookieOptions(),
       maxAge: 0
     });
+    // Transfer Supabase cookie clears from res (where signOut wrote them) to redirectRes
+    for (const cookie of res.headers.getSetCookie()) {
+      redirectRes.headers.append("set-cookie", cookie);
+    }
     applySecurityHeaders(redirectRes, nonce);
     return redirectRes;
   }
@@ -263,6 +271,10 @@ export async function middleware(req: NextRequest) {
       ...makeSessionCookieOptions(),
       maxAge: 0
     });
+    // Transfer Supabase cookie clears from res (where signOut wrote them) to redirectRes
+    for (const cookie of res.headers.getSetCookie()) {
+      redirectRes.headers.append("set-cookie", cookie);
+    }
     applySecurityHeaders(redirectRes, nonce);
     return redirectRes;
   }
