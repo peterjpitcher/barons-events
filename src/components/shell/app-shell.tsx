@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import type { AppUser, UserRole } from "@/lib/types";
 import { MobileNav } from "./mobile-nav";
 import { NavLink } from "./nav-link";
+import { SessionMonitor } from "./session-monitor";
 
 type NavItem = {
   label: string;
@@ -72,6 +73,7 @@ export function AppShell({ user, children }: AppShellProps) {
 
   return (
     <div className="flex h-screen bg-[var(--color-canvas)] text-[var(--color-text)]">
+      <SessionMonitor />
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-full focus:bg-[var(--color-primary-700)] focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-white focus:shadow-soft"
