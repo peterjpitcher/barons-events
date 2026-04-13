@@ -66,7 +66,7 @@ const passwordResetSchema = z
 export async function signInAction(_: SignInState | undefined, formData: FormData): Promise<SignInState> {
   const redirectToRaw = formData.get("redirectTo");
   const redirectTarget =
-    typeof redirectToRaw === "string" && redirectToRaw.startsWith("/") && !redirectToRaw.startsWith("//")
+    typeof redirectToRaw === "string" && redirectToRaw.startsWith("/") && !redirectToRaw.startsWith("//") && !redirectToRaw.includes("\\")
       ? redirectToRaw
       : "/";
 

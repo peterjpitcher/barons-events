@@ -20,7 +20,7 @@ type LoginPageProps = {
 
 function sanitizeRedirect(path?: string | null) {
   if (!path) return "/";
-  if (!path.startsWith("/") || path.startsWith("//")) return "/";
+  if (!path.startsWith("/") || path.startsWith("//") || path.includes("\\")) return "/";
   return path;
 }
 
@@ -59,7 +59,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           </CardDescription>
         </CardHeader>
         <CardContent className={AUTH_CARD_CONTENT_CLASS}>
-          {reason === "session_expired" ? (
+          {reason === "session_expired" || reason === "session_missing" || reason === "session_mismatch" ? (
             <p className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
               Your session has expired. Please sign in again.
             </p>

@@ -216,10 +216,13 @@ export async function middleware(req: NextRequest) {
   if (!appSessionId) {
     // No app-session-id cookie but user has a valid Supabase JWT.
     // The migration window for pre-session-layer logins is over.
-    // Redirect to login so a fresh session is created via the sign-in flow.
+    // Sign out the stale Supabase session to prevent redirect loops.
+    await supabase.auth.signOut({ scope: "local" });
     const redirectUrl = req.nextUrl.clone();
     redirectUrl.pathname = "/login";
     redirectUrl.searchParams.set("reason", "session_missing");
+    const originalPath = `${pathname}${req.nextUrl.search ?? ""}`;
+    redirectUrl.searchParams.set("redirectedFrom", originalPath);
     const redirectRes = NextResponse.redirect(redirectUrl);
     applySecurityHeaders(redirectRes, nonce);
     return redirectRes;
@@ -229,9 +232,13 @@ export async function middleware(req: NextRequest) {
 
   if (!session) {
     // Session is expired, invalid, or DB unavailable. Fail closed.
+    // Sign out the stale Supabase session to prevent redirect loops.
+    await supabase.auth.signOut({ scope: "local" });
     const redirectUrl = req.nextUrl.clone();
     redirectUrl.pathname = "/login";
     redirectUrl.searchParams.set("reason", "session_expired");
+    const originalPath = `${pathname}${req.nextUrl.search ?? ""}`;
+    redirectUrl.searchParams.set("redirectedFrom", originalPath);
     const redirectRes = NextResponse.redirect(redirectUrl);
     redirectRes.cookies.set(SESSION_COOKIE_NAME, "", {
       ...makeSessionCookieOptions(),
@@ -244,9 +251,13 @@ export async function middleware(req: NextRequest) {
   // Verify the app session belongs to the same user as the Supabase JWT.
   // Prevents session fixation where a stolen session cookie is used by a different account.
   if (session.userId !== user.id) {
+    // Session belongs to a different user — sign out to prevent redirect loops.
+    await supabase.auth.signOut({ scope: "local" });
     const redirectUrl = req.nextUrl.clone();
     redirectUrl.pathname = "/login";
     redirectUrl.searchParams.set("reason", "session_mismatch");
+    const originalPath = `${pathname}${req.nextUrl.search ?? ""}`;
+    redirectUrl.searchParams.set("redirectedFrom", originalPath);
     const redirectRes = NextResponse.redirect(redirectUrl);
     redirectRes.cookies.set(SESSION_COOKIE_NAME, "", {
       ...makeSessionCookieOptions(),
