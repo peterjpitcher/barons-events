@@ -209,6 +209,7 @@ export async function createOpeningOverrideAction(payload: {
   try {
     await createOpeningOverride({ ...parsed.data, created_by: user.id, note: parsed.data.note ?? null, open_time: parsed.data.open_time ?? null, close_time: parsed.data.close_time ?? null });
     revalidatePath("/venues");
+    revalidatePath("/opening-hours");
     return { success: true, message: "Override added." };
   } catch (error) {
     console.error(error);
@@ -242,6 +243,7 @@ export async function updateOpeningOverrideAction(
   try {
     await updateOpeningOverride(id, { ...parsed.data, note: parsed.data.note ?? null, open_time: parsed.data.open_time ?? null, close_time: parsed.data.close_time ?? null });
     revalidatePath("/venues");
+    revalidatePath("/opening-hours");
     return { success: true, message: "Override updated." };
   } catch (error) {
     console.error(error);
@@ -259,6 +261,7 @@ export async function deleteOpeningOverrideAction(id: string): Promise<ActionRes
   try {
     await deleteOpeningOverride(id);
     revalidatePath("/venues");
+    revalidatePath("/opening-hours");
     return { success: true, message: "Override removed." };
   } catch (error) {
     console.error(error);

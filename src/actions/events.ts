@@ -593,7 +593,6 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
   if (!user) {
     redirect("/login");
   }
-  console.log("[draft-save] user:", user.id, user.role);
   if (!canManageEvents(user.role)) {
     return { success: false, message: "You don't have permission to save events." };
   }
@@ -854,8 +853,6 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
       seoDescription: values.seoDescription ?? null,
       seoSlug: values.seoSlug ?? null
     });
-    console.log("[draft-save] created event:", created.id);
-
     // Create linked planning item and generate SOP checklist
     try {
       await createEventPlanningItem(
@@ -929,7 +926,6 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
     return { success: false, message: `Could not save the draft: ${detail.slice(0, 120)}` };
   }
   if (redirectUrl) {
-    console.log("[draft-save] redirecting to:", redirectUrl);
     redirect(redirectUrl);
   }
   return { success: true, message: "Draft saved." };
@@ -1352,7 +1348,7 @@ export async function reviewerDecisionAction(
       return { success: false, message: "Event not found." };
     }
 
-    if (!["submitted", "draft"].includes(eventBeforeDecision.status ?? "")) {
+    if (!["submitted", "needs_revisions"].includes(eventBeforeDecision.status ?? "")) {
       return { success: false, message: "This event is not currently awaiting review." };
     }
 
@@ -1841,6 +1837,12 @@ export async function revertToDraftAction(
   const user = await getCurrentUser();
   if (!user) {
     redirect("/login");
+  }
+
+  // Only central_planner can revert approved events — venue_managers are blocked by
+  // RLS on approved-status events, and reverting approval is a privileged action.
+  if (user.role !== "central_planner") {
+    return { success: false, message: "Only planners can revert approved events to draft." };
   }
 
   const eventId = formData.get("eventId");

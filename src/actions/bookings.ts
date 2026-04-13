@@ -173,27 +173,30 @@ export async function cancelBookingAction(
     return { success: false, error: "Unauthorized" };
   }
 
-  // Ownership check — derive the event from the BOOKING (not caller-supplied eventId)
-  // to prevent spoofing. central_planner has unrestricted cancel access;
-  // venue_manager may only cancel bookings for events at their assigned venue.
+  // Only central_planner and venue_manager can cancel bookings
+  if (user.role !== "central_planner" && user.role !== "venue_manager") {
+    return { success: false, error: "You do not have permission to cancel bookings." };
+  }
+
+  // Derive the event from the BOOKING (not caller-supplied eventId)
+  // to prevent spoofing and ensure audit/revalidation accuracy.
+  const db = createSupabaseAdminClient();
+  const { data: booking, error: bookingError } = await db
+    .from("event_bookings")
+    .select("event_id")
+    .eq("id", bookingId)
+    .single();
+  if (bookingError || !booking) {
+    return { success: false, error: "Booking not found." };
+  }
+  const actualEventId = booking.event_id;
+
   if (user.role !== "central_planner") {
-    if (user.role !== "venue_manager") {
-      return { success: false, error: "You do not have permission to cancel bookings." };
-    }
-    // Venue manager — look up the booking's actual event, not the caller-supplied eventId
-    const db = createSupabaseAdminClient();
-    const { data: booking, error: bookingError } = await db
-      .from("event_bookings")
-      .select("event_id")
-      .eq("id", bookingId)
-      .single();
-    if (bookingError || !booking) {
-      return { success: false, error: "Booking not found." };
-    }
+    // Venue manager — verify event belongs to their venue
     const { data: event, error: eventError } = await db
       .from("events")
       .select("venue_id")
-      .eq("id", booking.event_id)
+      .eq("id", actualEventId)
       .single();
     if (eventError || !event || event.venue_id !== user.venueId) {
       return { success: false, error: "You can only cancel bookings for events at your venue." };
@@ -209,12 +212,12 @@ export async function cancelBookingAction(
 
   await recordAuditLogEntry({
     entity: "event",
-    entityId: eventId,
+    entityId: actualEventId,
     action: "booking.cancelled",
     meta: { booking_id: bookingId },
     actorId: user.id,
   });
 
-  revalidatePath(`/events/${eventId}/bookings`);
+  revalidatePath(`/events/${actualEventId}/bookings`);
   return { success: true };
 }

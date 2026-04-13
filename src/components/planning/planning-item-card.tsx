@@ -788,7 +788,7 @@ export function EventOverlayCard({ event, canApprove }: EventOverlayCardProps) {
       </div>
 
       <div className="flex flex-wrap items-center justify-end gap-1.5">
-        {canApprove && ["submitted", "draft"].includes(event.status) ? (
+        {canApprove && ["submitted", "needs_revisions"].includes(event.status) ? (
           <ApproveEventButton eventId={event.eventId} size="sm" className="h-auto px-3 py-1 text-xs" hasWebCopy={hasWebCopy} />
         ) : null}
         <Link href={`/events/${event.eventId}`}>

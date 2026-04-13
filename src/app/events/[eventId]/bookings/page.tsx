@@ -45,8 +45,8 @@ export default async function BookingsPage({
     }
   }
 
-  // Reviewers do not have access to bookings management
-  if (user.role === "reviewer") {
+  // Only central_planner and venue_manager can manage bookings
+  if (user.role !== "central_planner" && user.role !== "venue_manager") {
     redirect("/events");
   }
 

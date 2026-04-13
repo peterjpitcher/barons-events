@@ -7,6 +7,15 @@ vi.mock('@/lib/supabase/server', () => ({ createSupabaseActionClient: vi.fn() })
 vi.mock('@/lib/supabase/admin', () => ({ createSupabaseAdminClient: vi.fn() }));
 vi.mock('@/lib/planning/inspiration', () => ({ generateInspirationItems: vi.fn() }));
 vi.mock('@/lib/auth', () => ({ getCurrentUser: vi.fn() }));
+vi.mock('@/lib/roles', () => ({
+  canUsePlanning: vi.fn((role: string) => role === 'central_planner'),
+  canViewPlanning: vi.fn((role: string) => ['central_planner', 'executive'].includes(role)),
+}));
+vi.mock('@/lib/planning/sop', () => ({
+  generateSopChecklist: vi.fn(),
+  recalculateSopDates: vi.fn(),
+  updateBlockedStatus: vi.fn(),
+}));
 // Also mock planning module to prevent its internals from running
 vi.mock('@/lib/planning', () => ({
   createPlanningItem: vi.fn(),
@@ -37,10 +46,30 @@ function makeUser(role: string) {
 }
 
 function makeChainableDb() {
-  const mockInsert = vi.fn().mockResolvedValue({ error: null });
-  const mockSingle = vi.fn().mockReturnValue({ data: { id: 'item-1', event_name: 'Good Friday', event_date: '2026-04-03', category: 'bank_holiday', description: null, source: 'gov_uk_api' }, error: null });
-  const mockEq = vi.fn().mockReturnValue({ single: mockSingle });
+  // Mock for .insert().select().single() chain (planning_items insert)
+  const mockInsertSingle = vi.fn().mockResolvedValue({
+    data: { id: 'new-item-1', target_date: '2026-04-03' },
+    error: null,
+  });
+  const mockInsertSelect = vi.fn().mockReturnValue({ single: mockInsertSingle });
+  const mockInsert = vi.fn().mockReturnValue({
+    select: mockInsertSelect,
+  });
+  // For inserts that don't chain .select() (dismissals), also resolve directly
+  mockInsert.mockImplementation(() => {
+    const result = Promise.resolve({ error: null }) as unknown as Record<string, unknown>;
+    result.select = mockInsertSelect;
+    return result;
+  });
+
+  // Mock for .select().eq().single() chain (fetching inspiration item)
+  const mockFetchSingle = vi.fn().mockReturnValue({
+    data: { id: 'item-1', event_name: 'Good Friday', event_date: '2026-04-03', category: 'bank_holiday', description: null, source: 'gov_uk_api' },
+    error: null,
+  });
+  const mockEq = vi.fn().mockReturnValue({ single: mockFetchSingle });
   const mockSelect = vi.fn().mockReturnValue({ eq: mockEq });
+
   const mockFrom = vi.fn().mockReturnValue({
     select: mockSelect,
     insert: mockInsert,

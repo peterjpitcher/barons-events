@@ -3,10 +3,15 @@ import type { Mock } from 'vitest';
 
 // Must mock these BEFORE importing the action (hoisted by Vitest)
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
-vi.mock('next/navigation', () => ({ redirect: vi.fn() }));
+const redirectError = new Error('NEXT_REDIRECT');
+vi.mock('next/navigation', () => ({ redirect: vi.fn(() => { throw redirectError; }) }));
 vi.mock('@/lib/supabase/server', () => ({ createSupabaseActionClient: vi.fn() }));
 vi.mock('@/lib/auth', () => ({ getCurrentUser: vi.fn() }));
 vi.mock('@/lib/audit-log', () => ({ recordAuditLogEntry: vi.fn() }));
+vi.mock('@/lib/roles', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/roles')>();
+  return { ...actual };
+});
 
 import { revertToDraftAction } from '@/actions/events';
 import { createSupabaseActionClient } from '@/lib/supabase/server';
@@ -53,8 +58,29 @@ describe('revertToDraftAction', () => {
 
   it('redirects to /login when user is not authenticated', async () => {
     (getCurrentUser as Mock).mockResolvedValue(null);
-    await revertToDraftAction(undefined, makeFormData('some-id'));
+    await expect(revertToDraftAction(undefined, makeFormData('some-id'))).rejects.toThrow('NEXT_REDIRECT');
     expect(redirect).toHaveBeenCalledWith('/login');
+  });
+
+  it('returns error when venue_manager tries to revert', async () => {
+    (getCurrentUser as Mock).mockResolvedValue(makeUser('venue_manager'));
+    const result = await revertToDraftAction(undefined, makeFormData('00000000-0000-0000-0000-000000000001'));
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/planner/i);
+  });
+
+  it('returns error when reviewer tries to revert', async () => {
+    (getCurrentUser as Mock).mockResolvedValue(makeUser('reviewer'));
+    const result = await revertToDraftAction(undefined, makeFormData('00000000-0000-0000-0000-000000000001'));
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/planner/i);
+  });
+
+  it('returns error when executive tries to revert', async () => {
+    (getCurrentUser as Mock).mockResolvedValue(makeUser('executive'));
+    const result = await revertToDraftAction(undefined, makeFormData('00000000-0000-0000-0000-000000000001'));
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/planner/i);
   });
 
   it('returns error for invalid (non-UUID) event ID', async () => {

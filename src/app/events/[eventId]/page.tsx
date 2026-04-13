@@ -95,7 +95,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
     (user.role === "venue_manager" &&
       event.created_by === user.id &&
       ["draft", "needs_revisions"].includes(event.status));
-  const canRevertToDraft = event.status === "approved";
+  const canRevertToDraft = event.status === "approved" && user.role === "central_planner";
 
   const reassignAssignee = async (formData: FormData) => {
     "use server";
@@ -576,7 +576,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
                 {event.created_by === user.id ? "You" : resolveUserName(event.created_by)}
               </span>
             </div>
-            {(user.role === "central_planner" || user.role === "executive" ||
+            {(user.role === "central_planner" ||
               (user.role === "venue_manager" && event.venue_id === user.venueId)) ? (
               <Button asChild variant="secondary" size="sm">
                 <Link href={`/events/${event.id}/bookings`}>Bookings</Link>

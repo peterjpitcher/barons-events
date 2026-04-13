@@ -240,6 +240,14 @@ describe("customer upsert", () => {
 });
 
 describe("cancelBookingAction", () => {
+  function mockAdminBookingLookup(eventId: string) {
+    const mockSingle = vi.fn().mockReturnValue({ data: { event_id: eventId }, error: null });
+    const mockEq = vi.fn().mockReturnValue({ single: mockSingle });
+    const mockSelect = vi.fn().mockReturnValue({ eq: mockEq });
+    const mockFrom = vi.fn().mockReturnValue({ select: mockSelect });
+    vi.mocked(createSupabaseAdminClient).mockReturnValue({ from: mockFrom } as never);
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -259,6 +267,7 @@ describe("cancelBookingAction", () => {
       role: "central_planner",
       venueId: null,
     });
+    mockAdminBookingLookup("event-id");
     mockCancelBooking.mockResolvedValue(undefined);
 
     const result = await cancelBookingAction("booking-id", "event-id");
@@ -274,6 +283,7 @@ describe("cancelBookingAction", () => {
       role: "central_planner",
       venueId: null,
     });
+    mockAdminBookingLookup("event-id");
     mockCancelBooking.mockRejectedValue(new Error("DB error"));
 
     const result = await cancelBookingAction("booking-id", "event-id");
