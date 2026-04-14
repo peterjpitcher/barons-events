@@ -1,0 +1,28 @@
+**Challenged Assumptions**
+1. `RC7 is fixed end-to-end.` Not yet. The original middleware finding was real in `77f92e5`, but current HEAD `c419076` does copy Supabase `Set-Cookie` clears from `res` onto each `redirectRes` in [middleware.ts](/Users/peterpitcher/Cursor/BARONS-BaronsHub/middleware.ts:216). That fixes the specific cookie-loss bug. The remaining gap is the client-side path: [session-check](/Users/peterpitcher/Cursor/BARONS-BaronsHub/src/app/api/auth/session-check/route.ts:16) returns `401` without signing out Supabase, while the [login page](/Users/peterpitcher/Cursor/BARONS-BaronsHub/src/app/login/page.tsx:31) still redirects away whenever `getCurrentUser()` returns a user, even if `reason=session_expired`. So tab-refocus/BFCache expiry can still bounce `/login -> protected route -> /login` instead of giving a clean single handoff.
+
+2. `The session-check route is safe with no-op cookie writers.` It is not. [route.ts](/Users/peterpitcher/Cursor/BARONS-BaronsHub/src/app/api/auth/session-check/route.ts:17) uses `set() {}` / `remove() {}`. Supabase’s SSR package explicitly warns that this setup can cause random logouts, early termination, and extra refreshes when cookies need to be written ([cookies.ts](/Users/peterpitcher/Cursor/BARONS-BaronsHub/node_modules/@supabase/ssr/src/cookies.ts:104)). Because `/api/*` is excluded from middleware in [middleware.ts](/Users/peterpitcher/Cursor/BARONS-BaronsHub/middleware.ts:296), any `getUser()` refresh on this route is request-local and not persisted. That creates inconsistent behavior between session-check, login, and middleware.
+
+3. `SessionMonitor covers the flash scenarios in the spec.` It only handles `visibilitychange` and BFCache `pageshow` in [session-monitor.tsx](/Users/peterpitcher/Cursor/BARONS-BaronsHub/src/components/shell/session-monitor.tsx:30). It does nothing for nav click, form submit, or Next Router cache reuse on in-app back/forward. Success criterion 2 in [spec.md](/Users/peterpitcher/Cursor/BARONS-BaronsHub/tasks/session-expiry-flash/spec.md:192) is still not met.
+
+4. `Concurrent checks are harmless.` Not really. [SessionMonitor](/Users/peterpitcher/Cursor/BARONS-BaronsHub/src/components/shell/session-monitor.tsx:13) has no in-flight guard or abort. `visibilitychange` and `pageshow` can overlap, and rapid tab switching can fire multiple fetches. With the no-op cookie writers above, parallel refresh attempts can race and produce a false `401` redirect even when a refreshed session would otherwise be valid.
+
+5. `RC5 was addressed.` No. The action layer still has the same three auth-failure styles: `redirect("/login")` in [artists.ts](/Users/peterpitcher/Cursor/BARONS-BaronsHub/src/actions/artists.ts:55), structured error returns in [links.ts](/Users/peterpitcher/Cursor/BARONS-BaronsHub/src/actions/links.ts:47), and thrown errors in [sop.ts](/Users/peterpitcher/Cursor/BARONS-BaronsHub/src/actions/sop.ts:22) and [planning.ts](/Users/peterpitcher/Cursor/BARONS-BaronsHub/src/actions/planning.ts:49). The five-commit fix series only touched [auth.ts](/Users/peterpitcher/Cursor/BARONS-BaronsHub/src/actions/auth.ts:66) for redirect sanitisation.
+
+**Completeness Gaps**
+- Criterion 1: improved for middleware redirects, but not cleanly solved for the SessionMonitor path because session-check does not clear Supabase auth.
+- Criterion 2: not met; no coverage for nav click, form submit, router-cache back/forward, or guaranteed no-flash refocus.
+- Criterion 3: met in current code for middleware and SessionMonitor. [SessionMonitor](/Users/peterpitcher/Cursor/BARONS-BaronsHub/src/components/shell/session-monitor.tsx:20) now preserves `pathname + search`.
+- Criterion 4: met on the login page; [page.tsx](/Users/peterpitcher/Cursor/BARONS-BaronsHub/src/app/login/page.tsx:62) shows feedback for `session_missing`, `session_expired`, and `session_mismatch`.
+- Criterion 5: not met; server action behavior is still inconsistent.
+- Criterion 6: mostly intact, but there is still no middleware integration test proving the expiry path works with real cookie mutations.
+- Criterion 7: no obvious new direct security bug; the backslash redirect hardening is good.
+- Criterion 8: not met by current tests.
+
+**False Confidence Flags**
+- The previously reported middleware cookie-loss bug is real in the original five-commit implementation, but it is fixed in current HEAD `c419076`. Don’t report it as still present in today’s tree.
+- The old pathname-only SessionMonitor bug is also fixed in current HEAD; [session-monitor.tsx](/Users/peterpitcher/Cursor/BARONS-BaronsHub/src/components/shell/session-monitor.tsx:20) now includes `window.location.search`.
+- The tests are too narrow. [route.test.ts](/Users/peterpitcher/Cursor/BARONS-BaronsHub/src/app/api/auth/session-check/__tests__/route.test.ts:11) mocks `createServerClient` down to `auth.getUser()` only, so it cannot catch refresh-persistence bugs. [session-monitor.test.tsx](/Users/peterpitcher/Cursor/BARONS-BaronsHub/src/components/shell/__tests__/session-monitor.test.tsx:12) still only exercises an empty `search` string. There are no middleware tests.
+- The `x-user-id` optimization is still suspect: [middleware.ts](/Users/peterpitcher/Cursor/BARONS-BaronsHub/middleware.ts:151) creates `NextResponse.next()` before later mutating `requestHeaders`, and Next snapshots request headers at response creation time in [response.js](/Users/peterpitcher/Cursor/BARONS-BaronsHub/node_modules/next/dist/server/web/spec-extension/response.js:24). That is probably a perf miss, not an auth bug.
+
+Targeted tests currently pass: `22/22` in the session-check, SessionMonitor, and sanitize-redirect suites. They do not validate the remaining gaps above.
