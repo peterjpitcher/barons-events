@@ -61,6 +61,7 @@ async function getEventBySlug(slug: string): Promise<EventRow | null> {
     )
     .eq("seo_slug", slug)
     .is("deleted_at", null)
+    .in("status", ["approved", "completed"])
     .maybeSingle();
 
   if (error) {
@@ -120,7 +121,7 @@ export default async function EventLandingPage({ params }: PageProps) {
   const { slug } = await params;
   const event = await getEventBySlug(slug);
 
-  if (!event || !event.booking_enabled || !["approved", "completed"].includes(event.status)) {
+  if (!event || !event.booking_enabled) {
     notFound();
   }
 
