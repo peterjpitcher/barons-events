@@ -1,0 +1,18 @@
+**Findings**
+- No exploitable security issue from this change. `currentUserId` is sourced from the authenticated server page in [src/app/planning/page.tsx](/Users/peterpitcher/Cursor/BARONS-BaronsHub/src/app/planning/page.tsx:13), threaded through client components in [src/components/planning/planning-board.tsx](/Users/peterpitcher/Cursor/BARONS-BaronsHub/src/components/planning/planning-board.tsx:29) and [src/components/planning/planning-item-card.tsx](/Users/peterpitcher/Cursor/BARONS-BaronsHub/src/components/planning/planning-item-card.tsx:20), and used only for local filtering in [src/components/planning/sop-checklist-view.tsx](/Users/peterpitcher/Cursor/BARONS-BaronsHub/src/components/planning/sop-checklist-view.tsx:72).
+- The real data boundary is pre-existing: the page already sends the full planning dataset, including task assignee IDs/emails and the planning user directory, into a client component via `data={boardData}` in [src/app/planning/page.tsx](/Users/peterpitcher/Cursor/BARONS-BaronsHub/src/app/planning/page.tsx:31). That data is loaded by [src/lib/planning/index.ts](/Users/peterpitcher/Cursor/BARONS-BaronsHub/src/lib/planning/index.ts:462) and [src/lib/planning/index.ts](/Users/peterpitcher/Cursor/BARONS-BaronsHub/src/lib/planning/index.ts:406). If that broad visibility is intended for `canViewPlanning` users, adding `currentUserId` does not materially change risk.
+
+**Answers**
+1. Passing `user.id` to client components is acceptable here. A Supabase user ID is an identifier, not a secret. Seeing it in DevTools is not a concern unless the app treats client-supplied user IDs as an auth credential. This code does not.
+
+2. Yes. The `My tasks` filter is client-side only. `SopChecklistView` filters the already-present `tasks` array in memory ([sop-checklist-view.tsx](/Users/peterpitcher/Cursor/BARONS-BaronsHub/src/components/planning/sop-checklist-view.tsx:75)), and it does not send `currentUserId` in any request.
+
+3. A user can tamper with client props/state on their own browser, but that only changes presentation over data already loaded into the page. They cannot use this prop to fetch extra tasks or bypass authorization. So the precise answer is: they can alter the filter criterion, but they cannot gain access to new records because of it.
+
+4. In this flow, `currentUserId` is purely for client-side UI filtering. Server-side auth and mutation attribution come from `getCurrentUser()` / `ensureUser()` on the server in [src/lib/auth.ts](/Users/peterpitcher/Cursor/BARONS-BaronsHub/src/lib/auth.ts:48) and [src/actions/planning.ts](/Users/peterpitcher/Cursor/BARONS-BaronsHub/src/actions/planning.ts:445).
+
+5. The only meaningful concern is policy, not this prop: [src/lib/roles.ts](/Users/peterpitcher/Cursor/BARONS-BaronsHub/src/lib/roles.ts:49) allows `executive` users to view planning, and [src/lib/planning/index.ts](/Users/peterpitcher/Cursor/BARONS-BaronsHub/src/lib/planning/index.ts:480) loads all planning items/tasks/users with an admin client. If executives are meant to see all of that, fine. If not, the fix is server-side data scoping. Minor cleanup: `currentUserId` is still passed into [src/components/planning/sop-task-row.tsx](/Users/peterpitcher/Cursor/BARONS-BaronsHub/src/components/planning/sop-task-row.tsx:11) but not used.
+
+6. Yes. This is already an established pattern: [src/app/events/[eventId]/page.tsx](/Users/peterpitcher/Cursor/BARONS-BaronsHub/src/app/events/[eventId]/page.tsx:535) passes `currentUserId={user.id}` into the same `SopChecklistView`.
+
+No new authorization risk introduced by threading `currentUserId`. The security posture here is determined by what `boardData` already contains and who is allowed onto the page.

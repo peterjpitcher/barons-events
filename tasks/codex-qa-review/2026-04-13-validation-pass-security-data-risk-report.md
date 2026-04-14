@@ -1,0 +1,5 @@
+**Findings**
+- High: Executives can still access per-event booking PII and reach the cancel-booking control. The event detail page explicitly shows a `Bookings` link to `executive` users in [page.tsx](/Users/peterpitcher/Cursor/BARONS-BaronsHub/src/app/events/[eventId]/page.tsx:579), the per-event bookings page only blocks `reviewer` in [page.tsx](/Users/peterpitcher/Cursor/BARONS-BaronsHub/src/app/events/[eventId]/bookings/page.tsx:34), and it then loads booking rows with the service-role client in [bookings.ts](/Users/peterpitcher/Cursor/BARONS-BaronsHub/src/lib/bookings.ts:67). That means an authenticated executive can open `/events/{eventId}/bookings` for any event they can view and read guest names, mobiles, emails, and ticket counts; the page also renders `CancelBookingButton` in [page.tsx](/Users/peterpitcher/Cursor/BARONS-BaronsHub/src/app/events/[eventId]/bookings/page.tsx:151), so they can still reach a destructive UI they should not have.
+
+**Verification**
+`npm test` passed: 24 test files, 258 tests.
