@@ -364,9 +364,9 @@ describe("cleanupExpiredSessions", () => {
 
     await cleanupExpiredSessions();
 
-    // delete called twice: expires_at and login_attempts
-    expect(deleteFn).toHaveBeenCalledTimes(2);
-    // First call: expires_at cleanup
+    // delete called three times: expires_at, idle last_activity_at, and login_attempts
+    expect(deleteFn).toHaveBeenCalledTimes(3);
+    // First call: absolute expiry cleanup
     expect(ltFn).toHaveBeenCalledWith("expires_at", expect.any(String));
   });
 

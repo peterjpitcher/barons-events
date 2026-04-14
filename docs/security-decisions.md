@@ -22,16 +22,15 @@ Conscious security trade-offs documented during the auth system audit and harden
 
 ## 2. Turnstile Verification Modes
 
-**Decision:** Turnstile verification uses two modes: `"lenient"` (fail-open) for auth pages (login, password reset) and `"strict"` (fail-closed) for the public booking flow.
+**Decision:** All Turnstile verification now uses `"strict"` (fail-closed) mode — login, password reset, and booking. Changed from lenient to strict during the 2026-04-14 auth hardening pass.
 
-**Rationale:** Auth pages are behind rate limiting and account lockout, so a Turnstile outage should not lock all users out of the platform. The public booking flow is unauthenticated and higher-abuse-risk, so it fails closed -- a Turnstile outage blocks bookings rather than allowing bot abuse. The `mode` parameter was added during the booking security hardening pass to separate these concerns.
+**Rationale:** Lenient/fail-open mode allowed requests through when Turnstile was unavailable, which undermined bot protection. With DB-backed rate limiting and account lockout as compensating controls, strict mode is now safe — if Turnstile is down, users can retry once it recovers rather than being silently let through without bot verification.
 
-**Accepted Risk:** In lenient mode, if Turnstile is unavailable (missing token, missing secret, API unreachable), auth pages allow the request through. Compensating controls: account lockout after failed attempts, rate limiting, audit logging of all auth events.
+**Accepted Risk:** If Turnstile experiences a prolonged outage, all login and password reset attempts will be blocked. Compensating control: the lockout system and rate limiting still function independently.
 
 **Revisit Conditions:**
-- If auth pages become a target for credential stuffing at scale despite rate limiting
-- If Turnstile reliability improves enough to justify strict mode everywhere
-- If a secondary bot detection layer is added (e.g., device fingerprinting)
+- If Turnstile outages become frequent enough to impact legitimate users
+- If a fallback CAPTCHA provider is needed for availability
 
 **Files:** `src/lib/turnstile.ts`, `src/actions/auth.ts` (lines 88, 225), `src/actions/bookings.ts` (line 52)
 
