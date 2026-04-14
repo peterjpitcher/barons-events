@@ -1,12 +1,10 @@
 import "server-only";
 import { NextResponse } from "next/server";
 import { generateInspirationItems } from "@/lib/planning/inspiration";
+import { verifyCronSecret } from "@/lib/cron-auth";
 
 export async function GET(request: Request): Promise<NextResponse> {
-  const cronSecret = process.env.CRON_SECRET;
-  const authHeader = request.headers.get("authorization");
-
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+  if (!verifyCronSecret(request.headers.get("authorization"))) {
     return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
   }
 

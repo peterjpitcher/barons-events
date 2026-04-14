@@ -1,6 +1,7 @@
 import "server-only";
 import { NextResponse } from "next/server";
 import { cleanupExpiredSessions } from "@/lib/auth/session";
+import { verifyCronSecret } from "@/lib/cron-auth";
 
 /**
  * GET /api/cron/cleanup-auth
@@ -10,10 +11,7 @@ import { cleanupExpiredSessions } from "@/lib/auth/session";
  * Secured by CRON_SECRET bearer token.
  */
 export async function GET(request: Request): Promise<NextResponse> {
-  const cronSecret = process.env.CRON_SECRET;
-  const authHeader = request.headers.get("authorization");
-
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+  if (!verifyCronSecret(request.headers.get("authorization"))) {
     return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
   }
 
