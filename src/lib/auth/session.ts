@@ -6,6 +6,10 @@ import { logAuthEvent } from "@/lib/audit-log";
 export const SESSION_COOKIE_NAME = "app-session-id";
 const ABSOLUTE_TIMEOUT_HOURS = 24;
 const MAX_SESSIONS_PER_USER = 5;
+const REFRESH_THRESHOLD_HOURS = ABSOLUTE_TIMEOUT_HOURS / 2; // 12 hours
+const MAX_SESSION_LIFETIME_HOURS = 48; // hard cap
+const IDLE_TIMEOUT_MINUTES = 30;
+const ACTIVITY_UPDATE_THROTTLE_MINUTES = 5;
 
 export type SessionRecord = {
   sessionId: string;
@@ -104,6 +108,48 @@ export async function validateSession(sessionId: string): Promise<SessionRecord 
       return null;
     }
 
+    // Idle timeout: reject if no activity in IDLE_TIMEOUT_MINUTES
+    const lastActivity = new Date(data.last_activity_at);
+    const idleMs = now.getTime() - lastActivity.getTime();
+    const idleLimit = IDLE_TIMEOUT_MINUTES * 60 * 1000;
+
+    if (idleMs > idleLimit) {
+      // Session idle — destroy and log
+      db.from("app_sessions").delete().eq("session_id", sessionId).then(() => {});
+      logAuthEvent({
+        event: "auth.session.expired.idle",
+        userId: data.user_id
+      }).catch(() => {});
+      return null;
+    }
+
+    // Throttled activity update: only update if >5 min since last update
+    const throttle = ACTIVITY_UPDATE_THROTTLE_MINUTES * 60 * 1000;
+    if (idleMs > throttle) {
+      db.from("app_sessions")
+        .update({ last_activity_at: now.toISOString() })
+        .eq("session_id", sessionId)
+        .then(() => {});
+    }
+
+    // Sliding window refresh: extend session if >50% elapsed
+    const sessionAge = now.getTime() - new Date(data.created_at).getTime();
+    const refreshThreshold = REFRESH_THRESHOLD_HOURS * 3600 * 1000;
+    const maxLifetime = MAX_SESSION_LIFETIME_HOURS * 3600 * 1000;
+    const createdAt = new Date(data.created_at).getTime();
+
+    if (sessionAge > refreshThreshold) {
+      const newExpiry = new Date(Math.min(
+        now.getTime() + ABSOLUTE_TIMEOUT_HOURS * 3600 * 1000,
+        createdAt + maxLifetime
+      ));
+      // Fire-and-forget — don't block the response
+      db.from("app_sessions")
+        .update({ expires_at: newExpiry.toISOString() })
+        .eq("session_id", sessionId)
+        .then(() => {});
+    }
+
     return {
       sessionId: data.session_id,
       userId: data.user_id,
@@ -146,6 +192,10 @@ export async function cleanupExpiredSessions(): Promise<void> {
   const now = new Date().toISOString();
 
   await db.from("app_sessions").delete().lt("expires_at", now);
+
+  // Also clean up idle sessions
+  const idleCutoff = new Date(Date.now() - IDLE_TIMEOUT_MINUTES * 60 * 1000).toISOString();
+  await db.from("app_sessions").delete().lt("last_activity_at", idleCutoff);
 
   // Clean up stale login_attempts (older than lockout duration)
   const attemptCutoff = new Date(Date.now() - LOCKOUT_DURATION_MINUTES * 60 * 1000).toISOString();
