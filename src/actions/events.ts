@@ -803,6 +803,13 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
         versionWarning = true;
         console.error("Draft saved but event version append failed", error);
       }
+      recordAuditLogEntry({
+        entity: "event",
+        entityId: values.eventId,
+        action: "event.draft_saved",
+        actorId: user.id,
+        meta: { title: values.title, isUpdate: true }
+      }).catch(() => {});
       revalidatePath(`/events/${values.eventId}`);
       if (artistSyncWarning || imageWarning || versionWarning) {
         return {
@@ -917,13 +924,20 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
       }
     }
 
+    recordAuditLogEntry({
+      entity: "event",
+      entityId: created.id,
+      action: "event.draft_saved",
+      actorId: user.id,
+      meta: { title: values.title, isNew: true }
+    }).catch(() => {});
     revalidatePath(`/events/${created.id}`);
     revalidatePath("/events");
     redirectUrl = `/events/${created.id}`;
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Unknown error";
-    console.error("saveEventDraftAction failed:", detail, error);
-    return { success: false, message: `Could not save the draft: ${detail.slice(0, 120)}` };
+    console.error("[events] Draft save failed:", detail, error);
+    return { success: false, message: "Could not save the draft. Please try again." };
   }
   if (redirectUrl) {
     redirect(redirectUrl);
@@ -1301,8 +1315,8 @@ export async function submitEventForReviewAction(
     return { success: true, message: "Sent to review." };
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Unknown error";
-    console.error("submitEventForReviewAction failed:", detail, error);
-    return { success: false, message: `Could not submit right now: ${detail.slice(0, 120)}` };
+    console.error("[events] Submit for review failed:", detail, error);
+    return { success: false, message: "Could not submit right now. Please try again." };
   }
 }
 
@@ -1466,7 +1480,7 @@ export async function reviewerDecisionAction(
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Unknown error";
     console.error("reviewerDecisionAction failed:", detail, error);
-    return { success: false, message: `Could not save the decision: ${detail.slice(0, 120)}` };
+    return { success: false, message: "Could not save the decision. Please try again." };
   }
 }
 
@@ -1526,7 +1540,7 @@ export async function generateWebsiteCopyAction(
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Unknown error";
     console.error("generateWebsiteCopyAction failed:", detail, error);
-    return { success: false, message: `Could not generate website copy right now: ${detail.slice(0, 120)}` };
+    return { success: false, message: "Could not generate website copy right now. Please try again." };
   }
 }
 
@@ -1622,7 +1636,7 @@ export async function generateWebsiteCopyFromFormAction(
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Unknown error";
     console.error("generateWebsiteCopyFromFormAction failed:", detail, error);
-    return { success: false, message: `Could not generate website copy right now: ${detail.slice(0, 120)}` };
+    return { success: false, message: "Could not generate website copy right now. Please try again." };
   }
 }
 
@@ -1693,7 +1707,7 @@ export async function generateTermsAndConditionsAction(
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Unknown error";
     console.error("generateTermsAndConditionsAction failed:", detail, error);
-    return { success: false, message: `Could not generate terms right now: ${detail.slice(0, 120)}` };
+    return { success: false, message: "Could not generate terms right now. Please try again." };
   }
 }
 
@@ -1751,7 +1765,7 @@ export async function updateAssigneeAction(formData: FormData) {
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Unknown error";
     console.error("updateAssigneeAction failed:", detail, error);
-    return { success: false, message: `Could not update assignee: ${detail.slice(0, 120)}` };
+    return { success: false, message: "Could not update assignee. Please try again." };
   }
 }
 
@@ -1815,7 +1829,7 @@ export async function deleteEventAction(_: ActionResult | undefined, formData: F
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Unknown error";
     console.error("deleteEventAction failed:", detail, error);
-    return { success: false, message: `Could not delete the event: ${detail.slice(0, 120)}` };
+    return { success: false, message: "Could not delete the event. Please try again." };
   }
   if (redirectUrl) {
     redirect(redirectUrl);
@@ -1898,7 +1912,7 @@ export async function revertToDraftAction(
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Unknown error";
     console.error("revertToDraftAction failed:", detail, error);
-    return { success: false, message: `Could not revert event to draft: ${detail.slice(0, 120)}` };
+    return { success: false, message: "Could not revert event to draft. Please try again." };
   }
 }
 
@@ -1979,6 +1993,13 @@ export async function updateBookingSettingsAction(
     return { success: false, message: "Could not save booking settings." };
   }
 
+  recordAuditLogEntry({
+    entity: "event",
+    entityId: eventId,
+    action: "event.booking_settings_updated",
+    actorId: user.id,
+    meta: { bookingEnabled, totalCapacity, maxTicketsPerBooking }
+  }).catch(() => {});
   revalidatePath(`/events/${eventId}`);
   return { success: true, message: "Booking settings saved.", seoSlug };
 }

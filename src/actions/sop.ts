@@ -124,10 +124,10 @@ export async function createSopSectionAction(
     revalidatePath("/settings");
     return { success: true, message: "Section created." };
   } catch (error) {
-    console.error("createSopSectionAction:", error);
+    console.error("[sop] createSopSectionAction:", error);
     return {
       success: false,
-      message: error instanceof Error ? error.message : "Could not create section.",
+      message: "Could not create section.",
     };
   }
 }
@@ -171,10 +171,10 @@ export async function updateSopSectionAction(
     revalidatePath("/settings");
     return { success: true, message: "Section updated." };
   } catch (error) {
-    console.error("updateSopSectionAction:", error);
+    console.error("[sop] updateSopSectionAction:", error);
     return {
       success: false,
-      message: error instanceof Error ? error.message : "Could not update section.",
+      message: "Could not update section.",
     };
   }
 }
@@ -211,10 +211,10 @@ export async function deleteSopSectionAction(
     revalidatePath("/settings");
     return { success: true, message: "Section deleted." };
   } catch (error) {
-    console.error("deleteSopSectionAction:", error);
+    console.error("[sop] deleteSopSectionAction:", error);
     return {
       success: false,
-      message: error instanceof Error ? error.message : "Could not delete section.",
+      message: "Could not delete section.",
     };
   }
 }
@@ -256,11 +256,10 @@ export async function createSopTaskTemplateAction(
     revalidatePath("/settings");
     return { success: true, message: "Task template created." };
   } catch (error) {
-    console.error("createSopTaskTemplateAction:", error);
+    console.error("[sop] createSopTaskTemplateAction:", error);
     return {
       success: false,
-      message:
-        error instanceof Error ? error.message : "Could not create task template.",
+      message: "Could not create task template.",
     };
   }
 }
@@ -303,11 +302,10 @@ export async function updateSopTaskTemplateAction(
     revalidatePath("/settings");
     return { success: true, message: "Task template updated." };
   } catch (error) {
-    console.error("updateSopTaskTemplateAction:", error);
+    console.error("[sop] updateSopTaskTemplateAction:", error);
     return {
       success: false,
-      message:
-        error instanceof Error ? error.message : "Could not update task template.",
+      message: "Could not update task template.",
     };
   }
 }
@@ -344,11 +342,10 @@ export async function deleteSopTaskTemplateAction(
     revalidatePath("/settings");
     return { success: true, message: "Task template deleted." };
   } catch (error) {
-    console.error("deleteSopTaskTemplateAction:", error);
+    console.error("[sop] deleteSopTaskTemplateAction:", error);
     return {
       success: false,
-      message:
-        error instanceof Error ? error.message : "Could not delete task template.",
+      message: "Could not delete task template.",
     };
   }
 }
@@ -395,11 +392,10 @@ export async function createSopDependencyAction(
     revalidatePath("/settings");
     return { success: true, message: "Dependency created." };
   } catch (error) {
-    console.error("createSopDependencyAction:", error);
+    console.error("[sop] createSopDependencyAction:", error);
     return {
       success: false,
-      message:
-        error instanceof Error ? error.message : "Could not create dependency.",
+      message: "Could not create dependency.",
     };
   }
 }
@@ -444,11 +440,10 @@ export async function deleteSopDependencyByCompositeAction(
     revalidatePath("/settings");
     return { success: true, message: "Dependency removed." };
   } catch (error) {
-    console.error("deleteSopDependencyByCompositeAction:", error);
+    console.error("[sop] deleteSopDependencyByCompositeAction:", error);
     return {
       success: false,
-      message:
-        error instanceof Error ? error.message : "Could not delete dependency.",
+      message: "Could not delete dependency.",
     };
   }
 }
@@ -485,11 +480,10 @@ export async function deleteSopDependencyAction(
     revalidatePath("/settings");
     return { success: true, message: "Dependency deleted." };
   } catch (error) {
-    console.error("deleteSopDependencyAction:", error);
+    console.error("[sop] deleteSopDependencyAction:", error);
     return {
       success: false,
-      message:
-        error instanceof Error ? error.message : "Could not delete dependency.",
+      message: "Could not delete dependency.",
     };
   }
 }
@@ -607,10 +601,10 @@ export async function backfillSopChecklistsAction(): Promise<BackfillSopResult> 
       errors,
     };
   } catch (error) {
-    console.error("backfillSopChecklistsAction:", error);
+    console.error("[sop] backfillSopChecklistsAction:", error);
     return {
       success: false,
-      message: error instanceof Error ? error.message : "Backfill failed.",
+      message: "Backfill failed. Check server logs for details.",
       eventsLinked: 0,
       checklistsGenerated: 0,
       skipped: 0,
