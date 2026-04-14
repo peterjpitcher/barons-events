@@ -22,6 +22,7 @@ const venueSchema = z.object({
   venueId: z.string().uuid().optional(),
   name: z.string().min(2, "Add a venue name"),
   defaultReviewerId: uuidOrUndefined,
+  defaultManagerResponsible: z.string().max(200, "Max 200 characters").optional().or(z.literal("")),
   googleReviewUrl: z.string().url("Enter a valid URL").optional().or(z.literal(""))
 });
 
@@ -39,7 +40,8 @@ export async function createVenueAction(
 
   const parsed = venueSchema.safeParse({
     name: typeof formData.get("name") === "string" ? formData.get("name") : "",
-    defaultReviewerId: typeof formData.get("defaultReviewerId") === "string" ? formData.get("defaultReviewerId") : ""
+    defaultReviewerId: typeof formData.get("defaultReviewerId") === "string" ? formData.get("defaultReviewerId") : "",
+    defaultManagerResponsible: typeof formData.get("defaultManagerResponsible") === "string" ? formData.get("defaultManagerResponsible") : "",
   });
 
   if (!parsed.success) {
@@ -53,7 +55,8 @@ export async function createVenueAction(
   try {
     await createVenue({
       name: parsed.data.name,
-      defaultReviewerId: parsed.data.defaultReviewerId ?? null
+      defaultReviewerId: parsed.data.defaultReviewerId ?? null,
+      defaultManagerResponsible: parsed.data.defaultManagerResponsible || null,
     });
     revalidatePath("/venues");
     return { success: true, message: "Venue added." };
@@ -79,6 +82,7 @@ export async function updateVenueAction(
     venueId: formData.get("venueId"),
     name: typeof formData.get("name") === "string" ? formData.get("name") : "",
     defaultReviewerId: typeof formData.get("defaultReviewerId") === "string" ? formData.get("defaultReviewerId") : "",
+    defaultManagerResponsible: typeof formData.get("defaultManagerResponsible") === "string" ? formData.get("defaultManagerResponsible") : "",
     googleReviewUrl: typeof formData.get("googleReviewUrl") === "string" ? formData.get("googleReviewUrl") : ""
   });
 
@@ -97,6 +101,7 @@ export async function updateVenueAction(
     await updateVenue(parsed.data.venueId, {
       name: parsed.data.name,
       defaultReviewerId: parsed.data.defaultReviewerId ?? null,
+      defaultManagerResponsible: parsed.data.defaultManagerResponsible || null,
       googleReviewUrl: parsed.data.googleReviewUrl || null
     });
     revalidatePath("/venues");
