@@ -130,6 +130,16 @@ export async function deleteServiceTypeAction(
 
 // ─── Weekly Hours ─────────────────────────────────────────────────────────────
 
+const openingHoursRowSchema = z.object({
+  service_type_id: z.string().uuid("Invalid service type reference."),
+  day_of_week: z.number().int().min(0).max(6),
+  open_time: z.string().regex(/^\d{2}:\d{2}$/, "Invalid time format.").nullable(),
+  close_time: z.string().regex(/^\d{2}:\d{2}$/, "Invalid time format.").nullable(),
+  is_closed: z.boolean(),
+});
+
+const openingHoursInputSchema = z.array(openingHoursRowSchema);
+
 export async function upsertVenueOpeningHoursAction(
   _: ActionResult | undefined,
   formData: FormData
@@ -153,7 +163,12 @@ export async function upsertVenueOpeningHoursAction(
 
   let rows: UpsertHoursInput[];
   try {
-    rows = JSON.parse(rowsRaw) as UpsertHoursInput[];
+    const parsed = JSON.parse(rowsRaw);
+    const validated = openingHoursInputSchema.safeParse(parsed);
+    if (!validated.success) {
+      return { success: false, message: "Invalid opening hours data." };
+    }
+    rows = validated.data;
   } catch {
     return { success: false, message: "Could not parse opening hours data." };
   }
@@ -189,20 +204,33 @@ export async function upsertMultiVenueOpeningHoursAction(
     return { success: false, message: "Select at least one venue." };
   }
 
+  // Validate venue IDs are proper UUIDs
+  const venueIdSchema = z.array(z.string().uuid("Invalid venue reference."));
+  const venueIdResult = venueIdSchema.safeParse(venueIds);
+  if (!venueIdResult.success) {
+    return { success: false, message: "Invalid venue reference." };
+  }
+
+  // Validate opening hours rows
+  const validated = openingHoursInputSchema.safeParse(rows);
+  if (!validated.success) {
+    return { success: false, message: "Invalid opening hours data." };
+  }
+
   try {
-    await Promise.all(venueIds.map((venueId) => upsertVenueOpeningHours(venueId, rows)));
+    await Promise.all(venueIdResult.data.map((venueId) => upsertVenueOpeningHours(venueId, validated.data)));
     recordAuditLogEntry({
       entity: "opening_hours",
-      entityId: venueIds[0],
+      entityId: venueIdResult.data[0],
       action: "opening_hours.multi_venue_hours_saved",
       actorId: user.id,
-      meta: { venueIds, venueCount: venueIds.length }
+      meta: { venueIds: venueIdResult.data, venueCount: venueIdResult.data.length }
     }).catch(() => {});
-    venueIds.forEach((venueId) => revalidatePath(`/venues/${venueId}/opening-hours`));
+    venueIdResult.data.forEach((venueId) => revalidatePath(`/venues/${venueId}/opening-hours`));
     revalidatePath("/opening-hours");
     return {
       success: true,
-      message: venueIds.length > 1 ? `Opening hours saved for ${venueIds.length} venues.` : "Opening hours saved."
+      message: venueIdResult.data.length > 1 ? `Opening hours saved for ${venueIdResult.data.length} venues.` : "Opening hours saved."
     };
   } catch (error) {
     console.error(error);
