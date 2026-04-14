@@ -171,7 +171,7 @@ function VenueRowEditor({ venue, reviewers }: { venue: VenueRow; reviewers: Revi
     <tr className="border-t border-[var(--color-border)]">
       <td colSpan={6} className="px-4 py-3">
         <div className="grid gap-3 md:grid-cols-[minmax(0,18fr)_minmax(0,18fr)_minmax(0,16fr)_minmax(0,28fr)_auto_auto] md:items-start">
-          <form action={formAction} className="contents" noValidate>
+          <form id={`venue-form-${venue.id}`} action={formAction} className="contents" noValidate>
             <input type="hidden" name="venueId" value={venue.id} />
             <div className="space-y-2">
               <label className="sr-only" htmlFor={`venue-name-${venue.id}`}>
@@ -225,22 +225,23 @@ function VenueRowEditor({ venue, reviewers }: { venue: VenueRow; reviewers: Revi
                 placeholder="Google Review URL"
               />
             </div>
-            <div className="flex items-start justify-end">
-              <SubmitButton
-                label="Save"
-                pendingLabel="Saving..."
-                variant="secondary"
-                size="sm"
-                icon={<Save className="h-4 w-4" aria-hidden="true" />}
-                hideLabel
-              />
-            </div>
           </form>
-          <div className="flex items-start justify-end gap-1">
+          <div className="flex items-start justify-center">
             <Button asChild variant="ghost" size="sm" aria-label={`Opening hours for ${venue.name}`}>
               <Link href={`/venues/${venue.id}/opening-hours`}>
                 <Clock className="h-4 w-4" aria-hidden="true" />
               </Link>
+            </Button>
+          </div>
+          <div className="flex items-start justify-end gap-1">
+            <Button
+              type="submit"
+              variant="secondary"
+              size="sm"
+              aria-label={`Save ${venue.name}`}
+              form={`venue-form-${venue.id}`}
+            >
+              <Save className="h-4 w-4" aria-hidden="true" />
             </Button>
             <form ref={deleteFormRef} action={deleteAction}>
               <input type="hidden" name="venueId" value={venue.id} />

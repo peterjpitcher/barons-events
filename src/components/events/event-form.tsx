@@ -446,7 +446,7 @@ export function EventForm({
   }
 
   useEffect(() => {
-    if (mode === "create" && !managerDirty && selectedVenueId) {
+    if (!managerDirty && selectedVenueId) {
       const venue = venues.find((v) => v.id === selectedVenueId);
       if (venue?.default_manager_responsible) {
         setManagerResponsible(venue.default_manager_responsible);
