@@ -472,7 +472,7 @@ export async function listPlanningBoardData(params?: {
   await ensurePlanningOccurrencesThrough(planningWindowEnd);
 
   const includeLater = params?.includeLater ?? true;
-  const lowerBound = addDays(today, -30);
+  const lowerBound = addDays(today, -365);
   const upperBound = includeLater ? addDays(today, 365) : planningWindowEnd;
 
   const admin = createSupabaseAdminClient();
@@ -543,7 +543,7 @@ export async function listPlanningBoardData(params?: {
     planningItems = ((itemData ?? []) as RawPlanningItemRow[]).map((row) => toPlanningItem(row));
   }
 
-  const startLowerIso = `${today}T00:00:00.000Z`;
+  const startLowerIso = `${lowerBound}T00:00:00.000Z`;
   const startUpperIso = `${upperBound}T23:59:59.999Z`;
 
   const { data: eventData, error: eventsError } = await admin
@@ -551,7 +551,6 @@ export async function listPlanningBoardData(params?: {
     .select("id,title,status,start_at,end_at,venue_space,venue_id,public_title,public_teaser,venue:venues(name)")
     .gte("start_at", startLowerIso)
     .lte("start_at", startUpperIso)
-    .neq("status", "completed")
     .order("start_at", { ascending: true });
 
   if (eventsError) {
