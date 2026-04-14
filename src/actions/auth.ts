@@ -32,7 +32,7 @@ const emailOnlySchema = z.object({
 
 export type ResetPasswordState =
   | { status: "idle"; message?: undefined; fieldErrors?: FieldErrors }
-  | { status: "success"; message?: undefined; fieldErrors?: FieldErrors }
+  | { status: "success"; message?: string; fieldErrors?: FieldErrors }
   | { status: "invalid"; message?: string; fieldErrors?: FieldErrors }
   | { status: "mismatch"; message?: string; fieldErrors?: FieldErrors }
   | { status: "missing-token"; message?: string; fieldErrors?: FieldErrors }
@@ -117,7 +117,24 @@ export async function signInAction(_: SignInState | undefined, formData: FormDat
   const { data, error } = await supabase.auth.signInWithPassword(parsed.data);
 
   if (error) {
-    // Record the failed attempt
+    // Differentiate service errors (5xx) from credential failures — Gap 1.5
+    // During a Supabase outage, we must NOT record failed login attempts
+    // as that would lock out legitimate users.
+    const isServiceError = typeof error.status === "number" && error.status >= 500;
+
+    if (isServiceError) {
+      const emailHash = await hashEmailForAudit(parsed.data.email);
+      await logAuthEvent({
+        event: "auth.login.service_error",
+        ipAddress: ip,
+        emailHash,
+        userAgent: headerStore.get("user-agent") ?? undefined,
+        meta: { reason: error.message, status: error.status }
+      });
+      return { success: false, message: "Sign in is temporarily unavailable. Please try again shortly." };
+    }
+
+    // Genuine credential failure — record the failed attempt
     await recordFailedLoginAttempt(parsed.data.email, ip);
     const emailHash = await hashEmailForAudit(parsed.data.email);
     await logAuthEvent({
@@ -309,10 +326,18 @@ export async function completePasswordResetAction(
   }
 
   // Destroy all sessions then immediately issue a fresh one to prevent session fixation
+  let sessionTeardownFailed = false;
+
   try {
     const { data: { user: currentUser } } = await supabase.auth.getUser();
     if (currentUser) {
-      await destroyAllSessionsForUser(currentUser.id);
+      // Attempt to destroy all existing sessions — Gap 1.6
+      try {
+        await destroyAllSessionsForUser(currentUser.id);
+      } catch (destroyError) {
+        console.error("Failed to destroy sessions after password reset:", destroyError);
+        sessionTeardownFailed = true;
+      }
 
       // Issue a replacement session before signing out (auth standard §3 — session fixation prevention)
       try {
@@ -328,7 +353,8 @@ export async function completePasswordResetAction(
 
       await logAuthEvent({
         event: "auth.password_updated",
-        userId: currentUser.id
+        userId: currentUser.id,
+        meta: sessionTeardownFailed ? { session_teardown_failed: true } : undefined
       });
 
       // Clear lockout records now that the user has proved mailbox ownership
@@ -341,10 +367,23 @@ export async function completePasswordResetAction(
         // Non-fatal — lockout records are housekeeping
       }
     }
-  } catch (sessionError) {
-    console.error("Failed to destroy sessions after password reset:", sessionError);
+  } catch (outerError) {
+    console.error("Failed during password reset session management:", outerError);
+    sessionTeardownFailed = true;
   }
 
-  await supabase.auth.signOut();
+  const { error: signOutError } = await supabase.auth.signOut();
+  if (signOutError) {
+    console.error("Failed to sign out after password reset:", signOutError);
+    sessionTeardownFailed = true;
+  }
+
+  if (sessionTeardownFailed) {
+    return {
+      status: "success",
+      message: "Password updated. Please sign in again on all your devices to ensure full security."
+    };
+  }
+
   return { status: "success" };
 }

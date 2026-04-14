@@ -53,6 +53,7 @@ export async function recordAuditLogEntry(params: RecordAuditParams): Promise<vo
 type AuthEventType =
   | "auth.login.success"
   | "auth.login.failure"
+  | "auth.login.service_error"
   | "auth.lockout"
   | "auth.logout"
   | "auth.password_reset.requested"
