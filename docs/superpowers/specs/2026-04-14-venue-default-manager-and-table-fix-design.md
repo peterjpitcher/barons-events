@@ -25,7 +25,7 @@ ALTER TABLE public.venues
     CHECK (char_length(default_manager_responsible) <= 200);
 ```
 
-No RLS changes needed — venues already have appropriate read/write policies scoped to `central_planner`.
+No RLS changes needed — venue writes are `central_planner`-only, reads are `using (true)` (globally readable).
 
 ### Server actions (`src/actions/venues.ts`)
 
@@ -42,9 +42,11 @@ No RLS changes needed — venues already have appropriate read/write policies sc
 
 ### Table alignment fix (`src/components/venues/venues-manager.tsx`)
 
-**Problem:** `VenueRowEditor` renders `<td colSpan={3}>` with a CSS grid inside. The header has 5 columns. Body content doesn't align with headers.
+**Problem:** `VenueRowEditor` renders `<td colSpan={3}>` with a CSS grid inside, but the header has 5 columns (now 6 with the new field). The internal grid tracks don't match header widths, causing misalignment.
 
-**Fix:** Replace the `colSpan` + grid pattern with individual `<td>` cells matching header columns.
+**Fix:** Keep the existing `<td colSpan={N}>` + `<form className="contents">` pattern (this is valid — `display: contents` removes the form from the rendering tree). Update `colSpan` from 3 to 6 to match the new 6-column header. Update the CSS grid template inside the form to have 6 tracks matching the header column proportions.
+
+**Why not individual `<td>` cells?** A `<form>` element cannot validly wrap inputs across multiple sibling `<td>` cells. The current `display: contents` pattern is the correct approach.
 
 ### New table structure — 6 columns
 
@@ -56,6 +58,8 @@ No RLS changes needed — venues already have appropriate read/write policies sc
 | 4 | Google Review URL | `<Input>` url | ~28% |
 | 5 | Hours | Icon-only `<Button>` link (Clock icon) | auto |
 | 6 | Actions | Icon-only Save + Delete buttons | auto |
+
+The CSS grid template inside the form must use matching proportions: `md:grid-cols-[minmax(0,18fr)_minmax(0,18fr)_minmax(0,16fr)_minmax(0,28fr)_auto_auto]`
 
 ### Action buttons — icon-only
 
@@ -74,7 +78,7 @@ No RLS changes needed — venues already have appropriate read/write policies sc
 
 When `manager_responsible` is empty and a venue is selected:
 - Pre-fill with `venue.default_manager_responsible`
-- Track manual edits with a `useRef<boolean>` flag, set `true` on `onChange`
+- Track manual edits using the same pattern as `endDirty` (existing precedent in the form for auto-fill-until-user-edits on end time)
 
 On venue change (dropdown selection):
 - If user has NOT manually edited the field → update to new venue's default
@@ -97,12 +101,18 @@ On venue change (dropdown selection):
 | File | Change |
 |------|--------|
 | `supabase/migrations/YYYYMMDD_add_venue_default_manager.sql` | Add column + constraint |
-| `src/lib/supabase/types.ts` | Update auto-generated types |
-| `src/lib/venues.ts` | Update `VenueRow` type |
-| `src/lib/validation.ts` | Add venue validation for new field |
-| `src/actions/venues.ts` | Accept + persist `defaultManagerResponsible` |
+| `src/lib/supabase/types.ts` | Regenerate from Supabase (also picks up stale `manager_responsible` on events) |
+| `src/lib/venues.ts` | `VenueRow` auto-derives; add `defaultManagerResponsible` to `createVenue`/`updateVenue` helper signatures |
+| `src/actions/venues.ts` | Add inline Zod validation + accept/persist `defaultManagerResponsible` (venue validation lives here, not in validation.ts) |
 | `src/components/venues/venues-manager.tsx` | Fix table alignment, add column, icon-only buttons |
 | `src/components/events/event-form.tsx` | Auto-populate manager responsible from venue default |
+
+## Implementation Notes (from adversarial review)
+
+- **Venue validation lives inline in `src/actions/venues.ts`**, not in `src/lib/validation.ts`. Follow existing pattern.
+- **`endDirty` pattern** in event form is the existing precedent for "auto-fill until user edits". Use the same approach (state boolean) rather than `useRef`.
+- **Generated types are stale** — `src/lib/supabase/types.ts` is behind migrations. Regenerate to pick up both `venues.default_manager_responsible` and the already-migrated `events.manager_responsible`.
+- **No existing tests** cover venues-manager, venue actions, or event form auto-fill. Tests should be added for the new field handling.
 
 ## Out of Scope
 
