@@ -16,6 +16,7 @@ import {
 } from "@/lib/opening-hours";
 import { getFieldErrors } from "@/lib/form-errors";
 import type { ActionResult } from "@/lib/types";
+import { recordAuditLogEntry } from "@/lib/audit-log";
 
 // ─── Service Types ────────────────────────────────────────────────────────────
 
@@ -39,7 +40,14 @@ export async function createServiceTypeAction(
   }
 
   try {
-    await createServiceType(parsed.data.name);
+    const created = await createServiceType(parsed.data.name);
+    recordAuditLogEntry({
+      entity: "opening_hours",
+      entityId: typeof created === "object" && created !== null && "id" in created ? (created as { id: string }).id : "unknown",
+      action: "opening_hours.service_type_created",
+      actorId: user.id,
+      meta: { name: parsed.data.name }
+    }).catch(() => {});
     revalidatePath("/settings");
     revalidatePath("/venues");
     return { success: true, message: "Service type added." };
@@ -71,6 +79,13 @@ export async function updateServiceTypeAction(
 
   try {
     await updateServiceType(id, parsed.data.name);
+    recordAuditLogEntry({
+      entity: "opening_hours",
+      entityId: id,
+      action: "opening_hours.service_type_updated",
+      actorId: user.id,
+      meta: { name: parsed.data.name }
+    }).catch(() => {});
     revalidatePath("/settings");
     revalidatePath("/venues");
     return { success: true, message: "Service type updated." };
@@ -97,6 +112,13 @@ export async function deleteServiceTypeAction(
 
   try {
     await deleteServiceType(id);
+    recordAuditLogEntry({
+      entity: "opening_hours",
+      entityId: id,
+      action: "opening_hours.service_type_deleted",
+      actorId: user.id,
+      meta: {}
+    }).catch(() => {});
     revalidatePath("/settings");
     revalidatePath("/venues");
     return { success: true, message: "Service type removed." };
@@ -138,6 +160,13 @@ export async function upsertVenueOpeningHoursAction(
 
   try {
     await upsertVenueOpeningHours(venueId, rows);
+    recordAuditLogEntry({
+      entity: "opening_hours",
+      entityId: venueId,
+      action: "opening_hours.hours_saved",
+      actorId: user.id,
+      meta: { venueId }
+    }).catch(() => {});
     revalidatePath(`/venues/${venueId}/opening-hours`);
     return { success: true, message: "Opening hours saved." };
   } catch (error) {
@@ -162,6 +191,13 @@ export async function upsertMultiVenueOpeningHoursAction(
 
   try {
     await Promise.all(venueIds.map((venueId) => upsertVenueOpeningHours(venueId, rows)));
+    recordAuditLogEntry({
+      entity: "opening_hours",
+      entityId: venueIds[0],
+      action: "opening_hours.multi_venue_hours_saved",
+      actorId: user.id,
+      meta: { venueIds, venueCount: venueIds.length }
+    }).catch(() => {});
     venueIds.forEach((venueId) => revalidatePath(`/venues/${venueId}/opening-hours`));
     revalidatePath("/opening-hours");
     return {
@@ -208,6 +244,13 @@ export async function createOpeningOverrideAction(payload: {
 
   try {
     await createOpeningOverride({ ...parsed.data, created_by: user.id, note: parsed.data.note ?? null, open_time: parsed.data.open_time ?? null, close_time: parsed.data.close_time ?? null });
+    recordAuditLogEntry({
+      entity: "opening_hours",
+      entityId: parsed.data.venue_ids[0],
+      action: "opening_hours.override_created",
+      actorId: user.id,
+      meta: { overrideDate: parsed.data.override_date, isClosed: parsed.data.is_closed }
+    }).catch(() => {});
     revalidatePath("/venues");
     revalidatePath("/opening-hours");
     return { success: true, message: "Override added." };
@@ -242,6 +285,13 @@ export async function updateOpeningOverrideAction(
 
   try {
     await updateOpeningOverride(id, { ...parsed.data, note: parsed.data.note ?? null, open_time: parsed.data.open_time ?? null, close_time: parsed.data.close_time ?? null });
+    recordAuditLogEntry({
+      entity: "opening_hours",
+      entityId: id,
+      action: "opening_hours.override_updated",
+      actorId: user.id,
+      meta: { overrideDate: parsed.data.override_date }
+    }).catch(() => {});
     revalidatePath("/venues");
     revalidatePath("/opening-hours");
     return { success: true, message: "Override updated." };
@@ -260,6 +310,13 @@ export async function deleteOpeningOverrideAction(id: string): Promise<ActionRes
 
   try {
     await deleteOpeningOverride(id);
+    recordAuditLogEntry({
+      entity: "opening_hours",
+      entityId: id,
+      action: "opening_hours.override_deleted",
+      actorId: user.id,
+      meta: {}
+    }).catch(() => {});
     revalidatePath("/venues");
     revalidatePath("/opening-hours");
     return { success: true, message: "Override removed." };

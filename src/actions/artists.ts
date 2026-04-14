@@ -8,6 +8,7 @@ import { createArtist, setArtistArchived, updateArtist } from "@/lib/artists";
 import { getFieldErrors } from "@/lib/form-errors";
 import type { ActionResult as BaseActionResult } from "@/lib/types";
 import { canManageArtists } from "@/lib/roles";
+import { recordAuditLogEntry } from "@/lib/audit-log";
 
 type ActionResult = BaseActionResult & {
   artist?: {
@@ -81,6 +82,13 @@ export async function createArtistAction(
       ...parsed.data,
       createdBy: user.id
     });
+    recordAuditLogEntry({
+      entity: "artist",
+      entityId: created.id,
+      action: "artist.created",
+      actorId: user.id,
+      meta: { name: created.name, artistType: created.artist_type }
+    }).catch(() => {});
     revalidatePath("/artists");
     revalidatePath("/events/new");
     return {
@@ -139,6 +147,13 @@ export async function updateArtistAction(
       phone: parsed.data.phone ?? null,
       description: parsed.data.description ?? null
     });
+    recordAuditLogEntry({
+      entity: "artist",
+      entityId: parsed.data.artistId,
+      action: "artist.updated",
+      actorId: user.id,
+      meta: { name: parsed.data.name }
+    }).catch(() => {});
     revalidatePath("/artists");
     revalidatePath(`/artists/${parsed.data.artistId}`);
     revalidatePath("/events/new");
@@ -174,6 +189,13 @@ export async function archiveArtistAction(
 
   try {
     await setArtistArchived(parsed.data.artistId, true);
+    recordAuditLogEntry({
+      entity: "artist",
+      entityId: parsed.data.artistId,
+      action: "artist.archived",
+      actorId: user.id,
+      meta: {}
+    }).catch(() => {});
     revalidatePath("/artists");
     revalidatePath(`/artists/${parsed.data.artistId}`);
     revalidatePath("/events/new");
@@ -208,6 +230,13 @@ export async function restoreArtistAction(
 
   try {
     await setArtistArchived(parsed.data.artistId, false);
+    recordAuditLogEntry({
+      entity: "artist",
+      entityId: parsed.data.artistId,
+      action: "artist.restored",
+      actorId: user.id,
+      meta: {}
+    }).catch(() => {});
     revalidatePath("/artists");
     revalidatePath(`/artists/${parsed.data.artistId}`);
     revalidatePath("/events/new");

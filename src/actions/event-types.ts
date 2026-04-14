@@ -7,6 +7,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { createEventType, updateEventType, deleteEventType } from "@/lib/event-types";
 import { getFieldErrors } from "@/lib/form-errors";
 import type { ActionResult } from "@/lib/types";
+import { recordAuditLogEntry } from "@/lib/audit-log";
 
 const baseSchema = z.object({
   label: z.string().min(2, "Add an event type name").max(120)
@@ -35,7 +36,14 @@ export async function createEventTypeAction(
   }
 
   try {
-    await createEventType(parsed.data.label);
+    const created = await createEventType(parsed.data.label);
+    recordAuditLogEntry({
+      entity: "event_type",
+      entityId: typeof created === "object" && created !== null && "id" in created ? (created as { id: string }).id : "unknown",
+      action: "event_type.created",
+      actorId: user.id,
+      meta: { label: parsed.data.label }
+    }).catch(() => {});
     revalidatePath("/settings");
     return { success: true, message: "Event type added." };
   } catch (error) {
@@ -73,6 +81,13 @@ export async function updateEventTypeAction(
 
   try {
     await updateEventType(parsed.data.typeId, parsed.data.label);
+    recordAuditLogEntry({
+      entity: "event_type",
+      entityId: parsed.data.typeId,
+      action: "event_type.updated",
+      actorId: user.id,
+      meta: { label: parsed.data.label }
+    }).catch(() => {});
     revalidatePath("/settings");
     return { success: true, message: "Event type updated." };
   } catch (error) {
@@ -105,6 +120,13 @@ export async function deleteEventTypeAction(
 
   try {
     await deleteEventType(parsed.data.typeId);
+    recordAuditLogEntry({
+      entity: "event_type",
+      entityId: parsed.data.typeId,
+      action: "event_type.deleted",
+      actorId: user.id,
+      meta: {}
+    }).catch(() => {});
     revalidatePath("/settings");
     return { success: true, message: "Event type removed." };
   } catch (error) {

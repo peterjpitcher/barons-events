@@ -21,6 +21,7 @@ import { canUsePlanning, canViewPlanning } from "@/lib/roles";
 import { createSupabaseActionClient } from "@/lib/supabase/server";
 import { generateInspirationItems } from "@/lib/planning/inspiration";
 import { generateSopChecklist, recalculateSopDates, updateBlockedStatus } from "@/lib/planning/sop";
+import { recordAuditLogEntry } from "@/lib/audit-log";
 
 export type PlanningActionResult = {
   success: boolean;
@@ -96,6 +97,13 @@ export async function createPlanningItemAction(input: unknown): Promise<Planning
       console.error("SOP checklist generation failed:", sopError);
     }
 
+    recordAuditLogEntry({
+      entity: "planning",
+      entityId: item.id,
+      action: "planning.item_created",
+      actorId: user.id,
+      meta: { title: parsed.data.title }
+    }).catch(() => {});
     revalidatePath("/planning");
     return { success: true, message: "Planning item created." };
   } catch (error) {
@@ -117,7 +125,7 @@ const updateItemSchema = z.object({
 
 export async function updatePlanningItemAction(input: unknown): Promise<PlanningActionResult> {
   try {
-    await ensureUser();
+    const user = await ensureUser();
     const parsed = updateItemSchema.safeParse(input);
     if (!parsed.success) {
       return {
@@ -137,6 +145,13 @@ export async function updatePlanningItemAction(input: unknown): Promise<Planning
       status: parsed.data.status as PlanningItemStatus | undefined
     });
 
+    recordAuditLogEntry({
+      entity: "planning",
+      entityId: parsed.data.itemId,
+      action: "planning.item_updated",
+      actorId: user.id,
+      meta: { title: parsed.data.title, status: parsed.data.status }
+    }).catch(() => {});
     revalidatePath("/planning");
     return { success: true, message: "Planning item updated." };
   } catch (error) {
@@ -196,6 +211,13 @@ export async function deletePlanningItemAction(input: unknown): Promise<Planning
 
     await deletePlanningItem(parsed.data.itemId);
 
+    recordAuditLogEntry({
+      entity: "planning",
+      entityId: parsed.data.itemId,
+      action: "planning.item_deleted",
+      actorId: null,
+      meta: {}
+    }).catch(() => {});
     revalidatePath("/planning");
     return { success: true, message: "Planning item deleted." };
   } catch (error) {
@@ -288,6 +310,13 @@ export async function createPlanningSeriesAction(input: unknown): Promise<Planni
       }))
     });
 
+    recordAuditLogEntry({
+      entity: "planning",
+      entityId: "series",
+      action: "planning.series_created",
+      actorId: user.id,
+      meta: { title: parsed.data.title, frequency: parsed.data.recurrenceFrequency }
+    }).catch(() => {});
     revalidatePath("/planning");
     return { success: true, message: "Recurring planning series created." };
   } catch (error) {
@@ -332,6 +361,13 @@ export async function updatePlanningSeriesAction(input: unknown): Promise<Planni
       }))
     });
 
+    recordAuditLogEntry({
+      entity: "planning",
+      entityId: parsed.data.seriesId,
+      action: "planning.series_updated",
+      actorId: null,
+      meta: { title: parsed.data.title }
+    }).catch(() => {});
     revalidatePath("/planning");
     return { success: true, message: "Recurring series updated." };
   } catch (error) {
@@ -356,6 +392,13 @@ export async function pausePlanningSeriesAction(input: unknown): Promise<Plannin
 
     await pausePlanningSeries(parsed.data.seriesId);
 
+    recordAuditLogEntry({
+      entity: "planning",
+      entityId: parsed.data.seriesId,
+      action: "planning.series_paused",
+      actorId: null,
+      meta: {}
+    }).catch(() => {});
     revalidatePath("/planning");
     return { success: true, message: "Recurring series paused." };
   } catch (error) {
@@ -393,6 +436,13 @@ export async function createPlanningTaskAction(input: unknown): Promise<Planning
       createdBy: user.id
     });
 
+    recordAuditLogEntry({
+      entity: "planning",
+      entityId: parsed.data.planningItemId,
+      action: "planning.task_created",
+      actorId: user.id,
+      meta: { title: parsed.data.title }
+    }).catch(() => {});
     revalidatePath("/planning");
     return { success: true, message: "Task added." };
   } catch (error) {
@@ -434,6 +484,13 @@ export async function updatePlanningTaskAction(input: unknown): Promise<Planning
       sortOrder: parsed.data.sortOrder
     });
 
+    recordAuditLogEntry({
+      entity: "planning",
+      entityId: parsed.data.taskId,
+      action: "planning.task_updated",
+      actorId: null,
+      meta: { title: parsed.data.title, status: parsed.data.status }
+    }).catch(() => {});
     revalidatePath("/planning");
     return { success: true, message: "Task updated." };
   } catch (error) {
@@ -531,6 +588,13 @@ export async function deletePlanningTaskAction(input: unknown): Promise<Planning
 
     await deletePlanningTask(parsed.data.taskId);
 
+    recordAuditLogEntry({
+      entity: "planning",
+      entityId: parsed.data.taskId,
+      action: "planning.task_deleted",
+      actorId: null,
+      meta: {}
+    }).catch(() => {});
     revalidatePath("/planning");
     return { success: true, message: "Task deleted." };
   } catch (error) {

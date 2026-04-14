@@ -7,6 +7,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { createVenue, deleteVenue, updateVenue } from "@/lib/venues";
 import { getFieldErrors } from "@/lib/form-errors";
 import type { ActionResult } from "@/lib/types";
+import { recordAuditLogEntry } from "@/lib/audit-log";
 
 const uuidOrUndefined = z.preprocess(
   (value) => {
@@ -53,11 +54,18 @@ export async function createVenueAction(
   }
 
   try {
-    await createVenue({
+    const created = await createVenue({
       name: parsed.data.name,
       defaultReviewerId: parsed.data.defaultReviewerId ?? null,
       defaultManagerResponsible: parsed.data.defaultManagerResponsible || null,
     });
+    recordAuditLogEntry({
+      entity: "venue",
+      entityId: typeof created === "object" && created !== null && "id" in created ? (created as { id: string }).id : "unknown",
+      action: "venue.created",
+      actorId: user.id,
+      meta: { name: parsed.data.name }
+    }).catch(() => {});
     revalidatePath("/venues");
     return { success: true, message: "Venue added." };
   } catch (error) {
@@ -104,6 +112,13 @@ export async function updateVenueAction(
       defaultManagerResponsible: parsed.data.defaultManagerResponsible || null,
       googleReviewUrl: parsed.data.googleReviewUrl || null
     });
+    recordAuditLogEntry({
+      entity: "venue",
+      entityId: parsed.data.venueId,
+      action: "venue.updated",
+      actorId: user.id,
+      meta: { name: parsed.data.name }
+    }).catch(() => {});
     revalidatePath("/venues");
     return { success: true, message: "Venue updated." };
   } catch (error) {
@@ -138,6 +153,13 @@ export async function deleteVenueAction(
 
   try {
     await deleteVenue(parsed.data.venueId);
+    recordAuditLogEntry({
+      entity: "venue",
+      entityId: parsed.data.venueId,
+      action: "venue.deleted",
+      actorId: user.id,
+      meta: {}
+    }).catch(() => {});
     revalidatePath("/venues");
     return { success: true, message: "Venue removed." };
   } catch (error) {

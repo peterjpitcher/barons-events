@@ -5,7 +5,7 @@ import type { Database, Json } from "@/lib/supabase/types";
 type AuditLogRow = Database["public"]["Tables"]["audit_log"]["Row"];
 
 type RecordAuditParams = {
-  entity: "event" | "sop_template" | "planning_task" | "auth" | "customer" | "booking";
+  entity: "event" | "sop_template" | "planning_task" | "auth" | "customer" | "booking" | "artist" | "event_type" | "link" | "opening_hours" | "planning" | "venue" | "user";
   entityId: string;
   action: string;
   meta?: Record<string, unknown>;

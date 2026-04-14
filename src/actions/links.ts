@@ -19,6 +19,7 @@ import {
   type ShortLink,
   type LinkType,
 } from "@/lib/links";
+import { recordAuditLogEntry } from "@/lib/audit-log";
 
 // ─── Result type ──────────────────────────────────────────────────────────────
 
@@ -95,6 +96,13 @@ export async function createShortLinkAction(input: unknown): Promise<LinksAction
       created_by:  auth.user.id,
     });
 
+    recordAuditLogEntry({
+      entity: "link",
+      entityId: link.id,
+      action: "link.created",
+      actorId: auth.user.id,
+      meta: { name: parsed.data.name, linkType: parsed.data.link_type }
+    }).catch(() => {});
     revalidatePath("/links");
     return { success: true, message: "Short link created.", link };
   } catch (error) {
@@ -119,6 +127,13 @@ export async function updateShortLinkAction(input: unknown): Promise<LinksAction
       expires_at:  parsed.data.expires_at ?? null,
     });
 
+    recordAuditLogEntry({
+      entity: "link",
+      entityId: parsed.data.id,
+      action: "link.updated",
+      actorId: auth.user.id,
+      meta: { name: parsed.data.name }
+    }).catch(() => {});
     revalidatePath("/links");
     return { success: true, message: "Link updated." };
   } catch (error) {
@@ -137,6 +152,13 @@ export async function deleteShortLinkAction(input: unknown): Promise<LinksAction
     }
 
     await deleteShortLink(parsed.data.id);
+    recordAuditLogEntry({
+      entity: "link",
+      entityId: parsed.data.id,
+      action: "link.deleted",
+      actorId: auth.user.id,
+      meta: {}
+    }).catch(() => {});
     revalidatePath("/links");
     return { success: true, message: "Link deleted." };
   } catch (error) {
