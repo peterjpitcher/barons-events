@@ -62,7 +62,7 @@ function applySecurityHeaders(response: NextResponse, nonce: string): void {
       "default-src 'self'",
       // 'nonce-…' allows Next.js hydration inline scripts and any <Script nonce={nonce}> tags.
       // https://challenges.cloudflare.com is required for the Turnstile widget JS.
-      `script-src 'self' 'nonce-${nonce}' https://challenges.cloudflare.com`,
+      `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://challenges.cloudflare.com`,
       // 'unsafe-inline' on style-src is needed for Turnstile's injected inline styles.
       "style-src 'self' 'unsafe-inline'",
       `connect-src 'self' ${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""} https://api.pwnedpasswords.com https://challenges.cloudflare.com`,
