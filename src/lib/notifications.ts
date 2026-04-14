@@ -3,7 +3,7 @@ import { createSupabaseReadonlyClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
 import { formatSpacesLabel } from "@/lib/venue-spaces";
 
-const RESEND_FROM_ADDRESS = process.env.RESEND_FROM_EMAIL ?? "BaronsHub <no-reply@baronshub.orangejelly.co.uk>";
+const RESEND_FROM_ADDRESS = process.env.RESEND_FROM_EMAIL ?? "BaronsHub <noreply@auth.orangejelly.co.uk>";
 const APP_BASE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ??
   process.env.NEXT_PUBLIC_APP_URL ??
