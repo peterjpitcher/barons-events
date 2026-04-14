@@ -58,7 +58,7 @@ function VenueCreateForm({ reviewers }: { reviewers: ReviewerOption[] }) {
         <CardDescription>Manage your venues in a table so updates stay consistent and quick.</CardDescription>
       </CardHeader>
       <CardContent>
-        <form ref={formRef} action={formAction} className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_auto]" noValidate>
+        <form ref={formRef} action={formAction} className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,2fr)_auto]" noValidate>
           <div className="space-y-2">
             <Label htmlFor="new-venue-name">Venue name</Label>
             <Input
@@ -71,6 +71,15 @@ function VenueCreateForm({ reviewers }: { reviewers: ReviewerOption[] }) {
               className={nameError ? errorInputClass : undefined}
             />
             <FieldError id="new-venue-name-error" message={nameError} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="new-venue-default-manager">Default manager responsible</Label>
+            <Input
+              id="new-venue-default-manager"
+              name="defaultManagerResponsible"
+              placeholder="Manager name"
+              maxLength={200}
+            />
           </div>
           <div className="space-y-2">
             <Label htmlFor="new-venue-default-reviewer">Default reviewer</Label>
@@ -112,7 +121,8 @@ function VenueTable({ venues, reviewers }: VenuesManagerProps) {
         <thead>
           <tr className="bg-[var(--color-muted-surface)] text-left text-xs font-semibold uppercase tracking-[0.14em] text-subtle">
             <th scope="col" className="px-4 py-3">Venue</th>
-            <th scope="col" className="px-4 py-3">Default reviewer</th>
+            <th scope="col" className="px-4 py-3">Manager Responsible</th>
+            <th scope="col" className="px-4 py-3">Default Reviewer</th>
             <th scope="col" className="px-4 py-3">Google Review URL</th>
             <th scope="col" className="px-4 py-3">Hours</th>
             <th scope="col" className="px-4 py-3 text-right">Actions</th>
@@ -159,8 +169,8 @@ function VenueRowEditor({ venue, reviewers }: { venue: VenueRow; reviewers: Revi
 
   return (
     <tr className="border-t border-[var(--color-border)]">
-      <td colSpan={3} className="px-4 py-3">
-        <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,2fr)_auto_auto_auto] md:items-start">
+      <td colSpan={6} className="px-4 py-3">
+        <div className="grid gap-3 md:grid-cols-[minmax(0,18fr)_minmax(0,18fr)_minmax(0,16fr)_minmax(0,28fr)_auto_auto] md:items-start">
           <form action={formAction} className="contents" noValidate>
             <input type="hidden" name="venueId" value={venue.id} />
             <div className="space-y-2">
@@ -177,6 +187,18 @@ function VenueRowEditor({ venue, reviewers }: { venue: VenueRow; reviewers: Revi
                 className={cn(nameError ? errorInputClass : undefined)}
               />
               <FieldError id={nameErrorId} message={nameError} />
+            </div>
+            <div className="space-y-2">
+              <label className="sr-only" htmlFor={`venue-manager-${venue.id}`}>
+                Default manager responsible
+              </label>
+              <Input
+                id={`venue-manager-${venue.id}`}
+                name="defaultManagerResponsible"
+                defaultValue={venue.default_manager_responsible ?? ""}
+                placeholder="Default manager responsible"
+                maxLength={200}
+              />
             </div>
             <div className="space-y-2">
               <label className="sr-only" htmlFor={`venue-reviewer-${venue.id}`}>
@@ -210,23 +232,20 @@ function VenueRowEditor({ venue, reviewers }: { venue: VenueRow; reviewers: Revi
                 variant="secondary"
                 size="sm"
                 icon={<Save className="h-4 w-4" aria-hidden="true" />}
+                hideLabel
               />
             </div>
           </form>
-          <div className="flex items-start justify-end">
+          <div className="flex items-start justify-end gap-1">
             <Button asChild variant="ghost" size="sm" aria-label={`Opening hours for ${venue.name}`}>
               <Link href={`/venues/${venue.id}/opening-hours`}>
                 <Clock className="h-4 w-4" aria-hidden="true" />
-                Hours
               </Link>
             </Button>
-          </div>
-          <div className="flex items-start justify-end">
             <form ref={deleteFormRef} action={deleteAction}>
               <input type="hidden" name="venueId" value={venue.id} />
               <Button type="button" variant="destructive" size="sm" aria-label={`Delete ${venue.name}`} onClick={() => setDeleteConfirmOpen(true)}>
                 <Trash2 className="h-4 w-4" aria-hidden="true" />
-                Delete
               </Button>
             </form>
             <ConfirmDialog
