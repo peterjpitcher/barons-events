@@ -59,6 +59,8 @@ function InviteUserForm({ venues }: { venues: VenueRow[] }) {
   const formRef = useRef<HTMLFormElement>(null);
   const emailError = state?.fieldErrors?.email;
   const roleError = state?.fieldErrors?.role;
+  const fullNameError = state?.fieldErrors?.fullName;
+  const venueIdError = state?.fieldErrors?.venueId;
 
   useEffect(() => {
     if (!state?.message) return;
@@ -95,7 +97,15 @@ function InviteUserForm({ venues }: { venues: VenueRow[] }) {
           </div>
           <div className="space-y-2">
             <Label htmlFor="invite-name">Full name (optional)</Label>
-            <Input id="invite-name" name="fullName" placeholder="Add their preferred name" />
+            <Input
+              id="invite-name"
+              name="fullName"
+              placeholder="Add their preferred name"
+              aria-invalid={Boolean(fullNameError)}
+              aria-describedby={fullNameError ? "invite-name-error" : undefined}
+              className={fullNameError ? errorInputClass : undefined}
+            />
+            <FieldError id="invite-name-error" message={fullNameError} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="invite-role">Role</Label>
@@ -118,7 +128,14 @@ function InviteUserForm({ venues }: { venues: VenueRow[] }) {
           </div>
           <div className="space-y-2">
             <Label htmlFor="invite-venue">Linked venue (optional)</Label>
-            <Select id="invite-venue" name="venueId" defaultValue="">
+            <Select
+              id="invite-venue"
+              name="venueId"
+              defaultValue=""
+              aria-invalid={Boolean(venueIdError)}
+              aria-describedby={venueIdError ? "invite-venue-error" : undefined}
+              className={venueIdError ? errorInputClass : undefined}
+            >
               <option value="">No linked venue</option>
               {venues.map((venue) => (
                 <option key={venue.id} value={venue.id}>
@@ -126,6 +143,7 @@ function InviteUserForm({ venues }: { venues: VenueRow[] }) {
                 </option>
               ))}
             </Select>
+            <FieldError id="invite-venue-error" message={venueIdError} />
           </div>
           <div className="md:col-span-2">
             <SubmitButton label="Send invite" pendingLabel="Sending..." />
@@ -174,7 +192,7 @@ function UserCardMobile({ user, venues }: { user: EnrichedUser; venues: VenueRow
           {roleLabels[user.role]}
         </p>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
         <form action={formAction} className="grid gap-4 md:grid-cols-2">
           <input type="hidden" name="userId" value={user.id} />
           <div className="space-y-2">
@@ -207,15 +225,6 @@ function UserCardMobile({ user, venues }: { user: EnrichedUser; venues: VenueRow
               ))}
             </Select>
           </div>
-          {!user.emailConfirmedAt && (
-            <div className="md:col-span-2">
-              <ResendInviteButton
-                userId={user.id}
-                email={user.email}
-                fullName={user.full_name}
-              />
-            </div>
-          )}
           <div className="md:col-span-2 flex justify-end">
             <SubmitButton
               label="Save changes"
@@ -225,6 +234,13 @@ function UserCardMobile({ user, venues }: { user: EnrichedUser; venues: VenueRow
             />
           </div>
         </form>
+        {!user.emailConfirmedAt && (
+          <ResendInviteButton
+            userId={user.id}
+            email={user.email}
+            fullName={user.full_name}
+          />
+        )}
       </CardContent>
     </Card>
   );
@@ -302,13 +318,6 @@ function UserDesktopRow({ user, venues, isFirst }: { user: EnrichedUser; venues:
               {formatRelativeTime(user.lastSignInAt)}
             </span>
           </div>
-          {!user.emailConfirmedAt && (
-            <ResendInviteButton
-              userId={user.id}
-              email={user.email}
-              fullName={user.full_name}
-            />
-          )}
         </div>
         <div className="space-y-1">
           <span className="text-xs font-medium uppercase tracking-[0.18em] text-subtle">Email</span>
@@ -349,6 +358,15 @@ function UserDesktopRow({ user, venues, isFirst }: { user: EnrichedUser; venues:
           />
         </div>
       </form>
+      {!user.emailConfirmedAt && (
+        <div className="mt-2 pl-1">
+          <ResendInviteButton
+            userId={user.id}
+            email={user.email}
+            fullName={user.full_name}
+          />
+        </div>
+      )}
     </li>
   );
 }

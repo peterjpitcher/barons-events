@@ -35,7 +35,7 @@ const {
     upsertError: null as { message: string } | null,
     sendInviteEmailResult: true as boolean,
     getUserByIdResult: {
-      data: { user: { email_confirmed_at: null as string | null } },
+      data: { user: { email_confirmed_at: null as string | null, email: "pending@example.com" as string | null } },
       error: null as { message: string } | null
     }
   };
@@ -236,7 +236,7 @@ describe("inviteUserAction", () => {
     );
 
     expect(result.success).toBe(false);
-    expect(result.message).toMatch(/updating access failed/i);
+    expect(result.message).toMatch(/invitation failed/i);
 
     expect(mockDeleteUser).toHaveBeenCalledOnce();
     expect(mockDeleteUser).toHaveBeenCalledWith("new-user-uuid");
@@ -261,8 +261,8 @@ describe("inviteUserAction", () => {
     expect(mockSendInviteEmail).not.toHaveBeenCalled();
   });
 
-  // 6. Email delivery failure surfaces as an error — user must not see false success
-  it("should return an error when Resend fails to deliver the invite email", async () => {
+  // 6. Email delivery failure triggers rollback and surfaces as an error
+  it("should roll back the auth user and return an error when Resend fails to deliver the invite email", async () => {
     state.sendInviteEmailResult = false;
     mockSendInviteEmail.mockResolvedValue(false);
 
@@ -272,7 +272,9 @@ describe("inviteUserAction", () => {
     );
 
     expect(result.success).toBe(false);
-    expect(result.message).toMatch(/email/i);
+    expect(result.message).toMatch(/invitation failed/i);
+    expect(mockDeleteUser).toHaveBeenCalledOnce();
+    expect(mockDeleteUser).toHaveBeenCalledWith("new-user-uuid");
   });
 
   // 7. Audit: logAuthEvent called with 'auth.invite.sent' on success
@@ -312,7 +314,7 @@ describe("resendInviteAction", () => {
       error: null
     };
     state.getUserByIdResult = {
-      data: { user: { email_confirmed_at: null } },
+      data: { user: { email_confirmed_at: null, email: "pending@example.com" } },
       error: null
     };
     state.sendInviteEmailResult = true;
@@ -347,7 +349,7 @@ describe("resendInviteAction", () => {
   // 2. Active user rejected
   it("should return an error when the user has already confirmed their email", async () => {
     state.getUserByIdResult = {
-      data: { user: { email_confirmed_at: "2026-01-01T00:00:00Z" } },
+      data: { user: { email_confirmed_at: "2026-01-01T00:00:00Z", email: "active@example.com" } },
       error: null
     };
     mockGetUserById.mockImplementation(() => Promise.resolve(state.getUserByIdResult));
@@ -374,6 +376,7 @@ describe("resendInviteAction", () => {
 
     expect(mockGetUserById).toHaveBeenCalledWith(PENDING_USER_UUID);
     expect(mockGenerateLink).toHaveBeenCalledOnce();
+    // Email comes from server-side auth lookup, not client-supplied form data
     expect(mockSendInviteEmail).toHaveBeenCalledOnce();
     expect(mockSendInviteEmail).toHaveBeenCalledWith(
       "pending@example.com",

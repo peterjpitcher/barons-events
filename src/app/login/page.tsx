@@ -30,6 +30,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
     ({} as SearchParams);
   const redirectTarget = sanitizeRedirect(query.redirectedFrom);
   const reason = query.reason;
+  const error = query.error;
 
   // Use getCurrentUser() (which calls getUser()) rather than getSession().
   // getSession() trusts the local cookie and can return a stale session even
@@ -62,6 +63,16 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           {reason === "session_expired" || reason === "session_missing" || reason === "session_mismatch" ? (
             <p className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
               Your session has expired. Please sign in again.
+            </p>
+          ) : null}
+          {error === "invalid_token" || error === "missing_token" ? (
+            <p className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              That link has expired or is no longer valid. Please request a new invite or reset link.
+            </p>
+          ) : null}
+          {error === "server_error" ? (
+            <p className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+              Something went wrong verifying your link. Please try again or contact support.
             </p>
           ) : null}
           <LoginForm redirectTo={redirectTarget} nonce={nonce} />

@@ -58,8 +58,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(`${baseUrl}/login?error=missing_token`);
     }
 
-    // Redirect based on flow type
-    if (type === "invite" || type === "recovery") {
+    // Redirect based on flow type — invite and recovery always go to password setup.
+    // Default to /reset-password for code exchanges without a type param, since
+    // the user likely arrived via an invite or recovery link and needs to set a password.
+    if (type === "invite" || type === "recovery" || (code && !type)) {
       return NextResponse.redirect(`${baseUrl}/reset-password`);
     }
 

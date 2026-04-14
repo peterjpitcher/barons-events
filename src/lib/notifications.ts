@@ -383,7 +383,7 @@ export async function sendInviteEmail(email: string, inviteLink: string, fullNam
   }
 
   try {
-    const greeting = fullName ? `Hi ${escapeHtml(fullName)},` : "Hi there,";
+    const greeting = fullName ? `Hi ${fullName},` : "Hi there,";
     const { html, text } = renderEmailTemplate({
       headline: "You've been invited to BaronsHub",
       intro: `${greeting} you've been invited to join the Barons BaronsHub planning platform.`,

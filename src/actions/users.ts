@@ -138,8 +138,8 @@ export async function inviteUserAction(
   const userId = linkData?.user?.id ?? null;
   const actionLink = linkData?.properties?.action_link ?? null;
 
-  if (!userId) {
-    console.error("[invite] generateLink returned no userId for", parsed.data.email);
+  if (!userId || !actionLink) {
+    console.error("[invite] generateLink returned incomplete data for", parsed.data.email, { hasUserId: !!userId, hasActionLink: !!actionLink });
     return { success: false, message: "Invitation could not be sent. Please try again or contact support." };
   }
 
@@ -157,14 +157,24 @@ export async function inviteUserAction(
       throw upsertError;
     }
 
-    if (actionLink) {
-      const sent = await sendInviteEmail(parsed.data.email, actionLink, parsed.data.fullName ?? null);
-      if (!sent) {
-        console.error("[invite] Resend failed to deliver invite email to", parsed.data.email);
-        return { success: false, message: "User created but the invite email failed to send. Please try again." };
-      }
+    const sent = await sendInviteEmail(parsed.data.email, actionLink, parsed.data.fullName ?? null);
+    if (!sent) {
+      console.error("[invite] Resend failed to deliver invite email to", parsed.data.email);
+      throw new Error("Email delivery failed");
     }
+  } catch (error) {
+    console.error("[invite] failed, rolling back auth user:", error);
+    try {
+      const cleanupClient = createSupabaseAdminClient();
+      await cleanupClient.auth.admin.deleteUser(userId);
+    } catch (cleanupError) {
+      console.error("[invite] rollback failed:", cleanupError);
+    }
+    return { success: false, message: "Invitation failed. Please try again." };
+  }
 
+  // Audit logging — outside rollback scope so failures don't invalidate sent invites
+  try {
     const emailHash = await hashEmailForAudit(parsed.data.email);
     await logAuthEvent({
       event: "auth.invite.sent",
@@ -172,19 +182,12 @@ export async function inviteUserAction(
       emailHash,
       meta: { role: parsed.data.role, inviteeId: userId }
     });
-
-    revalidatePath("/users");
-    return { success: true, message: "Invite sent." };
-  } catch (upsertError) {
-    console.error("[invite] upsert failed, rolling back auth user:", upsertError);
-    try {
-      const cleanupClient = createSupabaseAdminClient();
-      await cleanupClient.auth.admin.deleteUser(userId);
-    } catch (cleanupError) {
-      console.error("[invite] rollback failed:", cleanupError);
-    }
-    return { success: false, message: "Invitation sent but updating access failed. Please try again." };
+  } catch (auditError) {
+    console.error("[invite] audit logging failed (non-fatal):", auditError);
   }
+
+  revalidatePath("/users");
+  return { success: true, message: "Invite sent." };
 }
 
 export async function resendInviteAction(
@@ -233,11 +236,18 @@ export async function resendInviteAction(
     return { success: false, message: "This user has already accepted their invite." };
   }
 
+  // Use server-side email — never trust client-supplied values for invite dispatch
+  const serverEmail = authData?.user?.email;
+  if (!serverEmail) {
+    console.error("[resend-invite] no email found for auth user", userId);
+    return { success: false, message: "Could not find user email. Please try again." };
+  }
+
   const confirmUrl = new URL("/auth/confirm", resolveAppUrl()).toString();
 
   const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
     type: "invite",
-    email,
+    email: serverEmail,
     options: {
       data: { full_name: fullName ?? undefined },
       redirectTo: confirmUrl
@@ -261,13 +271,13 @@ export async function resendInviteAction(
     return { success: false, message: "Invitation failed. Please try again." };
   }
 
-  const sent = await sendInviteEmail(email, actionLink, fullName);
+  const sent = await sendInviteEmail(serverEmail, actionLink, fullName);
   if (!sent) {
-    console.error("[resend-invite] Resend failed to deliver invite email to", email);
+    console.error("[resend-invite] Resend failed to deliver invite email to", serverEmail);
     return { success: false, message: "Invite created but the email failed to send. Please try again." };
   }
 
-  const emailHash = await hashEmailForAudit(email);
+  const emailHash = await hashEmailForAudit(serverEmail);
   await logAuthEvent({
     event: "auth.invite.resent",
     userId: currentUser.id,
