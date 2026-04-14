@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { formatInLondon } from "@/lib/datetime";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getConfirmedTicketCount } from "@/lib/bookings";
@@ -125,6 +126,9 @@ export default async function EventLandingPage({ params }: PageProps) {
   const confirmedCount = await getConfirmedTicketCount(event.id);
   const isSoldOut =
     event.total_capacity != null && confirmedCount >= event.total_capacity;
+
+  const headersList = await headers();
+  const nonce = headersList.get("x-nonce") ?? undefined;
 
   const { date: dateStr, time: timeStr } = formatInLondon(event.start_at);
 
@@ -253,6 +257,7 @@ export default async function EventLandingPage({ params }: PageProps) {
               eventId={event.id}
               maxTickets={event.max_tickets_per_booking}
               isSoldOut={isSoldOut}
+              nonce={nonce}
             />
           </div>
         </div>

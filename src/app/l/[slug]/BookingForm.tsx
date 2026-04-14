@@ -10,9 +10,10 @@ interface BookingFormProps {
   eventId: string;
   maxTickets: number;
   isSoldOut: boolean;
+  nonce?: string;
 }
 
-export function BookingForm({ eventId, maxTickets, isSoldOut }: BookingFormProps) {
+export function BookingForm({ eventId, maxTickets, isSoldOut, nonce }: BookingFormProps) {
   const [ticketCount, setTicketCount] = useState(1);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -242,6 +243,7 @@ export function BookingForm({ eventId, maxTickets, isSoldOut }: BookingFormProps
       <Script
         src="https://challenges.cloudflare.com/turnstile/v0/api.js"
         strategy="afterInteractive"
+        nonce={nonce}
       />
     </div>
   );
