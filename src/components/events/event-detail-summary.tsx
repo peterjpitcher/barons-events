@@ -88,6 +88,7 @@ export function EventDetailSummary({ event }: EventDetailSummaryProps) {
         {eventImageUrl ? (
           <div className="space-y-2">
             <p className="font-semibold text-[var(--color-text)]">Event image</p>
+            {/* eslint-disable-next-line @next/next/no-img-element -- external event image URL, not suitable for next/image optimisation */}
             <img
               src={eventImageUrl}
               alt={`${event.title} event image`}

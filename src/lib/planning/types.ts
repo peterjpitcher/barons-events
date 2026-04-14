@@ -93,6 +93,8 @@ export type PlanningAlertCounts = {
   dueSoonTasks: number;
 };
 
+export type TodoAlertFilter = "overdue_items" | "overdue_tasks" | "due_soon_items" | "due_soon_tasks";
+
 export type PlanningBoardData = {
   today: string;
   alerts: PlanningAlertCounts;

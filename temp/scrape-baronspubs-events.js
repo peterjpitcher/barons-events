@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-/* eslint-disable no-console */
 /**
  * Scrape Barons venue sites for upcoming 2026 events using JSON-LD and emit:
  *  - temp/barons-events-2026.json (normalized events)

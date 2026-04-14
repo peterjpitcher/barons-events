@@ -22,7 +22,8 @@ import type {
   PlanningEventOverlay,
   PlanningInspirationItem,
   PlanningItem,
-  PlanningVenueOption
+  PlanningVenueOption,
+  TodoAlertFilter
 } from "@/lib/planning/types";
 import { bucketForDayOffset, daysBetween } from "@/lib/planning/utils";
 
@@ -105,6 +106,7 @@ export function PlanningBoard({ data, venues, canApproveEvents, userRole, curren
   const [search, setSearch] = useState("");
   const [venueFilter, setVenueFilter] = useState("");
   const [eventVisibility, setEventVisibility] = useState<"with_events" | "planning_only">("with_events");
+  const [todoAlertFilter, setTodoAlertFilter] = useState<TodoAlertFilter | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const filteredPlanningItems = useMemo(() => {
@@ -291,6 +293,13 @@ export function PlanningBoard({ data, venues, canApproveEvents, userRole, curren
     }
   }, [activeItem, activeItemId]);
 
+  function switchView(mode: ViewMode): void {
+    setViewMode(mode);
+    if (mode !== "todos_by_person") {
+      setTodoAlertFilter(null);
+    }
+  }
+
   function refreshBoard() {
     router.refresh();
   }
@@ -332,7 +341,7 @@ export function PlanningBoard({ data, venues, canApproveEvents, userRole, curren
                 type="button"
                 size="sm"
                 variant={viewMode === "board" ? "secondary" : "ghost"}
-                onClick={() => setViewMode("board")}
+                onClick={() => switchView("board")}
               >
                 <LayoutGrid className="h-4 w-4" aria-hidden="true" /> Board
               </Button>
@@ -340,7 +349,7 @@ export function PlanningBoard({ data, venues, canApproveEvents, userRole, curren
                 type="button"
                 size="sm"
                 variant={viewMode === "calendar" ? "secondary" : "ghost"}
-                onClick={() => setViewMode("calendar")}
+                onClick={() => switchView("calendar")}
               >
                 <CalendarRange className="h-4 w-4" aria-hidden="true" /> Calendar
               </Button>
@@ -348,7 +357,7 @@ export function PlanningBoard({ data, venues, canApproveEvents, userRole, curren
                 type="button"
                 size="sm"
                 variant={viewMode === "list" ? "secondary" : "ghost"}
-                onClick={() => setViewMode("list")}
+                onClick={() => switchView("list")}
               >
                 <List className="h-4 w-4" aria-hidden="true" /> List
               </Button>
@@ -356,7 +365,7 @@ export function PlanningBoard({ data, venues, canApproveEvents, userRole, curren
                 type="button"
                 size="sm"
                 variant={viewMode === "todos_by_person" ? "secondary" : "ghost"}
-                onClick={() => setViewMode("todos_by_person")}
+                onClick={() => switchView("todos_by_person")}
               >
                 <Users className="h-4 w-4" aria-hidden="true" /> Todos by person
               </Button>
@@ -365,7 +374,22 @@ export function PlanningBoard({ data, venues, canApproveEvents, userRole, curren
         </div>
       </header>
 
-      <PlanningAlertStrip alerts={data.alerts} />
+      <PlanningAlertStrip
+        alerts={data.alerts}
+        activeFilter={viewMode === "todos_by_person" ? todoAlertFilter : null}
+        onFilterClick={(filter) => {
+          const toggling = todoAlertFilter === filter;
+          setTodoAlertFilter(toggling ? null : filter);
+          if (!toggling) {
+            // Clear search/venue filters so counts match the alert strip numbers
+            setSearch("");
+            setVenueFilter("");
+          }
+          if (viewMode !== "todos_by_person") {
+            setViewMode("todos_by_person");
+          }
+        }}
+      />
 
       <section className="space-y-2 rounded-[var(--radius)] border border-[var(--color-border)] bg-white p-3 shadow-soft">
         <div className="flex flex-wrap items-center gap-1.5">
@@ -471,6 +495,10 @@ export function PlanningBoard({ data, venues, canApproveEvents, userRole, curren
       {viewMode === "todos_by_person" ? (
         <PlanningTodosByPersonView
           items={filteredPlanningItems}
+          today={data.today}
+          currentUserId={currentUserId}
+          canEdit={userRole === "central_planner"}
+          alertFilter={todoAlertFilter}
           onOpenPlanningItem={(item) => setActiveItemId(item.id)}
         />
       ) : null}
