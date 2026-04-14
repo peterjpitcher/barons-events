@@ -18,7 +18,14 @@ export async function createSupabaseReadonlyClient(): Promise<SupabaseClient> {
       remove() {
         // no-op in read contexts
       }
-    }
+    },
+    cookieOptions: {
+      path: "/",
+      sameSite: "lax" as const,
+      secure: process.env.NODE_ENV === "production",
+      // httpOnly cannot be true — @supabase/ssr's JS client needs cookie access
+      // for token refresh. This is a known framework limitation.
+    },
   });
 }
 
@@ -41,6 +48,13 @@ export async function createSupabaseActionClient(): Promise<SupabaseClient> {
           { name, value: "", ...options, maxAge: 0 }
         );
       }
-    }
+    },
+    cookieOptions: {
+      path: "/",
+      sameSite: "lax" as const,
+      secure: process.env.NODE_ENV === "production",
+      // httpOnly cannot be true — @supabase/ssr's JS client needs cookie access
+      // for token refresh. This is a known framework limitation.
+    },
   });
 }
