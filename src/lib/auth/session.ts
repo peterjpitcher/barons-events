@@ -287,3 +287,43 @@ export async function clearLockoutForAllIps(email: string): Promise<void> {
   const emailHash = await hashEmail(email);
   await db.from("login_attempts").delete().eq("email_hash", emailHash);
 }
+
+// ─── Password reset rate limiting ─────────────────────────────────────────────
+
+const RESET_LIMIT_PER_HOUR = 3;
+const RESET_WINDOW_MINUTES = 60;
+
+/**
+ * Records a password reset request. Returns true if the per-email limit has
+ * been exceeded (caller should silently succeed to prevent enumeration).
+ *
+ * Reuses the `login_attempts` table with `ip_address = "password_reset"` as a
+ * type discriminator so no schema migration is needed. These rows are cleaned
+ * up automatically by `cleanupExpiredSessions`.
+ */
+export async function recordPasswordResetAttempt(email: string): Promise<boolean> {
+  const db = createSupabaseAdminClient();
+  const emailHash = await hashEmail(email);
+
+  // Count recent reset attempts for this email
+  const windowStart = new Date(Date.now() - RESET_WINDOW_MINUTES * 60 * 1000).toISOString();
+  const { count } = await db
+    .from("login_attempts")
+    .select("*", { count: "exact", head: true })
+    .eq("email_hash", emailHash)
+    .eq("ip_address", "password_reset")
+    .gte("attempted_at", windowStart);
+
+  if ((count ?? 0) >= RESET_LIMIT_PER_HOUR) {
+    return true; // Rate limited
+  }
+
+  // Record the attempt
+  await db.from("login_attempts").insert({
+    email_hash: emailHash,
+    ip_address: "password_reset",
+    attempted_at: new Date().toISOString()
+  });
+
+  return false;
+}

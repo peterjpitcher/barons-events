@@ -13,6 +13,7 @@ import {
   clearLockoutForAllIps,
   recordFailedLoginAttempt,
   isLockedOut,
+  recordPasswordResetAttempt,
   makeSessionCookieOptions,
   SESSION_COOKIE_NAME
 } from "@/lib/auth/session";
@@ -242,6 +243,13 @@ export async function requestPasswordResetAction(
   const turnstileValid = await verifyTurnstile(turnstileToken, "password_reset", "strict");
   if (!turnstileValid) {
     return { success: false, message: "Security check failed. Please try again." };
+  }
+
+  // Per-email rate limit: 3 requests per hour
+  const rateLimited = await recordPasswordResetAttempt(parsed.data.email);
+  if (rateLimited) {
+    // Always return generic success to prevent email enumeration
+    redirect("/forgot-password?status=sent");
   }
 
   const redirectUrl = new URL("/auth/confirm", resolveAppUrl()).toString();
