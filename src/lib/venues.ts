@@ -14,12 +14,18 @@ export async function listVenues(): Promise<VenueRow[]> {
   return data ?? [];
 }
 
-export async function createVenue(payload: { name: string; address?: string | null; defaultReviewerId?: string | null }) {
+export async function createVenue(payload: {
+  name: string;
+  address?: string | null;
+  defaultReviewerId?: string | null;
+  defaultManagerResponsible?: string | null;
+}) {
   const supabase = await createSupabaseActionClient();
   const { error } = await supabase.from("venues").insert({
     name: payload.name,
     address: payload.address ?? null,
-    default_reviewer_id: payload.defaultReviewerId ?? null
+    default_reviewer_id: payload.defaultReviewerId ?? null,
+    default_manager_responsible: payload.defaultManagerResponsible ?? null,
   });
 
   if (error) {
@@ -27,17 +33,28 @@ export async function createVenue(payload: { name: string; address?: string | nu
   }
 }
 
-export async function updateVenue(id: string, updates: { name: string; address?: string | null; defaultReviewerId?: string | null; googleReviewUrl?: string | null }) {
+export async function updateVenue(id: string, updates: {
+  name: string;
+  address?: string | null;
+  defaultReviewerId?: string | null;
+  defaultManagerResponsible?: string | null;
+  googleReviewUrl?: string | null;
+}) {
   const supabase = await createSupabaseActionClient();
   const updatePayload: {
     name: string;
     default_reviewer_id: string | null;
+    default_manager_responsible?: string | null;
     address?: string | null;
     google_review_url?: string | null;
   } = {
     name: updates.name,
-    default_reviewer_id: updates.defaultReviewerId ?? null
+    default_reviewer_id: updates.defaultReviewerId ?? null,
   };
+
+  if (Object.prototype.hasOwnProperty.call(updates, "defaultManagerResponsible")) {
+    updatePayload.default_manager_responsible = updates.defaultManagerResponsible ?? null;
+  }
 
   if (Object.prototype.hasOwnProperty.call(updates, "address")) {
     updatePayload.address = updates.address ?? null;
