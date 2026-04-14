@@ -6,7 +6,7 @@ import {
   methodNotAllowed,
   requireWebsiteApiKey,
 } from "@/lib/public-api/auth";
-import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { createSupabaseReadonlyClient } from "@/lib/supabase/server";
 import { resolveOpeningTimes } from "@/lib/opening-hours";
 import type { ServiceTypeRow, OpeningHoursRow, OpeningOverrideRow } from "@/lib/opening-hours";
 
@@ -61,10 +61,10 @@ export async function GET(request: Request) {
   // ── DB client ───────────────────────────────────────────────────────────────
   let supabase;
   try {
-    supabase = createSupabaseAdminClient();
+    supabase = await createSupabaseReadonlyClient();
   } catch (error) {
-    console.error("Public API: Supabase service role client is not configured", error);
-    return jsonError(503, "not_configured", "Supabase service role is not configured");
+    console.error("Public API: Supabase readonly client is not configured", error);
+    return jsonError(503, "not_configured", "Supabase readonly client is not configured");
   }
 
   const from = todayInLondon();
