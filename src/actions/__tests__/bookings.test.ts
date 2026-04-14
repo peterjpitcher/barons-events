@@ -29,9 +29,7 @@ vi.mock("@/lib/booking-consent", () => ({
   MARKETING_CONSENT_WORDING: "Test wording",
 }));
 vi.mock("@/lib/public-api/rate-limit", () => ({
-  RateLimiter: class {
-    check() { return { allowed: true }; }
-  },
+  checkBookingRateLimit: vi.fn().mockResolvedValue({ allowed: true, remaining: 9, resetAt: Date.now() + 60000 }),
 }));
 vi.mock("@/lib/turnstile", () => ({
   verifyTurnstile: vi.fn().mockResolvedValue(true),

@@ -13,7 +13,7 @@ const paramsSchema = z.object({
 });
 
 export async function GET(request: NextRequest, context: { params: Promise<{ eventId: string }> }) {
-  const rateLimitResponse = checkApiRateLimit(request);
+  const rateLimitResponse = await checkApiRateLimit(request);
   if (rateLimitResponse) return rateLimitResponse;
 
   const authResponse = requireWebsiteApiKey(request);

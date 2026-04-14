@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const rateLimitResponse = checkApiRateLimit(request);
+  const rateLimitResponse = await checkApiRateLimit(request);
   if (rateLimitResponse) return rateLimitResponse;
 
   const authResponse = requireWebsiteApiKey(request);

@@ -1,16 +1,6 @@
 import "server-only";
-
-/**
- * Configurable in-process sliding-window rate limiter.
- *
- * IMPORTANT: In-process — each Vercel cold-start gets a fresh counter.
- * For production multi-instance deployments, replace with Upstash Redis.
- */
-
-type WindowEntry = {
-  count: number;
-  resetAt: number;
-};
+import { Ratelimit } from "@upstash/ratelimit";
+import { getRedisClient } from "@/lib/redis";
 
 export type RateLimitResult = {
   allowed: boolean;
@@ -18,7 +8,11 @@ export type RateLimitResult = {
   resetAt: number;
 };
 
-export class RateLimiter {
+// ── In-memory fallback (dev/missing Redis) ────────────────────────────────────
+
+type WindowEntry = { count: number; resetAt: number };
+
+class InMemoryLimiter {
   private store = new Map<string, WindowEntry>();
   private windowMs: number;
   private maxRequests: number;
@@ -26,7 +20,6 @@ export class RateLimiter {
   constructor({ windowMs, maxRequests }: { windowMs: number; maxRequests: number }) {
     this.windowMs = windowMs;
     this.maxRequests = maxRequests;
-
     const interval = setInterval(() => {
       const now = Date.now();
       for (const [key, entry] of this.store) {
@@ -39,13 +32,11 @@ export class RateLimiter {
   check(identifier: string): RateLimitResult {
     const now = Date.now();
     const existing = this.store.get(identifier);
-
     if (!existing || existing.resetAt <= now) {
       const resetAt = now + this.windowMs;
       this.store.set(identifier, { count: 1, resetAt });
       return { allowed: true, remaining: this.maxRequests - 1, resetAt };
     }
-
     existing.count += 1;
     const allowed = existing.count <= this.maxRequests;
     return {
@@ -56,17 +47,76 @@ export class RateLimiter {
   }
 }
 
-/** Default instance for the public event API — 120 req/60 s. */
-export const publicApiLimiter = new RateLimiter({ windowMs: 60_000, maxRequests: 120 });
+// ── Rate limiter factory ──────────────────────────────────────────────────────
 
-/** Backward-compatible export so existing callers don't need updating. */
-export function checkRateLimit(identifier: string): RateLimitResult {
-  return publicApiLimiter.check(identifier);
+const redis = getRedisClient();
+
+// Upstash Ratelimit instance — shared across all requests, persisted in Redis
+const upstashLimiter = redis
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(120, "60 s"),
+      prefix: "ratelimit:public-api",
+    })
+  : null;
+
+// Fallback in-memory limiter for dev
+const memoryLimiter = new InMemoryLimiter({ windowMs: 60_000, maxRequests: 120 });
+
+/**
+ * Check rate limit for a given identifier (typically client IP).
+ * Uses Upstash Redis in production, falls back to in-memory in dev.
+ */
+export async function checkRateLimit(identifier: string): Promise<RateLimitResult> {
+  if (upstashLimiter) {
+    try {
+      const result = await upstashLimiter.limit(identifier);
+      return {
+        allowed: result.success,
+        remaining: result.remaining,
+        resetAt: result.reset,
+      };
+    } catch (error) {
+      console.error("[rate-limit] Upstash error, falling back to in-memory:", error);
+      // Fall through to in-memory
+    }
+  }
+  return memoryLimiter.check(identifier);
+}
+
+// ── Booking rate limiter ──────────────────────────────────────────────────────
+
+const upstashBookingLimiter = redis
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(10, "60 s"),
+      prefix: "ratelimit:booking",
+    })
+  : null;
+
+const memoryBookingLimiter = new InMemoryLimiter({ windowMs: 60_000, maxRequests: 10 });
+
+/**
+ * Rate limit for the public booking flow — tighter than the API limiter.
+ */
+export async function checkBookingRateLimit(identifier: string): Promise<RateLimitResult> {
+  if (upstashBookingLimiter) {
+    try {
+      const result = await upstashBookingLimiter.limit(identifier);
+      return {
+        allowed: result.success,
+        remaining: result.remaining,
+        resetAt: result.reset,
+      };
+    } catch (error) {
+      console.error("[rate-limit] Upstash booking error, falling back to in-memory:", error);
+    }
+  }
+  return memoryBookingLimiter.check(identifier);
 }
 
 /**
  * Extract the client IP from a Request, respecting common proxy headers.
- * Falls back to "unknown" if no IP can be determined.
  */
 export function getClientIp(request: Request): string {
   return (

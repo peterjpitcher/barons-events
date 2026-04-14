@@ -55,9 +55,9 @@ export function methodNotAllowed(allowed: string[] = ["GET"]): Response {
  * Check the rate limit for the request. Returns a 429 response if exceeded, otherwise null.
  * Should be called before requireWebsiteApiKey so unauthenticated probing is also rate-limited.
  */
-export function checkApiRateLimit(request: Request): Response | null {
+export async function checkApiRateLimit(request: Request): Promise<Response | null> {
   const ip = getClientIp(request);
-  const result = checkRateLimit(ip);
+  const result = await checkRateLimit(ip);
 
   if (!result.allowed) {
     return NextResponse.json(

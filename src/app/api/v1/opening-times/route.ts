@@ -30,7 +30,7 @@ function addDays(isoDate: string, n: number): string {
 }
 
 export async function GET(request: Request) {
-  const rateLimitResponse = checkApiRateLimit(request);
+  const rateLimitResponse = await checkApiRateLimit(request);
   if (rateLimitResponse) return rateLimitResponse;
 
   const authResponse = requireWebsiteApiKey(request);

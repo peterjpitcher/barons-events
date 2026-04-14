@@ -18,7 +18,7 @@ function extractEventIdFromSlug(slug: string): string | null {
 }
 
 export async function GET(request: NextRequest, context: { params: Promise<{ slug: string }> }) {
-  const rateLimitResponse = checkApiRateLimit(request);
+  const rateLimitResponse = await checkApiRateLimit(request);
   if (rateLimitResponse) return rateLimitResponse;
 
   const authResponse = requireWebsiteApiKey(request);

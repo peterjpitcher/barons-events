@@ -4,7 +4,7 @@ import { z } from "zod";
 import { parsePhoneNumber, isValidPhoneNumber } from "libphonenumber-js";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
-import { RateLimiter } from "@/lib/public-api/rate-limit";
+import { checkBookingRateLimit } from "@/lib/public-api/rate-limit";
 import { createBookingAtomic, cancelBooking } from "@/lib/bookings";
 import { getCurrentUser } from "@/lib/auth";
 import { recordAuditLogEntry } from "@/lib/audit-log";
@@ -13,8 +13,6 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { MARKETING_CONSENT_WORDING } from "@/lib/booking-consent";
 import { verifyTurnstile } from "@/lib/turnstile";
 
-// 10 booking attempts per IP per 10 minutes — separate from the public API limiter
-const bookingLimiter = new RateLimiter({ windowMs: 600_000, maxRequests: 10 });
 
 const createBookingSchema = z.object({
   eventId:       z.string().uuid(),
@@ -43,7 +41,7 @@ export async function createBookingAction(
     headerList.get("x-real-ip") ??
     "unknown";
 
-  const rl = bookingLimiter.check(ip);
+  const rl = await checkBookingRateLimit(ip);
   if (!rl.allowed) {
     return { success: false, error: "rate_limited" };
   }
