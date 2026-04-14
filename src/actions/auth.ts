@@ -85,7 +85,7 @@ export async function signInAction(_: SignInState | undefined, formData: FormDat
 
   // Verify Turnstile CAPTCHA token before any auth work
   const turnstileToken = formData.get("cf-turnstile-response") as string | null;
-  const turnstileValid = await verifyTurnstile(turnstileToken, "login");
+  const turnstileValid = await verifyTurnstile(turnstileToken, "login", "strict");
   if (!turnstileValid) {
     return { success: false, message: "Security check failed. Please try again." };
   }
@@ -239,7 +239,7 @@ export async function requestPasswordResetAction(
 
   // Verify Turnstile CAPTCHA token before processing the request
   const turnstileToken = formData.get("cf-turnstile-response") as string | null;
-  const turnstileValid = await verifyTurnstile(turnstileToken, "password_reset");
+  const turnstileValid = await verifyTurnstile(turnstileToken, "password_reset", "strict");
   if (!turnstileValid) {
     return { success: false, message: "Security check failed. Please try again." };
   }
