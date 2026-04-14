@@ -133,7 +133,8 @@ describe("recordFailedLoginAttempt — lockout threshold", () => {
     );
 
     // Email hash should be consistent (lowercased before hashing)
-    const firstCallHash = insertFn.mock.calls[0][0].email_hash;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const firstCallHash = (insertFn.mock.calls as any)[0]?.[0]?.email_hash as string;
     expect(firstCallHash).toBeTruthy();
     expect(firstCallHash.length).toBe(64); // SHA-256 hex = 64 chars
   });

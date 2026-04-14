@@ -229,7 +229,7 @@ describe("validateSession — correct field mapping from DB row", () => {
       session_id: "session-abc",
       user_id: "user-xyz",
       created_at: "2026-01-10T10:00:00.000Z",
-      last_activity_at: "2026-01-10T11:00:00.000Z",
+      last_activity_at: "2026-01-10T11:50:00.000Z",
       expires_at: "2026-01-11T10:00:00.000Z",
       user_agent: "Mozilla/5.0",
       ip_address: "192.168.1.1"
@@ -243,11 +243,14 @@ describe("validateSession — correct field mapping from DB row", () => {
       })),
       delete: vi.fn(() => ({
         eq: vi.fn(() => Promise.resolve({ data: null, error: null }))
+      })),
+      update: vi.fn(() => ({
+        eq: vi.fn(() => Promise.resolve({ data: null, error: null }))
       }))
     });
 
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-01-10T12:00:00.000Z")); // before expiry
+    vi.setSystemTime(new Date("2026-01-10T12:00:00.000Z")); // before expiry, 10 min idle (under 30 min threshold)
 
     const result = await validateSession("session-abc");
 
