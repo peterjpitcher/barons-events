@@ -25,6 +25,7 @@ type PlanningItemCardProps = {
   onDragStart?: (item: PlanningItem) => void;
   compact?: boolean;
   onOpenDetails?: (item: PlanningItem) => void;
+  currentUserId?: string;
 };
 
 type EditableField = "title" | "typeLabel" | "status" | "targetDate" | "ownerId" | "venueId" | "description";
@@ -88,7 +89,8 @@ export function PlanningItemCard({
   onChanged,
   onDragStart,
   compact = false,
-  onOpenDetails
+  onOpenDetails,
+  currentUserId
 }: PlanningItemCardProps) {
   const [editingField, setEditingField] = useState<EditableField | null>(null);
   const [title, setTitle] = useState(item.title);
@@ -637,6 +639,7 @@ export function PlanningItemCard({
                 tasks={sopTasks}
                 users={users}
                 itemId={item.id}
+                currentUserId={currentUserId}
                 onChanged={onChanged}
               />
             )}

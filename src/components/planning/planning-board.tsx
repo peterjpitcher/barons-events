@@ -31,6 +31,7 @@ type PlanningBoardProps = {
   venues: PlanningVenueOption[];
   canApproveEvents?: boolean;
   userRole?: string;
+  currentUserId?: string;
 };
 
 type BucketConfig = {
@@ -95,7 +96,7 @@ function RefreshInspirationButton() {
   );
 }
 
-export function PlanningBoard({ data, venues, canApproveEvents, userRole }: PlanningBoardProps) {
+export function PlanningBoard({ data, venues, canApproveEvents, userRole, currentUserId }: PlanningBoardProps) {
   const router = useRouter();
   const [viewMode, setViewMode] = useState<ViewMode>("board");
   const [isCreateModalOpen, setCreateModalOpen] = useState(false);
@@ -430,6 +431,7 @@ export function PlanningBoard({ data, venues, canApproveEvents, userRole }: Plan
                           onChanged={refreshBoard}
                           compact
                           onOpenDetails={(planningItem) => setActiveItemId(planningItem.id)}
+                          currentUserId={currentUserId}
                         />
                       );
                     }
@@ -502,6 +504,7 @@ export function PlanningBoard({ data, venues, canApproveEvents, userRole }: Plan
             users={data.users}
             venues={venues}
             onChanged={refreshBoard}
+            currentUserId={currentUserId}
           />
         ) : null}
       </PlanningModal>

@@ -37,6 +37,7 @@ export default async function PlanningPage() {
       }))}
       canApproveEvents={canReviewEvents(user.role)}
       userRole={user.role}
+      currentUserId={user.id}
     />
   );
 }
