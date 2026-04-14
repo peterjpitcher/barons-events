@@ -320,6 +320,7 @@ export function EventForm({
   const [endDirty, setEndDirty] = useState(Boolean(defaultValues?.end_at ?? initialEndAt));
   const [eventNotes, setEventNotes] = useState(defaultValues?.notes ?? "");
   const [managerResponsible, setManagerResponsible] = useState((defaultValues as any)?.manager_responsible ?? "");
+  const [managerDirty, setManagerDirty] = useState(Boolean((defaultValues as any)?.manager_responsible));
   const [bookingType, setBookingType] = useState(defaultValues?.booking_type ?? "");
   const [ticketPrice, setTicketPrice] = useState(defaultValues?.ticket_price != null ? String(defaultValues.ticket_price) : "");
   const [selectedGoals, setSelectedGoals] = useState<Set<string>>(new Set(defaultGoalValues));
@@ -438,7 +439,21 @@ export function EventForm({
 
   function handleVenueChange(value: string) {
     setSelectedVenueId(value);
+    if (!managerDirty) {
+      const venue = venues.find((v) => v.id === value);
+      setManagerResponsible(venue?.default_manager_responsible ?? "");
+    }
   }
+
+  useEffect(() => {
+    if (mode === "create" && !managerDirty && selectedVenueId) {
+      const venue = venues.find((v) => v.id === selectedVenueId);
+      if (venue?.default_manager_responsible) {
+        setManagerResponsible(venue.default_manager_responsible);
+      }
+    }
+    // Only run on mount
+  }, []);
 
   function handleStartChange(value: string) {
     setStartValue(value);
@@ -771,7 +786,10 @@ export function EventForm({
         name="managerResponsible"
         maxLength={200}
         value={managerResponsible}
-        onChange={(event) => setManagerResponsible(event.target.value)}
+        onChange={(event) => {
+          setManagerDirty(true);
+          setManagerResponsible(event.target.value);
+        }}
         placeholder="Enter manager name"
       />
       <p className="text-xs text-subtle">
