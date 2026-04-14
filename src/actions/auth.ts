@@ -310,6 +310,11 @@ export async function completePasswordResetAction(
   }
 
   // Server-side password policy validation (authoritative)
+  // Note: validatePassword accepts an optional currentPasswordHash for no-reuse checking,
+  // but Supabase Auth does not expose password hashes through the client API (neither
+  // the anon-key client nor the admin client). The HIBP breach check still provides
+  // protection against known-compromised passwords.
+  // TODO: If Supabase adds password hash access via admin API, pass currentHash here.
   const policyResult = await validatePassword(parsed.data.password);
   if (!policyResult.valid) {
     return {
