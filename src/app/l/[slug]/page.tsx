@@ -40,6 +40,7 @@ type EventRow = {
   booking_enabled: boolean;
   total_capacity: number | null;
   max_tickets_per_booking: number;
+  status: string;
   venue: {
     id: string;
     name: string;
@@ -56,7 +57,7 @@ async function getEventBySlug(slug: string): Promise<EventRow | null> {
   const { data, error } = await db
     .from("events")
     .select(
-      "id, title, public_title, public_teaser, public_description, public_highlights, event_image_path, start_at, seo_slug, booking_enabled, total_capacity, max_tickets_per_booking, venue:venues(id, name)"
+      "id, title, public_title, public_teaser, public_description, public_highlights, event_image_path, start_at, seo_slug, booking_enabled, total_capacity, max_tickets_per_booking, status, venue:venues(id, name)"
     )
     .eq("seo_slug", slug)
     .is("deleted_at", null)
@@ -91,6 +92,7 @@ async function getEventBySlug(slug: string): Promise<EventRow | null> {
     booking_enabled: raw.booking_enabled as boolean,
     total_capacity: (raw.total_capacity as number | null) ?? null,
     max_tickets_per_booking: (raw.max_tickets_per_booking as number) ?? 10,
+    status: raw.status as string,
     venue,
   };
 }
@@ -118,7 +120,7 @@ export default async function EventLandingPage({ params }: PageProps) {
   const { slug } = await params;
   const event = await getEventBySlug(slug);
 
-  if (!event || !event.booking_enabled) {
+  if (!event || !event.booking_enabled || !["approved", "completed"].includes(event.status)) {
     notFound();
   }
 

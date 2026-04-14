@@ -24,7 +24,7 @@ const createBookingSchema = z.object({
   email:         z.string().email("Invalid email address").nullable(),
   ticketCount:   z.number().int().min(1).max(50),
   marketingOptIn: z.boolean().default(false),
-  turnstileToken: z.string().optional(),
+  turnstileToken: z.string().min(1),
 });
 
 export type CreateBookingInput = z.infer<typeof createBookingSchema>;
@@ -49,7 +49,7 @@ export async function createBookingAction(
   }
 
   // Verify Turnstile CAPTCHA — protects the public booking flow from bots
-  const turnstileValid = await verifyTurnstile(input.turnstileToken ?? null, "booking");
+  const turnstileValid = await verifyTurnstile(input.turnstileToken ?? null, "booking", "strict");
   if (!turnstileValid) {
     return { success: false, error: "Security check failed. Please try again." };
   }

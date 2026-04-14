@@ -54,7 +54,7 @@ export function BookingForm({ eventId, maxTickets, isSoldOut, nonce }: BookingFo
 
     // Read Turnstile token injected by the widget into the hidden input
     const turnstileToken =
-      (formRef.current?.querySelector<HTMLInputElement>('[name="cf-turnstile-response"]')?.value) || undefined;
+      (formRef.current?.querySelector<HTMLInputElement>('[name="cf-turnstile-response"]')?.value) || "";
 
     const input: CreateBookingInput = {
       eventId,
@@ -75,6 +75,10 @@ export function BookingForm({ eventId, maxTickets, isSoldOut, nonce }: BookingFo
         setError("Sorry, this event is now fully booked.");
       } else if (result.error === "rate_limited") {
         setError("Too many attempts. Please try again in a few minutes.");
+      } else if (result.error === "booking_limit_reached") {
+        setError("You've reached the maximum number of bookings for this event.");
+      } else if (result.error === "too_many_tickets") {
+        setError("Too many tickets requested. Please reduce your selection.");
       } else {
         setError(result.error || "Something went wrong. Please try again.");
       }

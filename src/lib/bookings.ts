@@ -55,7 +55,7 @@ export async function createBookingAtomic(params: {
 
   const result = data as { ok: boolean; reason?: string; booking_id?: string };
   if (!result.ok) {
-    return { ok: false, reason: result.reason as "not_found" | "sold_out" };
+    return { ok: false, reason: result.reason as "not_found" | "sold_out" | "booking_limit_reached" | "too_many_tickets" };
   }
   return { ok: true, bookingId: result.booking_id! };
 }

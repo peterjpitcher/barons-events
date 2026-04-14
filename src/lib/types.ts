@@ -84,4 +84,4 @@ export interface EventBookingSettings {
 /** Result from the create_booking Postgres RPC. */
 export type BookingRpcResult =
   | { ok: true; bookingId: string }
-  | { ok: false; reason: "not_found" | "sold_out" };
+  | { ok: false; reason: "not_found" | "sold_out" | "booking_limit_reached" | "too_many_tickets" };

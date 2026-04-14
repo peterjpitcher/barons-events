@@ -33,16 +33,21 @@ vi.mock("@/lib/public-api/rate-limit", () => ({
     check() { return { allowed: true }; }
   },
 }));
+vi.mock("@/lib/turnstile", () => ({
+  verifyTurnstile: vi.fn().mockResolvedValue(true),
+}));
 
 import { createBookingAction, cancelBookingAction } from "../bookings";
 import { createBookingAtomic, cancelBooking } from "@/lib/bookings";
 import { getCurrentUser } from "@/lib/auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { verifyTurnstile } from "@/lib/turnstile";
 
 const mockCreateBookingAtomic = vi.mocked(createBookingAtomic);
 const mockCancelBooking = vi.mocked(cancelBooking);
 const mockGetCurrentUser = vi.mocked(getCurrentUser);
 const mockCreateSupabaseAdminClient = vi.mocked(createSupabaseAdminClient);
+const mockVerifyTurnstile = vi.mocked(verifyTurnstile);
 
 const VALID_INPUT = {
   eventId: "550e8400-e29b-41d4-a716-446655440000",
@@ -52,11 +57,13 @@ const VALID_INPUT = {
   email: null,
   ticketCount: 2,
   marketingOptIn: false,
+  turnstileToken: "valid-token",
 } as const;
 
 describe("createBookingAction", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockVerifyTurnstile.mockResolvedValue(true);
   });
 
   it("should return error for invalid mobile number", async () => {
@@ -125,6 +132,39 @@ describe("createBookingAction", () => {
     expect(result.success).toBe(false);
     if (!result.success) expect(result.error).toBeTruthy();
   });
+
+  it("should reject booking when turnstileToken is missing", async () => {
+    const { turnstileToken, ...inputWithoutToken } = VALID_INPUT;
+    const result = await createBookingAction(inputWithoutToken as any);
+    expect(result.success).toBe(false);
+  });
+
+  it("should call verifyTurnstile with strict mode", async () => {
+    mockCreateBookingAtomic.mockResolvedValue({ ok: true, bookingId: "booking-uuid" });
+    await createBookingAction(VALID_INPUT);
+    expect(mockVerifyTurnstile).toHaveBeenCalledWith("valid-token", "booking", "strict");
+  });
+
+  it("should reject when Turnstile verification fails", async () => {
+    mockVerifyTurnstile.mockResolvedValue(false);
+    const result = await createBookingAction(VALID_INPUT);
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error).toMatch(/security/i);
+  });
+
+  it("should return booking_limit_reached from RPC", async () => {
+    mockCreateBookingAtomic.mockResolvedValue({ ok: false, reason: "booking_limit_reached" });
+    const result = await createBookingAction(VALID_INPUT);
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error).toBe("booking_limit_reached");
+  });
+
+  it("should return too_many_tickets from RPC", async () => {
+    mockCreateBookingAtomic.mockResolvedValue({ ok: false, reason: "too_many_tickets" });
+    const result = await createBookingAction(VALID_INPUT);
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error).toBe("too_many_tickets");
+  });
 });
 
 describe("customer upsert", () => {
@@ -177,6 +217,7 @@ describe("customer upsert", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockVerifyTurnstile.mockResolvedValue(true);
     mockCreateBookingAtomic.mockResolvedValue({ ok: true, bookingId: "booking-uuid" });
   });
 
