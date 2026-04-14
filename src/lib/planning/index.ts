@@ -551,6 +551,7 @@ export async function listPlanningBoardData(params?: {
     .select("id,title,status,start_at,end_at,venue_space,venue_id,public_title,public_teaser,venue:venues(name)")
     .gte("start_at", startLowerIso)
     .lte("start_at", startUpperIso)
+    .not("status", "in", '("completed","rejected")')
     .order("start_at", { ascending: true });
 
   if (eventsError) {
