@@ -49,6 +49,13 @@ export async function updateUserAction(
   }
 
   try {
+    const supabase = await createSupabaseActionClient();
+    const { data: currentUserData } = await supabase
+      .from("users")
+      .select("role, venue_id")
+      .eq("id", parsed.data.userId)
+      .single();
+
     await updateUser(parsed.data.userId, {
       fullName: parsed.data.fullName ?? null,
       role: parsed.data.role,
@@ -69,7 +76,10 @@ export async function updateUserAction(
       userId: currentUser.id,
       meta: {
         targetUserId: parsed.data.userId,
-        newRole: parsed.data.role
+        oldRole: currentUserData?.role ?? "unknown",
+        newRole: parsed.data.role,
+        oldVenueId: currentUserData?.venue_id ?? null,
+        newVenueId: parsed.data.venueId ? parsed.data.venueId : null
       }
     });
 
@@ -166,7 +176,18 @@ export async function inviteUserAction(
     console.error("[invite] failed, rolling back auth user:", error);
     try {
       const cleanupClient = createSupabaseAdminClient();
-      await cleanupClient.auth.admin.deleteUser(userId);
+      const { error: deleteError } = await cleanupClient.auth.admin.deleteUser(userId);
+      if (deleteError) {
+        console.error("[invite] Rollback failed — orphaned auth user:", userId, deleteError);
+        await logAuthEvent({
+          event: "auth.invite.sent",
+          userId: currentUser.id,
+          meta: {
+            rollback_failed: true,
+            orphaned_auth_user_id: userId,
+          }
+        });
+      }
     } catch (cleanupError) {
       console.error("[invite] rollback failed:", cleanupError);
     }
