@@ -146,12 +146,17 @@ export async function inviteUserAction(
   }
 
   const userId = linkData?.user?.id ?? null;
-  const actionLink = linkData?.properties?.action_link ?? null;
+  const hashedToken = linkData?.properties?.hashed_token ?? null;
 
-  if (!userId || !actionLink) {
-    console.error("[invite] generateLink returned incomplete data for", parsed.data.email, { hasUserId: !!userId, hasActionLink: !!actionLink });
+  if (!userId || !hashedToken) {
+    console.error("[invite] generateLink returned incomplete data for", parsed.data.email, { hasUserId: !!userId, hasHashedToken: !!hashedToken });
     return { success: false, message: "Invitation could not be sent. Please try again or contact support." };
   }
+
+  // Build a direct token_hash link that bypasses Supabase's server-side /auth/v1/verify
+  // redirect. This avoids OTP-burn by email link prefetchers (Outlook SafeLinks, etc.)
+  // and matches what /auth/confirm expects: ?token_hash=...&type=invite
+  const inviteLink = `${confirmUrl}?token_hash=${encodeURIComponent(hashedToken)}&type=invite`;
 
   try {
     const adminDb = createSupabaseAdminClient();
@@ -167,7 +172,7 @@ export async function inviteUserAction(
       throw upsertError;
     }
 
-    const sent = await sendInviteEmail(parsed.data.email, actionLink, parsed.data.fullName ?? null);
+    const sent = await sendInviteEmail(parsed.data.email, inviteLink, parsed.data.fullName ?? null);
     if (!sent) {
       console.error("[invite] Resend failed to deliver invite email to", parsed.data.email);
       throw new Error("Email delivery failed");
@@ -283,16 +288,20 @@ export async function resendInviteAction(
     return { success: false, message: "Invitation failed. Please try again." };
   }
 
-  const actionLink = linkData?.properties?.action_link ?? null;
+  const hashedToken = linkData?.properties?.hashed_token ?? null;
 
-  // For a resend action the entire purpose is sending an email, so a missing action_link
-  // (generateLink succeeded but returned no link) is treated as an error rather than a silent skip.
-  if (!actionLink) {
-    console.error("[resend-invite] generateLink returned no action_link for", email);
+  // For a resend action the entire purpose is sending an email, so a missing hashed_token
+  // (generateLink succeeded but returned no token) is treated as an error rather than a silent skip.
+  if (!hashedToken) {
+    console.error("[resend-invite] generateLink returned no hashed_token for", email);
     return { success: false, message: "Invitation failed. Please try again." };
   }
 
-  const sent = await sendInviteEmail(serverEmail, actionLink, fullName);
+  // Build a direct token_hash link — bypasses Supabase's server-side verify redirect,
+  // preventing OTP-burn by email link prefetchers.
+  const inviteLink = `${confirmUrl}?token_hash=${encodeURIComponent(hashedToken)}&type=invite`;
+
+  const sent = await sendInviteEmail(serverEmail, inviteLink, fullName);
   if (!sent) {
     console.error("[resend-invite] Resend failed to deliver invite email to", serverEmail);
     return { success: false, message: "Invite created but the email failed to send. Please try again." };

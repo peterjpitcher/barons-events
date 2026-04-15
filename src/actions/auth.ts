@@ -267,8 +267,12 @@ export async function requestPasswordResetAction(
         console.error("Password reset link generation failed", error);
       }
       // Always redirect with success to prevent email enumeration
-    } else if (data?.properties?.action_link) {
-      const sent = await sendPasswordResetEmail(parsed.data.email, data.properties.action_link);
+    } else if (data?.properties?.hashed_token) {
+      // Build a direct token_hash link that bypasses Supabase's server-side /auth/v1/verify
+      // redirect. This avoids OTP-burn by email link prefetchers (Outlook SafeLinks, etc.)
+      // and matches what /auth/confirm expects: ?token_hash=...&type=recovery
+      const resetLink = `${redirectUrl}?token_hash=${encodeURIComponent(data.properties.hashed_token)}&type=recovery`;
+      const sent = await sendPasswordResetEmail(parsed.data.email, resetLink);
       if (!sent) {
         console.error("Password reset email failed to send via Resend");
       }

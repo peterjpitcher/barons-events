@@ -113,7 +113,7 @@ describe("inviteUserAction — success path", () => {
     generateLinkMock.mockResolvedValue({
       data: {
         user: { id: "new-user-uuid" },
-        properties: { action_link: "https://app.example.com/confirm?token=abc" }
+        properties: { hashed_token: "abc123hashedtoken" }
       },
       error: null
     });
@@ -136,7 +136,7 @@ describe("inviteUserAction — rollback on DB upsert failure", () => {
     generateLinkMock.mockResolvedValue({
       data: {
         user: { id: "orphan-user-uuid" },
-        properties: { action_link: "https://app.example.com/confirm?token=abc" }
+        properties: { hashed_token: "abc123hashedtoken" }
       },
       error: null
     });
@@ -161,7 +161,7 @@ describe("inviteUserAction — rollback on email delivery failure", () => {
     generateLinkMock.mockResolvedValue({
       data: {
         user: { id: "orphan-user-uuid-2" },
-        properties: { action_link: "https://app.example.com/confirm?token=abc" }
+        properties: { hashed_token: "abc123hashedtoken" }
       },
       error: null
     });
@@ -186,7 +186,7 @@ describe("inviteUserAction — failed rollback", () => {
     generateLinkMock.mockResolvedValue({
       data: {
         user: { id: "truly-orphaned-uuid" },
-        properties: { action_link: "https://app.example.com/confirm?token=abc" }
+        properties: { hashed_token: "abc123hashedtoken" }
       },
       error: null
     });
@@ -238,7 +238,7 @@ describe("inviteUserAction — early failures (no rollback needed)", () => {
     generateLinkMock.mockResolvedValue({
       data: {
         user: { id: null },
-        properties: { action_link: "https://example.com/confirm" }
+        properties: { hashed_token: "abc123hashedtoken" }
       },
       error: null
     });
@@ -250,11 +250,11 @@ describe("inviteUserAction — early failures (no rollback needed)", () => {
     expect(deleteUserMock).not.toHaveBeenCalled();
   });
 
-  it("should return error when generateLink returns incomplete data (no action_link)", async () => {
+  it("should return error when generateLink returns incomplete data (no hashed_token)", async () => {
     generateLinkMock.mockResolvedValue({
       data: {
         user: { id: "some-user-uuid" },
-        properties: { action_link: null }
+        properties: { hashed_token: null }
       },
       error: null
     });

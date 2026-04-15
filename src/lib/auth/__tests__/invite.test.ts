@@ -17,18 +17,17 @@ const {
   mockGetUserById,
   state
 } = vi.hoisted(() => {
-  const INVITE_ACTION_LINK =
-    "https://project.supabase.co/auth/v1/verify?token=abc123&type=invite&redirect_to=https://app.example.com/auth/confirm";
+  const INVITE_HASHED_TOKEN = "abc123hashedtoken";
 
   // Mutable control object — tests can override these before each call.
   const state = {
     generateLinkResult: {
       data: {
         user: { id: "new-user-uuid" },
-        properties: { action_link: INVITE_ACTION_LINK }
+        properties: { hashed_token: INVITE_HASHED_TOKEN }
       } as {
         user: { id: string } | null;
-        properties: { action_link: string } | null;
+        properties: { hashed_token: string } | null;
       } | null,
       error: null as { status?: number; message: string } | null
     },
@@ -142,14 +141,11 @@ describe("inviteUserAction", () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    const INVITE_ACTION_LINK =
-      "https://project.supabase.co/auth/v1/verify?token=abc123&type=invite&redirect_to=https://app.example.com/auth/confirm";
-
     // Reset shared state to happy-path defaults before each test.
     state.generateLinkResult = {
       data: {
         user: { id: "new-user-uuid" },
-        properties: { action_link: INVITE_ACTION_LINK }
+        properties: { hashed_token: "abc123hashedtoken" }
       },
       error: null
     };
@@ -218,7 +214,7 @@ describe("inviteUserAction", () => {
     expect(mockSendInviteEmail).toHaveBeenCalledOnce();
     expect(mockSendInviteEmail).toHaveBeenCalledWith(
       "invite@example.com",
-      expect.stringContaining("supabase.co"),
+      expect.stringContaining("token_hash="),
       "Bob Venue"
     );
 
@@ -309,7 +305,7 @@ describe("resendInviteAction", () => {
     state.generateLinkResult = {
       data: {
         user: { id: "new-user-uuid" },
-        properties: { action_link: "https://project.supabase.co/auth/v1/verify?token=abc123&type=invite&redirect_to=https://app.example.com/auth/confirm" }
+        properties: { hashed_token: "abc123hashedtoken" }
       },
       error: null
     };
@@ -380,7 +376,7 @@ describe("resendInviteAction", () => {
     expect(mockSendInviteEmail).toHaveBeenCalledOnce();
     expect(mockSendInviteEmail).toHaveBeenCalledWith(
       "pending@example.com",
-      expect.stringContaining("supabase.co"),
+      expect.stringContaining("token_hash="),
       "Pending User"
     );
     expect(mockLogAuthEvent).toHaveBeenCalledWith(
