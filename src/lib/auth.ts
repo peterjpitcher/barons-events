@@ -17,6 +17,8 @@ function timingSafeEqual(a: string, b: string): boolean {
 
 function normalizeRole(role: string | null | undefined): UserRole | null {
   switch (role) {
+    case "administrator":
+    case "office_worker":
     case "venue_manager":
     case "reviewer":
     case "central_planner":
@@ -104,7 +106,7 @@ export async function requireAdmin(): Promise<AppUser> {
   if (!user) {
     redirect("/login");
   }
-  if (user.role !== "central_planner") {
+  if (user.role !== "central_planner" && user.role !== "administrator") {
     redirect("/unauthorized");
   }
   return user;
@@ -143,7 +145,7 @@ export function withAdminAuth(
         headers: { "Content-Type": "application/json" }
       });
     }
-    if (user.role !== "central_planner") {
+    if (user.role !== "central_planner" && user.role !== "administrator") {
       return new Response(JSON.stringify({ error: "Forbidden" }), {
         status: 403,
         headers: { "Content-Type": "application/json" }
@@ -201,7 +203,7 @@ export function withAdminAuthAndCSRF(
         headers: { "Content-Type": "application/json" }
       });
     }
-    if (user.role !== "central_planner") {
+    if (user.role !== "central_planner" && user.role !== "administrator") {
       return new Response(JSON.stringify({ error: "Forbidden" }), {
         status: 403,
         headers: { "Content-Type": "application/json" }

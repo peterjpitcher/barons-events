@@ -4,6 +4,8 @@ export type UserRole =
   | "venue_manager"
   | "reviewer"
   | "central_planner"
+  | "administrator"
+  | "office_worker"
   | "executive";
 
 export interface AppUser {

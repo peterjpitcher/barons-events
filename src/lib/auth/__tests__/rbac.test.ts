@@ -37,6 +37,21 @@ import {
   withAuthAndCSRF
 } from "@/lib/auth";
 import type { AppUser } from "@/lib/types";
+import {
+  canManageEvents,
+  canReviewEvents,
+  canSubmitDebriefs,
+  canManageArtists,
+  canManageVenues,
+  canManageUsers,
+  canManageSettings,
+  canUsePlanning,
+  canViewPlanning,
+  canViewAllEvents,
+  canManageLinks,
+  canViewSopTemplate,
+  canEditSopTemplate,
+} from "@/lib/roles";
 
 // ─── Typed mock helpers ───────────────────────────────────────────────────────
 
@@ -175,6 +190,8 @@ describe("normalizeRole — all valid roles return an AppUser", () => {
     "venue_manager",
     "reviewer",
     "central_planner",
+    "administrator",
+    "office_worker",
     "executive"
   ] as const;
 
@@ -280,6 +297,32 @@ describe("requireAdmin", () => {
     expect(result).toEqual(validCentralPlannerUser);
     expect(mockRedirect).not.toHaveBeenCalled();
   });
+
+  it("returns the AppUser when role is administrator", async () => {
+    mockCreateClient.mockResolvedValue(
+      makeSupabaseClient(
+        { id: "user-admin" },
+        {
+          id: "user-admin",
+          email: "admin@example.com",
+          full_name: "Admin User",
+          role: "administrator",
+          venue_id: null
+        }
+      )
+    );
+
+    const result = await requireAdmin();
+
+    expect(result).toEqual({
+      id: "user-admin",
+      email: "admin@example.com",
+      fullName: "Admin User",
+      role: "administrator",
+      venueId: null
+    });
+    expect(mockRedirect).not.toHaveBeenCalled();
+  });
 });
 
 // ─── withAuth ─────────────────────────────────────────────────────────────────
@@ -373,6 +416,37 @@ describe("withAdminAuth", () => {
 
     expect(response.status).toBe(200);
     expect(handler).toHaveBeenCalledWith(req, validCentralPlannerUser);
+  });
+
+  it("calls the handler when role is administrator", async () => {
+    mockCreateClient.mockResolvedValue(
+      makeSupabaseClient(
+        { id: "user-admin" },
+        {
+          id: "user-admin",
+          email: "admin@example.com",
+          full_name: "Admin User",
+          role: "administrator",
+          venue_id: null
+        }
+      )
+    );
+
+    const handlerResponse = new Response("ok", { status: 200 });
+    const handler = vi.fn().mockResolvedValue(handlerResponse);
+    const wrapped = withAdminAuth(handler);
+    const req = new Request("http://localhost/test");
+
+    const response = await wrapped(req);
+
+    expect(response.status).toBe(200);
+    expect(handler).toHaveBeenCalledWith(req, {
+      id: "user-admin",
+      email: "admin@example.com",
+      fullName: "Admin User",
+      role: "administrator",
+      venueId: null
+    });
   });
 });
 
@@ -572,5 +646,83 @@ describe("withAdminAuthAndCSRF", () => {
 
     expect(response.status).toBe(200);
     expect(handler).toHaveBeenCalledWith(req, validCentralPlannerUser);
+  });
+
+  it("calls the handler when role is administrator and CSRF valid", async () => {
+    mockCreateClient.mockResolvedValue(
+      makeSupabaseClient(
+        { id: "user-admin" },
+        {
+          id: "user-admin",
+          email: "admin@example.com",
+          full_name: "Admin User",
+          role: "administrator",
+          venue_id: null
+        }
+      )
+    );
+
+    const handlerResponse = new Response("ok", { status: 200 });
+    const handler = vi.fn().mockResolvedValue(handlerResponse);
+    const wrapped = withAdminAuthAndCSRF(handler);
+    const req = makeCSRFRequest("valid-csrf-token");
+
+    const response = await wrapped(req);
+
+    expect(response.status).toBe(200);
+    expect(handler).toHaveBeenCalledWith(req, {
+      id: "user-admin",
+      email: "admin@example.com",
+      fullName: "Admin User",
+      role: "administrator",
+      venueId: null
+    });
+  });
+});
+
+// ─── roles.ts — compatibility phase ──────────────────────────────────────────
+
+describe("roles.ts — compatibility phase", () => {
+  it("administrator has same capabilities as central_planner", () => {
+    expect(canManageEvents("administrator")).toBe(true);
+    expect(canReviewEvents("administrator")).toBe(true);
+    expect(canSubmitDebriefs("administrator")).toBe(true);
+    expect(canManageArtists("administrator")).toBe(true);
+    expect(canManageVenues("administrator")).toBe(true);
+    expect(canManageUsers("administrator")).toBe(true);
+    expect(canManageSettings("administrator")).toBe(true);
+    expect(canUsePlanning("administrator")).toBe(true);
+    expect(canViewPlanning("administrator")).toBe(true);
+    expect(canViewAllEvents("administrator")).toBe(true);
+    expect(canManageLinks("administrator")).toBe(true);
+    expect(canViewSopTemplate("administrator")).toBe(true);
+    expect(canEditSopTemplate("administrator")).toBe(true);
+  });
+
+  it("office_worker has same capabilities as venue_manager", () => {
+    expect(canManageEvents("office_worker")).toBe(true);
+    expect(canSubmitDebriefs("office_worker")).toBe(true);
+    expect(canManageArtists("office_worker")).toBe(true);
+    // office_worker should NOT have planning access in compatibility phase
+    expect(canViewPlanning("office_worker")).toBe(false);
+  });
+
+  it("legacy central_planner still works", () => {
+    expect(canManageEvents("central_planner")).toBe(true);
+    expect(canManageVenues("central_planner")).toBe(true);
+    expect(canReviewEvents("central_planner")).toBe(true);
+  });
+
+  it("legacy venue_manager still works", () => {
+    expect(canManageEvents("venue_manager")).toBe(true);
+    expect(canSubmitDebriefs("venue_manager")).toBe(true);
+    expect(canManageArtists("venue_manager")).toBe(true);
+    expect(canManageVenues("venue_manager")).toBe(false);
+  });
+
+  it("legacy reviewer still works", () => {
+    expect(canReviewEvents("reviewer")).toBe(true);
+    expect(canViewAllEvents("reviewer")).toBe(true);
+    expect(canManageEvents("reviewer")).toBe(false);
   });
 });

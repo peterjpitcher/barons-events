@@ -1,79 +1,90 @@
 import type { UserRole } from "./types";
 
 /**
- * Role capability model
+ * Role capability model — COMPATIBILITY PHASE
  *
- * venue_manager   — creates and manages their own events; submits debriefs; manages their artists
- * reviewer        — reviews and makes decisions on events assigned to them
- * central_planner — full access: all of the above plus user/venue/event-type management, planning workspace
- * executive       — read-only observer: can view all data but cannot create, modify, or delete anything
+ * Accepts both legacy role strings (central_planner, venue_manager, reviewer)
+ * and new role strings (administrator, office_worker). This will be simplified
+ * in Phase 2 once the DB migration has run.
  *
- * Write actions use these helpers instead of inline role string comparisons so that adding a new
- * capability to a role (or adding a new role) only requires a change in this file.
+ * administrator = central_planner
+ * office_worker = venue_manager (with venue_id) or reviewer (without venue_id)
+ * executive = executive (unchanged)
  */
+
+function isAdmin(role: UserRole): boolean {
+  return role === "central_planner" || role === "administrator";
+}
+
+function isVenueWorker(role: UserRole): boolean {
+  return role === "venue_manager" || role === "office_worker";
+}
+
+function isReviewerLegacy(role: UserRole): boolean {
+  return role === "reviewer";
+}
 
 /** Can create or edit events */
 export function canManageEvents(role: UserRole): boolean {
-  return role === "central_planner" || role === "venue_manager";
+  return isAdmin(role) || isVenueWorker(role);
 }
 
 /** Can make review decisions on events */
 export function canReviewEvents(role: UserRole): boolean {
-  return role === "central_planner" || role === "reviewer";
+  return isAdmin(role) || isReviewerLegacy(role);
 }
 
 /** Can submit post-event debriefs */
 export function canSubmitDebriefs(role: UserRole): boolean {
-  return role === "central_planner" || role === "venue_manager";
+  return isAdmin(role) || isVenueWorker(role);
 }
 
 /** Can manage artists (create, curate, archive) */
 export function canManageArtists(role: UserRole): boolean {
-  return role === "central_planner" || role === "venue_manager";
+  return isAdmin(role) || isVenueWorker(role);
 }
 
 /** Can manage venues */
 export function canManageVenues(role: UserRole): boolean {
-  return role === "central_planner";
+  return isAdmin(role);
 }
 
 /** Can manage users (invite, update roles) */
 export function canManageUsers(role: UserRole): boolean {
-  return role === "central_planner";
+  return isAdmin(role);
 }
 
 /** Can manage event types and system settings */
 export function canManageSettings(role: UserRole): boolean {
-  return role === "central_planner";
+  return isAdmin(role);
 }
 
 /** Can use the planning workspace (read and write) */
 export function canUsePlanning(role: UserRole): boolean {
-  return role === "central_planner";
+  return isAdmin(role);
 }
 
-/** Can view the planning workspace (central_planner has full access; executive is a read-only observer) */
+/** Can view the planning workspace */
 export function canViewPlanning(role: UserRole): boolean {
-  // central_planner has full planning access; executive is a read-only observer
-  return role === 'central_planner' || role === 'executive';
+  return isAdmin(role) || role === "executive";
 }
 
 /** Can view all events regardless of venue or assignment */
 export function canViewAllEvents(role: UserRole): boolean {
-  return role === "central_planner" || role === "reviewer" || role === "executive";
+  return isAdmin(role) || isReviewerLegacy(role) || role === "executive";
 }
 
 /** Can create, edit, or delete short links and manage QR codes */
 export function canManageLinks(role: UserRole): boolean {
-  return role === "central_planner";
+  return isAdmin(role);
 }
 
 /** Can view the SOP template configuration */
 export function canViewSopTemplate(role: UserRole): boolean {
-  return role === "central_planner" || role === "executive";
+  return isAdmin(role) || role === "executive";
 }
 
 /** Can create, edit, or delete SOP template sections and tasks */
 export function canEditSopTemplate(role: UserRole): boolean {
-  return role === "central_planner";
+  return isAdmin(role);
 }
