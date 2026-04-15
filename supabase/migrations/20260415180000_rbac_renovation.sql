@@ -356,13 +356,12 @@ CREATE POLICY "event types managed by admins"
   WITH CHECK (public.current_user_role() = 'administrator');
 
 -- ─── 5.9: public.venue_areas ─────────────────────────────────────────────────
--- Note: venue_areas table was retired in 20260210122000 but policies may linger.
+-- Note: venue_areas table was retired in 20260210122000 — skip if table doesn't exist.
 
-DROP POLICY IF EXISTS "venue areas managed by planners" ON public.venue_areas;
--- Only recreate if the table still exists (it was dropped in 20260210122000)
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'venue_areas' AND table_schema = 'public') THEN
+    EXECUTE 'DROP POLICY IF EXISTS "venue areas managed by planners" ON public.venue_areas';
     EXECUTE 'CREATE POLICY "venue areas managed by admins" ON public.venue_areas FOR ALL USING (public.current_user_role() = ''administrator'') WITH CHECK (public.current_user_role() = ''administrator'')';
   END IF;
 END $$;
