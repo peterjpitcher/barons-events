@@ -41,23 +41,30 @@ ALTER TABLE public.users DROP CONSTRAINT IF EXISTS users_role_check;
 ALTER TABLE public.audit_log DROP CONSTRAINT IF EXISTS audit_log_action_check;
 ALTER TABLE public.audit_log ADD CONSTRAINT audit_log_action_check
   CHECK (action IN (
+    -- event actions
     'event.created', 'event.updated', 'event.artists_updated',
     'event.submitted', 'event.approved', 'event.needs_revisions',
     'event.rejected', 'event.completed', 'event.assignee_changed',
     'event.deleted', 'event.status_changed', 'event.website_copy_generated',
-    'event.debrief_updated', 'event.reverted_to_draft',
+    'event.debrief_updated', 'event.terms_generated', 'event.reverted_to_draft',
+    -- SOP actions
     'sop_section.created', 'sop_section.updated', 'sop_section.deleted',
     'sop_task_template.created', 'sop_task_template.updated', 'sop_task_template.deleted',
     'sop_dependency.created', 'sop_dependency.deleted',
     'sop_checklist.generated', 'sop_checklist.dates_recalculated', 'sop_backfill_completed',
-    'planning_task.status_changed', 'planning_task.assignee_changed',
-    'planning_task.deleted', 'planning_task.created',
-    'user.invited', 'user.updated', 'user.deleted',
+    -- planning actions
+    'planning_task.status_changed', 'planning_task.reassigned',
+    'planning_task.assignee_changed', 'planning_task.deleted', 'planning_task.created',
+    -- auth actions
+    'auth.login.success', 'auth.login.failure', 'auth.lockout', 'auth.logout',
+    'auth.password_reset.requested', 'auth.password_updated',
+    'auth.invite.sent', 'auth.invite.accepted', 'auth.invite.resent',
+    'auth.role.changed', 'auth.session.expired.idle', 'auth.session.expired.absolute',
+    -- user/venue/customer/booking actions
+    'user.invited', 'user.updated', 'user.deleted', 'user.sensitive_column_changed',
     'venue.created', 'venue.updated', 'venue.deleted',
-    'auth.login', 'auth.logout', 'auth.password_changed',
-    'customer.erased', 'booking.cancelled',
-    'user.sensitive_column_changed'
-  ));
+    'customer.erased', 'booking.cancelled'
+  )) NOT VALID;
 
 ALTER TABLE public.users DISABLE TRIGGER trg_users_sensitive_column_audit;
 
