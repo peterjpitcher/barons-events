@@ -24,20 +24,24 @@ ALTER TABLE public.users ADD COLUMN IF NOT EXISTS previous_role text;
 UPDATE public.users SET previous_role = role WHERE previous_role IS NULL;
 
 -- ═══════════════════════════════════════════════════════════════════════════════
--- Section 2: Rename role values
+-- Section 2: Drop old check constraint BEFORE renaming values
 -- ═══════════════════════════════════════════════════════════════════════════════
--- Order matters: rename existing values BEFORE replacing the check constraint.
+-- Must drop first — the old constraint rejects the new role strings.
+
+ALTER TABLE public.users DROP CONSTRAINT IF EXISTS users_role_check;
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- Section 3: Rename role values
+-- ═══════════════════════════════════════════════════════════════════════════════
 
 UPDATE public.users SET role = 'administrator' WHERE role = 'central_planner';
 UPDATE public.users SET role = 'office_worker'  WHERE role = 'venue_manager';
 UPDATE public.users SET role = 'office_worker'  WHERE role = 'reviewer';
 
 -- ═══════════════════════════════════════════════════════════════════════════════
--- Section 3: Replace check constraint on users.role
+-- Section 4: Add new check constraint
 -- ═══════════════════════════════════════════════════════════════════════════════
--- The original inline constraint is auto-named "users_role_check".
 
-ALTER TABLE public.users DROP CONSTRAINT IF EXISTS users_role_check;
 ALTER TABLE public.users ADD CONSTRAINT users_role_check
   CHECK (role IN ('administrator', 'office_worker', 'executive'));
 
