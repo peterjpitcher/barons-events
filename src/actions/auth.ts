@@ -358,10 +358,14 @@ export async function completePasswordResetAction(
     };
   }
 
-  // Use admin API to update password — bypasses Supabase session constraints
+  // Use admin API to update password — bypasses Supabase session constraints.
+  // CRITICAL: Explicitly preserve existing user_metadata to prevent GoTrue from
+  // clearing or overwriting it. Without this, the password value can leak into
+  // raw_user_meta_data and propagate to public.users.full_name via DB triggers.
   const adminClient = createSupabaseAdminClient();
   const { error: updateError } = await adminClient.auth.admin.updateUserById(user.id, {
-    password: parsed.data.password
+    password: parsed.data.password,
+    user_metadata: user.user_metadata ?? {}
   });
 
   if (updateError) {
