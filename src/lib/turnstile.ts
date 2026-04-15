@@ -13,7 +13,10 @@ export async function verifyTurnstile(
   mode: "strict" | "lenient" = "lenient",
 ): Promise<boolean> {
   if (!token) {
-    if (mode === "strict") return false;
+    if (mode === "strict") {
+      console.warn(`[turnstile] No token received for action="${action}" — rejecting (strict). Widget may not have loaded.`);
+      return false;
+    }
     console.warn("[turnstile] No token received — widget may not have loaded. Failing soft.");
     return true;
   }
@@ -21,7 +24,10 @@ export async function verifyTurnstile(
   const secret = process.env.TURNSTILE_SECRET_KEY;
   if (!secret) {
     // In strict mode, allow dev convenience only outside production
-    if (mode === "strict" && process.env.NODE_ENV === "production") return false;
+    if (mode === "strict" && process.env.NODE_ENV === "production") {
+      console.error(`[turnstile] TURNSTILE_SECRET_KEY not set in production for action="${action}" — rejecting.`);
+      return false;
+    }
     console.warn("[turnstile] TURNSTILE_SECRET_KEY not set — skipping verification");
     return true;
   }
@@ -34,18 +40,28 @@ export async function verifyTurnstile(
     });
 
     if (!res.ok) {
-      if (mode === "strict") return false;
+      if (mode === "strict") {
+        console.error(`[turnstile] siteverify API returned ${res.status} for action="${action}" — rejecting (strict).`);
+        return false;
+      }
       console.warn("[turnstile] siteverify API unavailable — failing soft");
       return true;
     }
 
-    const data = (await res.json()) as { success: boolean; action?: string };
+    const data = (await res.json()) as { success: boolean; action?: string; "error-codes"?: string[] };
     if (data.action && data.action !== action) {
+      console.warn(`[turnstile] action mismatch: expected="${action}" got="${data.action}" — rejecting.`);
       return false; // action mismatch — always reject
     }
+    if (!data.success) {
+      console.warn(`[turnstile] verification failed for action="${action}" errors=${JSON.stringify(data["error-codes"] ?? [])}`);
+    }
     return data.success === true;
-  } catch {
-    if (mode === "strict") return false;
+  } catch (err) {
+    if (mode === "strict") {
+      console.error(`[turnstile] siteverify error for action="${action}" — rejecting (strict).`, err);
+      return false;
+    }
     console.warn("[turnstile] siteverify error — failing soft");
     return true;
   }

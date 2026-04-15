@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useRef } from "react";
-import Script from "next/script";
 import { createBookingAction } from "@/actions/bookings";
 import type { CreateBookingInput } from "@/actions/bookings";
 import { MARKETING_CONSENT_WORDING } from "@/lib/booking-consent";
+import { TurnstileWidget } from "@/components/turnstile-widget";
 
 interface BookingFormProps {
   eventId: string;
@@ -226,12 +226,7 @@ export function BookingForm({ eventId, maxTickets, isSoldOut, nonce }: BookingFo
           .
         </p>
 
-        {/* Turnstile CAPTCHA widget — injects a hidden cf-turnstile-response input */}
-        <div
-          className="cf-turnstile"
-          data-sitekey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY}
-          data-action="booking"
-        />
+        <TurnstileWidget action="booking" nonce={nonce} />
 
         {/* Submit */}
         <button
@@ -244,11 +239,6 @@ export function BookingForm({ eventId, maxTickets, isSoldOut, nonce }: BookingFo
           {loading ? "Booking…" : "Book Now — Free Entry"}
         </button>
       </form>
-      <Script
-        src="https://challenges.cloudflare.com/turnstile/v0/api.js"
-        strategy="afterInteractive"
-        nonce={nonce}
-      />
     </div>
   );
 }

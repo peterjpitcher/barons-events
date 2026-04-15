@@ -1,12 +1,12 @@
 "use client";
 
 import { useActionState } from "react";
-import Script from "next/script";
 import { signInAction } from "@/actions/auth";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { FieldError } from "@/components/ui/field-error";
+import { TurnstileWidget } from "@/components/turnstile-widget";
 
 type LoginFormProps = {
   redirectTo: string;
@@ -22,7 +22,6 @@ export function LoginForm({ redirectTo, nonce }: LoginFormProps) {
   const formError = state?.fieldErrors ? null : state?.message;
 
   return (
-    <>
     <form action={formAction} className="space-y-6" noValidate>
       <input type="hidden" name="redirectTo" value={redirectTo} />
       <div className="space-y-2">
@@ -58,15 +57,9 @@ export function LoginForm({ redirectTo, nonce }: LoginFormProps) {
         <FieldError id="password-error" message={passwordError} />
       </div>
       {formError ? <p className="text-sm text-[var(--color-danger)]">{formError}</p> : null}
-      <div
-        className="cf-turnstile"
-        data-sitekey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY}
-        data-action="login"
-      />
+      <TurnstileWidget action="login" nonce={nonce} />
       <SubmitButton label="Sign in" />
     </form>
-    <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js" strategy="afterInteractive" nonce={nonce} />
-    </>
   );
 }
 

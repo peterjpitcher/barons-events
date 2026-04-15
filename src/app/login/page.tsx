@@ -32,13 +32,13 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const reason = query.reason;
   const error = query.error;
 
+  const headersList = await headers();
+  const nonce = headersList.get("x-nonce") ?? undefined;
+
   // Use getCurrentUser() (which calls getUser()) rather than getSession().
   // getSession() trusts the local cookie and can return a stale session even
   // when the refresh token is no longer valid — causing a redirect loop with
   // the middleware, which also uses getUser() and rejects the same stale token.
-  const headersList = await headers();
-  const nonce = headersList.get("x-nonce") ?? undefined;
-
   const user = await getCurrentUser();
   if (user) {
     redirect(redirectTarget);

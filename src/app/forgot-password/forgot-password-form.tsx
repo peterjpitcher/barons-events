@@ -2,12 +2,12 @@
 
 import { useActionState } from "react";
 import Link from "next/link";
-import Script from "next/script";
 import { requestPasswordResetAction } from "@/actions/auth";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { FieldError } from "@/components/ui/field-error";
+import { TurnstileWidget } from "@/components/turnstile-widget";
 
 const errorInputClass = "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]";
 
@@ -17,7 +17,6 @@ export function ForgotPasswordForm({ nonce }: { nonce?: string }) {
   const formError = state?.fieldErrors ? null : state?.message;
 
   return (
-    <>
     <form action={formAction} className="space-y-6" noValidate>
       <div className="space-y-2">
         <Label className="text-[var(--color-text-subtle)]" htmlFor="email">
@@ -36,11 +35,7 @@ export function ForgotPasswordForm({ nonce }: { nonce?: string }) {
         <FieldError id="email-error" message={emailError} />
       </div>
       {formError ? <p className="text-sm text-[var(--color-danger)]">{formError}</p> : null}
-      <div
-        className="cf-turnstile"
-        data-sitekey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY}
-        data-action="password_reset"
-      />
+      <TurnstileWidget action="password_reset" nonce={nonce} />
       <SubmitButton label="Send reset link" pendingLabel="Sending link..." />
       <p className="text-sm text-muted">
         Remembered it?{" "}
@@ -50,8 +45,6 @@ export function ForgotPasswordForm({ nonce }: { nonce?: string }) {
         .
       </p>
     </form>
-    <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js" strategy="afterInteractive" nonce={nonce} />
-    </>
   );
 }
 
