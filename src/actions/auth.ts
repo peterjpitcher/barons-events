@@ -245,8 +245,15 @@ export async function requestPasswordResetAction(
     return { success: false, message: "Security check failed. Please try again." };
   }
 
+  // Extract IP from headers for rate limiting
+  const { headers } = await import("next/headers");
+  const headersList = await headers();
+  const clientIp = headersList.get("x-forwarded-for")?.split(",")[0]?.trim()
+    ?? headersList.get("x-real-ip")
+    ?? "unknown";
+
   // Per-email rate limit: 3 requests per hour
-  const rateLimited = await recordPasswordResetAttempt(parsed.data.email);
+  const rateLimited = await recordPasswordResetAttempt(parsed.data.email, clientIp);
   if (rateLimited) {
     // Always return generic success to prevent email enumeration
     redirect("/forgot-password?status=sent");
@@ -328,9 +335,32 @@ export async function completePasswordResetAction(
     };
   }
 
+  // Validate the recovery-proof cookie — ensures the user arrived via a legitimate reset link
+  const cookieStore = await cookies();
+  const recoveryProof = cookieStore.get("recovery-ok")?.value;
+  if (!recoveryProof) {
+    return {
+      status: "error",
+      message: "Your reset session has expired or is invalid. Please request a new reset link."
+    };
+  }
+  // Consume the proof immediately — single use only
+  cookieStore.set("recovery-ok", "", { maxAge: 0, path: "/" });
+
   const supabase = await createSupabaseActionClient();
 
-  const { error: updateError } = await supabase.auth.updateUser({
+  // Retrieve the current user from the Supabase session (established during token exchange)
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return {
+      status: "error",
+      message: "Session expired. Request a new reset link and try again."
+    };
+  }
+
+  // Use admin API to update password — bypasses Supabase session constraints
+  const adminClient = createSupabaseAdminClient();
+  const { error: updateError } = await adminClient.auth.admin.updateUserById(user.id, {
     password: parsed.data.password
   });
 
@@ -346,39 +376,28 @@ export async function completePasswordResetAction(
   let sessionTeardownFailed = false;
 
   try {
-    const { data: { user: currentUser } } = await supabase.auth.getUser();
-    if (currentUser) {
+    if (user) {
       // Attempt to destroy all existing sessions — Gap 1.6
       try {
-        await destroyAllSessionsForUser(currentUser.id);
+        await destroyAllSessionsForUser(user.id);
       } catch (destroyError) {
         console.error("Failed to destroy sessions after password reset:", destroyError);
         sessionTeardownFailed = true;
       }
 
-      // Issue a replacement session before signing out (auth standard §3 — session fixation prevention)
-      try {
-        const cookieStore = await cookies();
-        const newSessionId = await createSession(currentUser.id, {
-          userAgent: "",
-          ipAddress: "", // not available in server action context
-        });
-        cookieStore.set(SESSION_COOKIE_NAME, newSessionId, makeSessionCookieOptions());
-      } catch (sessionError) {
-        console.error("Failed to issue replacement session after password reset:", sessionError);
-      }
+      // Clear the app session cookie — user will create a fresh session on next login
+      cookieStore.set(SESSION_COOKIE_NAME, "", { maxAge: 0, path: "/" });
 
       await logAuthEvent({
         event: "auth.password_updated",
-        userId: currentUser.id,
+        userId: user.id,
         meta: sessionTeardownFailed ? { session_teardown_failed: true } : undefined
       });
 
       // Clear lockout records now that the user has proved mailbox ownership
       try {
-        const { data: { user: refreshedUser } } = await supabase.auth.getUser();
-        if (refreshedUser?.email) {
-          await clearLockoutForAllIps(refreshedUser.email);
+        if (user.email) {
+          await clearLockoutForAllIps(user.email);
         }
       } catch {
         // Non-fatal — lockout records are housekeeping

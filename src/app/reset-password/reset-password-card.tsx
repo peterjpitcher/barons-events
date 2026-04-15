@@ -111,7 +111,7 @@ export function ResetPasswordCard() {
               </button>
             </div>
             <FieldError id="password-error" message={passwordError} />
-            <p className="text-xs text-muted">At least 12 characters with uppercase, lowercase, number, and special character.</p>
+            <p className="text-xs text-muted">At least 12 characters.</p>
           </div>
 
           <div className="space-y-2">

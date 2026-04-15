@@ -1,4 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { randomUUID } from "crypto";
 import { createSupabaseActionClient } from "@/lib/supabase/server";
 import { logAuthEvent } from "@/lib/audit-log";
 
@@ -62,6 +64,16 @@ export async function GET(req: NextRequest) {
     // Default to /reset-password for code exchanges without a type param, since
     // the user likely arrived via an invite or recovery link and needs to set a password.
     if (type === "invite" || type === "recovery" || (code && !type)) {
+      // Set a one-time recovery proof cookie — must complete reset within 10 minutes
+      const cookieStore = await cookies();
+      const recoveryProof = randomUUID();
+      cookieStore.set("recovery-ok", recoveryProof, {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        path: "/",
+        maxAge: 600
+      });
       return NextResponse.redirect(`${baseUrl}/reset-password`);
     }
 

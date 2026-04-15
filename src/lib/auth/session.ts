@@ -21,6 +21,10 @@ export type SessionRecord = {
     userAgent?: string | null;
     ipAddress?: string | null;
   };
+  /** True if the DB expiry was extended during this validation request */
+  refreshed: boolean;
+  /** The new expiry time, if refreshed */
+  newExpiresAt?: Date;
 };
 
 export function makeSessionCookieOptions() {
@@ -138,14 +142,19 @@ export async function validateSession(sessionId: string): Promise<SessionRecord 
     const maxLifetime = MAX_SESSION_LIFETIME_HOURS * 3600 * 1000;
     const createdAt = new Date(data.created_at).getTime();
 
+    let refreshed = false;
+    let newExpiresAt: Date | undefined;
+
     if (sessionAge > refreshThreshold) {
-      const newExpiry = new Date(Math.min(
+      const computedExpiry = new Date(Math.min(
         now.getTime() + ABSOLUTE_TIMEOUT_HOURS * 3600 * 1000,
         createdAt + maxLifetime
       ));
+      refreshed = true;
+      newExpiresAt = computedExpiry;
       // Fire-and-forget — don't block the response
       db.from("app_sessions")
-        .update({ expires_at: newExpiry.toISOString() })
+        .update({ expires_at: computedExpiry.toISOString() })
         .eq("session_id", sessionId)
         .then(() => {});
     }
@@ -159,7 +168,9 @@ export async function validateSession(sessionId: string): Promise<SessionRecord 
       metadata: {
         userAgent: data.user_agent,
         ipAddress: data.ip_address
-      }
+      },
+      refreshed,
+      newExpiresAt
     };
   } catch (error) {
     console.error("Session validation error (fail-closed):", error);
@@ -186,6 +197,10 @@ export async function destroyAllSessionsForUser(userId: string): Promise<void> {
 
 /**
  * Removes all expired sessions. For use in a periodic cron job.
+ *
+ * Uses separate cleanup windows for login attempts (30 min lockout duration)
+ * and password reset attempts (60 min reset window) to avoid premature deletion
+ * of reset-throttle rows.
  */
 export async function cleanupExpiredSessions(): Promise<void> {
   const db = createSupabaseAdminClient();
@@ -197,9 +212,20 @@ export async function cleanupExpiredSessions(): Promise<void> {
   const idleCutoff = new Date(Date.now() - IDLE_TIMEOUT_MINUTES * 60 * 1000).toISOString();
   await db.from("app_sessions").delete().lt("last_activity_at", idleCutoff);
 
-  // Clean up stale login_attempts (older than lockout duration)
-  const attemptCutoff = new Date(Date.now() - LOCKOUT_DURATION_MINUTES * 60 * 1000).toISOString();
-  await db.from("login_attempts").delete().lt("attempted_at", attemptCutoff);
+  // Login attempt cleanup — use lockout duration (30 min)
+  const loginCutoff = new Date(Date.now() - LOCKOUT_DURATION_MINUTES * 60 * 1000).toISOString();
+  await db.from("login_attempts")
+    .delete()
+    .lt("attempted_at", loginCutoff)
+    .neq("ip_address", "password_reset")
+    .neq("ip_address", "password_reset_ip");
+
+  // Password reset attempt cleanup — use reset window (60 min)
+  const resetCutoff = new Date(Date.now() - RESET_WINDOW_MINUTES * 60 * 1000).toISOString();
+  await db.from("login_attempts")
+    .delete()
+    .lt("attempted_at", resetCutoff)
+    .in("ip_address", ["password_reset", "password_reset_ip"]);
 }
 
 // ─── Account lockout helpers ────────────────────────────────────────────────
@@ -207,6 +233,11 @@ export async function cleanupExpiredSessions(): Promise<void> {
 const LOCKOUT_WINDOW_MINUTES = 15;
 const LOCKOUT_THRESHOLD = 5;
 const LOCKOUT_DURATION_MINUTES = 30;
+
+// Password reset rate limiting constants (also used by cleanupExpiredSessions)
+const RESET_LIMIT_PER_HOUR = 3;
+const RESET_WINDOW_MINUTES = 60;
+const RESET_IP_LIMIT_PER_HOUR = 10;
 
 /**
  * SHA-256 hashes an email for lockout/audit storage.
@@ -281,49 +312,68 @@ export async function clearLockoutForIp(email: string, ip: string): Promise<void
 
 /**
  * Clears all lockout records for an email across all IPs. Called on successful password reset.
+ * Excludes password_reset and password_reset_ip rows — those are rate-limit records, not lockout records.
  */
 export async function clearLockoutForAllIps(email: string): Promise<void> {
   const db = createSupabaseAdminClient();
   const emailHash = await hashEmail(email);
-  await db.from("login_attempts").delete().eq("email_hash", emailHash);
+  await db.from("login_attempts")
+    .delete()
+    .eq("email_hash", emailHash)
+    .neq("ip_address", "password_reset")
+    .neq("ip_address", "password_reset_ip");
 }
 
 // ─── Password reset rate limiting ─────────────────────────────────────────────
 
-const RESET_LIMIT_PER_HOUR = 3;
-const RESET_WINDOW_MINUTES = 60;
-
 /**
- * Records a password reset request. Returns true if the per-email limit has
- * been exceeded (caller should silently succeed to prevent enumeration).
+ * Records a password reset request. Returns true if either the per-email or
+ * per-IP limit has been exceeded (caller should silently succeed to prevent enumeration).
  *
- * Reuses the `login_attempts` table with `ip_address = "password_reset"` as a
- * type discriminator so no schema migration is needed. These rows are cleaned
- * up automatically by `cleanupExpiredSessions`.
+ * Reuses the `login_attempts` table with `ip_address = "password_reset"` (per-email)
+ * and `ip_address = "password_reset_ip"` (per-IP) as type discriminators so no
+ * schema migration is needed. These rows are cleaned up automatically by
+ * `cleanupExpiredSessions`.
+ *
+ * Per-email limit: 3/hour — prevents hammering a single target.
+ * Per-IP limit: 10/hour — prevents spray attacks across many emails from one IP.
  */
-export async function recordPasswordResetAttempt(email: string): Promise<boolean> {
+export async function recordPasswordResetAttempt(
+  email: string,
+  ipAddress: string
+): Promise<boolean> {
   const db = createSupabaseAdminClient();
   const emailHash = await hashEmail(email);
+  const ipHash = await hashEmail(`ip:${ipAddress}`); // namespace-prefix avoids collision with real email hashes
 
-  // Count recent reset attempts for this email
   const windowStart = new Date(Date.now() - RESET_WINDOW_MINUTES * 60 * 1000).toISOString();
-  const { count } = await db
+
+  // Per-email limit: 3/hour
+  const { count: emailCount } = await db
     .from("login_attempts")
     .select("*", { count: "exact", head: true })
     .eq("email_hash", emailHash)
     .eq("ip_address", "password_reset")
     .gte("attempted_at", windowStart);
 
-  if ((count ?? 0) >= RESET_LIMIT_PER_HOUR) {
-    return true; // Rate limited
-  }
+  if ((emailCount ?? 0) >= RESET_LIMIT_PER_HOUR) return true;
 
-  // Record the attempt
-  await db.from("login_attempts").insert({
-    email_hash: emailHash,
-    ip_address: "password_reset",
-    attempted_at: new Date().toISOString()
-  });
+  // Per-IP limit: 10/hour (prevents spray attacks)
+  const { count: ipCount } = await db
+    .from("login_attempts")
+    .select("*", { count: "exact", head: true })
+    .eq("email_hash", ipHash)
+    .eq("ip_address", "password_reset_ip")
+    .gte("attempted_at", windowStart);
+
+  if ((ipCount ?? 0) >= RESET_IP_LIMIT_PER_HOUR) return true;
+
+  // Record both rows
+  const now = new Date().toISOString();
+  await db.from("login_attempts").insert([
+    { email_hash: emailHash, ip_address: "password_reset", attempted_at: now },
+    { email_hash: ipHash, ip_address: "password_reset_ip", attempted_at: now }
+  ]);
 
   return false;
 }

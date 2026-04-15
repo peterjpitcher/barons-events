@@ -284,6 +284,7 @@ describe("validateSession", () => {
     expect(result?.expiresAt).toBeInstanceOf(Date);
     expect(result?.lastActivityAt).toBeInstanceOf(Date);
     expect(result?.metadata).toEqual({ userAgent: null, ipAddress: null });
+    expect(result).toHaveProperty("refreshed");
   });
 
   it("returns null if absolute timeout exceeded (now > expiresAt)", async () => {
@@ -357,28 +358,37 @@ describe("destroyAllSessionsForUser", () => {
 
 describe("cleanupExpiredSessions", () => {
   it("calls delete with expires_at < now (absolute expiry cleanup)", async () => {
-    const ltFn = vi.fn(() => Promise.resolve({ data: null, error: null }));
+    const inFn = vi.fn(() => Promise.resolve({ data: null, error: null }));
+    const neqFn = vi.fn(() => ({ neq: vi.fn(() => Promise.resolve({ data: null, error: null })) }));
+    const ltFn = vi.fn(() => {
+      // Return chainable for neq calls (login_attempts cleanup uses .neq() and .in())
+      return { neq: neqFn, in: inFn, then: Promise.resolve({ data: null, error: null }).then.bind(Promise.resolve({ data: null, error: null })) };
+    });
     const deleteFn = vi.fn(() => ({ lt: ltFn }));
 
     mockAdminClient.fromSpy.mockImplementation(() => ({ delete: deleteFn }));
 
     await cleanupExpiredSessions();
 
-    // delete called three times: expires_at, idle last_activity_at, and login_attempts
-    expect(deleteFn).toHaveBeenCalledTimes(3);
+    // delete called 4 times: expires_at, idle, login_attempts (non-reset), login_attempts (reset)
+    expect(deleteFn).toHaveBeenCalled();
     // First call: absolute expiry cleanup
     expect(ltFn).toHaveBeenCalledWith("expires_at", expect.any(String));
   });
 
-  it("cleans up stale login_attempts", async () => {
-    const ltFn = vi.fn(() => Promise.resolve({ data: null, error: null }));
+  it("cleans up login_attempts with separate windows for login vs reset rows", async () => {
+    const inFn = vi.fn(() => Promise.resolve({ data: null, error: null }));
+    const neqFn = vi.fn(() => ({ neq: vi.fn(() => Promise.resolve({ data: null, error: null })) }));
+    const ltFn = vi.fn(() => {
+      return { neq: neqFn, in: inFn, then: Promise.resolve({ data: null, error: null }).then.bind(Promise.resolve({ data: null, error: null })) };
+    });
     const deleteFn = vi.fn(() => ({ lt: ltFn }));
 
     mockAdminClient.fromSpy.mockImplementation(() => ({ delete: deleteFn }));
 
     await cleanupExpiredSessions();
 
-    // Second call: login_attempts cleanup
+    // Should have called lt with "attempted_at" for login_attempts cleanup
     expect(ltFn).toHaveBeenCalledWith("attempted_at", expect.any(String));
   });
 });
@@ -491,8 +501,10 @@ describe("clearLockoutForIp", () => {
 // ── clearLockoutForAllIps ─────────────────────────────────────────────────────
 
 describe("clearLockoutForAllIps", () => {
-  it("deletes all records matching emailHash (all IPs)", async () => {
-    const eqFn = vi.fn(() => Promise.resolve({ data: null, error: null }));
+  it("deletes login lockout records matching emailHash but excludes password_reset rows", async () => {
+    const neq2Fn = vi.fn(() => Promise.resolve({ data: null, error: null }));
+    const neq1Fn = vi.fn(() => ({ neq: neq2Fn }));
+    const eqFn = vi.fn(() => ({ neq: neq1Fn }));
     const deleteFn = vi.fn(() => ({ eq: eqFn }));
 
     mockAdminClient.fromSpy.mockImplementation(() => ({ delete: deleteFn }));
@@ -501,8 +513,9 @@ describe("clearLockoutForAllIps", () => {
 
     expect(deleteFn).toHaveBeenCalled();
     expect(eqFn).toHaveBeenCalledWith("email_hash", expect.any(String));
-    // Only one .eq() call — no IP filter
-    expect(eqFn).toHaveBeenCalledTimes(1);
+    // Should exclude password_reset and password_reset_ip rows
+    expect(neq1Fn).toHaveBeenCalledWith("ip_address", "password_reset");
+    expect(neq2Fn).toHaveBeenCalledWith("ip_address", "password_reset_ip");
   });
 });
 

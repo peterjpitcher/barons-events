@@ -1,5 +1,5 @@
+import { cache } from "react";
 import { redirect } from "next/navigation";
-import { headers } from "next/headers";
 import { createSupabaseReadonlyClient } from "./supabase/server";
 import type { AppUser, UserRole } from "./types";
 
@@ -45,33 +45,18 @@ export async function getSession() {
   return session ?? null;
 }
 
-export async function getCurrentUser(): Promise<AppUser | null> {
+export const getCurrentUser = cache(async function getCurrentUser(): Promise<AppUser | null> {
   const supabase = await createSupabaseReadonlyClient();
 
-  // Optimisation: middleware already validated the Supabase JWT and sets x-user-id.
-  // When present, skip the redundant getUser() network round-trip (~50-150ms).
-  let verifiedUserId: string | null = null;
-  try {
-    const headersList = await headers();
-    verifiedUserId = headersList.get("x-user-id");
-  } catch {
-    // headers() throws outside a request scope (e.g. in tests or API routes
-    // not running through Next.js). Fall through to getUser() below.
+  // Always validate the session server-side — never trust client-injectable headers.
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return null;
   }
 
-  let userId: string;
-  if (verifiedUserId) {
-    userId = verifiedUserId;
-  } else {
-    // Fallback for contexts where middleware didn't run (e.g. API routes, tests)
-    const {
-      data: { user }
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return null;
-    }
-    userId = user.id;
-  }
+  const userId = user.id;
 
   const { data: profile } = await supabase
     .from("users")
@@ -96,7 +81,7 @@ export async function getCurrentUser(): Promise<AppUser | null> {
     role,
     venueId: profile.venue_id
   };
-}
+});
 
 /**
  * Server Component helper: returns the current user or redirects to /login.
@@ -183,11 +168,12 @@ export function withAuthAndCSRF(
       });
     }
 
-    const csrfCookie = req.headers.get("cookie")
+    const csrfCookieStr = req.headers.get("cookie")
       ?.split(";")
-      .find((c) => c.trim().startsWith("csrf-token="))
-      ?.split("=")[1]
-      ?.trim();
+      .find((c) => c.trim().startsWith("csrf-token="));
+    const csrfCookie = csrfCookieStr
+      ? csrfCookieStr.substring(csrfCookieStr.indexOf("=") + 1).trim()
+      : undefined;
     const csrfHeader = req.headers.get("x-csrf-token");
 
     if (!csrfCookie || !csrfHeader || !timingSafeEqual(csrfCookie, csrfHeader)) {
@@ -222,11 +208,12 @@ export function withAdminAuthAndCSRF(
       });
     }
 
-    const csrfCookie = req.headers.get("cookie")
+    const csrfCookieStr = req.headers.get("cookie")
       ?.split(";")
-      .find((c) => c.trim().startsWith("csrf-token="))
-      ?.split("=")[1]
-      ?.trim();
+      .find((c) => c.trim().startsWith("csrf-token="));
+    const csrfCookie = csrfCookieStr
+      ? csrfCookieStr.substring(csrfCookieStr.indexOf("=") + 1).trim()
+      : undefined;
     const csrfHeader = req.headers.get("x-csrf-token");
 
     if (!csrfCookie || !csrfHeader || !timingSafeEqual(csrfCookie, csrfHeader)) {

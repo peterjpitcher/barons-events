@@ -449,6 +449,64 @@ describe("withAuthAndCSRF", () => {
   });
 });
 
+// ─── CSRF parsing — tokens containing "=" ────────────────────────────────────
+
+describe("CSRF parsing — tokens with special characters", () => {
+  it("should correctly parse CSRF tokens containing '=' characters (e.g. base64)", async () => {
+    mockCreateClient.mockResolvedValue(
+      makeSupabaseClient({ id: "user-1" }, validCentralPlannerProfile)
+    );
+
+    const base64Token = "abc123def456==";
+    const handlerResponse = new Response("ok", { status: 200 });
+    const handler = vi.fn().mockResolvedValue(handlerResponse);
+    const wrapped = withAuthAndCSRF(handler);
+    const req = new Request("http://localhost/test", {
+      headers: {
+        cookie: `csrf-token=${base64Token}`,
+        "x-csrf-token": base64Token
+      }
+    });
+
+    const response = await wrapped(req);
+
+    expect(response.status).toBe(200);
+    expect(handler).toHaveBeenCalledWith(req, validCentralPlannerUser);
+  });
+
+  it("should correctly parse CSRF tokens without '=' characters (regression)", async () => {
+    mockCreateClient.mockResolvedValue(
+      makeSupabaseClient({ id: "user-1" }, validCentralPlannerProfile)
+    );
+
+    const simpleToken = "abc123def456";
+    const handlerResponse = new Response("ok", { status: 200 });
+    const handler = vi.fn().mockResolvedValue(handlerResponse);
+    const wrapped = withAuthAndCSRF(handler);
+    const req = makeCSRFRequest(simpleToken);
+
+    const response = await wrapped(req);
+
+    expect(response.status).toBe(200);
+    expect(handler).toHaveBeenCalledWith(req, validCentralPlannerUser);
+  });
+});
+
+// ─── getCurrentUser — no header trust ────────────────────────────────────────
+
+describe("getCurrentUser — no x-user-id header trust", () => {
+  it("should return null when no session exists (verifies getUser is called, not header)", async () => {
+    mockCreateClient.mockResolvedValue(makeSupabaseClient(null, null));
+
+    const result = await getCurrentUser();
+
+    expect(result).toBeNull();
+    // Verify the supabase client was used (getUser called), not a header
+    const client = await mockCreateClient.mock.results[0].value;
+    expect(client.auth.getUser).toHaveBeenCalled();
+  });
+});
+
 // ─── withAdminAuthAndCSRF ─────────────────────────────────────────────────────
 
 describe("withAdminAuthAndCSRF", () => {

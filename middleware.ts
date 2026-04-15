@@ -148,6 +148,14 @@ export async function middleware(req: NextRequest) {
   const requestHeaders = new Headers(req.headers);
   requestHeaders.set("x-nonce", nonce);
 
+  // Regression hardening: strip any spoofed x-user-id from incoming requests.
+  // getCurrentUser() no longer reads this header, but delete it to prevent future re-introduction.
+  requestHeaders.delete("x-user-id");
+
+  // Forward the current pathname so server components (e.g. layout.tsx) can detect auth pages
+  // without duplicating the public-path logic.
+  requestHeaders.set("x-pathname", pathname);
+
   const res = NextResponse.next({
     request: { headers: requestHeaders }
   });
@@ -279,10 +287,17 @@ export async function middleware(req: NextRequest) {
     return redirectRes;
   }
 
-  // Step 6: Set verified user ID header for downstream Server Components.
-  // This avoids a redundant getUser() round-trip in getCurrentUser() — the JWT
-  // has already been validated above via supabase.auth.getUser().
-  requestHeaders.set("x-user-id", user.id);
+  // Step 6: Refresh cookie lifetime when DB expiry was extended (sliding window).
+  // Must be on the final success path — after all redirect/mismatch checks have passed.
+  if (session.refreshed && session.newExpiresAt) {
+    const newMaxAge = Math.floor((session.newExpiresAt.getTime() - Date.now()) / 1000);
+    if (newMaxAge > 0) {
+      res.cookies.set(SESSION_COOKIE_NAME, appSessionId, {
+        ...makeSessionCookieOptions(),
+        maxAge: newMaxAge
+      });
+    }
+  }
 
   // Step 7: CSRF token — generate if absent
   const existingCsrf = req.cookies.get(CSRF_COOKIE_NAME)?.value;

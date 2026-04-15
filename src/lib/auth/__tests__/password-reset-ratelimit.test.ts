@@ -30,7 +30,8 @@ import {
   recordFailedLoginAttempt,
   isLockedOut,
   clearLockoutForIp,
-  clearLockoutForAllIps
+  clearLockoutForAllIps,
+  recordPasswordResetAttempt
 } from "../session";
 
 // ─── Setup ────────────────────────────────────────────────────────────────────
@@ -133,10 +134,10 @@ describe("recordFailedLoginAttempt — lockout threshold", () => {
     );
 
     // Email hash should be consistent (lowercased before hashing)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const firstCallHash = (insertFn.mock.calls as any)[0]?.[0]?.email_hash as string;
-    expect(firstCallHash).toBeTruthy();
-    expect(firstCallHash.length).toBe(64); // SHA-256 hex = 64 chars
+    const firstCallHash = (insertFn.mock.calls as unknown[][])[0]?.[0] as { email_hash: string } | undefined;
+    const emailHash = firstCallHash?.email_hash ?? "";
+    expect(emailHash).toBeTruthy();
+    expect(emailHash.length).toBe(64); // SHA-256 hex = 64 chars
   });
 });
 
@@ -198,8 +199,10 @@ describe("clearLockoutForIp — targeted lockout reset", () => {
 // ─── clearLockoutForAllIps — full lockout reset after password change ───────
 
 describe("clearLockoutForAllIps — global lockout reset", () => {
-  it("should delete all attempts matching hashed email across all IPs", async () => {
-    const eqFn = vi.fn(() => Promise.resolve({ data: null, error: null }));
+  it("should delete login lockout records but exclude password_reset and password_reset_ip rows", async () => {
+    const neq2Fn = vi.fn(() => Promise.resolve({ data: null, error: null }));
+    const neq1Fn = vi.fn(() => ({ neq: neq2Fn }));
+    const eqFn = vi.fn(() => ({ neq: neq1Fn }));
     const deleteFn = vi.fn(() => ({ eq: eqFn }));
 
     mockFromImpl = () => ({ delete: deleteFn });
@@ -208,16 +211,18 @@ describe("clearLockoutForAllIps — global lockout reset", () => {
 
     expect(deleteFn).toHaveBeenCalled();
     expect(eqFn).toHaveBeenCalledWith("email_hash", expect.any(String));
-    // Should only call eq once — no IP filter
-    expect(eqFn).toHaveBeenCalledTimes(1);
+    expect(neq1Fn).toHaveBeenCalledWith("ip_address", "password_reset");
+    expect(neq2Fn).toHaveBeenCalledWith("ip_address", "password_reset_ip");
   });
 
   it("should produce the same hash regardless of email case", async () => {
     const hashes: string[] = [];
 
+    const neq2Fn = vi.fn(() => Promise.resolve({ data: null, error: null }));
+    const neq1Fn = vi.fn(() => ({ neq: neq2Fn }));
     const eqFn = vi.fn((field: string, value: string) => {
       if (field === "email_hash") hashes.push(value);
-      return Promise.resolve({ data: null, error: null });
+      return { neq: neq1Fn };
     });
     const deleteFn = vi.fn(() => ({ eq: eqFn }));
 
@@ -228,5 +233,121 @@ describe("clearLockoutForAllIps — global lockout reset", () => {
 
     expect(hashes.length).toBe(2);
     expect(hashes[0]).toBe(hashes[1]);
+  });
+});
+
+// ─── recordPasswordResetAttempt — per-email and per-IP rate limiting ────────
+
+describe("recordPasswordResetAttempt — per-email and per-IP rate limiting", () => {
+  it("should return false when under per-email limit", async () => {
+    const insertFn = vi.fn(() => Promise.resolve({ data: null, error: null }));
+    // Per-email count: 1 (under 3)
+    const emailGteFn = vi.fn(() => Promise.resolve({ count: 1, error: null }));
+    const emailEq2Fn = vi.fn(() => ({ gte: emailGteFn }));
+    const emailEq1Fn = vi.fn(() => ({ eq: emailEq2Fn }));
+    // Per-IP count: 2 (under 10)
+    const ipGteFn = vi.fn(() => Promise.resolve({ count: 2, error: null }));
+    const ipEq2Fn = vi.fn(() => ({ gte: ipGteFn }));
+    const ipEq1Fn = vi.fn(() => ({ eq: ipEq2Fn }));
+
+    let selectCallCount = 0;
+    const selectFn = vi.fn(() => {
+      selectCallCount++;
+      if (selectCallCount === 1) return { eq: emailEq1Fn };
+      return { eq: ipEq1Fn };
+    });
+
+    mockFromImpl = () => ({
+      select: selectFn,
+      insert: insertFn
+    });
+
+    const result = await recordPasswordResetAttempt("user@example.com", "1.2.3.4");
+
+    expect(result).toBe(false);
+    // Should have inserted both per-email and per-IP rows
+    expect(insertFn).toHaveBeenCalled();
+  });
+
+  it("should return true when per-email limit exceeded (3/hour)", async () => {
+    const insertFn = vi.fn(() => Promise.resolve({ data: null, error: null }));
+    // Per-email count: 3 (at limit)
+    const emailGteFn = vi.fn(() => Promise.resolve({ count: 3, error: null }));
+    const emailEq2Fn = vi.fn(() => ({ gte: emailGteFn }));
+    const emailEq1Fn = vi.fn(() => ({ eq: emailEq2Fn }));
+    const selectFn = vi.fn(() => ({ eq: emailEq1Fn }));
+
+    mockFromImpl = () => ({
+      select: selectFn,
+      insert: insertFn
+    });
+
+    const result = await recordPasswordResetAttempt("user@example.com", "1.2.3.4");
+
+    expect(result).toBe(true);
+    // Should NOT insert — rate limited before insertion
+    expect(insertFn).not.toHaveBeenCalled();
+  });
+
+  it("should return true when per-IP limit exceeded (10/hour)", async () => {
+    const insertFn = vi.fn(() => Promise.resolve({ data: null, error: null }));
+    // Per-email count: 1 (under limit)
+    const emailGteFn = vi.fn(() => Promise.resolve({ count: 1, error: null }));
+    const emailEq2Fn = vi.fn(() => ({ gte: emailGteFn }));
+    const emailEq1Fn = vi.fn(() => ({ eq: emailEq2Fn }));
+    // Per-IP count: 10 (at limit)
+    const ipGteFn = vi.fn(() => Promise.resolve({ count: 10, error: null }));
+    const ipEq2Fn = vi.fn(() => ({ gte: ipGteFn }));
+    const ipEq1Fn = vi.fn(() => ({ eq: ipEq2Fn }));
+
+    let selectCallCount = 0;
+    const selectFn = vi.fn(() => {
+      selectCallCount++;
+      if (selectCallCount === 1) return { eq: emailEq1Fn };
+      return { eq: ipEq1Fn };
+    });
+
+    mockFromImpl = () => ({
+      select: selectFn,
+      insert: insertFn
+    });
+
+    const result = await recordPasswordResetAttempt("user@example.com", "1.2.3.4");
+
+    expect(result).toBe(true);
+    // Should NOT insert — rate limited before insertion
+    expect(insertFn).not.toHaveBeenCalled();
+  });
+
+  it("should insert both per-email and per-IP rows when not rate limited", async () => {
+    const insertFn = vi.fn(() => Promise.resolve({ data: null, error: null }));
+    const emailGteFn = vi.fn(() => Promise.resolve({ count: 0, error: null }));
+    const emailEq2Fn = vi.fn(() => ({ gte: emailGteFn }));
+    const emailEq1Fn = vi.fn(() => ({ eq: emailEq2Fn }));
+    const ipGteFn = vi.fn(() => Promise.resolve({ count: 0, error: null }));
+    const ipEq2Fn = vi.fn(() => ({ gte: ipGteFn }));
+    const ipEq1Fn = vi.fn(() => ({ eq: ipEq2Fn }));
+
+    let selectCallCount = 0;
+    const selectFn = vi.fn(() => {
+      selectCallCount++;
+      if (selectCallCount === 1) return { eq: emailEq1Fn };
+      return { eq: ipEq1Fn };
+    });
+
+    mockFromImpl = () => ({
+      select: selectFn,
+      insert: insertFn
+    });
+
+    await recordPasswordResetAttempt("user@example.com", "1.2.3.4");
+
+    // Should insert an array with both rows
+    expect(insertFn).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ ip_address: "password_reset" }),
+        expect.objectContaining({ ip_address: "password_reset_ip" })
+      ])
+    );
   });
 });

@@ -154,7 +154,14 @@ export default async function RootLayout({
 }>) {
   const headersList = await headers();
   const nonce = headersList.get("x-nonce") ?? undefined;
-  const user = await getCurrentUser();
+  const pathname = headersList.get("x-pathname") ?? "";
+
+  // Skip AppShell and session validation on auth pages — no need to call getCurrentUser()
+  // when the page does not require authentication.
+  const AUTH_PATHS = ["/login", "/forgot-password", "/reset-password", "/unauthorized"];
+  const isAuthPage = AUTH_PATHS.some(p => pathname.startsWith(p));
+
+  const user = isAuthPage ? null : await getCurrentUser();
 
   return (
     <html lang="en">

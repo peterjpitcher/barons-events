@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const mockUpdateUser = vi.fn();
 const mockSignOut = vi.fn();
 const mockGetUser = vi.fn();
+const mockUpdateUserById = vi.fn();
 
 vi.mock("@/lib/supabase/server", () => ({
   createSupabaseActionClient: vi.fn().mockResolvedValue({
@@ -53,7 +54,12 @@ vi.mock("@/lib/notifications", () => ({
 
 vi.mock("@/lib/supabase/admin", () => ({
   createSupabaseAdminClient: vi.fn().mockReturnValue({
-    auth: { admin: { generateLink: vi.fn().mockResolvedValue({ data: null, error: null }) } },
+    auth: {
+      admin: {
+        generateLink: vi.fn().mockResolvedValue({ data: null, error: null }),
+        updateUserById: (...args: unknown[]) => mockUpdateUserById(...args),
+      },
+    },
   }),
 }));
 
@@ -71,13 +77,16 @@ vi.mock("next/navigation", () => ({
   }),
 }));
 
+const mockCookieGet = vi.fn();
+const mockCookieSet = vi.fn();
+
 vi.mock("next/headers", () => ({
   headers: vi.fn().mockResolvedValue({
     get: vi.fn().mockReturnValue("127.0.0.1"),
   }),
   cookies: vi.fn().mockResolvedValue({
-    get: vi.fn().mockReturnValue(undefined),
-    set: vi.fn(),
+    get: (...args: unknown[]) => mockCookieGet(...args),
+    set: (...args: unknown[]) => mockCookieSet(...args),
   }),
 }));
 
@@ -96,10 +105,17 @@ describe("completePasswordResetAction — session teardown failure handling", ()
   beforeEach(() => {
     vi.clearAllMocks();
     mockUpdateUser.mockResolvedValue({ error: null });
+    mockUpdateUserById.mockResolvedValue({ data: { user: testUser }, error: null });
     mockGetUser.mockResolvedValue({ data: { user: testUser } });
     mockSignOut.mockResolvedValue({ error: null });
     mockDestroyAllSessionsForUser.mockResolvedValue(undefined);
     mockCreateSession.mockResolvedValue("new-session-id");
+    // Default: recovery-ok cookie present
+    mockCookieGet.mockImplementation((name: string) => {
+      if (name === "recovery-ok") return { value: "1" };
+      return undefined;
+    });
+    mockCookieSet.mockImplementation(() => {});
   });
 
   it("should log session_teardown_failed: true in audit metadata when destroyAllSessionsForUser throws", async () => {
@@ -154,5 +170,72 @@ describe("completePasswordResetAction — session teardown failure handling", ()
         meta: undefined,
       })
     );
+  });
+
+  it("should fail with error when recovery-ok cookie is missing", async () => {
+    // Override: no recovery-ok cookie
+    mockCookieGet.mockImplementation(() => undefined);
+
+    const { completePasswordResetAction } = await import("@/actions/auth");
+    const result = await completePasswordResetAction(
+      { status: "idle" },
+      makeFormData("SecureP@ssword123!", "SecureP@ssword123!")
+    );
+
+    expect(result.status).toBe("error");
+    expect(result.message).toContain("expired");
+  });
+
+  it("should succeed when recovery-ok cookie is present", async () => {
+    const { completePasswordResetAction } = await import("@/actions/auth");
+    const result = await completePasswordResetAction(
+      { status: "idle" },
+      makeFormData("SecureP@ssword123!", "SecureP@ssword123!")
+    );
+
+    expect(result.status).toBe("success");
+  });
+
+  it("should NOT call createSession after password reset (no ghost session)", async () => {
+    const { completePasswordResetAction } = await import("@/actions/auth");
+    await completePasswordResetAction(
+      { status: "idle" },
+      makeFormData("SecureP@ssword123!", "SecureP@ssword123!")
+    );
+
+    // createSession should never be called during password reset
+    expect(mockCreateSession).not.toHaveBeenCalled();
+  });
+
+  it("should clear the app-session-id cookie after password reset", async () => {
+    const { completePasswordResetAction } = await import("@/actions/auth");
+    await completePasswordResetAction(
+      { status: "idle" },
+      makeFormData("SecureP@ssword123!", "SecureP@ssword123!")
+    );
+
+    // Verify session cookie was cleared (set with maxAge: 0)
+    // The SESSION_COOKIE_NAME is "baronshub_session" per the mock setup
+    expect(mockCookieSet).toHaveBeenCalledWith(
+      "baronshub_session",
+      "",
+      expect.objectContaining({ maxAge: 0 })
+    );
+  });
+
+  it("should use admin API updateUserById instead of client-side updateUser", async () => {
+    const { completePasswordResetAction } = await import("@/actions/auth");
+    await completePasswordResetAction(
+      { status: "idle" },
+      makeFormData("SecureP@ssword123!", "SecureP@ssword123!")
+    );
+
+    // Admin API should be used
+    expect(mockUpdateUserById).toHaveBeenCalledWith(
+      testUser.id,
+      expect.objectContaining({ password: "SecureP@ssword123!" })
+    );
+    // Client-side updateUser should NOT be used
+    expect(mockUpdateUser).not.toHaveBeenCalled();
   });
 });
