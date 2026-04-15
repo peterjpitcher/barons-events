@@ -26,7 +26,7 @@ export interface Database {
           name: string;
           address: string | null;
           capacity: number | null;
-          default_reviewer_id: string | null;
+          default_approver_id: string | null;
           default_manager_responsible: string | null;
           google_review_url: string | null;
           created_at: string;

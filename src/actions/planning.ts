@@ -17,8 +17,9 @@ import {
   updatePlanningTask
 } from "@/lib/planning";
 import type { PlanningItemStatus, PlanningTaskStatus, RecurrenceFrequency } from "@/lib/planning/types";
-import { canUsePlanning, canViewPlanning } from "@/lib/roles";
-import { createSupabaseActionClient } from "@/lib/supabase/server";
+import { canCreatePlanningItems, canManageAllPlanning, canViewPlanning } from "@/lib/roles";
+import type { UserRole } from "@/lib/types";
+import { createSupabaseActionClient, createSupabaseReadonlyClient } from "@/lib/supabase/server";
 import { generateInspirationItems } from "@/lib/planning/inspiration";
 import { generateSopChecklist, recalculateSopDates, updateBlockedStatus } from "@/lib/planning/sop";
 import { recordAuditLogEntry } from "@/lib/audit-log";
@@ -52,7 +53,7 @@ async function ensureUser() {
   if (!user) {
     throw new Error("You must be signed in.");
   }
-  if (!canUsePlanning(user.role)) {
+  if (!canCreatePlanningItems(user.role)) {
     throw new Error("You do not have permission to perform planning actions.");
   }
   return user;
@@ -407,6 +408,50 @@ export async function pausePlanningSeriesAction(input: unknown): Promise<Plannin
   }
 }
 
+/**
+ * Verify the current user owns the parent planning item.
+ * Returns an error result if the user is not admin and does not own the item.
+ */
+async function ensureOwnsParentItem(
+  userId: string,
+  userRole: UserRole,
+  planningItemId: string
+): Promise<PlanningActionResult | null> {
+  if (canManageAllPlanning(userRole)) return null;
+  const supabase = await createSupabaseReadonlyClient();
+  const { data: parentItem } = await supabase
+    .from("planning_items")
+    .select("owner_id")
+    .eq("id", planningItemId)
+    .single();
+  if (parentItem?.owner_id !== userId) {
+    return { success: false, message: "You can only manage tasks on your own planning items." };
+  }
+  return null;
+}
+
+/**
+ * Verify the current user owns the parent planning item of a given task.
+ * Returns an error result if the user is not admin and does not own the parent item.
+ */
+async function ensureOwnsParentItemOfTask(
+  userId: string,
+  userRole: UserRole,
+  taskId: string
+): Promise<PlanningActionResult | null> {
+  if (canManageAllPlanning(userRole)) return null;
+  const supabase = await createSupabaseReadonlyClient();
+  const { data: task } = await supabase
+    .from("planning_tasks")
+    .select("planning_item_id")
+    .eq("id", taskId)
+    .single();
+  if (!task) {
+    return { success: false, message: "Task not found." };
+  }
+  return ensureOwnsParentItem(userId, userRole, task.planning_item_id);
+}
+
 const createTaskSchema = z.object({
   planningItemId: uuidSchema,
   title: z.string().min(2, "Add a task title").max(160),
@@ -426,6 +471,10 @@ export async function createPlanningTaskAction(input: unknown): Promise<Planning
         fieldErrors: zodFieldErrors(parsed.error)
       };
     }
+
+    // Ownership check: non-admins can only add tasks to their own planning items
+    const ownershipError = await ensureOwnsParentItem(user.id, user.role, parsed.data.planningItemId);
+    if (ownershipError) return ownershipError;
 
     await createPlanningTask({
       planningItemId: parsed.data.planningItemId,
@@ -462,7 +511,7 @@ const updateTaskSchema = z.object({
 
 export async function updatePlanningTaskAction(input: unknown): Promise<PlanningActionResult> {
   try {
-    await ensureUser();
+    const user = await ensureUser();
     const parsed = updateTaskSchema.safeParse(input);
     if (!parsed.success) {
       return {
@@ -471,6 +520,10 @@ export async function updatePlanningTaskAction(input: unknown): Promise<Planning
         fieldErrors: zodFieldErrors(parsed.error)
       };
     }
+
+    // Ownership check: non-admins can only update tasks on their own planning items
+    const ownershipError = await ensureOwnsParentItemOfTask(user.id, user.role, parsed.data.taskId);
+    if (ownershipError) return ownershipError;
 
     await updatePlanningTask(parsed.data.taskId, {
       title: parsed.data.title,
@@ -504,6 +557,10 @@ export async function togglePlanningTaskStatusAction(input: unknown): Promise<Pl
   const parsed = z.object({ taskId: uuidSchema, status: taskStatusSchema }).safeParse(input);
   if (!parsed.success) return { success: false, fieldErrors: zodFieldErrors(parsed.error) };
   try {
+    // Ownership check: non-admins can only toggle tasks on their own planning items
+    const ownershipError = await ensureOwnsParentItemOfTask(user.id, user.role, parsed.data.taskId);
+    if (ownershipError) return ownershipError;
+
     await togglePlanningTaskStatus(parsed.data.taskId, parsed.data.status, user.id);
     try {
       await updateBlockedStatus(parsed.data.taskId, parsed.data.status);
@@ -521,7 +578,7 @@ export async function togglePlanningTaskStatusAction(input: unknown): Promise<Pl
 
 export async function reassignPlanningTaskAction(input: unknown): Promise<PlanningActionResult> {
   try {
-    await ensureUser();
+    const user = await ensureUser();
     const parsed = z.object({
       taskId: z.string().min(1),
       assigneeIds: z.array(z.string().min(1)),
@@ -529,6 +586,10 @@ export async function reassignPlanningTaskAction(input: unknown): Promise<Planni
     if (!parsed.success) {
       return { success: false, message: "Invalid input.", fieldErrors: zodFieldErrors(parsed.error) };
     }
+
+    // Ownership check: non-admins can only reassign tasks on their own planning items
+    const ownershipError = await ensureOwnsParentItemOfTask(user.id, user.role, parsed.data.taskId);
+    if (ownershipError) return ownershipError;
 
     const { createSupabaseAdminClient } = await import("@/lib/supabase/admin");
     const db = createSupabaseAdminClient();
@@ -576,7 +637,7 @@ const deleteTaskSchema = z.object({ taskId: uuidSchema });
 
 export async function deletePlanningTaskAction(input: unknown): Promise<PlanningActionResult> {
   try {
-    await ensureUser();
+    const user = await ensureUser();
     const parsed = deleteTaskSchema.safeParse(input);
     if (!parsed.success) {
       return {
@@ -585,6 +646,10 @@ export async function deletePlanningTaskAction(input: unknown): Promise<Planning
         fieldErrors: zodFieldErrors(parsed.error)
       };
     }
+
+    // Ownership check: non-admins can only delete tasks on their own planning items
+    const ownershipError = await ensureOwnsParentItemOfTask(user.id, user.role, parsed.data.taskId);
+    if (ownershipError) return ownershipError;
 
     await deletePlanningTask(parsed.data.taskId);
 
@@ -611,7 +676,7 @@ export async function convertInspirationItemAction(
   try {
     const user = await getCurrentUser();
     if (!user) return { success: false, message: "You must be signed in." };
-    if (!canUsePlanning(user.role)) {
+    if (!canCreatePlanningItems(user.role)) {
       return { success: false, message: "You do not have permission to perform this action." };
     }
 
@@ -677,7 +742,7 @@ export async function dismissInspirationItemAction(
   try {
     const user = await getCurrentUser();
     if (!user) return { success: false, message: "You must be signed in." };
-    if (!canUsePlanning(user.role)) {
+    if (!canCreatePlanningItems(user.role)) {
       return { success: false, message: "You do not have permission to perform this action." };
     }
 
@@ -703,7 +768,7 @@ export async function dismissInspirationItemAction(
 export async function refreshInspirationItemsAction(): Promise<{ success: boolean; message?: string }> {
   try {
     const user = await getCurrentUser();
-    if (!user || user.role !== "central_planner") {
+    if (!user || user.role !== "administrator") {
       return { success: false, message: "Unauthorised." };
     }
 

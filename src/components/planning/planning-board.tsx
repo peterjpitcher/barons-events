@@ -26,12 +26,14 @@ import type {
   TodoAlertFilter
 } from "@/lib/planning/types";
 import { bucketForDayOffset, daysBetween } from "@/lib/planning/utils";
+import { canCreatePlanningItems, canManageOwnPlanningItems, canManageAllPlanning } from "@/lib/roles";
+import type { UserRole } from "@/lib/types";
 
 type PlanningBoardProps = {
   data: PlanningBoardData;
   venues: PlanningVenueOption[];
   canApproveEvents?: boolean;
-  userRole?: string;
+  userRole?: UserRole;
   currentUserId?: string;
 };
 
@@ -330,12 +332,14 @@ export function PlanningBoard({ data, venues, canApproveEvents, userRole, curren
             <p className="max-w-3xl text-subtle">
               Track operational actions and launches in a rolling 30/60/90 planner, with recurring templates and task ownership.
             </p>
-            {userRole === 'central_planner' && <RefreshInspirationButton />}
+            {userRole === 'administrator' && <RefreshInspirationButton />}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" onClick={() => setCreateModalOpen(true)}>
-              <Plus className="h-4 w-4" aria-hidden="true" /> Add planning item
-            </Button>
+            {userRole && canCreatePlanningItems(userRole) && (
+              <Button type="button" onClick={() => setCreateModalOpen(true)}>
+                <Plus className="h-4 w-4" aria-hidden="true" /> Add planning item
+              </Button>
+            )}
             <div className="flex items-center gap-1 rounded-full border border-[var(--color-border)] bg-white p-1">
               <Button
                 type="button"
@@ -446,6 +450,9 @@ export function PlanningBoard({ data, venues, canApproveEvents, userRole, curren
                 <div className="space-y-2">
                   {rows.map((row) => {
                     if (row.type === "planning") {
+                      const canEditItem = userRole
+                        ? canManageAllPlanning(userRole) || (canManageOwnPlanningItems(userRole) && row.item.ownerId === currentUserId)
+                        : false;
                       return (
                         <PlanningItemCard
                           key={row.item.id}
@@ -454,7 +461,7 @@ export function PlanningBoard({ data, venues, canApproveEvents, userRole, curren
                           venues={venues}
                           onChanged={refreshBoard}
                           compact
-                          onOpenDetails={(planningItem) => setActiveItemId(planningItem.id)}
+                          onOpenDetails={canEditItem ? (planningItem) => setActiveItemId(planningItem.id) : undefined}
                           currentUserId={currentUserId}
                         />
                       );
@@ -479,8 +486,12 @@ export function PlanningBoard({ data, venues, canApproveEvents, userRole, curren
         <PlanningCalendarView
           today={data.today}
           entries={combinedEntries}
-          onOpenPlanningItem={(item) => setActiveItemId(item.id)}
-          onMovePlanningItem={movePlanningItemInCalendar}
+          onOpenPlanningItem={userRole && canManageOwnPlanningItems(userRole)
+            ? (item) => setActiveItemId(item.id)
+            : undefined}
+          onMovePlanningItem={userRole && canManageAllPlanning(userRole)
+            ? movePlanningItemInCalendar
+            : undefined}
         />
       ) : null}
 
@@ -488,7 +499,9 @@ export function PlanningBoard({ data, venues, canApproveEvents, userRole, curren
         <PlanningListView
           today={data.today}
           entries={combinedEntries}
-          onOpenPlanningItem={(item) => setActiveItemId(item.id)}
+          onOpenPlanningItem={userRole && canManageOwnPlanningItems(userRole)
+            ? (item) => setActiveItemId(item.id)
+            : undefined}
         />
       ) : null}
 
@@ -497,7 +510,7 @@ export function PlanningBoard({ data, venues, canApproveEvents, userRole, curren
           items={filteredPlanningItems}
           today={data.today}
           currentUserId={currentUserId}
-          canEdit={userRole === "central_planner"}
+          canEdit={userRole ? canManageAllPlanning(userRole) : false}
           alertFilter={todoAlertFilter}
           onOpenPlanningItem={(item) => setActiveItemId(item.id)}
         />
@@ -513,6 +526,8 @@ export function PlanningBoard({ data, venues, canApproveEvents, userRole, curren
           today={data.today}
           users={data.users}
           venues={venues.map((venue) => ({ id: venue.id, name: venue.name }))}
+          currentUserId={currentUserId}
+          isAdministrator={userRole === "administrator"}
           onChanged={() => {
             setCreateModalOpen(false);
             refreshBoard();

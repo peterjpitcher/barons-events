@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { EventForm } from "@/components/events/event-form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCurrentUser } from "@/lib/auth";
+import { canManageEvents } from "@/lib/roles";
 import { listVenues } from "@/lib/venues";
 import { listEventTypes } from "@/lib/event-types";
 import { listArtists } from "@/lib/artists";
@@ -32,7 +33,7 @@ export default async function NewEventPage({ searchParams }: PageProps) {
     redirect("/login");
   }
 
-  if (user.role === "reviewer" || user.role === "executive") {
+  if (!canManageEvents(user.role, user.venueId)) {
     redirect("/unauthorized");
   }
 
@@ -46,7 +47,7 @@ export default async function NewEventPage({ searchParams }: PageProps) {
     listEventTypes(),
     listArtists()
   ]);
-  const availableVenues = user.role === "venue_manager" ? venues.filter((venue) => venue.id === user.venueId) : venues;
+  const availableVenues = user.role === "office_worker" ? venues.filter((venue) => venue.id === user.venueId) : venues;
   const initialStartAt = parseDateParam(resolvedSearchParams.startAt);
   const initialEndAt =
     parseDateParam(resolvedSearchParams.endAt) ??

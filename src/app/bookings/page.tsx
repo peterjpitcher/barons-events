@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { listAllBookingsForUser } from "@/lib/all-bookings";
+import { canManageBookings } from "@/lib/roles";
 import { BookingsView } from "./BookingsView";
 
 export const metadata = { title: "All Bookings — BaronsHub" };
@@ -8,7 +9,7 @@ export const metadata = { title: "All Bookings — BaronsHub" };
 export default async function BookingsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (user.role !== "central_planner" && user.role !== "venue_manager") {
+  if (!canManageBookings(user.role, user.venueId)) {
     redirect("/unauthorized");
   }
 

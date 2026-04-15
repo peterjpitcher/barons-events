@@ -24,9 +24,8 @@ type UsersManagerProps = {
 };
 
 const roleLabels: Record<AppUserRow["role"], string> = {
-  central_planner: "Central planner",
-  venue_manager: "Venue manager",
-  reviewer: "Reviewer",
+  administrator: "Administrator",
+  office_worker: "Office Worker",
   executive: "Executive"
 };
 
@@ -112,7 +111,7 @@ function InviteUserForm({ venues }: { venues: VenueRow[] }) {
             <Select
               id="invite-role"
               name="role"
-              defaultValue="venue_manager"
+              defaultValue="office_worker"
               required
               aria-invalid={Boolean(roleError)}
               aria-describedby={roleError ? "invite-role-error" : undefined}

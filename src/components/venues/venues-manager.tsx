@@ -82,9 +82,9 @@ function VenueCreateForm({ reviewers }: { reviewers: ReviewerOption[] }) {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="new-venue-default-reviewer">Default reviewer</Label>
-            <Select id="new-venue-default-reviewer" name="defaultReviewerId" defaultValue="">
-              <option value="">No default reviewer</option>
+            <Label htmlFor="new-venue-default-approver">Default approver</Label>
+            <Select id="new-venue-default-approver" name="defaultApproverId" defaultValue="">
+              <option value="">No default approver</option>
               {reviewers.map((reviewer) => (
                 <option key={reviewer.id} value={reviewer.id}>
                   {reviewer.name}
@@ -201,11 +201,11 @@ function VenueRowEditor({ venue, reviewers }: { venue: VenueRow; reviewers: Revi
               />
             </div>
             <div className="space-y-2">
-              <label className="sr-only" htmlFor={`venue-reviewer-${venue.id}`}>
-                Default reviewer
+              <label className="sr-only" htmlFor={`venue-approver-${venue.id}`}>
+                Default approver
               </label>
-              <Select id={`venue-reviewer-${venue.id}`} name="defaultReviewerId" defaultValue={venue.default_reviewer_id ?? ""}>
-                <option value="">No default reviewer</option>
+              <Select id={`venue-approver-${venue.id}`} name="defaultApproverId" defaultValue={venue.default_approver_id ?? ""}>
+                <option value="">No default approver</option>
                 {reviewers.map((reviewer) => (
                   <option key={reviewer.id} value={reviewer.id}>
                     {reviewer.name}

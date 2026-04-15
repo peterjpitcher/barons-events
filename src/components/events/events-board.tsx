@@ -156,17 +156,16 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
   const rawMatrixStart = searchParams.get("start");
   const myVenueId = user.venueId ?? null;
   const createScopeVenueId =
-    user.role === "central_planner" ? undefined : user.role === "venue_manager" ? myVenueId ?? null : null;
+    user.role === "administrator" ? undefined : user.role === "office_worker" ? myVenueId ?? null : null;
   const canCreate =
-    user.role === "central_planner" || (user.role === "venue_manager" && typeof createScopeVenueId === "string");
+    user.role === "administrator" || (user.role === "office_worker" && typeof createScopeVenueId === "string");
 
   const canApproveEvent = useCallback(
     (event: EventSummary) => {
       if (!canReviewEvents(user.role) || !["submitted", "needs_revisions"].includes(event.status)) return false;
-      if (user.role === "reviewer") return event.assignee_id === user.id;
       return true;
     },
-    [user.role, user.id]
+    [user.role]
   );
 
   const [view, setView] = useState<ViewMode>(
@@ -464,7 +463,7 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
     setSelectedVenueId(value);
   }, []);
 
-  const heading = user.role === "venue_manager" ? "My events" : "Events overview";
+  const heading = user.role === "office_worker" ? "My events" : "Events overview";
 
   return (
     <div className="space-y-6">

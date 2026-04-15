@@ -1,90 +1,125 @@
 import type { UserRole } from "./types";
 
 /**
- * Role capability model — COMPATIBILITY PHASE
+ * Role capability model — FINAL (3-role)
  *
- * Accepts both legacy role strings (central_planner, venue_manager, reviewer)
- * and new role strings (administrator, office_worker). This will be simplified
- * in Phase 2 once the DB migration has run.
+ * administrator — full platform access
+ * office_worker — venue-scoped write (if venueId set) or global read-only (if no venueId)
+ * executive     — read-only observer
  *
- * administrator = central_planner
- * office_worker = venue_manager (with venue_id) or reviewer (without venue_id)
- * executive = executive (unchanged)
+ * Functions accepting venueId use it as a capability switch:
+ * office_worker + venueId = venue-scoped write access
+ * office_worker + no venueId = read-only access
  */
 
-function isAdmin(role: UserRole): boolean {
-  return role === "central_planner" || role === "administrator";
+/** Convenience: check if user is an administrator */
+export function isAdministrator(role: UserRole): boolean {
+  return role === "administrator";
 }
 
-function isVenueWorker(role: UserRole): boolean {
-  return role === "venue_manager" || role === "office_worker";
+/** Can create or edit events (admin always; office_worker only with venueId) */
+export function canManageEvents(role: UserRole, venueId?: string | null): boolean {
+  if (role === "administrator") return true;
+  if (role === "office_worker" && venueId) return true;
+  return false;
 }
 
-function isReviewerLegacy(role: UserRole): boolean {
-  return role === "reviewer";
+/** Can view events (all roles) */
+export function canViewEvents(role: UserRole): boolean {
+  return true;
 }
 
-/** Can create or edit events */
-export function canManageEvents(role: UserRole): boolean {
-  return isAdmin(role) || isVenueWorker(role);
-}
-
-/** Can make review decisions on events */
+/** Can make review/approval decisions on events */
 export function canReviewEvents(role: UserRole): boolean {
-  return isAdmin(role) || isReviewerLegacy(role);
+  return role === "administrator";
 }
 
-/** Can submit post-event debriefs */
-export function canSubmitDebriefs(role: UserRole): boolean {
-  return isAdmin(role) || isVenueWorker(role);
+/** Can manage bookings (admin always; office_worker only with venueId) */
+export function canManageBookings(role: UserRole, venueId?: string | null): boolean {
+  if (role === "administrator") return true;
+  if (role === "office_worker" && venueId) return true;
+  return false;
 }
 
-/** Can manage artists (create, curate, archive) */
-export function canManageArtists(role: UserRole): boolean {
-  return isAdmin(role) || isVenueWorker(role);
+/** Can manage customers (admin always; office_worker only with venueId) */
+export function canManageCustomers(role: UserRole, venueId?: string | null): boolean {
+  if (role === "administrator") return true;
+  if (role === "office_worker" && venueId) return true;
+  return false;
 }
 
-/** Can manage venues */
-export function canManageVenues(role: UserRole): boolean {
-  return isAdmin(role);
+/** Can manage artists (admin always; office_worker only with venueId) */
+export function canManageArtists(role: UserRole, venueId?: string | null): boolean {
+  if (role === "administrator") return true;
+  if (role === "office_worker" && venueId) return true;
+  return false;
 }
 
-/** Can manage users (invite, update roles) */
-export function canManageUsers(role: UserRole): boolean {
-  return isAdmin(role);
+/** Can create debriefs (admin always; office_worker only with venueId) */
+export function canCreateDebriefs(role: UserRole, venueId?: string | null): boolean {
+  if (role === "administrator") return true;
+  if (role === "office_worker" && venueId) return true;
+  return false;
 }
 
-/** Can manage event types and system settings */
-export function canManageSettings(role: UserRole): boolean {
-  return isAdmin(role);
+/** Can edit a debrief. Admin always; office_worker only if they are the submitted_by user. */
+export function canEditDebrief(role: UserRole, isCreator: boolean): boolean {
+  if (role === "administrator") return true;
+  if (role === "office_worker" && isCreator) return true;
+  return false;
 }
 
-/** Can use the planning workspace (read and write) */
-export function canUsePlanning(role: UserRole): boolean {
-  return isAdmin(role);
+/** Can view/read debriefs (all roles) */
+export function canViewDebriefs(role: UserRole): boolean {
+  return true;
+}
+
+/** Can create new planning items */
+export function canCreatePlanningItems(role: UserRole): boolean {
+  return role === "administrator" || role === "office_worker";
+}
+
+/** Can edit/delete own planning items (admin can manage any) */
+export function canManageOwnPlanningItems(role: UserRole): boolean {
+  return role === "administrator" || role === "office_worker";
+}
+
+/** Can manage all planning items regardless of owner */
+export function canManageAllPlanning(role: UserRole): boolean {
+  return role === "administrator";
 }
 
 /** Can view the planning workspace */
 export function canViewPlanning(role: UserRole): boolean {
-  return isAdmin(role) || role === "executive";
+  return true;
 }
 
-/** Can view all events regardless of venue or assignment */
-export function canViewAllEvents(role: UserRole): boolean {
-  return isAdmin(role) || isReviewerLegacy(role) || role === "executive";
+/** Can manage venues */
+export function canManageVenues(role: UserRole): boolean {
+  return role === "administrator";
+}
+
+/** Can manage users (invite, update roles) */
+export function canManageUsers(role: UserRole): boolean {
+  return role === "administrator";
+}
+
+/** Can manage event types and system settings */
+export function canManageSettings(role: UserRole): boolean {
+  return role === "administrator";
 }
 
 /** Can create, edit, or delete short links and manage QR codes */
 export function canManageLinks(role: UserRole): boolean {
-  return isAdmin(role);
+  return role === "administrator";
 }
 
 /** Can view the SOP template configuration */
 export function canViewSopTemplate(role: UserRole): boolean {
-  return isAdmin(role) || role === "executive";
+  return role === "administrator" || role === "executive";
 }
 
 /** Can create, edit, or delete SOP template sections and tasks */
 export function canEditSopTemplate(role: UserRole): boolean {
-  return isAdmin(role);
+  return role === "administrator";
 }

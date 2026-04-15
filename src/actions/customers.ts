@@ -13,17 +13,17 @@ export type DeleteCustomerResult = { success: boolean; error?: string };
  * mobile token = `DELETED-${customerId}` (~44 chars, unique per customer).
  * The mobile column uses text (not varchar) to accommodate this.
  *
- * Accessible to central_planner only. No UI in v1.
+ * Accessible to administrator only. No UI in v1.
  */
 export async function deleteCustomerAction(
   customerId: string,
 ): Promise<DeleteCustomerResult> {
   const user = await getCurrentUser();
   if (!user) return { success: false, error: "Unauthorized" };
-  // GDPR erasure — intentionally restricted to central_planner only.
+  // GDPR erasure — intentionally restricted to administrator only.
   // No venue scoping needed: this is a privileged administrative action.
-  if (user.role !== "central_planner") {
-    return { success: false, error: "Only central planners can erase customer data." };
+  if (user.role !== "administrator") {
+    return { success: false, error: "Only administrators can erase customer data." };
   }
 
   const db = createSupabaseAdminClient();

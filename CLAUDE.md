@@ -94,28 +94,28 @@ npm run supabase:reset   # Reset database (linked, requires confirmation)
 
 ### Permissions
 - Event creators can edit own events
-- Reviewers/admins can moderate all events
+- Administrators can moderate all events; office_workers can manage events at their venue
 - Check permissions in both UI and server actions (defense in depth)
 - RLS enforces at database level
 
 ### Auth Standard Deviation: Custom Role Model
 
-**Deviation from workspace standard (auth-standard.md §7):** The workspace standard mandates three generic roles (`admin`, `editor`, `viewer`). This project uses four domain-specific roles approved for this application:
+**Deviation from workspace standard (auth-standard.md §7):** The workspace standard mandates three generic roles (`admin`, `editor`, `viewer`). This project uses three domain-specific roles approved for this application:
 
 | Application Role | Maps to Standard Tier | Capabilities |
 |---|---|---|
-| `central_planner` | `admin` | Full platform access, user management, all event operations |
-| `venue_manager` | `editor` | Event creation and editing for assigned venues |
-| `reviewer` | `editor` | Event review and moderation, read access to all events |
-| `executive` | `viewer` | Read-only access to all events and reporting |
+| `administrator` | `admin` | Full platform access, user management, all event operations |
+| `office_worker` | `editor` | Venue-scoped write access (if venue_id set) or global read-only (if no venue_id); planning CRUD on own items; debrief create/edit (own) |
+| `executive` | `viewer` | Read-only access to all events, planning, and reporting |
 
-**Why:** Event management requires two distinct editor-tier roles with different operational scopes (venue ownership vs. cross-venue review). A single `editor` role cannot express this.
+**Why:** Event management requires venue-scoped write access for some staff and global read-only for others, expressed through a single role with venue_id as the capability switch.
 
 **Implementation notes:**
-- Roles stored in `public.users.role` column (not Supabase `app_metadata`) — see `supabase/migrations/20250218000000_initial_mvp.sql`
-- Role helpers in `src/lib/roles.ts` use explicit capability functions rather than numeric hierarchy
-- Permission checks use `role === "central_planner"` for admin operations
-- All 7 required RBAC helper functions are present in `src/lib/auth.ts`
+- Roles stored in `public.users.role` column (not Supabase `app_metadata`)
+- Role helpers in `src/lib/roles.ts` use explicit capability functions with optional `venueId` parameter
+- Permission checks use `role === "administrator"` for admin operations
+- `venue_id` on the user record acts as a capability switch for office_worker
+- All capability functions are in `src/lib/roles.ts`
 
 ### Email & Notifications
 - `src/lib/notifications.ts` handles async dispatch
@@ -144,10 +144,10 @@ npm run supabase:reset   # Reset database (linked, requires confirmation)
 - Run seeding after `supabase db reset`
 - Keep seed data minimal (fast test setup)
 
-### Artist/Reviewer Logic
+### Artist Logic
 - `src/lib/artists.ts` — fetch artist info, bios, links
 - `src/lib/reviewers.ts` — fetch reviewer assignments, approval status
-- Always verify reviewer permissions before allowing edits
+- Always verify permissions via `src/lib/roles.ts` capability functions before allowing edits
 
 ### Datetime Handling
 - Use `src/lib/datetime.ts` for all user-facing dates

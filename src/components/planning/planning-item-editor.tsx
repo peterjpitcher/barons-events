@@ -17,6 +17,10 @@ type PlanningItemEditorProps = {
   users: PlanningPerson[];
   venues: PlanningVenueOption[];
   onChanged: () => void;
+  /** Current user's ID — used to default ownerId for non-admin users */
+  currentUserId?: string;
+  /** Whether the current user is an administrator */
+  isAdministrator?: boolean;
 };
 
 type TemplateRow = {
@@ -45,9 +49,12 @@ function createTemplateRow(): TemplateRow {
   };
 }
 
-export function PlanningItemEditor({ today, users, venues, onChanged }: PlanningItemEditorProps) {
+export function PlanningItemEditor({ today, users, venues, onChanged, currentUserId, isAdministrator: isAdmin }: PlanningItemEditorProps) {
   const [mode, setMode] = useState<"single" | "series">("single");
   const [isPending, startTransition] = useTransition();
+
+  // Non-admin users default to themselves as owner (RLS requires owner_id = auth.uid())
+  const defaultOwnerId = isAdmin ? "" : (currentUserId ?? "");
 
   const sortedUsers = useMemo(
     () => [...users].sort((left, right) => left.name.localeCompare(right.name)),
@@ -58,14 +65,14 @@ export function PlanningItemEditor({ today, users, venues, onChanged }: Planning
   const [itemType, setItemType] = useState("");
   const [itemDescription, setItemDescription] = useState("");
   const [itemVenueId, setItemVenueId] = useState("");
-  const [itemOwnerId, setItemOwnerId] = useState("");
+  const [itemOwnerId, setItemOwnerId] = useState(defaultOwnerId);
   const [itemTargetDate, setItemTargetDate] = useState(today);
 
   const [seriesTitle, setSeriesTitle] = useState("");
   const [seriesType, setSeriesType] = useState("");
   const [seriesDescription, setSeriesDescription] = useState("");
   const [seriesVenueId, setSeriesVenueId] = useState("");
-  const [seriesOwnerId, setSeriesOwnerId] = useState("");
+  const [seriesOwnerId, setSeriesOwnerId] = useState(defaultOwnerId);
   const [frequency, setFrequency] = useState<RecurrenceFrequency>("weekly");
   const [interval, setInterval] = useState("1");
   const [weekdays, setWeekdays] = useState<number[]>([1]);
@@ -92,7 +99,7 @@ export function PlanningItemEditor({ today, users, venues, onChanged }: Planning
     setItemType("");
     setItemDescription("");
     setItemVenueId("");
-    setItemOwnerId("");
+    setItemOwnerId(defaultOwnerId);
     setItemTargetDate(today);
   }
 
@@ -101,7 +108,7 @@ export function PlanningItemEditor({ today, users, venues, onChanged }: Planning
     setSeriesType("");
     setSeriesDescription("");
     setSeriesVenueId("");
-    setSeriesOwnerId("");
+    setSeriesOwnerId(defaultOwnerId);
     setFrequency("weekly");
     setInterval("1");
     setWeekdays([1]);

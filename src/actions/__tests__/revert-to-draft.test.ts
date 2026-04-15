@@ -22,7 +22,7 @@ import { redirect } from 'next/navigation';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function makeUser(role = 'central_planner') {
+function makeUser(role = 'administrator') {
   return { id: 'user-abc', role };
 }
 
@@ -62,25 +62,18 @@ describe('revertToDraftAction', () => {
     expect(redirect).toHaveBeenCalledWith('/login');
   });
 
-  it('returns error when venue_manager tries to revert', async () => {
-    (getCurrentUser as Mock).mockResolvedValue(makeUser('venue_manager'));
+  it('returns error when office_worker tries to revert', async () => {
+    (getCurrentUser as Mock).mockResolvedValue(makeUser('office_worker'));
     const result = await revertToDraftAction(undefined, makeFormData('00000000-0000-0000-0000-000000000001'));
     expect(result.success).toBe(false);
-    expect(result.message).toMatch(/planner/i);
-  });
-
-  it('returns error when reviewer tries to revert', async () => {
-    (getCurrentUser as Mock).mockResolvedValue(makeUser('reviewer'));
-    const result = await revertToDraftAction(undefined, makeFormData('00000000-0000-0000-0000-000000000001'));
-    expect(result.success).toBe(false);
-    expect(result.message).toMatch(/planner/i);
+    expect(result.message).toMatch(/administrator/i);
   });
 
   it('returns error when executive tries to revert', async () => {
     (getCurrentUser as Mock).mockResolvedValue(makeUser('executive'));
     const result = await revertToDraftAction(undefined, makeFormData('00000000-0000-0000-0000-000000000001'));
     expect(result.success).toBe(false);
-    expect(result.message).toMatch(/planner/i);
+    expect(result.message).toMatch(/administrator/i);
   });
 
   it('returns error for invalid (non-UUID) event ID', async () => {

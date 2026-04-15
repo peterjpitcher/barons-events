@@ -20,41 +20,48 @@ type NavSection = {
 
 const NAV_SECTIONS: NavSection[] = [
   {
-    label: "Core Workspace",
+    label: "Dashboard",
     items: [
-      { label: "Dashboard", href: "/", roles: ["central_planner", "reviewer", "venue_manager", "executive"] },
-      { label: "Events", href: "/events", roles: ["central_planner", "venue_manager"] },
-      { label: "Bookings", href: "/bookings", roles: ["central_planner", "venue_manager"] },
-      { label: "Customers", href: "/customers", roles: ["central_planner", "venue_manager"] },
-      { label: "Artists", href: "/artists", roles: ["central_planner", "venue_manager"] },
-      { label: "Reviews", href: "/reviews", roles: ["central_planner", "reviewer"] }
+      { label: "Dashboard", href: "/", roles: ["administrator", "office_worker", "executive"] }
+    ]
+  },
+  {
+    label: "Events",
+    items: [
+      { label: "Events", href: "/events", roles: ["administrator"] },
+      { label: "Bookings", href: "/bookings", roles: ["administrator"] },
+      { label: "Customers", href: "/customers", roles: ["administrator"] },
+      { label: "Artists", href: "/artists", roles: ["administrator"] },
+      { label: "Reviews", href: "/reviews", roles: ["administrator"] },
+      { label: "Debriefs", href: "/debriefs", roles: ["administrator"] }
     ]
   },
   {
     label: "Strategic Planning",
-    items: [{ label: "30/60/90 Planning", href: "/planning", roles: ["central_planner", "reviewer", "venue_manager", "executive"], newUntil: "2026-03-29" }]
+    items: [
+      { label: "30/60/90 Planning", href: "/planning", roles: ["administrator", "office_worker", "executive"] }
+    ]
   },
   {
     label: "Tools",
     items: [
-      { label: "Opening Hours", href: "/opening-hours", roles: ["central_planner"], newUntil: "2026-03-29" },
-      { label: "Links & QR Codes", href: "/links", roles: ["central_planner"], newUntil: "2026-03-29" }
+      { label: "Links & QR Codes", href: "/links", roles: ["administrator"] }
     ]
   },
   {
     label: "Administration",
     items: [
-      { label: "Venues", href: "/venues", roles: ["central_planner"] },
-      { label: "Users", href: "/users", roles: ["central_planner"] },
-      { label: "Settings", href: "/settings", roles: ["central_planner"] }
+      { label: "Venues", href: "/venues", roles: ["administrator"] },
+      { label: "Opening Hours", href: "/opening-hours", roles: ["administrator"] },
+      { label: "Users", href: "/users", roles: ["administrator"] },
+      { label: "Settings", href: "/settings", roles: ["administrator"] }
     ]
   }
 ];
 
 const roleDisplayNames: Record<string, string> = {
-  central_planner: "Central Planner",
-  venue_manager: "Venue Manager",
-  reviewer: "Reviewer",
+  administrator: "Administrator",
+  office_worker: "Office Worker",
   executive: "Executive",
 };
 

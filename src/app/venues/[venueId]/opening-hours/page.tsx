@@ -30,7 +30,7 @@ export default async function VenueOpeningHoursPage({
   const venue = venues.find((v) => v.id === venueId);
   if (!venue) notFound();
 
-  const canEdit = user.role === "central_planner";
+  const canEdit = user.role === "administrator";
 
   const [serviceTypes, openingHours, overrides] = await Promise.all([
     listServiceTypes(),
@@ -57,7 +57,7 @@ export default async function VenueOpeningHoursPage({
           </CardTitle>
           <CardDescription>
             Manage standard weekly hours and date-specific changes for this venue.
-            {!canEdit ? " Contact a central planner to make changes." : ""}
+            {!canEdit ? " Contact an administrator to make changes." : ""}
           </CardDescription>
         </CardHeader>
         <CardContent>

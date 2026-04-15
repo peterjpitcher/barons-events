@@ -8,17 +8,13 @@ import { getCurrentUser } from "@/lib/auth";
 import { getStatusCounts, listEventsForUser, listReviewQueue, findConflicts } from "@/lib/events";
 
 const roleCopy: Record<string, { heading: string; body: string }> = {
-  central_planner: {
+  administrator: {
     heading: "Today’s planning view",
     body: "Check in on pending submissions, watch for clashes, and keep the pipeline moving."
   },
-  reviewer: {
-    heading: "Your review queue",
-    body: "Look over new requests, give quick feedback, and keep venues informed."
-  },
-  venue_manager: {
+  office_worker: {
     heading: "Your upcoming plans",
-    body: "Draft fresh ideas, tidy earlier submissions, and stay on top of reviewer notes."
+    body: "Draft fresh ideas, tidy earlier submissions, and stay on top of feedback."
   },
   executive: {
     heading: "Snapshot",
@@ -32,7 +28,7 @@ export default async function OverviewPage() {
     redirect("/login");
   }
 
-  const copy = roleCopy[user.role] ?? roleCopy["central_planner"];
+  const copy = roleCopy[user.role] ?? roleCopy["administrator"];
 
   const cards: ReactNode[] = [];
   let upcoming: Awaited<ReturnType<typeof listEventsForUser>> = [];
@@ -44,7 +40,7 @@ export default async function OverviewPage() {
       .slice(0, 5);
   }
 
-  if (user.role === "central_planner") {
+  if (user.role === "administrator") {
     const [events, statusCounts, queue, conflicts] = await Promise.all([
       listEventsForUser(user),
       getStatusCounts(),
@@ -136,41 +132,6 @@ export default async function OverviewPage() {
         </CardContent>
       </Card>
     );
-  } else if (user.role === "reviewer") {
-    const [events, queue] = await Promise.all([
-      listEventsForUser(user),
-      listReviewQueue(user)
-    ]);
-
-    upcoming = computeUpcoming(events);
-
-    cards.push(
-      <Card key="queue">
-        <CardHeader className="flex items-center justify-between">
-          <div>
-            <CardTitle>Your queue</CardTitle>
-            <CardDescription>Pick off the oldest submissions first.</CardDescription>
-          </div>
-          <Button asChild variant="secondary">
-            <Link href="/reviews">Open queue</Link>
-          </Button>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {queue.slice(0, 5).map((event) => (
-            <div key={event.id} className="rounded-[var(--radius)] border border-[rgba(39,54,64,0.12)] bg-white/80 px-4 py-3 text-sm shadow-soft">
-              <Link
-                href={`/events/${event.id}`}
-                className="font-medium text-[var(--color-text)] transition-colors hover:text-[var(--color-primary-600)]"
-              >
-                {event.title}
-              </Link>
-              <p className="text-subtle">{event.venue?.name ?? ""} · {new Date(event.start_at).toLocaleString("en-GB")}</p>
-            </div>
-          ))}
-          {queue.length === 0 ? <p className="text-sm text-subtle">No reviews waiting.</p> : null}
-        </CardContent>
-      </Card>
-    );
   } else {
     const events = await listEventsForUser(user);
     upcoming = computeUpcoming(events);
@@ -180,10 +141,10 @@ export default async function OverviewPage() {
     <Card key="upcoming">
       <CardHeader className="flex items-center justify-between">
         <div>
-          <CardTitle>{user.role === "venue_manager" ? "Upcoming at your venue" : "Next confirmed events"}</CardTitle>
+          <CardTitle>{user.role === "office_worker" ? "Upcoming at your venue" : "Next confirmed events"}</CardTitle>
           <CardDescription>Keep everyone lined up for the week ahead.</CardDescription>
         </div>
-        {(user.role === "venue_manager" || user.role === "central_planner") && (
+        {(user.role === "office_worker" || user.role === "administrator") && (
           <Button asChild>
             <Link href="/events/new">New Event</Link>
           </Button>
@@ -219,7 +180,7 @@ export default async function OverviewPage() {
           <h1 className="font-brand-serif text-3xl text-[var(--color-primary-700)]">{copy.heading}</h1>
           <p className="mt-2 max-w-2xl text-base text-subtle">{copy.body}</p>
         </div>
-        {user.role === "venue_manager" && (
+        {user.role === "office_worker" && (
           <Button asChild>
             <Link href="/events/new">New Event</Link>
           </Button>

@@ -1,21 +1,28 @@
 import { createSupabaseReadonlyClient } from "@/lib/supabase/server";
 
-export interface ReviewerOption {
+export interface ApproverOption {
   id: string;
   name: string;
   email: string;
 }
 
-export async function listReviewers(): Promise<ReviewerOption[]> {
+/** @deprecated Use ApproverOption instead */
+export type ReviewerOption = ApproverOption;
+
+/**
+ * List users who can approve events (administrators).
+ * Formerly listed users with the "reviewer" role; that role no longer exists.
+ */
+export async function listApprovers(): Promise<ApproverOption[]> {
   const supabase = await createSupabaseReadonlyClient();
   const { data, error } = await supabase
     .from("users")
     .select("id, full_name, email")
-    .eq("role", "reviewer")
+    .eq("role", "administrator")
     .order("full_name", { ascending: true });
 
   if (error) {
-    throw new Error(`Could not load reviewers: ${error.message}`);
+    throw new Error(`Could not load approvers: ${error.message}`);
   }
 
   const rows = (data ?? []) as any[];
@@ -26,3 +33,6 @@ export async function listReviewers(): Promise<ReviewerOption[]> {
     email: row.email
   }));
 }
+
+/** @deprecated Use listApprovers instead */
+export { listApprovers as listReviewers };

@@ -7,7 +7,7 @@ import { LinksManager } from "@/components/links/links-manager";
 export default async function LinksPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (user.role !== "central_planner") redirect("/unauthorized");
+  if (user.role !== "administrator") redirect("/unauthorized");
 
   const links = await listShortLinks();
   const canEdit = canManageLinks(user.role);

@@ -57,7 +57,7 @@ export async function createArtistAction(
   if (!user) {
     redirect("/login");
   }
-  if (!canManageArtists(user.role)) {
+  if (!canManageArtists(user.role, user.venueId)) {
     return { success: false, message: "You don't have permission to create artists." };
   }
 
@@ -118,7 +118,7 @@ export async function updateArtistAction(
   if (!user) {
     redirect("/login");
   }
-  if (!canManageArtists(user.role)) {
+  if (!canManageArtists(user.role, user.venueId)) {
     return { success: false, message: "You don't have permission to update artists." };
   }
 
@@ -176,7 +176,7 @@ export async function archiveArtistAction(
   if (!user) {
     redirect("/login");
   }
-  if (!canManageArtists(user.role)) {
+  if (!canManageArtists(user.role, user.venueId)) {
     return { success: false, message: "You don't have permission to archive artists." };
   }
 
@@ -215,10 +215,10 @@ export async function restoreArtistAction(
   if (!user) {
     redirect("/login");
   }
-  // Intentionally planner-only: venue managers can archive but must
-  // escalate to a planner to restore. The restore UI is on /settings (planner-only).
-  if (user.role !== "central_planner") {
-    return { success: false, message: "Only planners can restore archived artists." };
+  // Intentionally admin-only: office workers can archive but must
+  // escalate to an administrator to restore. The restore UI is on /settings (admin-only).
+  if (user.role !== "administrator") {
+    return { success: false, message: "Only administrators can restore archived artists." };
   }
 
   const parsed = archiveSchema.safeParse({

@@ -136,7 +136,7 @@ export type AssignableUser = BasicUser & {
   role: string;
 };
 
-const ASSIGNABLE_ROLES = ["central_planner", "reviewer", "venue_manager"];
+const ASSIGNABLE_ROLES = ["administrator", "office_worker", "executive"];
 
 export async function listAssignableUsers(): Promise<AssignableUser[]> {
   const supabase = await createSupabaseReadonlyClient();

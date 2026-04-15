@@ -593,7 +593,7 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
   if (!user) {
     redirect("/login");
   }
-  if (!canManageEvents(user.role)) {
+  if (!canManageEvents(user.role, user.venueId)) {
     return { success: false, message: "You don't have permission to save events." };
   }
 
@@ -601,13 +601,13 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
   const eventId = typeof rawEventId === "string" ? rawEventId.trim() || undefined : undefined;
   const venueIdValue = formData.get("venueId");
   const requestedVenueId = typeof venueIdValue === "string" ? venueIdValue : "";
-  const venueId = user.role === "venue_manager" ? (user.venueId ?? "") : requestedVenueId;
+  const venueId = user.role === "office_worker" ? (user.venueId ?? "") : requestedVenueId;
 
-  if (user.role === "venue_manager" && !user.venueId) {
+  if (user.role === "office_worker" && !user.venueId) {
     return { success: false, message: "Your account is not linked to a venue." };
   }
 
-  if (user.role === "venue_manager" && requestedVenueId && requestedVenueId !== user.venueId) {
+  if (user.role === "office_worker" && requestedVenueId && requestedVenueId !== user.venueId) {
     return {
       success: false,
       message: "Venue managers can only create events for their linked venue.",
@@ -953,10 +953,10 @@ export async function submitEventForReviewAction(
   if (!user) {
     redirect("/login");
   }
-  if (!canManageEvents(user.role)) {
+  if (!canManageEvents(user.role, user.venueId)) {
     return { success: false, message: "You don't have permission to submit events." };
   }
-  if (user.role === "venue_manager" && !user.venueId) {
+  if (user.role === "office_worker" && !user.venueId) {
     return { success: false, message: "Your account is not linked to a venue." };
   }
 
@@ -981,9 +981,9 @@ export async function submitEventForReviewAction(
     } else {
       const venueIdValue = formData.get("venueId");
       const requestedVenueId = typeof venueIdValue === "string" ? venueIdValue : "";
-      const venueId = user.role === "venue_manager" ? (user.venueId ?? "") : requestedVenueId;
+      const venueId = user.role === "office_worker" ? (user.venueId ?? "") : requestedVenueId;
 
-      if (user.role === "venue_manager" && requestedVenueId && requestedVenueId !== user.venueId) {
+      if (user.role === "office_worker" && requestedVenueId && requestedVenueId !== user.venueId) {
         return {
           success: false,
           message: "Venue managers can only submit events for their linked venue.",
@@ -1147,7 +1147,7 @@ export async function submitEventForReviewAction(
       throw existingEventError;
     }
 
-    if (user.role === "venue_manager" && existingEvent?.created_by !== user.id) {
+    if (user.role === "office_worker" && existingEvent?.created_by !== user.id) {
       return { success: false, message: "You can only submit events you created." };
     }
 
@@ -1209,7 +1209,7 @@ export async function submitEventForReviewAction(
       }
     }
 
-    if (user.role === "central_planner") {
+    if (user.role === "administrator") {
 
       const approvalResult = await autoApproveEvent({
         eventId: targetEventId,
@@ -1241,21 +1241,21 @@ export async function submitEventForReviewAction(
       if (venueId) {
         const { data: venueRow, error: venueError } = await supabase
           .from("venues")
-          .select("default_reviewer_id")
+          .select("default_approver_id")
           .eq("id", venueId)
           .maybeSingle();
 
         if (venueError) {
-          console.error("Could not load venue default reviewer", venueError);
-        } else if (venueRow?.default_reviewer_id) {
-          return venueRow.default_reviewer_id;
+          console.error("Could not load venue default approver", venueError);
+        } else if (venueRow?.default_approver_id) {
+          return venueRow.default_approver_id;
         }
       }
 
       const { data } = await supabase
         .from("users")
         .select("id")
-        .eq("role", "reviewer")
+        .eq("role", "administrator")
         .order("full_name", { ascending: true })
         .limit(1)
         .maybeSingle();
@@ -1329,7 +1329,7 @@ export async function reviewerDecisionAction(
     redirect("/login");
   }
   if (!canReviewEvents(user.role)) {
-    return { success: false, message: "Only reviewers or planners can record decisions." };
+    return { success: false, message: "Only administrators can record decisions." };
   }
 
   const decision = formData.get("decision");
@@ -1364,12 +1364,6 @@ export async function reviewerDecisionAction(
 
     if (!["submitted", "needs_revisions"].includes(eventBeforeDecision.status ?? "")) {
       return { success: false, message: "This event is not currently awaiting review." };
-    }
-
-    if (user.role === "reviewer") {
-      if (eventBeforeDecision.assignee_id !== user.id) {
-        return { success: false, message: "This event is not assigned to you." };
-      }
     }
 
     const currentAssignee = eventBeforeDecision?.assignee_id ?? null;
@@ -1413,7 +1407,7 @@ export async function reviewerDecisionAction(
         ...(websiteCopyPayload ?? {})
       },
       contextLabel: "decision",
-      reviewerAssigneeId: user.role === "reviewer" ? user.id : null
+      reviewerAssigneeId: null
     });
 
     const statusBefore = eventBeforeDecision?.status ?? null;
@@ -1494,7 +1488,7 @@ export async function generateWebsiteCopyAction(
   }
 
   if (!canReviewEvents(user.role)) {
-    return { success: false, message: "Only reviewers or planners can generate website copy." };
+    return { success: false, message: "Only administrators can generate website copy." };
   }
 
   const eventIdValue = formData.get("eventId");
@@ -1509,9 +1503,7 @@ export async function generateWebsiteCopyAction(
     if (!record) {
       return { success: false, message: "Event not found." };
     }
-    if (user.role === "reviewer" && record.assignee_id !== user.id) {
-      return { success: false, message: "You can only generate website copy for events assigned to you." };
-    }
+    // Admin-only function (canReviewEvents gates above) — no per-assignee scoping needed
 
     if (record.status !== "approved" && record.status !== "completed") {
       return { success: false, message: "Approve the event before generating website copy." };
@@ -1553,8 +1545,8 @@ export async function generateWebsiteCopyFromFormAction(
     redirect("/login");
   }
 
-  if (!canManageEvents(user.role)) {
-    return { success: false, message: "Only planners or venue managers can generate website copy." };
+  if (!canManageEvents(user.role, user.venueId)) {
+    return { success: false, message: "Only administrators or venue managers can generate website copy." };
   }
 
   try {
@@ -1649,8 +1641,8 @@ export async function generateTermsAndConditionsAction(
     redirect("/login");
   }
 
-  if (!canManageEvents(user.role)) {
-    return { success: false, message: "Only planners or venue managers can generate terms." };
+  if (!canManageEvents(user.role, user.venueId)) {
+    return { success: false, message: "Only administrators or venue managers can generate terms." };
   }
 
   const bookingType = normaliseOptionalBookingTypeField(formData.get("bookingType"));
@@ -1713,8 +1705,8 @@ export async function generateTermsAndConditionsAction(
 
 export async function updateAssigneeAction(formData: FormData) {
   const user = await getCurrentUser();
-  if (!user || user.role !== "central_planner") {
-    return { success: false, message: "Only planners can update assignees." };
+  if (!user || user.role !== "administrator") {
+    return { success: false, message: "Only administrators can update assignees." };
   }
 
   const eventId = formData.get("eventId");
@@ -1774,7 +1766,7 @@ export async function deleteEventAction(_: ActionResult | undefined, formData: F
   if (!user) {
     redirect("/login");
   }
-  if (!canManageEvents(user.role)) {
+  if (!canManageEvents(user.role, user.venueId)) {
     return { success: false, message: "You don't have permission to delete events." };
   }
 
@@ -1800,8 +1792,8 @@ export async function deleteEventAction(_: ActionResult | undefined, formData: F
     }
 
     const canDelete =
-      user.role === "central_planner" ||
-      ((user.role === "venue_manager" && event.created_by === user.id) &&
+      user.role === "administrator" ||
+      ((user.role === "office_worker" && event.created_by === user.id) &&
         ["draft", "needs_revisions"].includes(event.status));
 
     if (!canDelete) {
@@ -1853,10 +1845,10 @@ export async function revertToDraftAction(
     redirect("/login");
   }
 
-  // Only central_planner can revert approved events — venue_managers are blocked by
+  // Only administrator can revert approved events — office_workers are blocked by
   // RLS on approved-status events, and reverting approval is a privileged action.
-  if (user.role !== "central_planner") {
-    return { success: false, message: "Only planners can revert approved events to draft." };
+  if (user.role !== "administrator") {
+    return { success: false, message: "Only administrators can revert approved events to draft." };
   }
 
   const eventId = formData.get("eventId");
@@ -1930,7 +1922,7 @@ export type UpdateBookingSettingsResult = ActionResult & { seoSlug?: string | nu
 /**
  * Save booking settings (booking_enabled, total_capacity, max_tickets_per_booking).
  * Auto-generates seo_slug when booking is first enabled and no slug exists yet.
- * Only central_planner and venue_manager (for their own venue's events) may call this.
+ * Only administrator and office_worker (for their own venue's events) may call this.
  */
 export async function updateBookingSettingsAction(
   input: UpdateBookingSettingsInput,
@@ -1938,7 +1930,7 @@ export async function updateBookingSettingsAction(
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  if (!canManageEvents(user.role)) {
+  if (!canManageEvents(user.role, user.venueId)) {
     return { success: false, message: "You don't have permission to update booking settings." };
   }
 
@@ -1963,7 +1955,7 @@ export async function updateBookingSettingsAction(
   }
 
   // Venue managers can only modify events at their own venue
-  if (user.role === "venue_manager" && event.venue_id !== user.venueId) {
+  if (user.role === "office_worker" && event.venue_id !== user.venueId) {
     return { success: false, message: "You can only manage booking settings for your own venue's events." };
   }
 

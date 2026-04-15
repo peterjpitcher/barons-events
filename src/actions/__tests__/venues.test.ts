@@ -44,15 +44,15 @@ describe("createVenueAction", () => {
     mockGetCurrentUser.mockResolvedValue({
       id: "user-1",
       email: "planner@test.com",
-      fullName: "Test Planner",
-      role: "central_planner",
+      fullName: "Test Admin",
+      role: "administrator",
       venueId: null,
     });
     mockCreateVenue.mockResolvedValue(undefined);
 
     const fd = makeFormData({
       name: "Test Venue",
-      defaultReviewerId: "",
+      defaultApproverId: "",
       defaultManagerResponsible: "Sarah Mitchell",
     });
 
@@ -61,7 +61,7 @@ describe("createVenueAction", () => {
     expect(result.success).toBe(true);
     expect(mockCreateVenue).toHaveBeenCalledWith({
       name: "Test Venue",
-      defaultReviewerId: null,
+      defaultApproverId: null,
       defaultManagerResponsible: "Sarah Mitchell",
     });
   });
@@ -70,15 +70,15 @@ describe("createVenueAction", () => {
     mockGetCurrentUser.mockResolvedValue({
       id: "user-1",
       email: "planner@test.com",
-      fullName: "Test Planner",
-      role: "central_planner",
+      fullName: "Test Admin",
+      role: "administrator",
       venueId: null,
     });
     mockCreateVenue.mockResolvedValue(undefined);
 
     const fd = makeFormData({
       name: "Test Venue",
-      defaultReviewerId: "",
+      defaultApproverId: "",
       defaultManagerResponsible: "",
     });
 
@@ -87,7 +87,7 @@ describe("createVenueAction", () => {
     expect(result.success).toBe(true);
     expect(mockCreateVenue).toHaveBeenCalledWith({
       name: "Test Venue",
-      defaultReviewerId: null,
+      defaultApproverId: null,
       defaultManagerResponsible: null,
     });
   });
@@ -98,8 +98,8 @@ describe("updateVenueAction", () => {
     mockGetCurrentUser.mockResolvedValue({
       id: "user-1",
       email: "planner@test.com",
-      fullName: "Test Planner",
-      role: "central_planner",
+      fullName: "Test Admin",
+      role: "administrator",
       venueId: null,
     });
     mockUpdateVenue.mockResolvedValue(undefined);
@@ -107,7 +107,7 @@ describe("updateVenueAction", () => {
     const fd = makeFormData({
       venueId: "550e8400-e29b-41d4-a716-446655440000",
       name: "Updated Venue",
-      defaultReviewerId: "",
+      defaultApproverId: "",
       defaultManagerResponsible: "Tom Bradley",
       googleReviewUrl: "",
     });
@@ -119,7 +119,7 @@ describe("updateVenueAction", () => {
       "550e8400-e29b-41d4-a716-446655440000",
       {
         name: "Updated Venue",
-        defaultReviewerId: null,
+        defaultApproverId: null,
         defaultManagerResponsible: "Tom Bradley",
         googleReviewUrl: null,
       }

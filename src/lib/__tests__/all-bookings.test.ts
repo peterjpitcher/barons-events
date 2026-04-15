@@ -14,19 +14,19 @@ import type { AppUser } from "@/lib/types";
 // Helpers
 // ---------------------------------------------------------------------------
 
-const centralPlanner: AppUser = {
+const administrator: AppUser = {
   id: "user-1",
-  email: "planner@test.com",
-  fullName: "Central Planner",
-  role: "central_planner",
+  email: "admin@test.com",
+  fullName: "Administrator",
+  role: "administrator",
   venueId: null,
 };
 
-const venueManager: AppUser = {
+const officeWorker: AppUser = {
   id: "user-2",
-  email: "manager@test.com",
-  fullName: "Venue Manager",
-  role: "venue_manager",
+  email: "worker@test.com",
+  fullName: "Office Worker",
+  role: "office_worker",
   venueId: "venue-42",
 };
 
@@ -121,7 +121,7 @@ describe("listAllBookingsForUser", () => {
       from: () => ({ select: () => ({ order: () => proxy }) }),
     });
 
-    const groups = await listAllBookingsForUser(centralPlanner);
+    const groups = await listAllBookingsForUser(administrator);
 
     expect(groups).toHaveLength(2);
     expect(groups[0].eventId).toBe("event-late");
@@ -129,15 +129,15 @@ describe("listAllBookingsForUser", () => {
   });
 
   // -------------------------------------------------------------------------
-  // 2. venue_manager scoping — eq called with venue filter
+  // 2. office_worker scoping — eq called with venue filter
   // -------------------------------------------------------------------------
-  it("applies venue_id scoping for venue_manager", async () => {
+  it("applies venue_id scoping for office_worker", async () => {
     const { proxy, calls } = buildQueryMock({ data: [], error: null });
     (createSupabaseAdminClient as ReturnType<typeof vi.fn>).mockReturnValue({
       from: () => ({ select: () => ({ order: () => proxy }) }),
     });
 
-    await listAllBookingsForUser(venueManager);
+    await listAllBookingsForUser(officeWorker);
 
     const eqCall = calls.find(
       (c) => c.method === "eq" && c.args[0] === "events.venue_id",
@@ -155,7 +155,7 @@ describe("listAllBookingsForUser", () => {
       from: () => ({ select: () => ({ order: () => proxy }) }),
     });
 
-    await listAllBookingsForUser(centralPlanner, { statusFilter: "cancelled" });
+    await listAllBookingsForUser(administrator, { statusFilter: "cancelled" });
 
     const eqCall = calls.find(
       (c) => c.method === "eq" && c.args[0] === "status",
@@ -184,7 +184,7 @@ describe("listAllBookingsForUser", () => {
       from: () => ({ select: () => ({ order: () => proxy }) }),
     });
 
-    const groups = await listAllBookingsForUser(centralPlanner, { searchTerm: "alice" });
+    const groups = await listAllBookingsForUser(administrator, { searchTerm: "alice" });
 
     // Only Alice's booking should be included; Bob's event group should not appear
     const allBookings = groups.flatMap((g) => g.bookings);
@@ -209,7 +209,7 @@ describe("listAllBookingsForUser", () => {
       from: () => ({ select: () => ({ order: () => proxy }) }),
     });
 
-    const groups = await listAllBookingsForUser(centralPlanner, { searchTerm: "900999" });
+    const groups = await listAllBookingsForUser(administrator, { searchTerm: "900999" });
     const allBookings = groups.flatMap((g) => g.bookings);
     expect(allBookings).toHaveLength(1);
     expect(allBookings[0].mobile).toBe("+447700900999");
@@ -224,7 +224,7 @@ describe("listAllBookingsForUser", () => {
       from: () => ({ select: () => ({ order: () => proxy }) }),
     });
 
-    const groups = await listAllBookingsForUser(centralPlanner);
+    const groups = await listAllBookingsForUser(administrator);
     expect(groups).toEqual([]);
   });
 
@@ -237,7 +237,7 @@ describe("listAllBookingsForUser", () => {
       from: () => ({ select: () => ({ order: () => proxy }) }),
     });
 
-    await expect(listAllBookingsForUser(centralPlanner)).rejects.toThrow(
+    await expect(listAllBookingsForUser(administrator)).rejects.toThrow(
       "listAllBookingsForUser failed: connection timeout",
     );
   });
@@ -256,7 +256,7 @@ describe("listAllBookingsForUser", () => {
       from: () => ({ select: () => ({ order: () => proxy }) }),
     });
 
-    const groups = await listAllBookingsForUser(centralPlanner);
+    const groups = await listAllBookingsForUser(administrator);
     expect(groups).toHaveLength(1);
     expect(groups[0].totalBookings).toBe(2);
     expect(groups[0].totalTickets).toBe(8);

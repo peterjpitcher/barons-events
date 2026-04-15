@@ -12,19 +12,19 @@ import type { AppUser } from "@/lib/types";
 
 const mockAdminClient = createSupabaseAdminClient as ReturnType<typeof vi.fn>;
 
-const centralPlanner: AppUser = {
+const administrator: AppUser = {
   id: "user-1",
-  email: "planner@example.com",
-  fullName: "Central Planner",
-  role: "central_planner",
+  email: "admin@example.com",
+  fullName: "Administrator",
+  role: "administrator",
   venueId: null,
 };
 
-const venueManager: AppUser = {
+const officeWorker: AppUser = {
   id: "user-2",
-  email: "manager@example.com",
-  fullName: "Venue Manager",
-  role: "venue_manager",
+  email: "worker@example.com",
+  fullName: "Office Worker",
+  role: "office_worker",
   venueId: "venue-abc",
 };
 
@@ -42,11 +42,11 @@ const sampleCustomerRow = {
 describe("listCustomersForUser", () => {
   beforeEach(() => { vi.clearAllMocks(); });
 
-  it("passes null venue_id to RPC for central_planner", async () => {
+  it("passes null venue_id to RPC for administrator", async () => {
     const rpcMock = vi.fn().mockResolvedValue({ data: [], error: null });
     mockAdminClient.mockReturnValue({ rpc: rpcMock });
 
-    await listCustomersForUser(centralPlanner);
+    await listCustomersForUser(administrator);
 
     expect(rpcMock).toHaveBeenCalledWith("list_customers_with_stats", {
       p_venue_id: null,
@@ -55,11 +55,11 @@ describe("listCustomersForUser", () => {
     });
   });
 
-  it("passes venueId to RPC for venue_manager", async () => {
+  it("passes venueId to RPC for office_worker", async () => {
     const rpcMock = vi.fn().mockResolvedValue({ data: [], error: null });
     mockAdminClient.mockReturnValue({ rpc: rpcMock });
 
-    await listCustomersForUser(venueManager);
+    await listCustomersForUser(officeWorker);
 
     expect(rpcMock).toHaveBeenCalledWith("list_customers_with_stats", {
       p_venue_id: "venue-abc",
@@ -72,7 +72,7 @@ describe("listCustomersForUser", () => {
     const rpcMock = vi.fn().mockResolvedValue({ data: [], error: null });
     mockAdminClient.mockReturnValue({ rpc: rpcMock });
 
-    await listCustomersForUser(centralPlanner, { searchTerm: "Alice", optInOnly: true });
+    await listCustomersForUser(administrator, { searchTerm: "Alice", optInOnly: true });
 
     expect(rpcMock).toHaveBeenCalledWith("list_customers_with_stats", {
       p_venue_id: null,
@@ -91,7 +91,7 @@ describe("listCustomersForUser", () => {
     const rpcMock = vi.fn().mockResolvedValue({ data: [rpcRow], error: null });
     mockAdminClient.mockReturnValue({ rpc: rpcMock });
 
-    const result = await listCustomersForUser(centralPlanner);
+    const result = await listCustomersForUser(administrator);
 
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe("cust-1");
@@ -111,7 +111,7 @@ describe("listCustomersForUser", () => {
     const rpcMock = vi.fn().mockResolvedValue({ data: [rpcRow], error: null });
     mockAdminClient.mockReturnValue({ rpc: rpcMock });
 
-    const result = await listCustomersForUser(centralPlanner);
+    const result = await listCustomersForUser(administrator);
 
     expect(result[0].firstSeen).toEqual(new Date(sampleCustomerRow.created_at));
   });
@@ -123,7 +123,7 @@ describe("listCustomersForUser", () => {
     });
     mockAdminClient.mockReturnValue({ rpc: rpcMock });
 
-    await expect(listCustomersForUser(centralPlanner)).rejects.toThrow("RPC boom");
+    await expect(listCustomersForUser(administrator)).rejects.toThrow("RPC boom");
   });
 });
 
@@ -138,7 +138,7 @@ describe("getCustomerById", () => {
     };
     mockAdminClient.mockReturnValue({ from: () => selectChain });
 
-    const result = await getCustomerById("nonexistent", centralPlanner);
+    const result = await getCustomerById("nonexistent", administrator);
     expect(result).toBeNull();
   });
 
@@ -150,10 +150,10 @@ describe("getCustomerById", () => {
     };
     mockAdminClient.mockReturnValue({ from: () => selectChain });
 
-    await expect(getCustomerById("cust-1", centralPlanner)).rejects.toThrow("DB error");
+    await expect(getCustomerById("cust-1", administrator)).rejects.toThrow("DB error");
   });
 
-  it("returns customer with bookings for central_planner", async () => {
+  it("returns customer with bookings for administrator", async () => {
     let callCount = 0;
     mockAdminClient.mockReturnValue({
       from: (table: string) => {
@@ -191,7 +191,7 @@ describe("getCustomerById", () => {
       },
     });
 
-    const result = await getCustomerById("cust-1", centralPlanner);
+    const result = await getCustomerById("cust-1", administrator);
 
     expect(result).not.toBeNull();
     expect(result!.id).toBe("cust-1");
@@ -201,7 +201,7 @@ describe("getCustomerById", () => {
     expect(callCount).toBe(1);
   });
 
-  it("venue_manager: returns null when customer has no bookings at their venue", async () => {
+  it("office_worker: returns null when customer has no bookings at their venue", async () => {
     mockAdminClient.mockReturnValue({
       from: (table: string) => {
         if (table === "customers") {
@@ -236,11 +236,11 @@ describe("getCustomerById", () => {
       },
     });
 
-    const result = await getCustomerById("cust-1", venueManager);
+    const result = await getCustomerById("cust-1", officeWorker);
     expect(result).toBeNull();
   });
 
-  it("venue_manager: filters bookings to own venue only", async () => {
+  it("office_worker: filters bookings to own venue only", async () => {
     mockAdminClient.mockReturnValue({
       from: (table: string) => {
         if (table === "customers") {
@@ -264,7 +264,7 @@ describe("getCustomerById", () => {
                   id: "event-1",
                   title: "Manager Venue Event",
                   start_at: "2025-03-01T19:00:00Z",
-                  venue_id: "venue-abc",          // matches venueManager.venueId
+                  venue_id: "venue-abc",          // matches officeWorker.venueId
                   venues: { id: "venue-abc", name: "Manager's Venue" },
                 },
               },
@@ -288,7 +288,7 @@ describe("getCustomerById", () => {
       },
     });
 
-    const result = await getCustomerById("cust-1", venueManager);
+    const result = await getCustomerById("cust-1", officeWorker);
 
     expect(result).not.toBeNull();
     expect(result!.bookings).toHaveLength(1);

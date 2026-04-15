@@ -15,7 +15,7 @@ export default async function UsersPage() {
   if (!user) {
     redirect("/login");
   }
-  if (user.role !== "central_planner") {
+  if (user.role !== "administrator") {
     redirect("/unauthorized");
   }
 
@@ -32,25 +32,18 @@ export default async function UsersPage() {
           <p className="text-subtle">
             Invites send through Supabase auth instantly; role tweaks apply as soon as you save.
           </p>
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid gap-3 md:grid-cols-3">
             <div className="rounded-[var(--radius)] border border-[var(--color-border)] bg-white/80 p-3 shadow-soft">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-subtle">Central planner</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-subtle">Administrator</p>
               <p className="mt-2 text-sm">
-                Full access to manage venues, users, and events. Can approve requests, edit anything, reassign reviewers, and
+                Full access to manage venues, users, and events. Can approve requests, review submissions, edit anything, and
                 see every report. Use for the core planning team only.
               </p>
             </div>
             <div className="rounded-[var(--radius)] border border-[var(--color-border)] bg-white/80 p-3 shadow-soft">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-subtle">Reviewer</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-subtle">Office Worker</p>
               <p className="mt-2 text-sm">
-                Sees events they&apos;re assigned once submitted. Can leave decisions and feedback but can&apos;t edit venue details or
-                invite new users. Ideal for ops or senior managers who review programming.
-              </p>
-            </div>
-            <div className="rounded-[var(--radius)] border border-[var(--color-border)] bg-white/80 p-3 shadow-soft">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-subtle">Venue manager</p>
-              <p className="mt-2 text-sm">
-                Creates and edits their own venue&apos;s events, submits drafts, and completes debriefs. They can see reviewer feedback
+                Creates and edits their own venue&apos;s events, submits drafts, and completes debriefs. They can see feedback
                 but not other venues or staffing info.
               </p>
             </div>

@@ -303,7 +303,7 @@ describe("cancelBookingAction", () => {
       id: "user-123",
       email: "staff@example.com",
       fullName: "Staff User",
-      role: "central_planner",
+      role: "administrator",
       venueId: null,
     });
     mockAdminBookingLookup("event-id");
@@ -319,7 +319,7 @@ describe("cancelBookingAction", () => {
       id: "user-123",
       email: "staff@example.com",
       fullName: "Staff User",
-      role: "central_planner",
+      role: "administrator",
       venueId: null,
     });
     mockAdminBookingLookup("event-id");

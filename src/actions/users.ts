@@ -17,7 +17,7 @@ import { sendInviteEmail } from "@/lib/notifications";
 const userUpdateSchema = z.object({
   userId: z.string().uuid(),
   fullName: z.string().max(120).optional(),
-  role: z.enum(["venue_manager", "reviewer", "central_planner", "executive"]),
+  role: z.enum(["administrator", "office_worker", "executive"]),
   venueId: z.union([z.string().uuid(), z.literal(""), z.null(), z.undefined()])
 });
 
@@ -29,8 +29,8 @@ export async function updateUserAction(
   if (!currentUser) {
     redirect("/login");
   }
-  if (currentUser.role !== "central_planner") {
-    return { success: false, message: "Only planners can change user access." };
+  if (currentUser.role !== "administrator") {
+    return { success: false, message: "Only administrators can change user access." };
   }
 
   const parsed = userUpdateSchema.safeParse({
@@ -94,7 +94,7 @@ export async function updateUserAction(
 const inviteSchema = z.object({
   email: z.string().email({ message: "Enter a valid email" }),
   fullName: z.string().max(120).optional(),
-  role: z.enum(["venue_manager", "reviewer", "central_planner", "executive"]),
+  role: z.enum(["administrator", "office_worker", "executive"]),
   venueId: z.union([z.string().uuid(), z.literal(""), z.null(), z.undefined()])
 });
 
@@ -106,8 +106,8 @@ export async function inviteUserAction(
   if (!currentUser) {
     redirect("/login");
   }
-  if (currentUser.role !== "central_planner") {
-    return { success: false, message: "Only planners can invite users." };
+  if (currentUser.role !== "administrator") {
+    return { success: false, message: "Only administrators can invite users." };
   }
 
   const parsed = inviteSchema.safeParse({
@@ -224,8 +224,8 @@ export async function resendInviteAction(
   if (!currentUser) {
     redirect("/login");
   }
-  if (currentUser.role !== "central_planner") {
-    return { success: false, message: "Only planners can resend invites." };
+  if (currentUser.role !== "administrator") {
+    return { success: false, message: "Only administrators can resend invites." };
   }
 
   // Validate inputs — consistent with the Zod pattern used in inviteUserAction and updateUserAction.

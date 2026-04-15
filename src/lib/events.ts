@@ -143,7 +143,7 @@ export async function listReviewQueue(user: AppUser): Promise<EventSummary[]> {
     .in("status", ["submitted", "needs_revisions"])
     .order("start_at", { ascending: true });
 
-  if (user.role === "reviewer") {
+  if (user.role !== "administrator") {
     query = query.eq("assignee_id", user.id);
   }
 
@@ -170,18 +170,21 @@ export async function listEventsForUser(user: AppUser): Promise<EventSummary[]> 
     .is("deleted_at", null)
     .order("start_at", { ascending: true });
 
-  if (user.role === "central_planner") {
+  if (user.role === "administrator") {
     // Default date range: 1 year back to 2 years forward
     const oneYearAgo = new Date();
     oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
     const twoYearsForward = new Date();
     twoYearsForward.setFullYear(twoYearsForward.getFullYear() + 2);
     query = query.gte("start_at", oneYearAgo.toISOString()).lte("start_at", twoYearsForward.toISOString());
-  } else if (user.role === "venue_manager") {
-    query = query.eq("created_by", user.id);
-  } else if (user.role === "reviewer") {
-    query = query.eq("assignee_id", user.id);
+  } else if (user.role === "office_worker") {
+    if (user.venueId) {
+      // Venue-scoped office worker: see all events for their venue
+      query = query.eq("venue_id", user.venueId);
+    }
+    // Office worker without venueId: holistic worker, show all events (no filter)
   } else {
+    // executive or unknown — limited read-only view
     query = query.limit(10);
   }
 

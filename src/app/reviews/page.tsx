@@ -27,7 +27,7 @@ export default async function ReviewsPage() {
     redirect("/login");
   }
 
-  if (user.role === "venue_manager" || user.role === "executive") {
+  if (user.role === "office_worker" || user.role === "executive") {
     redirect("/unauthorized");
   }
 
@@ -37,7 +37,7 @@ export default async function ReviewsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="font-brand-serif text-3xl text-[var(--color-primary-700)]">
-          {user.role === "central_planner" ? "Review pipeline" : "My review queue"}
+          {user.role === "administrator" ? "Review pipeline" : "My review queue"}
         </h1>
         <p className="mt-1 text-subtle">Work through the newest submissions first and leave clear feedback.</p>
       </div>
@@ -74,7 +74,7 @@ export default async function ReviewsPage() {
                   </p>
                 </div>
                 <div className="flex flex-col gap-3">
-                  {user.role === "reviewer" && event.assignee_id === user.id ? (
+                  {user.role === "administrator" ? (
                     <DecisionForm eventId={event.id} />
                   ) : (
                     <Button variant="secondary" asChild>
@@ -90,7 +90,7 @@ export default async function ReviewsPage() {
         {queue.length === 0 ? (
           <Card>
             <CardContent className="py-10 text-center text-subtle">
-              {user.role === "reviewer" ? "Nothing waiting for you right now." : "All clear—no submissions waiting."}
+              {"All clear—no submissions waiting."}
             </CardContent>
           </Card>
         ) : null}

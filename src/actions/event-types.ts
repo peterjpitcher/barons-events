@@ -19,8 +19,8 @@ export async function createEventTypeAction(
 ): Promise<ActionResult> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (user.role !== "central_planner") {
-    return { success: false, message: "Only planners can create event types." };
+  if (user.role !== "administrator") {
+    return { success: false, message: "Only administrators can create event types." };
   }
 
   const parsed = baseSchema.safeParse({
@@ -62,8 +62,8 @@ export async function updateEventTypeAction(
 ): Promise<ActionResult> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (user.role !== "central_planner") {
-    return { success: false, message: "Only planners can update event types." };
+  if (user.role !== "administrator") {
+    return { success: false, message: "Only administrators can update event types." };
   }
 
   const parsed = updateSchema.safeParse({
@@ -106,8 +106,8 @@ export async function deleteEventTypeAction(
 ): Promise<ActionResult> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (user.role !== "central_planner") {
-    return { success: false, message: "Only planners can delete event types." };
+  if (user.role !== "administrator") {
+    return { success: false, message: "Only administrators can delete event types." };
   }
 
   const parsed = deleteSchema.safeParse({

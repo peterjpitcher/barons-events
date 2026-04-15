@@ -38,15 +38,15 @@ export default async function BookingsPage({
     notFound();
   }
 
-  // Venue managers can only view bookings for events at their own venue
-  if (user.role === "venue_manager") {
+  // Office workers can only view bookings for events at their own venue
+  if (user.role === "office_worker") {
     if (!user.venueId || event.venue_id !== user.venueId) {
       redirect("/events");
     }
   }
 
-  // Only central_planner and venue_manager can manage bookings
-  if (user.role !== "central_planner" && user.role !== "venue_manager") {
+  // Only administrator and office_worker can manage bookings
+  if (user.role !== "administrator" && user.role !== "office_worker") {
     redirect("/events");
   }
 

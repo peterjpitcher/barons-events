@@ -1,9 +1,6 @@
 import type { FieldErrors } from "@/lib/form-errors";
 
 export type UserRole =
-  | "venue_manager"
-  | "reviewer"
-  | "central_planner"
   | "administrator"
   | "office_worker"
   | "executive";

@@ -22,8 +22,8 @@ export interface ListCustomersOptions {
 
 /**
  * List customers scoped by user role.
- * central_planner: all customers
- * venue_manager: customers with at least one booking at their venue (users.venue_id)
+ * administrator: all customers
+ * office_worker: customers with at least one booking at their venue (users.venue_id)
  * Returns CustomerWithStats (booking count, ticket count, first seen).
  * Calls the list_customers_with_stats RPC (defined in the migration).
  */
@@ -34,7 +34,7 @@ export async function listCustomersForUser(
   const db = createSupabaseAdminClient();
 
   const { data, error } = await db.rpc("list_customers_with_stats", {
-    p_venue_id:    user.role === "venue_manager" ? (user.venueId ?? null) : null,
+    p_venue_id:    user.role === "office_worker" ? (user.venueId ?? null) : null,
     p_search:      options.searchTerm ?? null,
     p_opt_in_only: options.optInOnly ?? false,
   });
@@ -64,7 +64,7 @@ export interface CustomerBooking {
 /**
  * Get a single customer with their bookings.
  * Returns null if not found.
- * For venue_manager: returns null if customer has no bookings at their venue.
+ * For office_worker: returns null if customer has no bookings at their venue.
  */
 export async function getCustomerById(
   customerId: string,
@@ -112,8 +112,8 @@ export async function getCustomerById(
     };
   });
 
-  // Scope for venue_manager: only show bookings at their venue
-  if (user.role === "venue_manager" && user.venueId) {
+  // Scope for office_worker: only show bookings at their venue
+  if (user.role === "office_worker" && user.venueId) {
     bookings = bookings.filter((b) => b.venueId === user.venueId);
     if (bookings.length === 0) return null;
   }

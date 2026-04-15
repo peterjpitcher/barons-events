@@ -1,32 +1,32 @@
 -- Demo venues
-insert into public.venues (id, name, capacity, address, default_reviewer_id)
+insert into public.venues (id, name, capacity, address, default_approver_id)
 values
   (
     '9f9c5da2-8a6e-4db0-84b7-8ae0b25177e7',
     'Barons Riverside',
     180,
     '12 River Walk, Guildford',
-    '22222222-2222-2222-2222-222222222222'
+    '11111111-1111-1111-1111-111111111111'
   ),
   (
     'c04ef2b5-2741-430b-9148-6a51fdd5dcd2',
     'Barons City Tap',
     220,
     '85 Market Street, London',
-    '22222222-2222-2222-2222-222222222222'
+    '11111111-1111-1111-1111-111111111111'
   ),
   (
     '0a077fe4-513b-438a-a60d-608c516d6b32',
     'Barons Lakeside',
     150,
     '44 Willow Lane, Reading',
-    '22222222-2222-2222-2222-222222222222'
+    '11111111-1111-1111-1111-111111111111'
   )
 on conflict (id) do update set
   name = excluded.name,
   capacity = excluded.capacity,
   address = excluded.address,
-  default_reviewer_id = excluded.default_reviewer_id;
+  default_approver_id = excluded.default_approver_id;
 
 insert into public.event_types (label)
 values
@@ -44,7 +44,7 @@ on conflict (label) do nothing;
 select auth.admin.create_user(
   jsonb_build_object(
     'id', '11111111-1111-1111-1111-111111111111',
-    'email', 'central.planner@barons.example',
+    'email', 'admin@barons.example',
     'password', 'password',
     'email_confirm', true
   )
@@ -55,7 +55,7 @@ select auth.admin.create_user(
 select auth.admin.create_user(
   jsonb_build_object(
     'id', '22222222-2222-2222-2222-222222222222',
-    'email', 'reviewer@barons.example',
+    'email', 'office.hq@barons.example',
     'password', 'password',
     'email_confirm', true
   )
@@ -66,7 +66,7 @@ select auth.admin.create_user(
 select auth.admin.create_user(
   jsonb_build_object(
     'id', '33333333-3333-3333-3333-333333333333',
-    'email', 'venue.manager@barons.example',
+    'email', 'office.venue@barons.example',
     'password', 'password',
     'email_confirm', true
   )
@@ -89,23 +89,23 @@ insert into public.users (id, email, full_name, role, venue_id)
 values
   (
     '11111111-1111-1111-1111-111111111111',
-    'central.planner@barons.example',
-    'Casey Planner',
-    'central_planner',
+    'admin@barons.example',
+    'Casey Admin',
+    'administrator',
     null
   ),
   (
     '22222222-2222-2222-2222-222222222222',
-    'reviewer@barons.example',
-    'Riley Reviewer',
-    'reviewer',
+    'office.hq@barons.example',
+    'Riley Office',
+    'office_worker',
     null
   ),
   (
     '33333333-3333-3333-3333-333333333333',
-    'venue.manager@barons.example',
+    'office.venue@barons.example',
     'Morgan Venue',
-    'venue_manager',
+    'office_worker',
     '9f9c5da2-8a6e-4db0-84b7-8ae0b25177e7'
   ),
   (

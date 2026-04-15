@@ -171,8 +171,8 @@ export async function cancelBookingAction(
     return { success: false, error: "Unauthorized" };
   }
 
-  // Only central_planner and venue_manager can cancel bookings
-  if (user.role !== "central_planner" && user.role !== "venue_manager") {
+  // Only administrator and office_worker can cancel bookings
+  if (user.role !== "administrator" && user.role !== "office_worker") {
     return { success: false, error: "You do not have permission to cancel bookings." };
   }
 
@@ -189,8 +189,8 @@ export async function cancelBookingAction(
   }
   const actualEventId = booking.event_id;
 
-  if (user.role !== "central_planner") {
-    // Venue manager — verify event belongs to their venue
+  if (user.role !== "administrator") {
+    // Office worker — verify event belongs to their venue
     const { data: event, error: eventError } = await db
       .from("events")
       .select("venue_id")

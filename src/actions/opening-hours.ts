@@ -30,8 +30,8 @@ export async function createServiceTypeAction(
 ): Promise<ActionResult> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (user.role !== "central_planner") {
-    return { success: false, message: "Only planners can manage service types." };
+  if (user.role !== "administrator") {
+    return { success: false, message: "Only administrators can manage service types." };
   }
 
   const parsed = serviceTypeSchema.safeParse({ name: formData.get("name") });
@@ -63,8 +63,8 @@ export async function updateServiceTypeAction(
 ): Promise<ActionResult> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (user.role !== "central_planner") {
-    return { success: false, message: "Only planners can manage service types." };
+  if (user.role !== "administrator") {
+    return { success: false, message: "Only administrators can manage service types." };
   }
 
   const id = formData.get("typeId");
@@ -101,8 +101,8 @@ export async function deleteServiceTypeAction(
 ): Promise<ActionResult> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (user.role !== "central_planner") {
-    return { success: false, message: "Only planners can manage service types." };
+  if (user.role !== "administrator") {
+    return { success: false, message: "Only administrators can manage service types." };
   }
 
   const id = formData.get("typeId");
@@ -146,8 +146,8 @@ export async function upsertVenueOpeningHoursAction(
 ): Promise<ActionResult> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (user.role !== "central_planner") {
-    return { success: false, message: "Only planners can manage opening hours." };
+  if (user.role !== "administrator") {
+    return { success: false, message: "Only administrators can manage opening hours." };
   }
 
   const venueId = formData.get("venueId");
@@ -196,8 +196,8 @@ export async function upsertMultiVenueOpeningHoursAction(
 ): Promise<ActionResult> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (user.role !== "central_planner") {
-    return { success: false, message: "Only planners can manage opening hours." };
+  if (user.role !== "administrator") {
+    return { success: false, message: "Only administrators can manage opening hours." };
   }
 
   if (venueIds.length === 0) {
@@ -261,8 +261,8 @@ export async function createOpeningOverrideAction(payload: {
 }): Promise<ActionResult> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (user.role !== "central_planner") {
-    return { success: false, message: "Only planners can manage opening overrides." };
+  if (user.role !== "administrator") {
+    return { success: false, message: "Only administrators can manage opening overrides." };
   }
 
   const parsed = overrideSchema.safeParse(payload);
@@ -302,8 +302,8 @@ export async function updateOpeningOverrideAction(
 ): Promise<ActionResult> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (user.role !== "central_planner") {
-    return { success: false, message: "Only planners can manage opening overrides." };
+  if (user.role !== "administrator") {
+    return { success: false, message: "Only administrators can manage opening overrides." };
   }
 
   const parsed = overrideSchema.safeParse(payload);
@@ -332,8 +332,8 @@ export async function updateOpeningOverrideAction(
 export async function deleteOpeningOverrideAction(id: string): Promise<ActionResult> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (user.role !== "central_planner") {
-    return { success: false, message: "Only planners can manage opening overrides." };
+  if (user.role !== "administrator") {
+    return { success: false, message: "Only administrators can manage opening overrides." };
   }
 
   try {

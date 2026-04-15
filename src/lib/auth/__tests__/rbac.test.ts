@@ -1,5 +1,6 @@
 /**
  * Tests for src/lib/auth.ts — RBAC helpers and API route wrappers.
+ * Tests for src/lib/roles.ts — capability functions.
  *
  * Mock strategy:
  * - @/lib/supabase/server is mocked so no real Supabase client is created.
@@ -38,16 +39,23 @@ import {
 } from "@/lib/auth";
 import type { AppUser } from "@/lib/types";
 import {
+  isAdministrator,
   canManageEvents,
+  canViewEvents,
   canReviewEvents,
-  canSubmitDebriefs,
+  canManageBookings,
+  canManageCustomers,
   canManageArtists,
+  canCreateDebriefs,
+  canEditDebrief,
+  canViewDebriefs,
+  canCreatePlanningItems,
+  canManageOwnPlanningItems,
+  canManageAllPlanning,
+  canViewPlanning,
   canManageVenues,
   canManageUsers,
   canManageSettings,
-  canUsePlanning,
-  canViewPlanning,
-  canViewAllEvents,
   canManageLinks,
   canViewSopTemplate,
   canEditSopTemplate,
@@ -90,21 +98,21 @@ function makeSupabaseClient(
   return client;
 }
 
-/** Convenience: a fully valid central_planner profile row. */
-const validCentralPlannerProfile = {
+/** Convenience: a fully valid administrator profile row. */
+const validAdminProfile = {
   id: "user-1",
-  email: "planner@example.com",
-  full_name: "Test Planner",
-  role: "central_planner",
+  email: "admin@example.com",
+  full_name: "Test Admin",
+  role: "administrator",
   venue_id: null
 };
 
-/** Convenience: the expected AppUser produced from validCentralPlannerProfile. */
-const validCentralPlannerUser: AppUser = {
+/** Convenience: the expected AppUser produced from validAdminProfile. */
+const validAdminUser: AppUser = {
   id: "user-1",
-  email: "planner@example.com",
-  fullName: "Test Planner",
-  role: "central_planner",
+  email: "admin@example.com",
+  fullName: "Test Admin",
+  role: "administrator",
   venueId: null
 };
 
@@ -174,22 +182,19 @@ describe("getCurrentUser", () => {
 
   it("returns a correctly shaped AppUser when role is valid", async () => {
     mockCreateClient.mockResolvedValue(
-      makeSupabaseClient({ id: "user-1" }, validCentralPlannerProfile)
+      makeSupabaseClient({ id: "user-1" }, validAdminProfile)
     );
 
     const result = await getCurrentUser();
 
-    expect(result).toEqual(validCentralPlannerUser);
+    expect(result).toEqual(validAdminUser);
   });
 });
 
 // ─── normalizeRole (exercised via getCurrentUser) ─────────────────────────────
 
-describe("normalizeRole — all valid roles return an AppUser", () => {
+describe("normalizeRole — final 3-role model", () => {
   const validRoles = [
-    "venue_manager",
-    "reviewer",
-    "central_planner",
     "administrator",
     "office_worker",
     "executive"
@@ -235,6 +240,63 @@ describe("normalizeRole — all valid roles return an AppUser", () => {
 
     expect(result).toBeNull();
   });
+
+  it("rejects legacy 'central_planner' role", async () => {
+    mockCreateClient.mockResolvedValue(
+      makeSupabaseClient(
+        { id: "user-4" },
+        {
+          id: "user-4",
+          email: "cp@example.com",
+          full_name: null,
+          role: "central_planner",
+          venue_id: null
+        }
+      )
+    );
+
+    const result = await getCurrentUser();
+
+    expect(result).toBeNull();
+  });
+
+  it("rejects legacy 'venue_manager' role", async () => {
+    mockCreateClient.mockResolvedValue(
+      makeSupabaseClient(
+        { id: "user-5" },
+        {
+          id: "user-5",
+          email: "vm@example.com",
+          full_name: null,
+          role: "venue_manager",
+          venue_id: "v1"
+        }
+      )
+    );
+
+    const result = await getCurrentUser();
+
+    expect(result).toBeNull();
+  });
+
+  it("rejects legacy 'reviewer' role", async () => {
+    mockCreateClient.mockResolvedValue(
+      makeSupabaseClient(
+        { id: "user-6" },
+        {
+          id: "user-6",
+          email: "rev@example.com",
+          full_name: null,
+          role: "reviewer",
+          venue_id: null
+        }
+      )
+    );
+
+    const result = await getCurrentUser();
+
+    expect(result).toBeNull();
+  });
 });
 
 // ─── requireAuth ──────────────────────────────────────────────────────────────
@@ -249,12 +311,12 @@ describe("requireAuth", () => {
 
   it("returns the AppUser when authenticated", async () => {
     mockCreateClient.mockResolvedValue(
-      makeSupabaseClient({ id: "user-1" }, validCentralPlannerProfile)
+      makeSupabaseClient({ id: "user-1" }, validAdminProfile)
     );
 
     const result = await requireAuth();
 
-    expect(result).toEqual(validCentralPlannerUser);
+    expect(result).toEqual(validAdminUser);
     expect(mockRedirect).not.toHaveBeenCalled();
   });
 });
@@ -269,15 +331,15 @@ describe("requireAdmin", () => {
     expect(mockRedirect).toHaveBeenCalledWith("/login");
   });
 
-  it("calls redirect('/unauthorized') when authenticated but role is venue_manager", async () => {
+  it("calls redirect('/unauthorized') when authenticated but role is office_worker", async () => {
     mockCreateClient.mockResolvedValue(
       makeSupabaseClient(
         { id: "user-2" },
         {
           id: "user-2",
-          email: "manager@example.com",
-          full_name: "Venue Manager",
-          role: "venue_manager",
+          email: "worker@example.com",
+          full_name: "Office Worker",
+          role: "office_worker",
           venue_id: "venue-1"
         }
       )
@@ -287,40 +349,32 @@ describe("requireAdmin", () => {
     expect(mockRedirect).toHaveBeenCalledWith("/unauthorized");
   });
 
-  it("returns the AppUser when role is central_planner", async () => {
-    mockCreateClient.mockResolvedValue(
-      makeSupabaseClient({ id: "user-1" }, validCentralPlannerProfile)
-    );
-
-    const result = await requireAdmin();
-
-    expect(result).toEqual(validCentralPlannerUser);
-    expect(mockRedirect).not.toHaveBeenCalled();
-  });
-
-  it("returns the AppUser when role is administrator", async () => {
+  it("calls redirect('/unauthorized') when role is executive", async () => {
     mockCreateClient.mockResolvedValue(
       makeSupabaseClient(
-        { id: "user-admin" },
+        { id: "user-3" },
         {
-          id: "user-admin",
-          email: "admin@example.com",
-          full_name: "Admin User",
-          role: "administrator",
+          id: "user-3",
+          email: "exec@example.com",
+          full_name: "Executive",
+          role: "executive",
           venue_id: null
         }
       )
     );
 
+    await expect(requireAdmin()).rejects.toThrow("NEXT_REDIRECT:/unauthorized");
+    expect(mockRedirect).toHaveBeenCalledWith("/unauthorized");
+  });
+
+  it("returns the AppUser when role is administrator", async () => {
+    mockCreateClient.mockResolvedValue(
+      makeSupabaseClient({ id: "user-1" }, validAdminProfile)
+    );
+
     const result = await requireAdmin();
 
-    expect(result).toEqual({
-      id: "user-admin",
-      email: "admin@example.com",
-      fullName: "Admin User",
-      role: "administrator",
-      venueId: null
-    });
+    expect(result).toEqual(validAdminUser);
     expect(mockRedirect).not.toHaveBeenCalled();
   });
 });
@@ -345,7 +399,7 @@ describe("withAuth", () => {
 
   it("calls the handler with the request and user when authenticated", async () => {
     mockCreateClient.mockResolvedValue(
-      makeSupabaseClient({ id: "user-1" }, validCentralPlannerProfile)
+      makeSupabaseClient({ id: "user-1" }, validAdminProfile)
     );
 
     const handlerResponse = new Response("ok", { status: 200 });
@@ -356,7 +410,7 @@ describe("withAuth", () => {
     const response = await wrapped(req);
 
     expect(response.status).toBe(200);
-    expect(handler).toHaveBeenCalledWith(req, validCentralPlannerUser);
+    expect(handler).toHaveBeenCalledWith(req, validAdminUser);
   });
 });
 
@@ -376,15 +430,15 @@ describe("withAdminAuth", () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
-  it("returns 403 when authenticated but not central_planner", async () => {
+  it("returns 403 when authenticated but not administrator", async () => {
     mockCreateClient.mockResolvedValue(
       makeSupabaseClient(
         { id: "user-2" },
         {
           id: "user-2",
-          email: "reviewer@example.com",
-          full_name: "A Reviewer",
-          role: "reviewer",
+          email: "worker@example.com",
+          full_name: "A Worker",
+          role: "office_worker",
           venue_id: null
         }
       )
@@ -402,34 +456,9 @@ describe("withAdminAuth", () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
-  it("calls the handler when role is central_planner", async () => {
-    mockCreateClient.mockResolvedValue(
-      makeSupabaseClient({ id: "user-1" }, validCentralPlannerProfile)
-    );
-
-    const handlerResponse = new Response("ok", { status: 200 });
-    const handler = vi.fn().mockResolvedValue(handlerResponse);
-    const wrapped = withAdminAuth(handler);
-    const req = new Request("http://localhost/test");
-
-    const response = await wrapped(req);
-
-    expect(response.status).toBe(200);
-    expect(handler).toHaveBeenCalledWith(req, validCentralPlannerUser);
-  });
-
   it("calls the handler when role is administrator", async () => {
     mockCreateClient.mockResolvedValue(
-      makeSupabaseClient(
-        { id: "user-admin" },
-        {
-          id: "user-admin",
-          email: "admin@example.com",
-          full_name: "Admin User",
-          role: "administrator",
-          venue_id: null
-        }
-      )
+      makeSupabaseClient({ id: "user-1" }, validAdminProfile)
     );
 
     const handlerResponse = new Response("ok", { status: 200 });
@@ -440,13 +469,7 @@ describe("withAdminAuth", () => {
     const response = await wrapped(req);
 
     expect(response.status).toBe(200);
-    expect(handler).toHaveBeenCalledWith(req, {
-      id: "user-admin",
-      email: "admin@example.com",
-      fullName: "Admin User",
-      role: "administrator",
-      venueId: null
-    });
+    expect(handler).toHaveBeenCalledWith(req, validAdminUser);
   });
 });
 
@@ -468,7 +491,7 @@ describe("withAuthAndCSRF", () => {
 
   it("returns 403 when the CSRF cookie is missing", async () => {
     mockCreateClient.mockResolvedValue(
-      makeSupabaseClient({ id: "user-1" }, validCentralPlannerProfile)
+      makeSupabaseClient({ id: "user-1" }, validAdminProfile)
     );
 
     const handler = vi.fn();
@@ -488,7 +511,7 @@ describe("withAuthAndCSRF", () => {
 
   it("returns 403 when the CSRF header does not match the cookie", async () => {
     mockCreateClient.mockResolvedValue(
-      makeSupabaseClient({ id: "user-1" }, validCentralPlannerProfile)
+      makeSupabaseClient({ id: "user-1" }, validAdminProfile)
     );
 
     const handler = vi.fn();
@@ -508,7 +531,7 @@ describe("withAuthAndCSRF", () => {
 
   it("calls the handler when auth and CSRF are both valid", async () => {
     mockCreateClient.mockResolvedValue(
-      makeSupabaseClient({ id: "user-1" }, validCentralPlannerProfile)
+      makeSupabaseClient({ id: "user-1" }, validAdminProfile)
     );
 
     const handlerResponse = new Response("ok", { status: 200 });
@@ -519,7 +542,7 @@ describe("withAuthAndCSRF", () => {
     const response = await wrapped(req);
 
     expect(response.status).toBe(200);
-    expect(handler).toHaveBeenCalledWith(req, validCentralPlannerUser);
+    expect(handler).toHaveBeenCalledWith(req, validAdminUser);
   });
 });
 
@@ -528,7 +551,7 @@ describe("withAuthAndCSRF", () => {
 describe("CSRF parsing — tokens with special characters", () => {
   it("should correctly parse CSRF tokens containing '=' characters (e.g. base64)", async () => {
     mockCreateClient.mockResolvedValue(
-      makeSupabaseClient({ id: "user-1" }, validCentralPlannerProfile)
+      makeSupabaseClient({ id: "user-1" }, validAdminProfile)
     );
 
     const base64Token = "abc123def456==";
@@ -545,12 +568,12 @@ describe("CSRF parsing — tokens with special characters", () => {
     const response = await wrapped(req);
 
     expect(response.status).toBe(200);
-    expect(handler).toHaveBeenCalledWith(req, validCentralPlannerUser);
+    expect(handler).toHaveBeenCalledWith(req, validAdminUser);
   });
 
   it("should correctly parse CSRF tokens without '=' characters (regression)", async () => {
     mockCreateClient.mockResolvedValue(
-      makeSupabaseClient({ id: "user-1" }, validCentralPlannerProfile)
+      makeSupabaseClient({ id: "user-1" }, validAdminProfile)
     );
 
     const simpleToken = "abc123def456";
@@ -562,7 +585,7 @@ describe("CSRF parsing — tokens with special characters", () => {
     const response = await wrapped(req);
 
     expect(response.status).toBe(200);
-    expect(handler).toHaveBeenCalledWith(req, validCentralPlannerUser);
+    expect(handler).toHaveBeenCalledWith(req, validAdminUser);
   });
 });
 
@@ -584,7 +607,7 @@ describe("getCurrentUser — no x-user-id header trust", () => {
 // ─── withAdminAuthAndCSRF ─────────────────────────────────────────────────────
 
 describe("withAdminAuthAndCSRF", () => {
-  it("returns 403 when authenticated but not central_planner", async () => {
+  it("returns 403 when authenticated but not administrator", async () => {
     mockCreateClient.mockResolvedValue(
       makeSupabaseClient(
         { id: "user-2" },
@@ -612,7 +635,7 @@ describe("withAdminAuthAndCSRF", () => {
 
   it("returns 403 when admin but CSRF token mismatches", async () => {
     mockCreateClient.mockResolvedValue(
-      makeSupabaseClient({ id: "user-1" }, validCentralPlannerProfile)
+      makeSupabaseClient({ id: "user-1" }, validAdminProfile)
     );
 
     const handler = vi.fn();
@@ -634,7 +657,7 @@ describe("withAdminAuthAndCSRF", () => {
 
   it("calls the handler when admin role and CSRF are both valid", async () => {
     mockCreateClient.mockResolvedValue(
-      makeSupabaseClient({ id: "user-1" }, validCentralPlannerProfile)
+      makeSupabaseClient({ id: "user-1" }, validAdminProfile)
     );
 
     const handlerResponse = new Response("ok", { status: 200 });
@@ -645,84 +668,126 @@ describe("withAdminAuthAndCSRF", () => {
     const response = await wrapped(req);
 
     expect(response.status).toBe(200);
-    expect(handler).toHaveBeenCalledWith(req, validCentralPlannerUser);
-  });
-
-  it("calls the handler when role is administrator and CSRF valid", async () => {
-    mockCreateClient.mockResolvedValue(
-      makeSupabaseClient(
-        { id: "user-admin" },
-        {
-          id: "user-admin",
-          email: "admin@example.com",
-          full_name: "Admin User",
-          role: "administrator",
-          venue_id: null
-        }
-      )
-    );
-
-    const handlerResponse = new Response("ok", { status: 200 });
-    const handler = vi.fn().mockResolvedValue(handlerResponse);
-    const wrapped = withAdminAuthAndCSRF(handler);
-    const req = makeCSRFRequest("valid-csrf-token");
-
-    const response = await wrapped(req);
-
-    expect(response.status).toBe(200);
-    expect(handler).toHaveBeenCalledWith(req, {
-      id: "user-admin",
-      email: "admin@example.com",
-      fullName: "Admin User",
-      role: "administrator",
-      venueId: null
-    });
+    expect(handler).toHaveBeenCalledWith(req, validAdminUser);
   });
 });
 
-// ─── roles.ts — compatibility phase ──────────────────────────────────────────
+// ─── roles.ts — final capability functions ───────────────────────────────────
 
-describe("roles.ts — compatibility phase", () => {
-  it("administrator has same capabilities as central_planner", () => {
-    expect(canManageEvents("administrator")).toBe(true);
-    expect(canReviewEvents("administrator")).toBe(true);
-    expect(canSubmitDebriefs("administrator")).toBe(true);
-    expect(canManageArtists("administrator")).toBe(true);
-    expect(canManageVenues("administrator")).toBe(true);
-    expect(canManageUsers("administrator")).toBe(true);
-    expect(canManageSettings("administrator")).toBe(true);
-    expect(canUsePlanning("administrator")).toBe(true);
-    expect(canViewPlanning("administrator")).toBe(true);
-    expect(canViewAllEvents("administrator")).toBe(true);
-    expect(canManageLinks("administrator")).toBe(true);
-    expect(canViewSopTemplate("administrator")).toBe(true);
-    expect(canEditSopTemplate("administrator")).toBe(true);
+describe("roles.ts — final capability functions", () => {
+  describe("isAdministrator", () => {
+    it("returns true for administrator", () => expect(isAdministrator("administrator")).toBe(true));
+    it("returns false for office_worker", () => expect(isAdministrator("office_worker")).toBe(false));
+    it("returns false for executive", () => expect(isAdministrator("executive")).toBe(false));
   });
 
-  it("office_worker has same capabilities as venue_manager", () => {
-    expect(canManageEvents("office_worker")).toBe(true);
-    expect(canSubmitDebriefs("office_worker")).toBe(true);
-    expect(canManageArtists("office_worker")).toBe(true);
-    // office_worker should NOT have planning access in compatibility phase
-    expect(canViewPlanning("office_worker")).toBe(false);
+  describe("canManageEvents (venue_id-dependent)", () => {
+    it("administrator can manage events without venueId", () => expect(canManageEvents("administrator")).toBe(true));
+    it("administrator can manage events with venueId", () => expect(canManageEvents("administrator", "v1")).toBe(true));
+    it("office_worker WITH venueId can manage events", () => expect(canManageEvents("office_worker", "v1")).toBe(true));
+    it("office_worker WITHOUT venueId cannot manage events", () => expect(canManageEvents("office_worker")).toBe(false));
+    it("office_worker with null venueId cannot manage events", () => expect(canManageEvents("office_worker", null)).toBe(false));
+    it("executive cannot manage events", () => expect(canManageEvents("executive")).toBe(false));
   });
 
-  it("legacy central_planner still works", () => {
-    expect(canManageEvents("central_planner")).toBe(true);
-    expect(canManageVenues("central_planner")).toBe(true);
-    expect(canReviewEvents("central_planner")).toBe(true);
+  describe("canViewEvents", () => {
+    it("all roles can view events", () => {
+      expect(canViewEvents("administrator")).toBe(true);
+      expect(canViewEvents("office_worker")).toBe(true);
+      expect(canViewEvents("executive")).toBe(true);
+    });
   });
 
-  it("legacy venue_manager still works", () => {
-    expect(canManageEvents("venue_manager")).toBe(true);
-    expect(canSubmitDebriefs("venue_manager")).toBe(true);
-    expect(canManageArtists("venue_manager")).toBe(true);
-    expect(canManageVenues("venue_manager")).toBe(false);
+  describe("canReviewEvents", () => {
+    it("administrator can review", () => expect(canReviewEvents("administrator")).toBe(true));
+    it("office_worker cannot review", () => expect(canReviewEvents("office_worker")).toBe(false));
+    it("executive cannot review", () => expect(canReviewEvents("executive")).toBe(false));
   });
 
-  it("legacy reviewer still works", () => {
-    expect(canReviewEvents("reviewer")).toBe(true);
-    expect(canViewAllEvents("reviewer")).toBe(true);
-    expect(canManageEvents("reviewer")).toBe(false);
+  describe("canManageBookings (venue_id-dependent)", () => {
+    it("administrator can manage bookings", () => expect(canManageBookings("administrator")).toBe(true));
+    it("office_worker WITH venueId can manage bookings", () => expect(canManageBookings("office_worker", "v1")).toBe(true));
+    it("office_worker WITHOUT venueId cannot manage bookings", () => expect(canManageBookings("office_worker")).toBe(false));
+    it("executive cannot manage bookings", () => expect(canManageBookings("executive")).toBe(false));
+  });
+
+  describe("canManageCustomers (venue_id-dependent)", () => {
+    it("administrator can manage customers", () => expect(canManageCustomers("administrator")).toBe(true));
+    it("office_worker WITH venueId can manage customers", () => expect(canManageCustomers("office_worker", "v1")).toBe(true));
+    it("office_worker WITHOUT venueId cannot manage customers", () => expect(canManageCustomers("office_worker")).toBe(false));
+    it("executive cannot manage customers", () => expect(canManageCustomers("executive")).toBe(false));
+  });
+
+  describe("canManageArtists (venue_id-dependent)", () => {
+    it("administrator can manage artists", () => expect(canManageArtists("administrator")).toBe(true));
+    it("office_worker WITH venueId can manage artists", () => expect(canManageArtists("office_worker", "v1")).toBe(true));
+    it("office_worker WITHOUT venueId cannot manage artists", () => expect(canManageArtists("office_worker")).toBe(false));
+    it("executive cannot manage artists", () => expect(canManageArtists("executive")).toBe(false));
+  });
+
+  describe("canCreateDebriefs (venue_id-dependent)", () => {
+    it("administrator can create debriefs", () => expect(canCreateDebriefs("administrator")).toBe(true));
+    it("office_worker WITH venueId can create debriefs", () => expect(canCreateDebriefs("office_worker", "v1")).toBe(true));
+    it("office_worker WITHOUT venueId cannot create debriefs", () => expect(canCreateDebriefs("office_worker")).toBe(false));
+    it("office_worker with null venueId cannot create debriefs", () => expect(canCreateDebriefs("office_worker", null)).toBe(false));
+    it("executive cannot create debriefs", () => expect(canCreateDebriefs("executive")).toBe(false));
+  });
+
+  describe("canEditDebrief (creator-dependent)", () => {
+    it("administrator can edit any debrief", () => expect(canEditDebrief("administrator", false)).toBe(true));
+    it("administrator can edit own debrief", () => expect(canEditDebrief("administrator", true)).toBe(true));
+    it("office_worker can edit own debrief", () => expect(canEditDebrief("office_worker", true)).toBe(true));
+    it("office_worker cannot edit others debrief", () => expect(canEditDebrief("office_worker", false)).toBe(false));
+    it("executive cannot edit any debrief", () => expect(canEditDebrief("executive", true)).toBe(false));
+    it("executive cannot edit even as creator", () => expect(canEditDebrief("executive", false)).toBe(false));
+  });
+
+  describe("canViewDebriefs", () => {
+    it("all roles can view debriefs", () => {
+      expect(canViewDebriefs("administrator")).toBe(true);
+      expect(canViewDebriefs("office_worker")).toBe(true);
+      expect(canViewDebriefs("executive")).toBe(true);
+    });
+  });
+
+  describe("canCreatePlanningItems", () => {
+    it("administrator can create", () => expect(canCreatePlanningItems("administrator")).toBe(true));
+    it("office_worker can create", () => expect(canCreatePlanningItems("office_worker")).toBe(true));
+    it("executive cannot create", () => expect(canCreatePlanningItems("executive")).toBe(false));
+  });
+
+  describe("canManageOwnPlanningItems", () => {
+    it("administrator can manage own", () => expect(canManageOwnPlanningItems("administrator")).toBe(true));
+    it("office_worker can manage own", () => expect(canManageOwnPlanningItems("office_worker")).toBe(true));
+    it("executive cannot manage", () => expect(canManageOwnPlanningItems("executive")).toBe(false));
+  });
+
+  describe("canManageAllPlanning", () => {
+    it("administrator can manage all", () => expect(canManageAllPlanning("administrator")).toBe(true));
+    it("office_worker cannot manage all", () => expect(canManageAllPlanning("office_worker")).toBe(false));
+    it("executive cannot manage all", () => expect(canManageAllPlanning("executive")).toBe(false));
+  });
+
+  describe("canViewPlanning", () => {
+    it("all roles can view planning", () => {
+      expect(canViewPlanning("administrator")).toBe(true);
+      expect(canViewPlanning("office_worker")).toBe(true);
+      expect(canViewPlanning("executive")).toBe(true);
+    });
+  });
+
+  describe("admin-only capabilities", () => {
+    const adminOnly = [canManageVenues, canManageUsers, canManageSettings, canManageLinks, canEditSopTemplate];
+    for (const fn of adminOnly) {
+      it(`${fn.name} returns true for administrator`, () => expect(fn("administrator")).toBe(true));
+      it(`${fn.name} returns false for office_worker`, () => expect(fn("office_worker")).toBe(false));
+      it(`${fn.name} returns false for executive`, () => expect(fn("executive")).toBe(false));
+    }
+  });
+
+  describe("canViewSopTemplate", () => {
+    it("administrator can view", () => expect(canViewSopTemplate("administrator")).toBe(true));
+    it("executive can view", () => expect(canViewSopTemplate("executive")).toBe(true));
+    it("office_worker cannot view", () => expect(canViewSopTemplate("office_worker")).toBe(false));
   });
 });

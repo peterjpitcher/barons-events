@@ -22,7 +22,7 @@ export default async function SettingsPage() {
   if (!user) {
     redirect("/login");
   }
-  if (user.role !== "central_planner") {
+  if (user.role !== "administrator") {
     redirect("/unauthorized");
   }
 

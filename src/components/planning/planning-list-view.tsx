@@ -8,7 +8,7 @@ import type { PlanningViewEntry } from "@/components/planning/view-types";
 type PlanningListViewProps = {
   today: string;
   entries: PlanningViewEntry[];
-  onOpenPlanningItem: (item: PlanningItem) => void;
+  onOpenPlanningItem?: (item: PlanningItem) => void;
 };
 
 type BoundaryMarker = {
@@ -117,7 +117,7 @@ export function PlanningListView({ today, entries, onOpenPlanningItem }: Plannin
                       <button
                         key={entry.id}
                         type="button"
-                        onClick={() => onOpenPlanningItem(entry.planningItem)}
+                        onClick={() => onOpenPlanningItem?.(entry.planningItem)}
                         className="flex w-full items-center justify-between gap-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] border-l-4 border-l-[var(--color-primary-600)] bg-white px-3 py-2 text-left hover:bg-[rgba(39,54,64,0.06)]"
                       >
                         <span className="min-w-0">

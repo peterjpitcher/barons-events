@@ -491,7 +491,7 @@ export async function sendUpcomingEventReminderEmail(eventId: string) {
       intro: `${buildGreeting(event.creator)} "${event.title}" is coming up soon.`,
       body: [
         "Double-check staffing, stock, and any promo assets so the team is ready.",
-        "If details have changed, update the draft so reviewers stay in the loop."
+        "If details have changed, update the draft so the team stays in the loop."
       ],
       button: { label: "Review event plan", url: eventLink(eventId) },
       meta: [
@@ -524,7 +524,7 @@ export async function sendNeedsRevisionsFollowUpEmail(eventId: string) {
 
     const { html, text } = renderEmailTemplate({
       headline: "Event still needs tweaks",
-      intro: `${buildGreeting(event.creator)} reviewers are waiting on updates for "${event.title}".`,
+      intro: `${buildGreeting(event.creator)} the team is waiting on updates for "${event.title}".`,
       body: [
         "Address the feedback and resubmit so we can confirm timings and promotion.",
         "If you need help, reply to this email or reach out on Teams."
@@ -626,7 +626,7 @@ export async function sendPostEventDigestEmail(eventId: string) {
     const event = await fetchEventContext(eventId);
     if (!event?.debrief) return;
 
-    const planners = await listUsersByRole("central_planner");
+    const planners = await listUsersByRole("administrator");
     const recipients = planners.filter((user) => user.email);
     if (!recipients.length) return;
 
@@ -688,7 +688,7 @@ export async function sendPostEventDigestEmail(eventId: string) {
         `When: ${formatEventWindow(event)}`,
         `Submitted by: ${event.creator?.full_name ?? "Unknown"}`
       ],
-      footerNote: "You’re receiving this because you’re listed as a planner or executive in BaronsHub."
+      footerNote: "You’re receiving this because you’re listed as an administrator in BaronsHub."
     });
 
     await resend.emails.send({
@@ -708,7 +708,7 @@ export async function sendWeeklyPipelineSummaryEmail() {
   if (!resend) return;
 
   try {
-    const planners = await listUsersByRole("central_planner");
+    const planners = await listUsersByRole("administrator");
     if (!planners.length) return;
 
     const supabase = await createSupabaseReadonlyClient();
@@ -780,7 +780,7 @@ export async function sendWeeklyPipelineSummaryEmail() {
       body,
       button: { label: "Open planning board", url: plannerDashboardLink() },
       meta: [`Generated: ${new Date().toLocaleString("en-GB")}`],
-      footerNote: "You’re receiving this because you’re a central planner in BaronsHub."
+      footerNote: "You’re receiving this because you’re an administrator in BaronsHub."
     });
 
     await resend.emails.send({

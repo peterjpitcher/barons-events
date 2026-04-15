@@ -3,6 +3,7 @@ import { ArtistsManager } from "@/components/artists/artists-manager";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCurrentUser } from "@/lib/auth";
 import { listArtistsWithPerformance } from "@/lib/artists";
+import { canManageArtists } from "@/lib/roles";
 
 export const metadata = {
   title: "Artists · Barons Events",
@@ -14,7 +15,7 @@ export default async function ArtistsPage() {
   if (!user) {
     redirect("/login");
   }
-  if (user.role !== "central_planner" && user.role !== "venue_manager") {
+  if (!canManageArtists(user.role, user.venueId)) {
     redirect("/unauthorized");
   }
 

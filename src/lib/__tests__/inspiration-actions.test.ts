@@ -8,8 +8,8 @@ vi.mock('@/lib/supabase/admin', () => ({ createSupabaseAdminClient: vi.fn() }));
 vi.mock('@/lib/planning/inspiration', () => ({ generateInspirationItems: vi.fn() }));
 vi.mock('@/lib/auth', () => ({ getCurrentUser: vi.fn() }));
 vi.mock('@/lib/roles', () => ({
-  canUsePlanning: vi.fn((role: string) => role === 'central_planner'),
-  canViewPlanning: vi.fn((role: string) => ['central_planner', 'executive'].includes(role)),
+  canCreatePlanningItems: vi.fn((role: string) => role === 'administrator' || role === 'office_worker'),
+  canViewPlanning: vi.fn(() => true),
 }));
 vi.mock('@/lib/planning/sop', () => ({
   generateSopChecklist: vi.fn(),
@@ -87,14 +87,14 @@ describe('convertInspirationItemAction', () => {
     expect(result.message).toMatch(/signed in/i);
   });
 
-  it('returns error if user role cannot view planning', async () => {
-    (getCurrentUser as Mock).mockResolvedValue(makeUser('reviewer'));
+  it('returns error if user role cannot create planning items', async () => {
+    (getCurrentUser as Mock).mockResolvedValue(makeUser('executive'));
     const result = await convertInspirationItemAction('item-1');
     expect(result.success).toBe(false);
   });
 
-  it('creates planning item and dismissal row for central_planner', async () => {
-    (getCurrentUser as Mock).mockResolvedValue(makeUser('central_planner'));
+  it('creates planning item and dismissal row for administrator', async () => {
+    (getCurrentUser as Mock).mockResolvedValue(makeUser('administrator'));
     const db = makeChainableDb();
     (createSupabaseActionClient as Mock).mockResolvedValue(db);
 
@@ -116,14 +116,14 @@ describe('dismissInspirationItemAction', () => {
     expect(result.success).toBe(false);
   });
 
-  it('returns error if user role cannot view planning', async () => {
-    (getCurrentUser as Mock).mockResolvedValue(makeUser('reviewer'));
+  it('returns error if user role cannot create planning items', async () => {
+    (getCurrentUser as Mock).mockResolvedValue(makeUser('executive'));
     const result = await dismissInspirationItemAction('item-1');
     expect(result.success).toBe(false);
   });
 
   it('inserts dismissal row for authenticated viewer', async () => {
-    (getCurrentUser as Mock).mockResolvedValue(makeUser('central_planner'));
+    (getCurrentUser as Mock).mockResolvedValue(makeUser('administrator'));
     const db = makeChainableDb();
     (createSupabaseActionClient as Mock).mockResolvedValue(db);
 
@@ -139,15 +139,15 @@ describe('dismissInspirationItemAction', () => {
 describe('refreshInspirationItemsAction', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('returns unauthorised error for non-central_planner', async () => {
+  it('returns unauthorised error for non-administrator', async () => {
     (getCurrentUser as Mock).mockResolvedValue(makeUser('executive'));
     const result = await refreshInspirationItemsAction();
     expect(result.success).toBe(false);
     expect(result.message).toMatch(/unauthorised/i);
   });
 
-  it('calls generateInspirationItems for central_planner', async () => {
-    (getCurrentUser as Mock).mockResolvedValue(makeUser('central_planner'));
+  it('calls generateInspirationItems for administrator', async () => {
+    (getCurrentUser as Mock).mockResolvedValue(makeUser('administrator'));
     (generateInspirationItems as Mock).mockResolvedValue(12);
 
     const result = await refreshInspirationItemsAction();

@@ -126,12 +126,12 @@ function createFormData(fields: Record<string, string>): FormData {
   return fd;
 }
 
-/** A central_planner AppUser fixture for the acting user. */
-const PLANNER_USER: AppUser = {
-  id: "planner-user-uuid",
-  email: "planner@example.com",
-  fullName: "Alice Planner",
-  role: "central_planner",
+/** An administrator AppUser fixture for the acting user. */
+const ADMIN_USER: AppUser = {
+  id: "admin-user-uuid",
+  email: "admin@example.com",
+  fullName: "Alice Admin",
+  role: "administrator",
   venueId: null
 };
 
@@ -153,7 +153,7 @@ describe("inviteUserAction", () => {
     state.sendInviteEmailResult = true;
 
     // Re-apply implementations after clearAllMocks wipes them.
-    mockGetCurrentUser.mockResolvedValue(PLANNER_USER);
+    mockGetCurrentUser.mockResolvedValue(ADMIN_USER);
     mockGenerateLink.mockImplementation(() => Promise.resolve(state.generateLinkResult));
     mockUpsert.mockImplementation(() => {
       if (state.upsertError) return Promise.resolve({ data: null, error: state.upsertError });
@@ -165,17 +165,17 @@ describe("inviteUserAction", () => {
     mockHashEmailForAudit.mockResolvedValue("mock-email-hash-64-char-hex-aabbcc");
   });
 
-  // 1. Non-central_planner is rejected before any Supabase call
-  it("should return an error when the current user is not a central_planner", async () => {
-    mockGetCurrentUser.mockResolvedValue({ ...PLANNER_USER, role: "reviewer" });
+  // 1. Non-administrator is rejected before any Supabase call
+  it("should return an error when the current user is not an administrator", async () => {
+    mockGetCurrentUser.mockResolvedValue({ ...ADMIN_USER, role: "office_worker" });
 
     const result = await inviteUserAction(
       undefined,
-      createFormData({ email: "newuser@example.com", role: "reviewer" })
+      createFormData({ email: "newuser@example.com", role: "office_worker" })
     );
 
     expect(result.success).toBe(false);
-    expect(result.message).toMatch(/only planners/i);
+    expect(result.message).toMatch(/only administrators/i);
     expect(mockGenerateLink).not.toHaveBeenCalled();
   });
 
@@ -183,7 +183,7 @@ describe("inviteUserAction", () => {
   it("should return a field error when the email is invalid", async () => {
     const result = await inviteUserAction(
       undefined,
-      createFormData({ email: "not-an-email", role: "reviewer" })
+      createFormData({ email: "not-an-email", role: "office_worker" })
     );
 
     expect(result.success).toBe(false);
@@ -196,7 +196,7 @@ describe("inviteUserAction", () => {
   it("should call generateLink, send the invite email, upsert the user record, and return success", async () => {
     const result = await inviteUserAction(
       undefined,
-      createFormData({ email: "invite@example.com", role: "venue_manager", fullName: "Bob Venue" })
+      createFormData({ email: "invite@example.com", role: "office_worker", fullName: "Bob Worker" })
     );
 
     expect(result.success).toBe(true);
@@ -207,7 +207,7 @@ describe("inviteUserAction", () => {
       expect.objectContaining({
         type: "invite",
         email: "invite@example.com",
-        options: expect.objectContaining({ data: expect.objectContaining({ full_name: "Bob Venue" }) })
+        options: expect.objectContaining({ data: expect.objectContaining({ full_name: "Bob Worker" }) })
       })
     );
 
@@ -215,7 +215,7 @@ describe("inviteUserAction", () => {
     expect(mockSendInviteEmail).toHaveBeenCalledWith(
       "invite@example.com",
       expect.stringContaining("token_hash="),
-      "Bob Venue"
+      "Bob Worker"
     );
 
     expect(mockUpsert).toHaveBeenCalledOnce();
@@ -228,7 +228,7 @@ describe("inviteUserAction", () => {
 
     const result = await inviteUserAction(
       undefined,
-      createFormData({ email: "fail-upsert@example.com", role: "reviewer" })
+      createFormData({ email: "fail-upsert@example.com", role: "office_worker" })
     );
 
     expect(result.success).toBe(false);
@@ -248,7 +248,7 @@ describe("inviteUserAction", () => {
 
     const result = await inviteUserAction(
       undefined,
-      createFormData({ email: "fail@example.com", role: "reviewer" })
+      createFormData({ email: "fail@example.com", role: "office_worker" })
     );
 
     expect(result.success).toBe(false);
@@ -264,7 +264,7 @@ describe("inviteUserAction", () => {
 
     const result = await inviteUserAction(
       undefined,
-      createFormData({ email: "no-email@example.com", role: "venue_manager" })
+      createFormData({ email: "no-email@example.com", role: "office_worker" })
     );
 
     expect(result.success).toBe(false);
@@ -277,7 +277,7 @@ describe("inviteUserAction", () => {
   it("should call logAuthEvent with 'auth.invite.sent' after a successful invite", async () => {
     await inviteUserAction(
       undefined,
-      createFormData({ email: "audit-check@example.com", role: "central_planner" })
+      createFormData({ email: "audit-check@example.com", role: "administrator" })
     );
 
     expect(mockLogAuthEvent).toHaveBeenCalledWith(
@@ -315,7 +315,7 @@ describe("resendInviteAction", () => {
     };
     state.sendInviteEmailResult = true;
 
-    mockGetCurrentUser.mockResolvedValue(PLANNER_USER);
+    mockGetCurrentUser.mockResolvedValue(ADMIN_USER);
     mockGenerateLink.mockImplementation(() => Promise.resolve(state.generateLinkResult));
     mockGetUserById.mockImplementation(() => Promise.resolve(state.getUserByIdResult));
     mockSendInviteEmail.mockImplementation(() => Promise.resolve(state.sendInviteEmailResult));
@@ -328,9 +328,9 @@ describe("resendInviteAction", () => {
   const CONFIRMED_USER_UUID = "a0000000-0000-4000-8000-000000000002";
   const PENDING_USER_UUID   = "a0000000-0000-4000-8000-000000000003";
 
-  // 1. Non-planner rejected
-  it("should return an error when the current user is not a central_planner", async () => {
-    mockGetCurrentUser.mockResolvedValue({ ...PLANNER_USER, role: "reviewer" });
+  // 1. Non-administrator rejected
+  it("should return an error when the current user is not an administrator", async () => {
+    mockGetCurrentUser.mockResolvedValue({ ...ADMIN_USER, role: "office_worker" });
 
     const result = await resendInviteAction(
       undefined,
@@ -338,7 +338,7 @@ describe("resendInviteAction", () => {
     );
 
     expect(result.success).toBe(false);
-    expect(result.message).toMatch(/only planners/i);
+    expect(result.message).toMatch(/only administrators/i);
     expect(mockGetUserById).not.toHaveBeenCalled();
   });
 

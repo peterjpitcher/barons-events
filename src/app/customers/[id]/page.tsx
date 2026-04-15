@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { getCustomerById } from "@/lib/customers";
+import { canManageCustomers } from "@/lib/roles";
 import { Badge } from "@/components/ui/badge";
 
 const dateFormatter = new Intl.DateTimeFormat("en-GB", {
@@ -32,7 +33,7 @@ export default async function CustomerDetailPage({
 
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (user.role !== "central_planner" && user.role !== "venue_manager") {
+  if (!canManageCustomers(user.role, user.venueId)) {
     redirect("/unauthorized");
   }
 

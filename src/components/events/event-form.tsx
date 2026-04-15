@@ -299,7 +299,7 @@ export function EventForm({
     }
   }, [artistCreateState]);
 
-  const canChooseVenue = role === "central_planner";
+  const canChooseVenue = role === "administrator";
   const preferredVenueId = initialVenueId ?? defaultValues?.venue_id ?? userVenueId ?? venues[0]?.id ?? "";
   const defaultVenueId = venues.some((venue) => venue.id === preferredVenueId) ? preferredVenueId : venues[0]?.id ?? "";
   const defaultGoalValues = new Set(
@@ -601,16 +601,16 @@ export function EventForm({
 
   const primaryLabel = (() => {
     if (mode === "create") return "Save draft";
-    if (role === "central_planner" && eventStatus === "approved") return "Save & re-publish";
+    if (role === "administrator" && eventStatus === "approved") return "Save & re-publish";
     return "Save changes";
   })();
 
   const showSecondaryAction = (() => {
-    if (role === "central_planner") {
+    if (role === "administrator") {
       // No secondary for approved or completed — primary handles it
       return eventStatus !== "approved" && eventStatus !== "completed";
     }
-    if (role === "venue_manager") {
+    if (role === "office_worker") {
       // Can only submit drafts or revisions
       return eventStatus === "draft" || eventStatus === "needs_revisions";
     }
@@ -618,7 +618,7 @@ export function EventForm({
   })();
 
   const secondaryLabel = (() => {
-    if (role === "central_planner") {
+    if (role === "administrator") {
       if (mode === "create") return "Save & publish";
       return "Publish";
     }
@@ -745,7 +745,7 @@ export function EventForm({
         </Select>
         <FieldError id="event-type-error" message={fieldErrors.eventType} />
         <p className="text-xs text-subtle">
-          {role === "central_planner"
+          {role === "administrator"
             ? "Need a new option? Add it in Settings."
             : "Need a new option? Contact your administrator to add new event types."}
         </p>
@@ -2027,7 +2027,7 @@ export function EventForm({
                 <SubmitButton
                   formAction={submitAction}
                   label={secondaryLabel}
-                  pendingLabel={role === "central_planner" ? "Publishing..." : "Sending..."}
+                  pendingLabel={role === "administrator" ? "Publishing..." : "Sending..."}
                   variant="secondary"
                   data-intent="submit"
                 />

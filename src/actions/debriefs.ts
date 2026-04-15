@@ -11,6 +11,7 @@ import { sendPostEventDigestEmail } from "@/lib/notifications";
 import { recordAuditLogEntry } from "@/lib/audit-log";
 import type { ActionResult } from "@/lib/types";
 import { normaliseOptionalText as normaliseText } from "@/lib/normalise";
+import { canCreateDebriefs } from "@/lib/roles";
 
 function changedDebriefFields(previous: Record<string, unknown> | null, next: Record<string, unknown>): string[] {
   const fields: Array<[key: string, label: string]> = [
@@ -47,8 +48,8 @@ export async function submitDebriefAction(
   if (!user) {
     redirect("/login");
   }
-  if (user.role !== "central_planner" && user.role !== "venue_manager") {
-    return { success: false, message: "Only planners or venue managers can submit debriefs." };
+  if (!canCreateDebriefs(user.role, user.venueId)) {
+    return { success: false, message: "You do not have permission to submit debriefs." };
   }
 
   const parsed = debriefSchema.safeParse({
@@ -88,7 +89,7 @@ export async function submitDebriefAction(
       return { success: false, message: "Event not found." };
     }
 
-    if (user.role === "venue_manager" && event.created_by !== user.id) {
+    if (user.role === "office_worker" && event.created_by !== user.id) {
       return { success: false, message: "You can only submit debriefs for your own events." };
     }
 
@@ -125,7 +126,7 @@ export async function submitDebriefAction(
     try {
       const admin = createSupabaseAdminClient();
       let updateQuery = admin.from("events").update({ status: "completed" }).eq("id", values.eventId);
-      if (user.role === "venue_manager") {
+      if (user.role === "office_worker") {
         updateQuery = updateQuery.eq("created_by", user.id);
       }
       const { error: adminError } = await updateQuery;

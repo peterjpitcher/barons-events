@@ -22,7 +22,7 @@ const uuidOrUndefined = z.preprocess(
 const venueSchema = z.object({
   venueId: z.string().uuid().optional(),
   name: z.string().min(2, "Add a venue name"),
-  defaultReviewerId: uuidOrUndefined,
+  defaultApproverId: uuidOrUndefined,
   defaultManagerResponsible: z.string().max(200, "Max 200 characters").optional().or(z.literal("")),
   googleReviewUrl: z.string().url("Enter a valid URL").optional().or(z.literal(""))
 });
@@ -35,13 +35,13 @@ export async function createVenueAction(
   if (!user) {
     redirect("/login");
   }
-  if (user.role !== "central_planner") {
-    return { success: false, message: "Only planners can create venues." };
+  if (user.role !== "administrator") {
+    return { success: false, message: "Only administrators can create venues." };
   }
 
   const parsed = venueSchema.safeParse({
     name: typeof formData.get("name") === "string" ? formData.get("name") : "",
-    defaultReviewerId: typeof formData.get("defaultReviewerId") === "string" ? formData.get("defaultReviewerId") : "",
+    defaultApproverId: typeof formData.get("defaultApproverId") === "string" ? formData.get("defaultApproverId") : "",
     defaultManagerResponsible: typeof formData.get("defaultManagerResponsible") === "string" ? formData.get("defaultManagerResponsible") : "",
   });
 
@@ -56,7 +56,7 @@ export async function createVenueAction(
   try {
     const created = await createVenue({
       name: parsed.data.name,
-      defaultReviewerId: parsed.data.defaultReviewerId ?? null,
+      defaultApproverId: parsed.data.defaultApproverId ?? null,
       defaultManagerResponsible: parsed.data.defaultManagerResponsible || null,
     });
     recordAuditLogEntry({
@@ -82,14 +82,14 @@ export async function updateVenueAction(
   if (!user) {
     redirect("/login");
   }
-  if (user.role !== "central_planner") {
-    return { success: false, message: "Only planners can update venues." };
+  if (user.role !== "administrator") {
+    return { success: false, message: "Only administrators can update venues." };
   }
 
   const parsed = venueSchema.safeParse({
     venueId: formData.get("venueId"),
     name: typeof formData.get("name") === "string" ? formData.get("name") : "",
-    defaultReviewerId: typeof formData.get("defaultReviewerId") === "string" ? formData.get("defaultReviewerId") : "",
+    defaultApproverId: typeof formData.get("defaultApproverId") === "string" ? formData.get("defaultApproverId") : "",
     defaultManagerResponsible: typeof formData.get("defaultManagerResponsible") === "string" ? formData.get("defaultManagerResponsible") : "",
     googleReviewUrl: typeof formData.get("googleReviewUrl") === "string" ? formData.get("googleReviewUrl") : ""
   });
@@ -108,7 +108,7 @@ export async function updateVenueAction(
   try {
     await updateVenue(parsed.data.venueId, {
       name: parsed.data.name,
-      defaultReviewerId: parsed.data.defaultReviewerId ?? null,
+      defaultApproverId: parsed.data.defaultApproverId ?? null,
       defaultManagerResponsible: parsed.data.defaultManagerResponsible || null,
       googleReviewUrl: parsed.data.googleReviewUrl || null
     });
@@ -139,8 +139,8 @@ export async function deleteVenueAction(
   if (!user) {
     redirect("/login");
   }
-  if (user.role !== "central_planner") {
-    return { success: false, message: "Only planners can delete venues." };
+  if (user.role !== "administrator") {
+    return { success: false, message: "Only administrators can delete venues." };
   }
 
   const parsed = deleteSchema.safeParse({

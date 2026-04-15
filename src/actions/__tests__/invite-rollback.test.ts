@@ -87,15 +87,15 @@ const validInviteFormData = () =>
   makeFormData({
     email: "newuser@example.com",
     fullName: "New User",
-    role: "venue_manager",
+    role: "office_worker",
     venueId: "550e8400-e29b-41d4-a716-446655440000"
   });
 
 const centralPlanner = {
   id: "admin-user-1",
   email: "planner@example.com",
-  fullName: "Test Planner",
-  role: "central_planner" as const,
+  fullName: "Test Admin",
+  role: "administrator" as const,
   venueId: null
 };
 
@@ -270,26 +270,26 @@ describe("inviteUserAction — early failures (no rollback needed)", () => {
 // ─── Authorization checks ───────────────────────────────────────────────────
 
 describe("inviteUserAction — authorization checks", () => {
-  it("should return error when user is not central_planner", async () => {
+  it("should return error when user is not administrator", async () => {
     mockGetCurrentUser.mockResolvedValue({
-      id: "reviewer-1",
-      email: "reviewer@example.com",
-      fullName: "A Reviewer",
-      role: "reviewer",
+      id: "worker-1",
+      email: "worker@example.com",
+      fullName: "An Office Worker",
+      role: "office_worker",
       venueId: null
     });
 
     const result = await inviteUserAction(undefined, validInviteFormData());
 
     expect(result.success).toBe(false);
-    expect(result.message).toContain("Only planners");
+    expect(result.message).toContain("Only administrators");
     expect(generateLinkMock).not.toHaveBeenCalled();
   });
 
   it("should return validation error for invalid email", async () => {
     const badFormData = makeFormData({
       email: "not-an-email",
-      role: "venue_manager"
+      role: "office_worker"
     });
 
     const result = await inviteUserAction(undefined, badFormData);

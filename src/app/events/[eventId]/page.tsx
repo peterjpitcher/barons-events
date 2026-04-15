@@ -79,23 +79,25 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
 
   const status = statusCopy[event.status] ?? statusCopy.draft;
 
+  // Venue-scoped permission: office_worker can act on events at their venue (not just events they created)
+  const isVenueScoped =
+    user.role === "office_worker" &&
+    user.venueId != null &&
+    event.venue_id === user.venueId;
+
   const canEdit =
-    (user.role === "central_planner" && ["draft", "submitted", "needs_revisions", "approved"].includes(event.status)) ||
-    ((user.role === "venue_manager" && event.created_by === user.id) &&
-      ["draft", "needs_revisions"].includes(event.status));
+    (user.role === "administrator" && ["draft", "submitted", "needs_revisions", "approved"].includes(event.status)) ||
+    (isVenueScoped && ["draft", "needs_revisions"].includes(event.status));
   const canReview =
-    (user.role === "reviewer" && event.assignee_id === user.id && ["submitted", "needs_revisions"].includes(event.status)) ||
-    (user.role === "central_planner" && ["submitted", "needs_revisions"].includes(event.status));
+    (user.role === "administrator" && ["submitted", "needs_revisions"].includes(event.status));
   const canSubmitDebrief =
-    (user.role === "venue_manager" && event.created_by === user.id && ["approved", "completed"].includes(event.status)) ||
-    (user.role === "central_planner" && ["approved", "completed"].includes(event.status));
-  const canUpdateAssignee = user.role === "central_planner";
+    (isVenueScoped && ["approved", "completed"].includes(event.status)) ||
+    (user.role === "administrator" && ["approved", "completed"].includes(event.status));
+  const canUpdateAssignee = user.role === "administrator";
   const canDelete =
-    user.role === "central_planner" ||
-    (user.role === "venue_manager" &&
-      event.created_by === user.id &&
-      ["draft", "needs_revisions"].includes(event.status));
-  const canRevertToDraft = event.status === "approved" && user.role === "central_planner";
+    user.role === "administrator" ||
+    (isVenueScoped && ["draft", "needs_revisions"].includes(event.status));
+  const canRevertToDraft = event.status === "approved" && user.role === "administrator";
 
   const reassignAssignee = async (formData: FormData) => {
     "use server";
@@ -576,8 +578,8 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
                 {event.created_by === user.id ? "You" : resolveUserName(event.created_by)}
               </span>
             </div>
-            {(user.role === "central_planner" ||
-              (user.role === "venue_manager" && event.venue_id === user.venueId)) ? (
+            {(user.role === "administrator" ||
+              (user.role === "office_worker" && event.venue_id === user.venueId)) ? (
               <Button asChild variant="secondary" size="sm">
                 <Link href={`/events/${event.id}/bookings`}>Bookings</Link>
               </Button>

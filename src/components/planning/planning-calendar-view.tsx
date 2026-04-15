@@ -11,8 +11,8 @@ import type { PlanningViewEntry } from "@/components/planning/view-types";
 type PlanningCalendarViewProps = {
   today: string;
   entries: PlanningViewEntry[];
-  onOpenPlanningItem: (item: PlanningItem) => void;
-  onMovePlanningItem: (itemId: string, targetDate: string) => void;
+  onOpenPlanningItem?: (item: PlanningItem) => void;
+  onMovePlanningItem?: (itemId: string, targetDate: string) => void;
 };
 
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -135,7 +135,7 @@ export function PlanningCalendarView({ today, entries, onOpenPlanningItem, onMov
                 const { itemId, sourceDate } = draggedPlanningItem;
                 setDraggedPlanningItem(null);
                 if (sourceDate === dateKey) return;
-                onMovePlanningItem(itemId, dateKey);
+                onMovePlanningItem?.(itemId, dateKey);
               }}
               className={`min-h-[7.5rem] rounded-[var(--radius-sm)] border p-2 ${
                 isToday
@@ -153,17 +153,17 @@ export function PlanningCalendarView({ today, entries, onOpenPlanningItem, onMov
                       <button
                         key={entry.id}
                         type="button"
-                        draggable
-                        onDragStart={() =>
+                        draggable={Boolean(onMovePlanningItem)}
+                        onDragStart={onMovePlanningItem ? () =>
                           setDraggedPlanningItem({
                             itemId: entry.planningItem.id,
                             sourceDate: entry.targetDate,
                             title: entry.title
-                          })
+                          }) : undefined
                         }
-                        onDragEnd={() => setDraggedPlanningItem(null)}
-                        onClick={() => onOpenPlanningItem(entry.planningItem)}
-                        className="block w-full cursor-grab rounded-[var(--radius-sm)] border-l-4 border-[var(--color-primary-600)] bg-[var(--color-muted-surface)] px-2 py-1 text-left text-[0.72rem] leading-tight text-[var(--color-text)] hover:bg-[rgba(39,54,64,0.08)] active:cursor-grabbing"
+                        onDragEnd={onMovePlanningItem ? () => setDraggedPlanningItem(null) : undefined}
+                        onClick={() => onOpenPlanningItem?.(entry.planningItem)}
+                        className={`block w-full rounded-[var(--radius-sm)] border-l-4 border-[var(--color-primary-600)] bg-[var(--color-muted-surface)] px-2 py-1 text-left text-[0.72rem] leading-tight text-[var(--color-text)] hover:bg-[rgba(39,54,64,0.08)] ${onMovePlanningItem ? "cursor-grab active:cursor-grabbing" : ""}`}
                         title={entry.title}
                       >
                         {entry.title}
