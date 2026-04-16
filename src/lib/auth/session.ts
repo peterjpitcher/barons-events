@@ -1,30 +1,21 @@
 import "server-only";
 
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { logAuthEvent } from "@/lib/audit-log";
 
 export const SESSION_COOKIE_NAME = "app-session-id";
-const ABSOLUTE_TIMEOUT_HOURS = 24;
 const MAX_SESSIONS_PER_USER = 5;
-const REFRESH_THRESHOLD_HOURS = ABSOLUTE_TIMEOUT_HOURS / 2; // 12 hours
-const MAX_SESSION_LIFETIME_HOURS = 48; // hard cap
-const IDLE_TIMEOUT_MINUTES = 30;
-const ACTIVITY_UPDATE_THROTTLE_MINUTES = 5;
+const STALE_SESSION_DAYS = 90;
+const COOKIE_MAX_AGE_SECONDS = 365 * 24 * 3600; // 1 year
 
 export type SessionRecord = {
   sessionId: string;
   userId: string;
   createdAt: Date;
   lastActivityAt: Date;
-  expiresAt: Date;
   metadata: {
     userAgent?: string | null;
     ipAddress?: string | null;
   };
-  /** True if the DB expiry was extended during this validation request */
-  refreshed: boolean;
-  /** The new expiry time, if refreshed */
-  newExpiresAt?: Date;
 };
 
 export function makeSessionCookieOptions() {
@@ -32,7 +23,7 @@ export function makeSessionCookieOptions() {
     httpOnly: true,
     sameSite: "strict" as const,
     secure: process.env.NODE_ENV === "production",
-    maxAge: ABSOLUTE_TIMEOUT_HOURS * 3600,
+    maxAge: COOKIE_MAX_AGE_SECONDS,
     path: "/"
   };
 }
@@ -48,14 +39,13 @@ export async function createSession(
   const db = createSupabaseAdminClient();
   const sessionId = crypto.randomUUID();
   const now = new Date();
-  const expiresAt = new Date(now.getTime() + ABSOLUTE_TIMEOUT_HOURS * 3600 * 1000);
 
-  // Evict oldest sessions if at limit
+  // Evict least-recently-active sessions if at limit
   const { data: existing } = await db
     .from("app_sessions")
-    .select("session_id, created_at")
+    .select("session_id, last_activity_at")
     .eq("user_id", userId)
-    .order("created_at", { ascending: true });
+    .order("last_activity_at", { ascending: true });
 
   if (existing && existing.length >= MAX_SESSIONS_PER_USER) {
     const toEvict = existing.slice(0, existing.length - MAX_SESSIONS_PER_USER + 1);
@@ -68,7 +58,7 @@ export async function createSession(
     user_id: userId,
     created_at: now.toISOString(),
     last_activity_at: now.toISOString(),
-    expires_at: expiresAt.toISOString(),
+    expires_at: null,
     user_agent: metadata?.userAgent ?? null,
     ip_address: metadata?.ipAddress ?? null
   });
@@ -98,63 +88,14 @@ export async function validateSession(sessionId: string): Promise<SessionRecord 
     if (error || !data) return null;
 
     const now = new Date();
-    const expiresAt = new Date(data.expires_at);
 
-    if (now > expiresAt) {
-      // Session expired — destroy it asynchronously (don't block the response)
-      db.from("app_sessions").delete().eq("session_id", sessionId).then(() => {});
-
-      logAuthEvent({
-        event: "auth.session.expired.absolute",
-        userId: data.user_id
-      }).catch(() => {});
-
-      return null;
-    }
-
-    // Idle timeout: reject if no activity in IDLE_TIMEOUT_MINUTES
+    // Throttled activity update: only update if >15 min since last update
     const lastActivity = new Date(data.last_activity_at);
     const idleMs = now.getTime() - lastActivity.getTime();
-    const idleLimit = IDLE_TIMEOUT_MINUTES * 60 * 1000;
-
-    if (idleMs > idleLimit) {
-      // Session idle — destroy and log
-      db.from("app_sessions").delete().eq("session_id", sessionId).then(() => {});
-      logAuthEvent({
-        event: "auth.session.expired.idle",
-        userId: data.user_id
-      }).catch(() => {});
-      return null;
-    }
-
-    // Throttled activity update: only update if >5 min since last update
-    const throttle = ACTIVITY_UPDATE_THROTTLE_MINUTES * 60 * 1000;
+    const throttle = 15 * 60 * 1000; // 15 minutes
     if (idleMs > throttle) {
       db.from("app_sessions")
         .update({ last_activity_at: now.toISOString() })
-        .eq("session_id", sessionId)
-        .then(() => {});
-    }
-
-    // Sliding window refresh: extend session if >50% elapsed
-    const sessionAge = now.getTime() - new Date(data.created_at).getTime();
-    const refreshThreshold = REFRESH_THRESHOLD_HOURS * 3600 * 1000;
-    const maxLifetime = MAX_SESSION_LIFETIME_HOURS * 3600 * 1000;
-    const createdAt = new Date(data.created_at).getTime();
-
-    let refreshed = false;
-    let newExpiresAt: Date | undefined;
-
-    if (sessionAge > refreshThreshold) {
-      const computedExpiry = new Date(Math.min(
-        now.getTime() + ABSOLUTE_TIMEOUT_HOURS * 3600 * 1000,
-        createdAt + maxLifetime
-      ));
-      refreshed = true;
-      newExpiresAt = computedExpiry;
-      // Fire-and-forget — don't block the response
-      db.from("app_sessions")
-        .update({ expires_at: computedExpiry.toISOString() })
         .eq("session_id", sessionId)
         .then(() => {});
     }
@@ -164,13 +105,10 @@ export async function validateSession(sessionId: string): Promise<SessionRecord 
       userId: data.user_id,
       createdAt: new Date(data.created_at),
       lastActivityAt: new Date(data.last_activity_at),
-      expiresAt,
       metadata: {
         userAgent: data.user_agent,
         ipAddress: data.ip_address
-      },
-      refreshed,
-      newExpiresAt
+      }
     };
   } catch (error) {
     console.error("Session validation error (fail-closed):", error);
@@ -204,13 +142,10 @@ export async function destroyAllSessionsForUser(userId: string): Promise<void> {
  */
 export async function cleanupExpiredSessions(): Promise<void> {
   const db = createSupabaseAdminClient();
-  const now = new Date().toISOString();
 
-  await db.from("app_sessions").delete().lt("expires_at", now);
-
-  // Also clean up idle sessions
-  const idleCutoff = new Date(Date.now() - IDLE_TIMEOUT_MINUTES * 60 * 1000).toISOString();
-  await db.from("app_sessions").delete().lt("last_activity_at", idleCutoff);
+  // Remove sessions with no activity in STALE_SESSION_DAYS
+  const staleCutoff = new Date(Date.now() - STALE_SESSION_DAYS * 24 * 3600 * 1000).toISOString();
+  await db.from("app_sessions").delete().lt("last_activity_at", staleCutoff);
 
   // Login attempt cleanup — use lockout duration (30 min)
   const loginCutoff = new Date(Date.now() - LOCKOUT_DURATION_MINUTES * 60 * 1000).toISOString();

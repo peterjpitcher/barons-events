@@ -281,31 +281,11 @@ describe("validateSession", () => {
     expect(result).not.toBeNull();
     expect(result?.sessionId).toBe(row.session_id);
     expect(result?.userId).toBe(row.user_id);
-    expect(result?.expiresAt).toBeInstanceOf(Date);
     expect(result?.lastActivityAt).toBeInstanceOf(Date);
     expect(result?.metadata).toEqual({ userAgent: null, ipAddress: null });
-    expect(result).toHaveProperty("refreshed");
   });
 
-  it("returns null if absolute timeout exceeded (now > expiresAt)", async () => {
-    const pastExpiry = new Date(Date.now() - 1000).toISOString(); // expired 1s ago
-    const row = makeSessionRow({ expires_at: pastExpiry });
-
-    const deleteMock = vi.fn(() => ({ eq: vi.fn(() => Promise.resolve({ data: null, error: null })) }));
-
-    mockAdminClient.fromSpy.mockImplementation(() => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          single: vi.fn(() => Promise.resolve({ data: row, error: null }))
-        }))
-      })),
-      delete: deleteMock
-    }));
-
-    const result = await validateSession("expired-session");
-
-    expect(result).toBeNull();
-  });
+  // Note: absolute timeout test removed — sessions no longer expire.
 
   it("returns null on DB error (fail-closed)", async () => {
     mockAdminClient.fromSpy.mockImplementation(() => ({

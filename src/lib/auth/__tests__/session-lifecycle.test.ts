@@ -259,89 +259,13 @@ describe("validateSession — correct field mapping from DB row", () => {
     expect(result?.userId).toBe("user-xyz");
     expect(result?.createdAt).toBeInstanceOf(Date);
     expect(result?.lastActivityAt).toBeInstanceOf(Date);
-    expect(result?.expiresAt).toBeInstanceOf(Date);
     expect(result?.metadata.userAgent).toBe("Mozilla/5.0");
     expect(result?.metadata.ipAddress).toBe("192.168.1.1");
   });
 });
 
-// ─── validateSession — refreshed field ─────────────────────────────────────
-
-describe("validateSession — session refresh (sliding window)", () => {
-  it("should return refreshed: false for sessions under 12 hours old", async () => {
-    vi.useFakeTimers();
-    const createdAt = new Date("2026-01-15T06:00:00.000Z");
-    const now = new Date("2026-01-15T10:00:00.000Z"); // 4 hours later — under 12h threshold
-    vi.setSystemTime(now);
-
-    const row = makeSessionRow({
-      session_id: "fresh-session",
-      user_id: "user-1",
-      created_at: createdAt.toISOString(),
-      last_activity_at: new Date(now.getTime() - 2 * 60 * 1000).toISOString(), // 2 min ago (under idle)
-      expires_at: new Date(createdAt.getTime() + 24 * 3600 * 1000).toISOString()
-    });
-
-    mockFromImpl = () => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          single: vi.fn(() => Promise.resolve({ data: row, error: null }))
-        }))
-      })),
-      delete: vi.fn(() => ({
-        eq: vi.fn(() => Promise.resolve({ data: null, error: null }))
-      })),
-      update: vi.fn(() => ({
-        eq: vi.fn(() => Promise.resolve({ data: null, error: null }))
-      }))
-    });
-
-    const result = await validateSession("fresh-session");
-
-    expect(result).not.toBeNull();
-    expect(result?.refreshed).toBe(false);
-    expect(result?.newExpiresAt).toBeUndefined();
-  });
-
-  it("should return refreshed: true with newExpiresAt for sessions over 12 hours old", async () => {
-    vi.useFakeTimers();
-    const createdAt = new Date("2026-01-15T00:00:00.000Z");
-    const now = new Date("2026-01-15T13:00:00.000Z"); // 13 hours later — over 12h threshold
-    vi.setSystemTime(now);
-
-    const row = makeSessionRow({
-      session_id: "old-session",
-      user_id: "user-1",
-      created_at: createdAt.toISOString(),
-      last_activity_at: new Date(now.getTime() - 2 * 60 * 1000).toISOString(), // 2 min ago (under idle)
-      expires_at: new Date(createdAt.getTime() + 24 * 3600 * 1000).toISOString()
-    });
-
-    mockFromImpl = () => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          single: vi.fn(() => Promise.resolve({ data: row, error: null }))
-        }))
-      })),
-      delete: vi.fn(() => ({
-        eq: vi.fn(() => Promise.resolve({ data: null, error: null }))
-      })),
-      update: vi.fn(() => ({
-        eq: vi.fn(() => Promise.resolve({ data: null, error: null }))
-      }))
-    });
-
-    const result = await validateSession("old-session");
-
-    expect(result).not.toBeNull();
-    expect(result?.refreshed).toBe(true);
-    expect(result?.newExpiresAt).toBeInstanceOf(Date);
-    // The new expiry should be in the future
-    expect(result!.newExpiresAt!.getTime()).toBeGreaterThan(now.getTime());
-  });
-});
-
 // ─── createSession — session eviction ───────────────────────────────────────
+// Note: sliding-window refresh tests removed — sessions no longer expire or refresh.
 
 describe("createSession — session limit eviction", () => {
   it("should not evict sessions when user has fewer than 5 sessions", async () => {
