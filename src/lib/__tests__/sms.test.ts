@@ -2,12 +2,12 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ── Module mocks ──────────────────────────────────────────────────────────────
 
-vi.mock("twilio", () => ({
-  default: vi.fn(() => ({
-    messages: {
-      create: vi.fn().mockResolvedValue({ sid: "SM123" }),
-    },
-  })),
+vi.mock("@/lib/twilio", () => ({
+  sendTwilioSms: vi.fn().mockResolvedValue({ sid: "SM123" }),
+}));
+
+vi.mock("@/lib/system-short-links", () => ({
+  createSystemShortLink: vi.fn().mockResolvedValue("https://l.baronspubs.com/abc12345"),
 }));
 
 const mockUpdate = vi.fn(() => ({
