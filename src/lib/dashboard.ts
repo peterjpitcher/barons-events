@@ -286,8 +286,8 @@ async function fetchDebriefTodos(user: AppUser, today: string): Promise<TodoItem
     .order("end_at", { ascending: true })
     .limit(10);
 
-  // Personal dashboard: scope to events user created or is assigned to
-  query = query.or(`created_by.eq.${user.id},assignee_id.eq.${user.id}`);
+  // Personal dashboard: scope to manager responsible with creator fallback
+  query = query.or(`manager_responsible_id.eq.${user.id},and(manager_responsible_id.is.null,created_by.eq.${user.id})`);
 
   const { data, error } = await query;
   if (error) throw error;
@@ -339,8 +339,8 @@ export async function getDebriefsDue(user: AppUser): Promise<Array<{
     .order("end_at", { ascending: false })
     .limit(10);
 
-  // Personal dashboard: scope to events user created or is assigned to
-  query = query.or(`created_by.eq.${user.id},assignee_id.eq.${user.id}`);
+  // Personal dashboard: scope to manager responsible with creator fallback
+  query = query.or(`manager_responsible_id.eq.${user.id},and(manager_responsible_id.is.null,created_by.eq.${user.id})`);
 
   const { data, error } = await query;
   if (error) throw error;
