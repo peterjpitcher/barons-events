@@ -40,7 +40,7 @@ beforeEach(() => {
 });
 
 describe("createVenueAction", () => {
-  it("should pass defaultManagerResponsible to createVenue", async () => {
+  it("should pass defaultManagerResponsibleId to createVenue", async () => {
     mockGetCurrentUser.mockResolvedValue({
       id: "user-1",
       email: "planner@test.com",
@@ -51,10 +51,11 @@ describe("createVenueAction", () => {
     });
     mockCreateVenue.mockResolvedValue(undefined);
 
+    const managerId = "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d";
     const fd = makeFormData({
       name: "Test Venue",
       defaultApproverId: "",
-      defaultManagerResponsible: "Sarah Mitchell",
+      defaultManagerResponsibleId: managerId,
     });
 
     const result = await createVenueAction(undefined, fd);
@@ -63,11 +64,11 @@ describe("createVenueAction", () => {
     expect(mockCreateVenue).toHaveBeenCalledWith({
       name: "Test Venue",
       defaultApproverId: null,
-      defaultManagerResponsible: "Sarah Mitchell",
+      defaultManagerResponsibleId: managerId,
     });
   });
 
-  it("should map empty defaultManagerResponsible to null", async () => {
+  it("should map empty defaultManagerResponsibleId to null", async () => {
     mockGetCurrentUser.mockResolvedValue({
       id: "user-1",
       email: "planner@test.com",
@@ -81,7 +82,7 @@ describe("createVenueAction", () => {
     const fd = makeFormData({
       name: "Test Venue",
       defaultApproverId: "",
-      defaultManagerResponsible: "",
+      defaultManagerResponsibleId: "",
     });
 
     const result = await createVenueAction(undefined, fd);
@@ -90,13 +91,13 @@ describe("createVenueAction", () => {
     expect(mockCreateVenue).toHaveBeenCalledWith({
       name: "Test Venue",
       defaultApproverId: null,
-      defaultManagerResponsible: null,
+      defaultManagerResponsibleId: null,
     });
   });
 });
 
 describe("updateVenueAction", () => {
-  it("should pass defaultManagerResponsible to updateVenue", async () => {
+  it("should pass defaultManagerResponsibleId to updateVenue", async () => {
     mockGetCurrentUser.mockResolvedValue({
       id: "user-1",
       email: "planner@test.com",
@@ -107,11 +108,12 @@ describe("updateVenueAction", () => {
     });
     mockUpdateVenue.mockResolvedValue(undefined);
 
+    const managerId = "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d";
     const fd = makeFormData({
       venueId: "550e8400-e29b-41d4-a716-446655440000",
       name: "Updated Venue",
       defaultApproverId: "",
-      defaultManagerResponsible: "Tom Bradley",
+      defaultManagerResponsibleId: managerId,
       googleReviewUrl: "",
     });
 
@@ -123,7 +125,7 @@ describe("updateVenueAction", () => {
       {
         name: "Updated Venue",
         defaultApproverId: null,
-        defaultManagerResponsible: "Tom Bradley",
+        defaultManagerResponsibleId: managerId,
         googleReviewUrl: null,
       }
     );
