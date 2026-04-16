@@ -23,7 +23,7 @@ const venueSchema = z.object({
   venueId: z.string().uuid().optional(),
   name: z.string().min(2, "Add a venue name"),
   defaultApproverId: uuidOrUndefined,
-  defaultManagerResponsible: z.string().max(200, "Max 200 characters").optional().or(z.literal("")),
+  defaultManagerResponsibleId: uuidOrUndefined,
   googleReviewUrl: z.string().url("Enter a valid URL").optional().or(z.literal(""))
 });
 
@@ -42,7 +42,7 @@ export async function createVenueAction(
   const parsed = venueSchema.safeParse({
     name: typeof formData.get("name") === "string" ? formData.get("name") : "",
     defaultApproverId: typeof formData.get("defaultApproverId") === "string" ? formData.get("defaultApproverId") : "",
-    defaultManagerResponsible: typeof formData.get("defaultManagerResponsible") === "string" ? formData.get("defaultManagerResponsible") : "",
+    defaultManagerResponsibleId: typeof formData.get("defaultManagerResponsibleId") === "string" ? formData.get("defaultManagerResponsibleId") : "",
   });
 
   if (!parsed.success) {
@@ -57,7 +57,7 @@ export async function createVenueAction(
     const created = await createVenue({
       name: parsed.data.name,
       defaultApproverId: parsed.data.defaultApproverId ?? null,
-      defaultManagerResponsible: parsed.data.defaultManagerResponsible || null,
+      defaultManagerResponsibleId: parsed.data.defaultManagerResponsibleId || null,
     });
     recordAuditLogEntry({
       entity: "venue",
@@ -90,7 +90,7 @@ export async function updateVenueAction(
     venueId: formData.get("venueId"),
     name: typeof formData.get("name") === "string" ? formData.get("name") : "",
     defaultApproverId: typeof formData.get("defaultApproverId") === "string" ? formData.get("defaultApproverId") : "",
-    defaultManagerResponsible: typeof formData.get("defaultManagerResponsible") === "string" ? formData.get("defaultManagerResponsible") : "",
+    defaultManagerResponsibleId: typeof formData.get("defaultManagerResponsibleId") === "string" ? formData.get("defaultManagerResponsibleId") : "",
     googleReviewUrl: typeof formData.get("googleReviewUrl") === "string" ? formData.get("googleReviewUrl") : ""
   });
 
@@ -109,7 +109,7 @@ export async function updateVenueAction(
     await updateVenue(parsed.data.venueId, {
       name: parsed.data.name,
       defaultApproverId: parsed.data.defaultApproverId ?? null,
-      defaultManagerResponsible: parsed.data.defaultManagerResponsible || null,
+      defaultManagerResponsibleId: parsed.data.defaultManagerResponsibleId || null,
       googleReviewUrl: parsed.data.googleReviewUrl || null
     });
     recordAuditLogEntry({

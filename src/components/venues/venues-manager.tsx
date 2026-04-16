@@ -18,23 +18,26 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn } from "@/lib/utils";
 import { Clock, Plus, Save, Trash2 } from "lucide-react";
 
+type UserOption = { id: string; name: string };
+
 type VenuesManagerProps = {
   venues: VenueRow[];
   reviewers: ReviewerOption[];
+  users: UserOption[];
 };
 
 const errorInputClass = "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]";
 
-export function VenuesManager({ venues, reviewers }: VenuesManagerProps) {
+export function VenuesManager({ venues, reviewers, users }: VenuesManagerProps) {
   return (
     <div className="space-y-6">
-      <VenueCreateForm reviewers={reviewers} />
-      <VenueTable venues={venues} reviewers={reviewers} />
+      <VenueCreateForm reviewers={reviewers} users={users} />
+      <VenueTable venues={venues} reviewers={reviewers} users={users} />
     </div>
   );
 }
 
-function VenueCreateForm({ reviewers }: { reviewers: ReviewerOption[] }) {
+function VenueCreateForm({ reviewers, users }: { reviewers: ReviewerOption[]; users: UserOption[] }) {
   const [state, formAction] = useActionState(createVenueAction, undefined);
   const formRef = useRef<HTMLFormElement>(null);
   const router = useRouter();
@@ -74,12 +77,14 @@ function VenueCreateForm({ reviewers }: { reviewers: ReviewerOption[] }) {
           </div>
           <div className="space-y-2">
             <Label htmlFor="new-venue-default-manager">Default manager responsible</Label>
-            <Input
-              id="new-venue-default-manager"
-              name="defaultManagerResponsible"
-              placeholder="Manager name"
-              maxLength={200}
-            />
+            <Select id="new-venue-default-manager" name="defaultManagerResponsibleId" defaultValue="">
+              <option value="">No default manager</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name}
+                </option>
+              ))}
+            </Select>
           </div>
           <div className="space-y-2">
             <Label htmlFor="new-venue-default-approver">Default approver</Label>
@@ -106,7 +111,7 @@ function VenueCreateForm({ reviewers }: { reviewers: ReviewerOption[] }) {
   );
 }
 
-function VenueTable({ venues, reviewers }: VenuesManagerProps) {
+function VenueTable({ venues, reviewers, users }: VenuesManagerProps) {
   if (venues.length === 0) {
     return (
       <Card>
@@ -130,7 +135,7 @@ function VenueTable({ venues, reviewers }: VenuesManagerProps) {
         </thead>
         <tbody>
           {venues.map((venue) => (
-            <VenueRowEditor key={venue.id} venue={venue} reviewers={reviewers} />
+            <VenueRowEditor key={venue.id} venue={venue} reviewers={reviewers} users={users} />
           ))}
         </tbody>
       </table>
@@ -138,7 +143,7 @@ function VenueTable({ venues, reviewers }: VenuesManagerProps) {
   );
 }
 
-function VenueRowEditor({ venue, reviewers }: { venue: VenueRow; reviewers: ReviewerOption[] }) {
+function VenueRowEditor({ venue, reviewers, users }: { venue: VenueRow; reviewers: ReviewerOption[]; users: UserOption[] }) {
   const [state, formAction] = useActionState(updateVenueAction, undefined);
   const [deleteState, deleteAction] = useActionState(deleteVenueAction, undefined);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -192,13 +197,18 @@ function VenueRowEditor({ venue, reviewers }: { venue: VenueRow; reviewers: Revi
               <label className="sr-only" htmlFor={`venue-manager-${venue.id}`}>
                 Default manager responsible
               </label>
-              <Input
+              <Select
                 id={`venue-manager-${venue.id}`}
-                name="defaultManagerResponsible"
-                defaultValue={venue.default_manager_responsible ?? ""}
-                placeholder="Default manager responsible"
-                maxLength={200}
-              />
+                name="defaultManagerResponsibleId"
+                defaultValue={venue.default_manager_responsible_id ?? ""}
+              >
+                <option value="">No default manager</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                  </option>
+                ))}
+              </Select>
             </div>
             <div className="space-y-2">
               <label className="sr-only" htmlFor={`venue-approver-${venue.id}`}>

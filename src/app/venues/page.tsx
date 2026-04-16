@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { listVenues } from "@/lib/venues";
 import { listReviewers } from "@/lib/reviewers";
+import { listAssignableUsers } from "@/lib/users";
 import { VenuesManager } from "@/components/venues/venues-manager";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -19,7 +20,11 @@ export default async function VenuesPage() {
     redirect("/unauthorized");
   }
 
-  const [venues, reviewers] = await Promise.all([listVenues(), listReviewers()]);
+  const [venues, reviewers, assignableUsers] = await Promise.all([
+    listVenues(),
+    listReviewers(),
+    listAssignableUsers()
+  ]);
 
   return (
     <div className="space-y-6">
@@ -34,7 +39,7 @@ export default async function VenuesPage() {
           </p>
         </CardContent>
       </Card>
-      <VenuesManager venues={venues} reviewers={reviewers} />
+      <VenuesManager venues={venues} reviewers={reviewers} users={assignableUsers.map((u) => ({ id: u.id, name: u.name }))} />
     </div>
   );
 }
