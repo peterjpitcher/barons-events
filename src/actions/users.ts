@@ -8,9 +8,10 @@ import { updateUser } from "@/lib/users";
 import { createSupabaseActionClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getFieldErrors } from "@/lib/form-errors";
-import type { ActionResult } from "@/lib/types";
+import type { ActionResult, UserImpactSummary } from "@/lib/types";
+import { isAdministrator } from "@/lib/roles";
 import { destroyAllSessionsForUser } from "@/lib/auth/session";
-import { logAuthEvent, hashEmailForAudit } from "@/lib/audit-log";
+import { logAuthEvent, hashEmailForAudit, recordAuditLogEntry } from "@/lib/audit-log";
 import { resolveAppUrl } from "@/lib/app-url";
 import { sendInviteEmail } from "@/lib/notifications";
 
@@ -122,6 +123,21 @@ export async function inviteUserAction(
       success: false,
       message: "Check the highlighted fields.",
       fieldErrors: getFieldErrors(parsed.error)
+    };
+  }
+
+  // Check for existing deactivated user with this email — direct admin to reactivate instead
+  const preCheckClient = createSupabaseAdminClient();
+  const { data: existingUser } = await preCheckClient
+    .from("users")
+    .select("id, deactivated_at")
+    .eq("email", parsed.data.email)
+    .maybeSingle();
+
+  if (existingUser?.deactivated_at) {
+    return {
+      success: false,
+      message: "This email belongs to a deactivated user. Reactivate them instead of sending a new invite.",
     };
   }
 
@@ -316,4 +332,265 @@ export async function resendInviteAction(
   });
 
   return { success: true, message: "Invite resent." };
+}
+
+// ─── User deactivation / deletion actions ──────────────────────────────────
+
+/** Active users eligible as reassignment targets (excludes executives, deactivated, and the target user). */
+export async function listReassignmentTargets(
+  excludeUserId: string
+): Promise<Array<{ id: string; full_name: string | null; email: string; role: string }>> {
+  const caller = await getCurrentUser();
+  if (!caller || !isAdministrator(caller.role)) {
+    return [];
+  }
+
+  const db = createSupabaseAdminClient();
+  const { data, error } = await db
+    .from("users")
+    .select("id, full_name, email, role")
+    .is("deactivated_at", null)
+    .neq("id", excludeUserId)
+    .neq("role", "executive")
+    .order("full_name");
+
+  if (error) throw new Error(`Failed to list reassignment targets: ${error.message}`);
+  return data ?? [];
+}
+
+export async function getUserImpactSummary(
+  userId: string
+): Promise<{ data?: UserImpactSummary; error?: string }> {
+  const user = await getCurrentUser();
+  if (!user || !isAdministrator(user.role)) {
+    return { error: "Unauthorized" };
+  }
+
+  const db = createSupabaseAdminClient();
+
+  const [
+    eventsCreated, eventsAssigned,
+    planningSeriesOwned, planningSeriesCreated,
+    planningItemsOwned, planningItemsCreated,
+    planningTasksAssigned, planningTasksCreated,
+    planningTaskAssignees, taskTemplateDefaults,
+    artistsCreated, eventArtistsCreated,
+    shortLinksCreated, venueDefaults,
+    approvalsReviewed, eventVersionsSubmitted,
+    debriefsSubmitted, eventsDeletedBy,
+    tasksCompletedBy, venueOverridesCreated
+  ] = await Promise.all([
+    db.from("events").select("id", { count: "exact", head: true }).eq("created_by", userId),
+    db.from("events").select("id", { count: "exact", head: true }).eq("assignee_id", userId),
+    db.from("planning_series").select("id", { count: "exact", head: true }).eq("owner_id", userId),
+    db.from("planning_series").select("id", { count: "exact", head: true }).eq("created_by", userId),
+    db.from("planning_items").select("id", { count: "exact", head: true }).eq("owner_id", userId),
+    db.from("planning_items").select("id", { count: "exact", head: true }).eq("created_by", userId),
+    db.from("planning_tasks").select("id", { count: "exact", head: true }).eq("assignee_id", userId),
+    db.from("planning_tasks").select("id", { count: "exact", head: true }).eq("created_by", userId),
+    db.from("planning_task_assignees").select("id", { count: "exact", head: true }).eq("user_id", userId),
+    db.from("planning_series_task_templates").select("id", { count: "exact", head: true }).eq("default_assignee_id", userId),
+    db.from("artists").select("id", { count: "exact", head: true }).eq("created_by", userId),
+    db.from("event_artists").select("id", { count: "exact", head: true }).eq("created_by", userId),
+    db.from("short_links").select("id", { count: "exact", head: true }).eq("created_by", userId),
+    db.from("venues").select("id", { count: "exact", head: true }).eq("default_approver_id", userId),
+    db.from("approvals").select("id", { count: "exact", head: true }).eq("reviewer_id", userId),
+    db.from("event_versions").select("id", { count: "exact", head: true }).eq("submitted_by", userId),
+    db.from("debriefs").select("id", { count: "exact", head: true }).eq("submitted_by", userId),
+    db.from("events").select("id", { count: "exact", head: true }).eq("deleted_by", userId),
+    db.from("planning_tasks").select("id", { count: "exact", head: true }).eq("completed_by", userId),
+    db.from("venue_opening_overrides").select("id", { count: "exact", head: true }).eq("created_by", userId),
+  ]);
+
+  return {
+    data: {
+      eventsCreated: eventsCreated.count ?? 0,
+      eventsAssigned: eventsAssigned.count ?? 0,
+      planningSeriesOwned: planningSeriesOwned.count ?? 0,
+      planningSeriesCreated: planningSeriesCreated.count ?? 0,
+      planningItemsOwned: planningItemsOwned.count ?? 0,
+      planningItemsCreated: planningItemsCreated.count ?? 0,
+      planningTasks: (planningTasksAssigned.count ?? 0) + (planningTasksCreated.count ?? 0),
+      planningTaskAssignees: planningTaskAssignees.count ?? 0,
+      taskTemplateDefaults: taskTemplateDefaults.count ?? 0,
+      artistsCreated: artistsCreated.count ?? 0,
+      eventArtistsCreated: eventArtistsCreated.count ?? 0,
+      shortLinksCreated: shortLinksCreated.count ?? 0,
+      venueDefaults: venueDefaults.count ?? 0,
+      sopDefaultAssignees: 0, // SOP array query requires custom SQL — acceptable to show 0 in UI
+      approvalsReviewed: approvalsReviewed.count ?? 0,
+      eventVersionsSubmitted: eventVersionsSubmitted.count ?? 0,
+      debriefsSubmitted: debriefsSubmitted.count ?? 0,
+      eventsDeletedBy: eventsDeletedBy.count ?? 0,
+      tasksCompletedBy: tasksCompletedBy.count ?? 0,
+      venueOverridesCreated: venueOverridesCreated.count ?? 0,
+    }
+  };
+}
+
+export async function deactivateUserAction(
+  userId: string,
+  reassignToUserId: string
+): Promise<{ success: boolean; error?: string }> {
+  const caller = await getCurrentUser();
+  if (!caller || !isAdministrator(caller.role)) {
+    return { success: false, error: "Unauthorized" };
+  }
+  if (userId === caller.id) {
+    return { success: false, error: "You cannot deactivate yourself." };
+  }
+
+  const db = createSupabaseAdminClient();
+
+  const { data: target } = await db
+    .from("users")
+    .select("id, role, deactivated_at, full_name")
+    .eq("id", userId)
+    .single();
+
+  if (!target) return { success: false, error: "User not found." };
+  if (target.role === "administrator") return { success: false, error: "Cannot deactivate an administrator." };
+  if (target.deactivated_at) return { success: false, error: "User is already deactivated." };
+
+  const { data: reassignTarget } = await db
+    .from("users")
+    .select("id, deactivated_at, role")
+    .eq("id", reassignToUserId)
+    .single();
+
+  if (!reassignTarget || reassignTarget.deactivated_at || reassignTarget.role === "executive") {
+    return { success: false, error: "The selected user is no longer active. Please choose another." };
+  }
+
+  const { error: rpcError } = await db.rpc("reassign_and_deactivate_user", {
+    p_target_id: userId,
+    p_reassign_to_id: reassignToUserId,
+    p_caller_id: caller.id,
+  });
+
+  if (rpcError) {
+    console.error("Deactivation RPC failed:", rpcError.message);
+    return { success: false, error: "Something went wrong. Please try again." };
+  }
+
+  // Destroy sessions (app_sessions references auth.users)
+  await db.from("app_sessions").delete().eq("user_id", userId);
+
+  revalidatePath("/users");
+  return { success: true };
+}
+
+export async function reactivateUserAction(
+  userId: string
+): Promise<{ success: boolean; error?: string }> {
+  const caller = await getCurrentUser();
+  if (!caller || !isAdministrator(caller.role)) {
+    return { success: false, error: "Unauthorized" };
+  }
+
+  const db = createSupabaseAdminClient();
+
+  const { data: target } = await db
+    .from("users")
+    .select("id, deactivated_at")
+    .eq("id", userId)
+    .single();
+
+  if (!target) return { success: false, error: "User not found." };
+  if (!target.deactivated_at) return { success: false, error: "User is not deactivated." };
+
+  const { error } = await db
+    .from("users")
+    .update({ deactivated_at: null, deactivated_by: null })
+    .eq("id", userId);
+
+  if (error) return { success: false, error: "Failed to reactivate user." };
+
+  await recordAuditLogEntry({
+    entity: "user",
+    entityId: userId,
+    action: "user.reactivated",
+    actorId: caller.id,
+  });
+
+  revalidatePath("/users");
+  return { success: true };
+}
+
+export async function deleteUserAction(
+  userId: string,
+  reassignToUserId: string,
+  confirmName: string
+): Promise<{ success: boolean; error?: string }> {
+  const caller = await getCurrentUser();
+  if (!caller || !isAdministrator(caller.role)) {
+    return { success: false, error: "Unauthorized" };
+  }
+  if (userId === caller.id) {
+    return { success: false, error: "You cannot delete yourself." };
+  }
+
+  const db = createSupabaseAdminClient();
+
+  const { data: target } = await db
+    .from("users")
+    .select("id, email, full_name, role")
+    .eq("id", userId)
+    .single();
+
+  if (!target) return { success: false, error: "User not found." };
+  if (target.role === "administrator") return { success: false, error: "Cannot delete an administrator." };
+
+  // Verify name confirmation
+  const nameMatch =
+    confirmName.trim().toLowerCase() === (target.full_name ?? "").trim().toLowerCase() ||
+    confirmName.trim().toLowerCase() === target.email.trim().toLowerCase();
+  if (!nameMatch) return { success: false, error: "Name confirmation does not match." };
+
+  // Verify reassignment target
+  const { data: reassignTarget } = await db
+    .from("users")
+    .select("id, deactivated_at, role")
+    .eq("id", reassignToUserId)
+    .single();
+
+  if (!reassignTarget || reassignTarget.deactivated_at || reassignTarget.role === "executive") {
+    return { success: false, error: "The selected user is no longer active. Please choose another." };
+  }
+
+  // Reassign content atomically
+  const { error: rpcError } = await db.rpc("reassign_user_content", {
+    p_from_id: userId,
+    p_to_id: reassignToUserId,
+  });
+
+  if (rpcError) {
+    console.error("Reassignment RPC failed:", rpcError.message);
+    return { success: false, error: "Something went wrong. Please try again." };
+  }
+
+  // Audit log MUST succeed before deletion
+  const emailHash = await hashEmailForAudit(target.email);
+  const { error: auditError } = await db.from("audit_log").insert({
+    entity: "user",
+    entity_id: userId,
+    action: "user.deleted",
+    actor_id: caller.id,
+    meta: { deleted_email_hash: emailHash, reassigned_to: reassignToUserId },
+  });
+
+  if (auditError) {
+    console.error("Audit log write failed:", auditError.message);
+    return { success: false, error: "Could not record audit trail. Please try again." };
+  }
+
+  // Delete auth.users — cascades to public.users and app_sessions
+  const { error: authError } = await db.auth.admin.deleteUser(userId);
+  if (authError) {
+    console.error("Auth user deletion failed:", authError.message);
+    return { success: false, error: "Failed to delete user account. Content has been reassigned — you can retry deletion." };
+  }
+
+  revalidatePath("/users");
+  return { success: true };
 }
