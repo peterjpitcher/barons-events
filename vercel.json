@@ -15,6 +15,10 @@
     {
       "path": "/api/cron/cleanup-auth",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/sms-booking-driver",
+      "schedule": "0 8 * * *"
     }
   ]
 }
