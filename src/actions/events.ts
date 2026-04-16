@@ -1931,6 +1931,7 @@ const bookingSettingsSchema = z.object({
   bookingEnabled: z.boolean(),
   totalCapacity: z.number().int().positive().nullable(),
   maxTicketsPerBooking: z.number().int().min(1).max(50),
+  smsPromoEnabled: z.boolean().optional(),
 });
 
 export type UpdateBookingSettingsInput = z.infer<typeof bookingSettingsSchema>;
@@ -1956,7 +1957,7 @@ export async function updateBookingSettingsAction(
     return { success: false, message: "Invalid booking settings." };
   }
 
-  const { eventId, bookingEnabled, totalCapacity, maxTicketsPerBooking } = parsed.data;
+  const { eventId, bookingEnabled, totalCapacity, maxTicketsPerBooking, smsPromoEnabled } = parsed.data;
 
   const supabase = createSupabaseAdminClient();
 
@@ -1987,14 +1988,20 @@ export async function updateBookingSettingsAction(
     }
   }
 
+  // Build update payload — only administrators can toggle sms_promo_enabled
+  const updatePayload: Record<string, unknown> = {
+    booking_enabled: bookingEnabled,
+    total_capacity: totalCapacity,
+    max_tickets_per_booking: maxTicketsPerBooking,
+    seo_slug: seoSlug,
+  };
+  if (user.role === "administrator" && smsPromoEnabled !== undefined) {
+    updatePayload.sms_promo_enabled = smsPromoEnabled;
+  }
+
   const { error: updateError } = await supabase
     .from("events")
-    .update({
-      booking_enabled: bookingEnabled,
-      total_capacity: totalCapacity,
-      max_tickets_per_booking: maxTicketsPerBooking,
-      seo_slug: seoSlug,
-    })
+    .update(updatePayload)
     .eq("id", eventId);
 
   if (updateError) {

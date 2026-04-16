@@ -18,6 +18,8 @@ type BookingSettingsCardProps = {
   totalCapacity: number | null;
   maxTicketsPerBooking: number;
   seoSlug: string | null;
+  smsPromoEnabled?: boolean;
+  userRole?: string;
 };
 
 export function BookingSettingsCard({
@@ -26,6 +28,8 @@ export function BookingSettingsCard({
   totalCapacity: initialTotalCapacity,
   maxTicketsPerBooking: initialMaxTickets,
   seoSlug: initialSeoSlug,
+  smsPromoEnabled: initialSmsPromoEnabled = false,
+  userRole,
 }: BookingSettingsCardProps) {
   const [bookingEnabled, setBookingEnabled] = useState(initialBookingEnabled);
   const [totalCapacity, setTotalCapacity] = useState(
@@ -33,6 +37,7 @@ export function BookingSettingsCard({
   );
   const [maxTickets, setMaxTickets] = useState(String(initialMaxTickets));
   const [currentSlug, setCurrentSlug] = useState<string | null>(initialSeoSlug);
+  const [smsPromoEnabled, setSmsPromoEnabled] = useState(initialSmsPromoEnabled);
   const [isPending, startTransition] = useTransition();
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -59,6 +64,7 @@ export function BookingSettingsCard({
         bookingEnabled,
         totalCapacity: parsedCapacity,
         maxTicketsPerBooking: parsedMax,
+        ...(userRole === "administrator" ? { smsPromoEnabled } : {}),
       });
 
       if (result.success) {
@@ -187,6 +193,38 @@ export function BookingSettingsCard({
             />
             <p className="text-xs text-subtle">Maximum number of tickets a single booking can include.</p>
           </div>
+
+          {/* Promotional SMS toggle — administrators only */}
+          {userRole === "administrator" && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <button
+                  id="smsPromoEnabled"
+                  type="button"
+                  role="switch"
+                  aria-checked={smsPromoEnabled}
+                  onClick={() => setSmsPromoEnabled((v) => !v)}
+                  className={`relative inline-flex h-6 w-11 flex-none cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(39,54,64,0.45)] ${
+                    smsPromoEnabled
+                      ? "bg-[var(--color-primary-700)]"
+                      : "bg-[rgba(39,54,64,0.2)]"
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                      smsPromoEnabled ? "translate-x-5" : "translate-x-0"
+                    }`}
+                  />
+                </button>
+                <Label htmlFor="smsPromoEnabled" className="cursor-pointer select-none">
+                  {smsPromoEnabled ? "Promotional SMS enabled" : "Promotional SMS disabled"}
+                </Label>
+              </div>
+              <p className="text-xs text-subtle">
+                Automatically send booking reminder SMS to past customers.
+              </p>
+            </div>
+          )}
 
           <div className="flex justify-end">
             <SubmitButton
