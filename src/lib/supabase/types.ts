@@ -27,7 +27,7 @@ export interface Database {
           address: string | null;
           capacity: number | null;
           default_approver_id: string | null;
-          default_manager_responsible: string | null;
+          default_manager_responsible_id: string | null;
           google_review_url: string | null;
           created_at: string;
           updated_at: string;
@@ -105,7 +105,7 @@ export interface Database {
           submitted_at: string | null;
           cost_total: number | null;
           cost_details: string | null;
-          manager_responsible: string | null;
+          manager_responsible_id: string | null;
           deleted_at: string | null;
           deleted_by: string | null;
           created_at: string;

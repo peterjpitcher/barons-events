@@ -18,14 +18,14 @@ export async function createVenue(payload: {
   name: string;
   address?: string | null;
   defaultApproverId?: string | null;
-  defaultManagerResponsible?: string | null;
+  defaultManagerResponsibleId?: string | null;
 }) {
   const supabase = await createSupabaseActionClient();
   const { error } = await supabase.from("venues").insert({
     name: payload.name,
     address: payload.address ?? null,
     default_approver_id: payload.defaultApproverId ?? null,
-    default_manager_responsible: payload.defaultManagerResponsible ?? null,
+    default_manager_responsible_id: payload.defaultManagerResponsibleId ?? null,
   });
 
   if (error) {
@@ -37,14 +37,14 @@ export async function updateVenue(id: string, updates: {
   name: string;
   address?: string | null;
   defaultApproverId?: string | null;
-  defaultManagerResponsible?: string | null;
+  defaultManagerResponsibleId?: string | null;
   googleReviewUrl?: string | null;
 }) {
   const supabase = await createSupabaseActionClient();
   const updatePayload: {
     name: string;
     default_approver_id: string | null;
-    default_manager_responsible?: string | null;
+    default_manager_responsible_id?: string | null;
     address?: string | null;
     google_review_url?: string | null;
   } = {
@@ -52,8 +52,8 @@ export async function updateVenue(id: string, updates: {
     default_approver_id: updates.defaultApproverId ?? null,
   };
 
-  if (Object.prototype.hasOwnProperty.call(updates, "defaultManagerResponsible")) {
-    updatePayload.default_manager_responsible = updates.defaultManagerResponsible ?? null;
+  if (Object.prototype.hasOwnProperty.call(updates, "defaultManagerResponsibleId")) {
+    updatePayload.default_manager_responsible_id = updates.defaultManagerResponsibleId ?? null;
   }
 
   if (Object.prototype.hasOwnProperty.call(updates, "address")) {

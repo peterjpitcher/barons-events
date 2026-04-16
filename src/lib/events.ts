@@ -399,7 +399,7 @@ export async function createEventDraft(payload: {
   termsAndConditions?: string | null;
   goalFocus?: string | null;
   notes?: string | null;
-  managerResponsible?: string | null;
+  managerResponsibleId?: string | null;
   publicTitle?: string | null;
   publicTeaser?: string | null;
   publicDescription?: string | null;
@@ -439,7 +439,7 @@ export async function createEventDraft(payload: {
     terms_and_conditions: termsAndConditions,
     goal_focus: payload.goalFocus ?? null,
     notes: payload.notes ?? null,
-    manager_responsible: payload.managerResponsible ?? null,
+    manager_responsible_id: payload.managerResponsibleId ?? null,
     public_title: payload.publicTitle ?? null,
     public_teaser: payload.publicTeaser ?? null,
     public_description: payload.publicDescription ?? null,

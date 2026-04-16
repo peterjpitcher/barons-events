@@ -127,7 +127,7 @@ const eventDraftBaseSchema = z.object({
   seoTitle: optionalText(80),
   seoDescription: optionalText(200),
   seoSlug: seoSlugSchema,
-  managerResponsible: z.string().max(200).optional().nullable()
+  managerResponsibleId: z.string().uuid().optional().nullable()
 });
 
 export const eventDraftSchema = eventDraftBaseSchema.refine(
