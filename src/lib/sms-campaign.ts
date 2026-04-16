@@ -140,26 +140,25 @@ export function renderCampaignSms(params: {
     replyCode,
   } = params;
   const date = formatShortDate(startAt);
-  const price = ticketPrice ? `Tickets from \u00a3${ticketPrice}. ` : "";
-  const stop = " Reply STOP to opt out";
+  const price = ticketPrice ? `Tickets £${ticketPrice}. ` : "";
 
   if (ctaMode === "link") {
     switch (wave) {
       case 1:
-        return `Hi ${firstName}! ${publicTitle} is coming to ${venueName} on ${date}. ${price}${capacityHint}Book here: ${bookingLink}${stop}`;
+        return `Hi ${firstName}! ${publicTitle} is coming to ${venueName} on ${date}. ${price}${capacityHint}Book here: ${bookingLink}`;
       case 2:
-        return `Just a week until ${publicTitle} at ${venueName}! ${capacityHint}Don't miss out \u2014 book now: ${bookingLink}${stop}`;
+        return `Just 1 week until ${publicTitle} at ${venueName}! ${capacityHint}Don't miss out, book now: ${bookingLink}`;
       case 3:
-        return `Tomorrow! ${publicTitle} at ${venueName}. Last chance to grab tickets: ${bookingLink}${stop}`;
+        return `Tomorrow! ${publicTitle} at ${venueName}. Last chance to grab your tickets: ${bookingLink}`;
     }
   } else {
     switch (wave) {
       case 1:
-        return `Hi ${firstName}! ${publicTitle} is coming to ${venueName} on ${date}. ${capacityHint}Reply '${replyCode} 2' for 2 seats (or any number).${stop}`;
+        return `Hi ${firstName}! ${publicTitle} is coming to ${venueName} on ${date}. ${capacityHint}Reply with how many seats you'd like!`;
       case 2:
-        return `Just a week until ${publicTitle} at ${venueName}! ${capacityHint}Reply '${replyCode} 2' to reserve your seats.${stop}`;
+        return `Just 1 week until ${publicTitle} at ${venueName}! ${capacityHint}Reply with your required number of seats to book in now!`;
       case 3:
-        return `Tomorrow! ${publicTitle} at ${venueName}. Reply '${replyCode} 2' \u2014 last chance!${stop}`;
+        return `Tomorrow! ${publicTitle} at ${venueName}. Reply with your required number of seats. Last chance to book!`;
     }
   }
 }

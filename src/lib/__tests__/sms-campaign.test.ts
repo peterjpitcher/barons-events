@@ -164,9 +164,8 @@ describe("renderCampaignSms", () => {
       });
       expect(result).toContain("Hi Sarah!");
       expect(result).toContain("Quiz Night is coming to The Duke's Head");
-      expect(result).toContain("Tickets from \u00a35.");
+      expect(result).toContain("Tickets £5.");
       expect(result).toContain("Book here: https://l.baronspubs.com/abc123");
-      expect(result).toContain("Reply STOP to opt out");
     });
 
     it("renders wave 1 without price when ticketPrice is null", () => {
@@ -175,7 +174,7 @@ describe("renderCampaignSms", () => {
         wave: 1,
         ctaMode: "link",
       });
-      expect(result).not.toContain("Tickets from");
+      expect(result).not.toContain("Tickets");
       expect(result).toContain("Book here:");
     });
 
@@ -186,11 +185,9 @@ describe("renderCampaignSms", () => {
         ctaMode: "link",
         capacityHint: "Filling up fast! ",
       });
-      expect(result).toContain("Just a week until Quiz Night");
+      expect(result).toContain("Just 1 week until Quiz Night");
       expect(result).toContain("Filling up fast!");
-      expect(result).toContain("Don't miss out");
-      expect(result).toContain("book now:");
-      expect(result).toContain("Reply STOP to opt out");
+      expect(result).toContain("Don't miss out, book now:");
     });
 
     it("renders wave 3", () => {
@@ -200,13 +197,12 @@ describe("renderCampaignSms", () => {
         ctaMode: "link",
       });
       expect(result).toContain("Tomorrow!");
-      expect(result).toContain("Last chance to grab tickets:");
-      expect(result).toContain("Reply STOP to opt out");
+      expect(result).toContain("Last chance to grab your tickets:");
     });
   });
 
   describe("reply mode", () => {
-    it("renders wave 1 with reply code", () => {
+    it("renders wave 1", () => {
       const result = renderCampaignSms({
         ...baseParams,
         wave: 1,
@@ -215,8 +211,7 @@ describe("renderCampaignSms", () => {
       });
       expect(result).toContain("Hi Sarah!");
       expect(result).toContain("Quiz Night is coming to The Duke's Head");
-      expect(result).toContain("Reply 'HKN 2' for 2 seats (or any number).");
-      expect(result).toContain("Reply STOP to opt out");
+      expect(result).toContain("Reply with how many seats you'd like!");
     });
 
     it("renders wave 2 with capacity hint", () => {
@@ -227,10 +222,9 @@ describe("renderCampaignSms", () => {
         capacityHint: "Nearly fully booked! ",
         bookingLink: null,
       });
-      expect(result).toContain("Just a week until Quiz Night");
+      expect(result).toContain("Just 1 week until Quiz Night");
       expect(result).toContain("Nearly fully booked!");
-      expect(result).toContain("Reply 'HKN 2' to reserve your seats.");
-      expect(result).toContain("Reply STOP to opt out");
+      expect(result).toContain("Reply with your required number of seats to book in now!");
     });
 
     it("renders wave 3", () => {
@@ -241,9 +235,7 @@ describe("renderCampaignSms", () => {
         bookingLink: null,
       });
       expect(result).toContain("Tomorrow!");
-      expect(result).toContain("Reply 'HKN 2'");
-      expect(result).toContain("last chance!");
-      expect(result).toContain("Reply STOP to opt out");
+      expect(result).toContain("Reply with your required number of seats. Last chance to book!");
     });
   });
 });

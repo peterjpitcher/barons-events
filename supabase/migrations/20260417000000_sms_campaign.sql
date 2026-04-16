@@ -2,7 +2,7 @@
 -- SMS Campaign: tables, column, RPCs, indexes
 
 -- ── New column on events ─────────────────────────────────────────────────────
-ALTER TABLE events ADD COLUMN sms_promo_enabled boolean NOT NULL DEFAULT true;
+ALTER TABLE events ADD COLUMN sms_promo_enabled boolean NOT NULL DEFAULT false;
 
 -- ── sms_campaign_sends ───────────────────────────────────────────────────────
 CREATE TABLE sms_campaign_sends (
