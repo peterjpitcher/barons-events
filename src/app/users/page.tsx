@@ -57,7 +57,7 @@ export default async function UsersPage() {
           </div>
         </CardContent>
       </Card>
-      <UsersManager users={users} venues={venues} />
+      <UsersManager users={users} venues={venues} currentUserId={user.id} />
     </div>
   );
 }

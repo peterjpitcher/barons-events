@@ -7,6 +7,7 @@ import type { Database } from "@/lib/supabase/types";
 import type { AppUserRow, EnrichedUser } from "@/lib/users";
 import { formatRelativeTime } from "@/lib/datetime";
 import { ResendInviteButton } from "@/components/users/resend-invite-button";
+import { UserActionsMenu } from "@/components/users/user-actions-menu";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -21,6 +22,7 @@ type VenueRow = Database["public"]["Tables"]["venues"]["Row"];
 type UsersManagerProps = {
   users: EnrichedUser[];
   venues: VenueRow[];
+  currentUserId: string;
 };
 
 const roleLabels: Record<AppUserRow["role"], string> = {
@@ -31,14 +33,14 @@ const roleLabels: Record<AppUserRow["role"], string> = {
 
 const errorInputClass = "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]";
 
-export function UsersManager({ users, venues }: UsersManagerProps) {
+export function UsersManager({ users, venues, currentUserId }: UsersManagerProps) {
   return (
     <div className="space-y-6">
       <InviteUserForm venues={venues} />
       <div className="space-y-4">
         <div className="grid gap-4 md:hidden">
           {users.map((user) => (
-            <UserCardMobile key={user.id} user={user} venues={venues} />
+            <UserCardMobile key={user.id} user={user} venues={venues} currentUserId={currentUserId} />
           ))}
           {users.length === 0 ? (
             <Card>
@@ -46,7 +48,7 @@ export function UsersManager({ users, venues }: UsersManagerProps) {
             </Card>
           ) : null}
         </div>
-        <UserDesktopList users={users} venues={venues} />
+        <UserDesktopList users={users} venues={venues} currentUserId={currentUserId} />
       </div>
     </div>
   );
@@ -153,7 +155,7 @@ function InviteUserForm({ venues }: { venues: VenueRow[] }) {
   );
 }
 
-function UserCardMobile({ user, venues }: { user: EnrichedUser; venues: VenueRow[] }) {
+function UserCardMobile({ user, venues, currentUserId }: { user: EnrichedUser; venues: VenueRow[]; currentUserId: string }) {
   const [state, formAction] = useActionState(updateUserAction, undefined);
   const router = useRouter();
 
@@ -167,8 +169,10 @@ function UserCardMobile({ user, venues }: { user: EnrichedUser; venues: VenueRow
     }
   }, [state, router]);
 
+  const isDeactivated = Boolean(user.deactivated_at);
+
   return (
-    <Card>
+    <Card className={isDeactivated ? "opacity-60" : undefined}>
       <CardHeader className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
         <div className="flex-1 min-w-0">
           <CardTitle className="text-lg text-[var(--color-primary-700)]">{user.full_name ?? user.email}</CardTitle>
@@ -176,20 +180,22 @@ function UserCardMobile({ user, venues }: { user: EnrichedUser; venues: VenueRow
           <div className="mt-1 flex items-center gap-1.5">
             <span
               className={`inline-block h-2 w-2 flex-shrink-0 rounded-full ${
-                user.emailConfirmedAt ? "bg-green-500" : "bg-amber-400"
+                isDeactivated ? "bg-red-500" : user.emailConfirmedAt ? "bg-green-500" : "bg-amber-400"
               }`}
               aria-hidden="true"
             />
             <span className="text-xs text-[var(--color-text-muted)]">
-              {user.emailConfirmedAt ? "Active" : "Pending"}
-              {" · "}
-              {formatRelativeTime(user.lastSignInAt)}
+              {isDeactivated ? "Deactivated" : user.emailConfirmedAt ? "Active" : "Pending"}
+              {!isDeactivated && <>{" · "}{formatRelativeTime(user.lastSignInAt)}</>}
             </span>
           </div>
         </div>
-        <p className="flex-shrink-0 rounded-full bg-muted-surface px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
-          {roleLabels[user.role]}
-        </p>
+        <div className="flex items-center gap-2">
+          <p className="flex-shrink-0 rounded-full bg-muted-surface px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
+            {roleLabels[user.role]}
+          </p>
+          <UserActionsMenu user={user} currentUserId={currentUserId} />
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <form action={formAction} className="grid gap-4 md:grid-cols-2">
@@ -233,7 +239,7 @@ function UserCardMobile({ user, venues }: { user: EnrichedUser; venues: VenueRow
             />
           </div>
         </form>
-        {!user.emailConfirmedAt && (
+        {!user.emailConfirmedAt && !isDeactivated && (
           <ResendInviteButton
             userId={user.id}
             email={user.email}
@@ -245,7 +251,7 @@ function UserCardMobile({ user, venues }: { user: EnrichedUser; venues: VenueRow
   );
 }
 
-function UserDesktopList({ users, venues }: UsersManagerProps) {
+function UserDesktopList({ users, venues, currentUserId }: UsersManagerProps) {
   if (users.length === 0) {
     return (
       <div className="hidden rounded-[var(--radius)] border border-[var(--color-border)] bg-white py-8 text-center text-subtle md:block">
@@ -265,14 +271,14 @@ function UserDesktopList({ users, venues }: UsersManagerProps) {
       </div>
       <ul>
         {users.map((user, index) => (
-          <UserDesktopRow key={user.id} user={user} venues={venues} isFirst={index === 0} />
+          <UserDesktopRow key={user.id} user={user} venues={venues} isFirst={index === 0} currentUserId={currentUserId} />
         ))}
       </ul>
     </div>
   );
 }
 
-function UserDesktopRow({ user, venues, isFirst }: { user: EnrichedUser; venues: VenueRow[]; isFirst: boolean }) {
+function UserDesktopRow({ user, venues, isFirst, currentUserId }: { user: EnrichedUser; venues: VenueRow[]; isFirst: boolean; currentUserId: string }) {
   const [state, formAction] = useActionState(updateUserAction, undefined);
   const router = useRouter();
 
@@ -286,11 +292,13 @@ function UserDesktopRow({ user, venues, isFirst }: { user: EnrichedUser; venues:
     }
   }, [state, router]);
 
+  const isDeactivated = Boolean(user.deactivated_at);
+
   return (
     <li
       className={`border-[var(--color-border)] px-5 py-4 ${
         isFirst ? "border-b" : "border-y"
-      } hover:bg-[rgba(39,54,64,0.03)]`}
+      } hover:bg-[rgba(39,54,64,0.03)] ${isDeactivated ? "opacity-60" : ""}`}
     >
       <form action={formAction} className="grid grid-cols-[minmax(0,2.5fr)_minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,2fr)_auto] items-center gap-4">
         <input type="hidden" name="userId" value={user.id} />
@@ -307,14 +315,13 @@ function UserDesktopRow({ user, venues, isFirst }: { user: EnrichedUser; venues:
           <div className="flex items-center gap-1.5">
             <span
               className={`inline-block h-2 w-2 flex-shrink-0 rounded-full ${
-                user.emailConfirmedAt ? "bg-green-500" : "bg-amber-400"
+                isDeactivated ? "bg-red-500" : user.emailConfirmedAt ? "bg-green-500" : "bg-amber-400"
               }`}
               aria-hidden="true"
             />
             <span className="text-xs text-[var(--color-text-muted)]">
-              {user.emailConfirmedAt ? "Active" : "Pending"}
-              {" · "}
-              {formatRelativeTime(user.lastSignInAt)}
+              {isDeactivated ? "Deactivated" : user.emailConfirmedAt ? "Active" : "Pending"}
+              {!isDeactivated && <>{" · "}{formatRelativeTime(user.lastSignInAt)}</>}
             </span>
           </div>
         </div>
@@ -347,17 +354,17 @@ function UserDesktopRow({ user, venues, isFirst }: { user: EnrichedUser; venues:
             ))}
           </Select>
         </div>
-        <div className="flex justify-end">
+        <div className="flex items-center justify-end gap-2">
           <SubmitButton
             label="Save changes"
             pendingLabel="Saving..."
-            className="min-w-[6rem]"
             icon={<Save className="h-4 w-4" aria-hidden="true" />}
             hideLabel
           />
+          <UserActionsMenu user={user} currentUserId={currentUserId} />
         </div>
       </form>
-      {!user.emailConfirmedAt && (
+      {!user.emailConfirmedAt && !isDeactivated && (
         <div className="mt-2 pl-1">
           <ResendInviteButton
             userId={user.id}
