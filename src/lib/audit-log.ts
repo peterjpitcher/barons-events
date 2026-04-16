@@ -65,6 +65,11 @@ type AuthEventType =
   | "auth.session.expired.idle"
   | "auth.session.expired.absolute";
 
+export type UserEventType =
+  | "user.deactivated"
+  | "user.reactivated"
+  | "user.deleted";
+
 type LogAuthEventParams = {
   event: AuthEventType;
   userId?: string | null;

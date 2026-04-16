@@ -8,6 +8,8 @@ export type AppUserRow = Database["public"]["Tables"]["users"]["Row"];
 export type EnrichedUser = AppUserRow & {
   emailConfirmedAt: Date | null;
   lastSignInAt: Date | null;
+  deactivated_at: string | null;
+  deactivated_by: string | null;
 };
 
 export async function listUsers(): Promise<AppUserRow[]> {
@@ -67,9 +69,17 @@ export async function listUsersWithAuthData(): Promise<EnrichedUser[]> {
   );
 
   // 4. Merge: public users drive the list. Missing auth record → treat as pending.
+  //    deactivated_at/deactivated_by come from the DB row (post-migration) but aren't
+  //    in the generated Supabase types yet — coerce with defaults for type safety.
   return (publicUsers ?? []).map((user) => {
     const meta = authMap.get(user.id) ?? { emailConfirmedAt: null, lastSignInAt: null };
-    return { ...user, ...meta };
+    const row = user as AppUserRow & { deactivated_at?: string | null; deactivated_by?: string | null };
+    return {
+      ...user,
+      ...meta,
+      deactivated_at: row.deactivated_at ?? null,
+      deactivated_by: row.deactivated_by ?? null,
+    };
   });
 }
 
@@ -144,6 +154,7 @@ export async function listAssignableUsers(): Promise<AssignableUser[]> {
     .from("users")
     .select("id, full_name, email, role")
     .in("role", ASSIGNABLE_ROLES)
+    .is("deactivated_at", null)
     .order("role")
     .order("full_name", { ascending: true });
 
@@ -158,4 +169,21 @@ export async function listAssignableUsers(): Promise<AssignableUser[]> {
     email: row.email,
     role: row.role
   }));
+}
+
+/** Active users eligible as reassignment targets (excludes executives, deactivated, and the target user). */
+export async function listReassignmentTargets(
+  excludeUserId: string
+): Promise<Array<{ id: string; full_name: string | null; email: string; role: string }>> {
+  const db = createSupabaseAdminClient();
+  const { data, error } = await db
+    .from("users")
+    .select("id, full_name, email, role")
+    .is("deactivated_at", null)
+    .neq("id", excludeUserId)
+    .neq("role", "executive")
+    .order("full_name");
+
+  if (error) throw new Error(`Failed to list reassignment targets: ${error.message}`);
+  return data ?? [];
 }

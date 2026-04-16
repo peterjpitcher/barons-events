@@ -254,6 +254,7 @@ async function listUsersByRole(role: UserRow["role"]): Promise<Pick<UserRow, "id
     .from("users")
     .select("id,email,full_name")
     .eq("role", role)
+    .is("deactivated_at", null)
     .order("full_name", { ascending: true });
 
   if (error) {

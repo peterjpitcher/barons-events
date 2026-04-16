@@ -11,6 +11,31 @@ export interface AppUser {
   fullName: string | null;
   role: UserRole;
   venueId: string | null;
+  deactivatedAt: string | null;
+}
+
+/** Counts of content owned by a user, used in deactivation/deletion confirmation dialogs. */
+export interface UserImpactSummary {
+  eventsCreated: number;
+  eventsAssigned: number;
+  planningSeriesOwned: number;
+  planningSeriesCreated: number;
+  planningItemsOwned: number;
+  planningItemsCreated: number;
+  planningTasks: number;
+  planningTaskAssignees: number;
+  taskTemplateDefaults: number;
+  artistsCreated: number;
+  eventArtistsCreated: number;
+  shortLinksCreated: number;
+  venueDefaults: number;
+  sopDefaultAssignees: number;
+  approvalsReviewed: number;
+  eventVersionsSubmitted: number;
+  debriefsSubmitted: number;
+  eventsDeletedBy: number;
+  tasksCompletedBy: number;
+  venueOverridesCreated: number;
 }
 
 export type EventStatus =

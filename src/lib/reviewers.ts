@@ -19,6 +19,7 @@ export async function listApprovers(): Promise<ApproverOption[]> {
     .from("users")
     .select("id, full_name, email")
     .eq("role", "administrator")
+    .is("deactivated_at", null)
     .order("full_name", { ascending: true });
 
   if (error) {

@@ -59,11 +59,16 @@ export const getCurrentUser = cache(async function getCurrentUser(): Promise<App
 
   const { data: profile } = await supabase
     .from("users")
-    .select("id,email,full_name,role,venue_id")
+    .select("id,email,full_name,role,venue_id,deactivated_at")
     .eq("id", userId)
     .maybeSingle();
 
   if (!profile) {
+    return null;
+  }
+
+  // Deactivated users are treated as unauthenticated
+  if (profile.deactivated_at) {
     return null;
   }
 
@@ -78,7 +83,8 @@ export const getCurrentUser = cache(async function getCurrentUser(): Promise<App
     email: profile.email,
     fullName: profile.full_name,
     role,
-    venueId: profile.venue_id
+    venueId: profile.venue_id,
+    deactivatedAt: profile.deactivated_at
   };
 });
 

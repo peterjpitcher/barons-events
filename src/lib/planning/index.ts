@@ -408,6 +408,7 @@ export async function listPlanningUsers(): Promise<PlanningPerson[]> {
   const { data, error } = await admin
     .from("users")
     .select("id,full_name,email,role")
+    .is("deactivated_at", null)
     .order("full_name", { ascending: true });
 
   if (error) {
