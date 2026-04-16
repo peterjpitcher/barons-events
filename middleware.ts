@@ -318,18 +318,6 @@ export async function middleware(req: NextRequest) {
     }
   }
 
-  // Step 7: Refresh cookie lifetime when DB expiry was extended (sliding window).
-  // Must be on the final success path — after all redirect/mismatch checks have passed.
-  if (session.refreshed && session.newExpiresAt) {
-    const newMaxAge = Math.floor((session.newExpiresAt.getTime() - Date.now()) / 1000);
-    if (newMaxAge > 0) {
-      res.cookies.set(SESSION_COOKIE_NAME, appSessionId, {
-        ...makeSessionCookieOptions(),
-        maxAge: newMaxAge
-      });
-    }
-  }
-
   // Step 7: CSRF token — generate if absent
   const existingCsrf = req.cookies.get(CSRF_COOKIE_NAME)?.value;
   if (!existingCsrf) {
