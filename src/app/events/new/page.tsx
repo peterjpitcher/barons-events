@@ -6,6 +6,7 @@ import { canManageEvents } from "@/lib/roles";
 import { listVenues } from "@/lib/venues";
 import { listEventTypes } from "@/lib/event-types";
 import { listArtists } from "@/lib/artists";
+import { listAssignableUsers } from "@/lib/users";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -41,11 +42,12 @@ export default async function NewEventPage({ searchParams }: PageProps) {
     searchParams?.then((params) => params as SearchParams).catch(() => ({} as SearchParams)) ??
     Promise.resolve({} as SearchParams);
 
-  const [resolvedSearchParams, venues, eventTypes, artists] = await Promise.all([
+  const [resolvedSearchParams, venues, eventTypes, artists, assignableUsers] = await Promise.all([
     searchParamsPromise,
     listVenues(),
     listEventTypes(),
-    listArtists()
+    listArtists(),
+    listAssignableUsers()
   ]);
   const availableVenues = user.role === "office_worker" ? venues.filter((venue) => venue.id === user.venueId) : venues;
   const initialStartAt = parseDateParam(resolvedSearchParams.startAt);
@@ -75,6 +77,7 @@ export default async function NewEventPage({ searchParams }: PageProps) {
         initialStartAt={initialStartAt}
         initialEndAt={initialEndAt}
         initialVenueId={initialVenueId}
+        users={assignableUsers.map((u) => ({ id: u.id, name: u.name }))}
       />
     </div>
   );

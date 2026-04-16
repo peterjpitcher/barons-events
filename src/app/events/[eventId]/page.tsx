@@ -193,6 +193,9 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
   if (event.assignee_id) {
     actorIds.add(event.assignee_id);
   }
+  if (event.manager_responsible_id) {
+    actorIds.add(event.manager_responsible_id);
+  }
   event.approvals.forEach((approval) => {
     if (approval.reviewer_id) {
       actorIds.add(approval.reviewer_id);
@@ -577,6 +580,12 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
                 <span className="font-semibold text-[var(--color-text)]">Created by:</span>{" "}
                 {event.created_by === user.id ? "You" : resolveUserName(event.created_by)}
               </span>
+              {event.manager_responsible_id ? (
+                <span>
+                  <span className="font-semibold text-[var(--color-text)]">Manager responsible:</span>{" "}
+                  {resolveUserName(event.manager_responsible_id)}
+                </span>
+              ) : null}
             </div>
             {(user.role === "administrator" ||
               (user.role === "office_worker" && event.venue_id === user.venueId)) ? (
@@ -598,6 +607,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
           eventTypes={eventTypes.map((type) => type.label)}
           role={user.role}
           userVenueId={user.venueId}
+          users={assignableUsers.map((u) => ({ id: u.id, name: u.name }))}
           sidebar={
             <div className="space-y-6">
               <Card>

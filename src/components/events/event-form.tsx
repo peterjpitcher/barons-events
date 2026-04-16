@@ -41,6 +41,7 @@ export type EventFormProps = {
   initialEndAt?: string;
   initialVenueId?: string;
   sidebar?: ReactNode;
+  users?: Array<{ id: string; name: string }>;
 };
 
 function toLocalInputValue(date?: string | null) {
@@ -152,7 +153,8 @@ export function EventForm({
   initialStartAt,
   initialEndAt,
   initialVenueId,
-  sidebar
+  sidebar,
+  users
 }: EventFormProps) {
   const [draftState, draftAction, isSavingPending] = useActionState(saveEventDraftAction, undefined);
   const [submitState, submitAction, isSubmittingPending] = useActionState(submitEventForReviewAction, undefined);
@@ -319,8 +321,8 @@ export function EventForm({
   const [endValue, setEndValue] = useState(toLocalInputValue(defaultValues?.end_at ?? initialEndAt));
   const [endDirty, setEndDirty] = useState(Boolean(defaultValues?.end_at ?? initialEndAt));
   const [eventNotes, setEventNotes] = useState(defaultValues?.notes ?? "");
-  const [managerResponsible, setManagerResponsible] = useState((defaultValues as any)?.manager_responsible ?? "");
-  const [managerDirty, setManagerDirty] = useState(Boolean((defaultValues as any)?.manager_responsible));
+  const [managerResponsibleId, setManagerResponsibleId] = useState<string>((defaultValues as any)?.manager_responsible_id ?? "");
+  const [managerDirty, setManagerDirty] = useState(Boolean((defaultValues as any)?.manager_responsible_id));
   const [bookingType, setBookingType] = useState(defaultValues?.booking_type ?? "");
   const [ticketPrice, setTicketPrice] = useState(defaultValues?.ticket_price != null ? String(defaultValues.ticket_price) : "");
   const [selectedGoals, setSelectedGoals] = useState<Set<string>>(new Set(defaultGoalValues));
@@ -350,7 +352,7 @@ export function EventForm({
     setEventTypeValue(defaultValues?.event_type ?? eventTypes[0] ?? "");
     setVenueSpaceValue(defaultValues?.venue_space ?? "");
     setEventNotes(defaultValues?.notes ?? "");
-    setManagerResponsible((defaultValues as any)?.manager_responsible ?? "");
+    setManagerResponsibleId((defaultValues as any)?.manager_responsible_id ?? "");
     setTicketPrice(defaultValues?.ticket_price != null ? String(defaultValues.ticket_price) : "");
     setSelectedArtistIds(getLinkedArtistSelection(defaultValues).ids);
     setSelectedGoals(
@@ -441,15 +443,15 @@ export function EventForm({
     setSelectedVenueId(value);
     if (!managerDirty) {
       const venue = venues.find((v) => v.id === value);
-      setManagerResponsible(venue?.default_manager_responsible ?? "");
+      setManagerResponsibleId(venue?.default_manager_responsible_id ?? "");
     }
   }
 
   useEffect(() => {
     if (!managerDirty && selectedVenueId) {
       const venue = venues.find((v) => v.id === selectedVenueId);
-      if (venue?.default_manager_responsible) {
-        setManagerResponsible(venue.default_manager_responsible);
+      if (venue?.default_manager_responsible_id) {
+        setManagerResponsibleId(venue.default_manager_responsible_id);
       }
     }
     // Only run on mount
@@ -780,18 +782,22 @@ export function EventForm({
 
   const managerResponsibleField = (
     <div className="space-y-2">
-      <Label htmlFor="managerResponsible">Manager Responsible</Label>
-      <Input
-        id="managerResponsible"
-        name="managerResponsible"
-        maxLength={200}
-        value={managerResponsible}
-        onChange={(event) => {
+      <Label htmlFor="managerResponsibleId">Manager Responsible</Label>
+      <select
+        id="managerResponsibleId"
+        name="managerResponsibleId"
+        value={managerResponsibleId}
+        onChange={(e) => {
           setManagerDirty(true);
-          setManagerResponsible(event.target.value);
+          setManagerResponsibleId(e.target.value);
         }}
-        placeholder="Enter manager name"
-      />
+        className="flex h-10 w-full rounded-md border border-[var(--color-border)] bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-400)] focus-visible:ring-offset-2"
+      >
+        <option value="">No manager assigned</option>
+        {(users ?? []).map((u) => (
+          <option key={u.id} value={u.id}>{u.name}</option>
+        ))}
+      </select>
       <p className="text-xs text-subtle">
         The on-site manager accountable for this event.
       </p>
