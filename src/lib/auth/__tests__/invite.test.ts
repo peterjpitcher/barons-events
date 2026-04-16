@@ -77,7 +77,14 @@ vi.mock("@/lib/supabase/admin", () => ({
         getUserById: mockGetUserById
       }
     },
-    from: vi.fn().mockReturnValue({ upsert: mockUpsert })
+    from: vi.fn().mockReturnValue({
+      upsert: mockUpsert,
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+        }),
+      }),
+    })
   }))
 }));
 
@@ -132,7 +139,8 @@ const ADMIN_USER: AppUser = {
   email: "admin@example.com",
   fullName: "Alice Admin",
   role: "administrator",
-  venueId: null
+  venueId: null,
+  deactivatedAt: null
 };
 
 // ─── Suite ───────────────────────────────────────────────────────────────────

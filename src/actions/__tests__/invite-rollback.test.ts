@@ -55,7 +55,12 @@ vi.mock("@/lib/supabase/admin", () => ({
       }
     },
     from: vi.fn(() => ({
-      upsert: upsertMock
+      upsert: upsertMock,
+      select: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+        })),
+      })),
     }))
   }))
 }));
@@ -96,7 +101,8 @@ const centralPlanner = {
   email: "planner@example.com",
   fullName: "Test Admin",
   role: "administrator" as const,
-  venueId: null
+  venueId: null,
+  deactivatedAt: null
 };
 
 // ─── Setup ────────────────────────────────────────────────────────────────────
@@ -276,7 +282,8 @@ describe("inviteUserAction — authorization checks", () => {
       email: "worker@example.com",
       fullName: "An Office Worker",
       role: "office_worker",
-      venueId: null
+      venueId: null,
+      deactivatedAt: null
     });
 
     const result = await inviteUserAction(undefined, validInviteFormData());

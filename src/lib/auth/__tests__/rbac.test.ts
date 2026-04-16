@@ -79,6 +79,7 @@ function makeSupabaseClient(
     full_name: string | null;
     role: string;
     venue_id: string | null;
+    deactivated_at: string | null;
   } | null
 ) {
   // Chain: supabase.from('users').select(...).eq(...).maybeSingle()
@@ -104,7 +105,8 @@ const validAdminProfile = {
   email: "admin@example.com",
   full_name: "Test Admin",
   role: "administrator",
-  venue_id: null
+  venue_id: null,
+  deactivated_at: null
 };
 
 /** Convenience: the expected AppUser produced from validAdminProfile. */
@@ -113,7 +115,8 @@ const validAdminUser: AppUser = {
   email: "admin@example.com",
   fullName: "Test Admin",
   role: "administrator",
-  venueId: null
+  venueId: null,
+  deactivatedAt: null
 };
 
 /** Build a valid CSRF request with matching cookie and header. */
@@ -170,7 +173,8 @@ describe("getCurrentUser", () => {
           email: "rogue@example.com",
           full_name: null,
           role: "super_admin", // not in the allowed set
-          venue_id: null
+          venue_id: null,
+          deactivated_at: null
         }
       )
     );
@@ -210,7 +214,8 @@ describe("normalizeRole — final 3-role model", () => {
             email: `${role}@example.com`,
             full_name: null,
             role,
-            venue_id: null
+            venue_id: null,
+            deactivated_at: null
           }
         )
       );
@@ -231,7 +236,8 @@ describe("normalizeRole — final 3-role model", () => {
           email: "unknown@example.com",
           full_name: null,
           role: "unknown_role",
-          venue_id: null
+          venue_id: null,
+          deactivated_at: null
         }
       )
     );
@@ -250,7 +256,8 @@ describe("normalizeRole — final 3-role model", () => {
           email: "cp@example.com",
           full_name: null,
           role: "central_planner",
-          venue_id: null
+          venue_id: null,
+          deactivated_at: null
         }
       )
     );
@@ -269,7 +276,8 @@ describe("normalizeRole — final 3-role model", () => {
           email: "vm@example.com",
           full_name: null,
           role: "venue_manager",
-          venue_id: "v1"
+          venue_id: "v1",
+          deactivated_at: null
         }
       )
     );
@@ -288,7 +296,8 @@ describe("normalizeRole — final 3-role model", () => {
           email: "rev@example.com",
           full_name: null,
           role: "reviewer",
-          venue_id: null
+          venue_id: null,
+          deactivated_at: null
         }
       )
     );
@@ -340,7 +349,8 @@ describe("requireAdmin", () => {
           email: "worker@example.com",
           full_name: "Office Worker",
           role: "office_worker",
-          venue_id: "venue-1"
+          venue_id: "venue-1",
+          deactivated_at: null
         }
       )
     );
@@ -358,7 +368,8 @@ describe("requireAdmin", () => {
           email: "exec@example.com",
           full_name: "Executive",
           role: "executive",
-          venue_id: null
+          venue_id: null,
+          deactivated_at: null
         }
       )
     );
@@ -439,7 +450,8 @@ describe("withAdminAuth", () => {
           email: "worker@example.com",
           full_name: "A Worker",
           role: "office_worker",
-          venue_id: null
+          venue_id: null,
+          deactivated_at: null
         }
       )
     );
@@ -616,7 +628,8 @@ describe("withAdminAuthAndCSRF", () => {
           email: "executive@example.com",
           full_name: "An Executive",
           role: "executive",
-          venue_id: null
+          venue_id: null,
+          deactivated_at: null
         }
       )
     );

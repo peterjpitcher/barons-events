@@ -20,6 +20,7 @@ const administrator: AppUser = {
   fullName: "Administrator",
   role: "administrator",
   venueId: null,
+  deactivatedAt: null,
 };
 
 const officeWorker: AppUser = {
@@ -28,6 +29,7 @@ const officeWorker: AppUser = {
   fullName: "Office Worker",
   role: "office_worker",
   venueId: "venue-42",
+  deactivatedAt: null,
 };
 
 /** Build a raw DB row as Supabase would return it. */

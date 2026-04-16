@@ -305,6 +305,7 @@ describe("cancelBookingAction", () => {
       fullName: "Staff User",
       role: "administrator",
       venueId: null,
+      deactivatedAt: null,
     });
     mockAdminBookingLookup("event-id");
     mockCancelBooking.mockResolvedValue(undefined);
@@ -321,6 +322,7 @@ describe("cancelBookingAction", () => {
       fullName: "Staff User",
       role: "administrator",
       venueId: null,
+      deactivatedAt: null,
     });
     mockAdminBookingLookup("event-id");
     mockCancelBooking.mockRejectedValue(new Error("DB error"));

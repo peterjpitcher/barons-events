@@ -20,6 +20,13 @@ vi.mock("@/lib/auth/session", () => ({
   validateSession: (...args: unknown[]) => mockValidateSession(...args),
 }));
 
+const mockAdminFrom = vi.fn();
+vi.mock("@/lib/supabase/admin", () => ({
+  createSupabaseAdminClient: vi.fn(() => ({
+    from: mockAdminFrom,
+  })),
+}));
+
 // ── Import after mocks ────────────────────────────────────────────────────────
 
 import { GET } from "../route";
@@ -37,6 +44,14 @@ describe("GET /api/auth/session-check", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     setupEnv();
+    // Default: user is active (not deactivated)
+    mockAdminFrom.mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          single: vi.fn().mockResolvedValue({ data: { deactivated_at: null }, error: null }),
+        }),
+      }),
+    });
   });
 
   it("should return 200 when both Supabase user and app session are valid", async () => {

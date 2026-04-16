@@ -47,6 +47,7 @@ describe("createVenueAction", () => {
       fullName: "Test Admin",
       role: "administrator",
       venueId: null,
+      deactivatedAt: null,
     });
     mockCreateVenue.mockResolvedValue(undefined);
 
@@ -73,6 +74,7 @@ describe("createVenueAction", () => {
       fullName: "Test Admin",
       role: "administrator",
       venueId: null,
+      deactivatedAt: null,
     });
     mockCreateVenue.mockResolvedValue(undefined);
 
@@ -101,6 +103,7 @@ describe("updateVenueAction", () => {
       fullName: "Test Admin",
       role: "administrator",
       venueId: null,
+      deactivatedAt: null,
     });
     mockUpdateVenue.mockResolvedValue(undefined);
 

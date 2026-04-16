@@ -18,6 +18,7 @@ const administrator: AppUser = {
   fullName: "Administrator",
   role: "administrator",
   venueId: null,
+  deactivatedAt: null,
 };
 
 const officeWorker: AppUser = {
@@ -26,6 +27,7 @@ const officeWorker: AppUser = {
   fullName: "Office Worker",
   role: "office_worker",
   venueId: "venue-abc",
+  deactivatedAt: null,
 };
 
 const sampleCustomerRow = {
