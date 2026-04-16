@@ -216,10 +216,8 @@ async function fetchReviewQueueTodos(user: AppUser, today: string): Promise<Todo
     .order("start_at", { ascending: true })
     .limit(20);
 
-  // Non-admin reviewers only see events assigned to them
-  if (user.role !== "administrator") {
-    query = query.eq("assignee_id", user.id);
-  }
+  // Personal dashboard: always scope to events assigned to this user
+  query = query.eq("assignee_id", user.id);
 
   const { data, error } = await query;
   if (error) throw error;
@@ -288,12 +286,8 @@ async function fetchDebriefTodos(user: AppUser, today: string): Promise<TodoItem
     .order("end_at", { ascending: true })
     .limit(10);
 
-  // Scope by role/venue
-  if (user.role !== "administrator" && user.venueId) {
-    query = query.eq("venue_id", user.venueId);
-  } else if (user.role !== "administrator") {
-    query = query.eq("created_by", user.id);
-  }
+  // Personal dashboard: scope to events user created or is assigned to
+  query = query.or(`created_by.eq.${user.id},assignee_id.eq.${user.id}`);
 
   const { data, error } = await query;
   if (error) throw error;
@@ -345,9 +339,8 @@ export async function getDebriefsDue(user: AppUser): Promise<Array<{
     .order("end_at", { ascending: false })
     .limit(10);
 
-  if (user.role !== "administrator" && user.venueId) {
-    query = query.eq("venue_id", user.venueId);
-  }
+  // Personal dashboard: scope to events user created or is assigned to
+  query = query.or(`created_by.eq.${user.id},assignee_id.eq.${user.id}`);
 
   const { data, error } = await query;
   if (error) throw error;
