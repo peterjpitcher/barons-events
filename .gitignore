@@ -24,3 +24,8 @@ yarn-error.log*
 .superpowers/
 .worktrees/
 .claude/session-context.md
+
+# Graphify / Session-Setup
+graphify-out/
+.claude/changes-manifest.log
+docs/architecture/.section-hashes.json
