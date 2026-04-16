@@ -337,7 +337,7 @@ describe("destroyAllSessionsForUser", () => {
 // ── cleanupExpiredSessions ────────────────────────────────────────────────────
 
 describe("cleanupExpiredSessions", () => {
-  it("calls delete with expires_at < now (absolute expiry cleanup)", async () => {
+  it("calls delete with last_activity_at < 90 days ago (90-day staleness cleanup)", async () => {
     const inFn = vi.fn(() => Promise.resolve({ data: null, error: null }));
     const neqFn = vi.fn(() => ({ neq: vi.fn(() => Promise.resolve({ data: null, error: null })) }));
     const ltFn = vi.fn(() => {
@@ -352,8 +352,8 @@ describe("cleanupExpiredSessions", () => {
 
     // delete called 4 times: expires_at, idle, login_attempts (non-reset), login_attempts (reset)
     expect(deleteFn).toHaveBeenCalled();
-    // First call: absolute expiry cleanup
-    expect(ltFn).toHaveBeenCalledWith("expires_at", expect.any(String));
+    // First call: 90-day staleness cleanup
+    expect(ltFn).toHaveBeenCalledWith("last_activity_at", expect.any(String));
   });
 
   it("cleans up login_attempts with separate windows for login vs reset rows", async () => {
