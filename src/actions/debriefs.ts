@@ -78,7 +78,7 @@ export async function submitDebriefAction(
     const supabase = await createSupabaseActionClient();
     const { data: event, error: eventError } = await supabase
       .from("events")
-      .select("id, created_by, status")
+      .select("id, created_by, status, manager_responsible_id")
       .eq("id", values.eventId)
       .maybeSingle();
 
@@ -89,8 +89,13 @@ export async function submitDebriefAction(
       return { success: false, message: "Event not found." };
     }
 
-    if (user.role === "office_worker" && event.created_by !== user.id) {
-      return { success: false, message: "You can only submit debriefs for your own events." };
+    // Manager responsible check with creator fallback
+    if (user.role !== "administrator") {
+      const isManager = event.manager_responsible_id === user.id;
+      const isCreatorFallback = !event.manager_responsible_id && event.created_by === user.id;
+      if (!isManager && !isCreatorFallback) {
+        return { success: false, message: "You do not have permission to submit this debrief." };
+      }
     }
 
     if (!["approved", "completed"].includes(event.status)) {
@@ -126,8 +131,11 @@ export async function submitDebriefAction(
     try {
       const admin = createSupabaseAdminClient();
       let updateQuery = admin.from("events").update({ status: "completed" }).eq("id", values.eventId);
-      if (user.role === "office_worker") {
-        updateQuery = updateQuery.eq("created_by", user.id);
+      if (user.role !== "administrator") {
+        // Manager responsible can also update status
+        updateQuery = updateQuery.or(
+          `manager_responsible_id.eq.${user.id},and(manager_responsible_id.is.null,created_by.eq.${user.id})`
+        );
       }
       const { error: adminError } = await updateQuery;
       if (!adminError) {

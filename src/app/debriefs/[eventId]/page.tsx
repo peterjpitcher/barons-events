@@ -17,8 +17,9 @@ export default async function DebriefPage({ params }: { params: Promise<{ eventI
     notFound();
   }
 
-  const allowed =
-    user.role === "administrator" || (user.role === "office_worker" && event.created_by === user.id);
+  const isManager = event.manager_responsible_id === user.id;
+  const isCreatorFallback = !event.manager_responsible_id && event.created_by === user.id;
+  const allowed = user.role === "administrator" || isManager || isCreatorFallback;
 
   if (!allowed) {
     redirect("/unauthorized");
