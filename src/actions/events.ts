@@ -650,7 +650,7 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
     costTotal: formData.get("costTotal") ?? undefined,
     costDetails: formData.get("costDetails") ?? undefined,
     notes: formData.get("notes") ?? undefined,
-    managerResponsible: formData.get("managerResponsible") ?? undefined,
+    managerResponsibleId: formData.get("managerResponsibleId") ?? undefined,
     publicTitle: formData.get("publicTitle") ?? undefined,
     publicTeaser: formData.get("publicTeaser") ?? undefined,
     publicDescription: formData.get("publicDescription") ?? undefined,
@@ -687,6 +687,21 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
       let updated: Awaited<ReturnType<typeof updateEventDraft>>["event"];
       let strippedColumns: string[];
       let mismatches: string[];
+
+      // Only admin or event creator can set manager_responsible_id
+      let managerResponsibleIdValue: string | null = values.managerResponsibleId || null;
+      if (managerResponsibleIdValue && user.role !== "administrator") {
+        const supabaseCheck = await createSupabaseActionClient();
+        const { data: ownerCheck } = await supabaseCheck
+          .from("events")
+          .select("created_by")
+          .eq("id", values.eventId)
+          .single();
+        if (ownerCheck?.created_by !== user.id) {
+          managerResponsibleIdValue = null; // Strip — user is not admin or creator
+        }
+      }
+
       try {
         const result = await updateEventDraft(values.eventId, {
           venue_id: values.venueId,
@@ -709,7 +724,7 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
           cost_details: values.costDetails ?? null,
           goal_focus: values.goalFocus ?? null,
           notes: values.notes ?? null,
-          manager_responsible: values.managerResponsible ?? null,
+          manager_responsible_id: managerResponsibleIdValue,
           public_title: values.publicTitle ?? null,
           public_teaser: values.publicTeaser ?? null,
           public_description: values.publicDescription ?? null,
@@ -850,7 +865,7 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
       costDetails: values.costDetails ?? null,
       goalFocus: values.goalFocus ?? null,
       notes: values.notes ?? null,
-      managerResponsible: values.managerResponsible ?? null,
+      managerResponsibleId: values.managerResponsibleId || null,
       publicTitle: values.publicTitle ?? null,
       publicTeaser: values.publicTeaser ?? null,
       publicDescription: values.publicDescription ?? null,
@@ -1026,7 +1041,7 @@ export async function submitEventForReviewAction(
           costTotal: formData.get("costTotal") ?? undefined,
           costDetails: formData.get("costDetails") ?? undefined,
           notes: formData.get("notes") ?? undefined,
-          managerResponsible: formData.get("managerResponsible") ?? undefined,
+          managerResponsibleId: formData.get("managerResponsibleId") ?? undefined,
           publicTitle: formData.get("publicTitle") ?? undefined,
           publicTeaser: formData.get("publicTeaser") ?? undefined,
           publicDescription: formData.get("publicDescription") ?? undefined,
@@ -1078,7 +1093,7 @@ export async function submitEventForReviewAction(
         costDetails: values.costDetails ?? null,
         goalFocus: values.goalFocus ?? null,
         notes: values.notes ?? null,
-        managerResponsible: values.managerResponsible ?? null,
+        managerResponsibleId: values.managerResponsibleId || null,
         publicTitle: values.publicTitle ?? null,
         publicTeaser: values.publicTeaser ?? null,
         publicDescription: values.publicDescription ?? null,
