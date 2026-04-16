@@ -41,7 +41,7 @@ export function BookingForm({ eventId, maxTickets, isSoldOut, nonce }: BookingFo
       <div className="rounded-lg bg-white border border-[#cbd5db] p-6 text-center space-y-2">
         <p className="text-lg font-semibold text-[#273640]">You&apos;re booked in!</p>
         <p className="text-[#637c8c] text-sm">
-          We&apos;ve sent a confirmation text to {bookedMobile}.
+          Your booking has been confirmed.
         </p>
       </div>
     );
