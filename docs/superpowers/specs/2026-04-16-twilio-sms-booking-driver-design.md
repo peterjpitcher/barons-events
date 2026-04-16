@@ -397,15 +397,15 @@ Add to `vercel.json` crons array:
 | `vercel.json` | Add cron schedule |
 | `.env.example` | Add `TWILIO_WEBHOOK_URL` |
 
-## 17. Assumptions Requiring Product Decision
+## 17. Product Decisions (Resolved)
 
-These items were flagged during adversarial review and need human confirmation:
+Decisions confirmed 2026-04-16:
 
-1. **Cancellation re-eligibility:** If a customer books via campaign then cancels, should they receive subsequent waves? Current design: no (permanent suppression). Recommendation: keep suppression for voluntary cancellations.
-2. **Customer stats RPC scope:** `list_customers_with_stats` currently counts all booking statuses. Should it be fixed to confirmed-only as part of this work? Recommendation: yes, include it.
-3. **Marketing consent wording:** The current booking form consent text does not explicitly mention SMS/text messages. Should consent wording be updated? Recommendation: yes, update and get legal review.
-4. **Send volume limits:** What is the maximum expected campaign volume per cron run? Determines whether Twilio Messaging Service or batching is needed from day one.
-5. **Mixed booking type behaviour:** Current design sends link CTA for `mixed` events. Confirm this is correct or if `mixed` events should be excluded from campaigns.
+1. **Cancellation re-eligibility:** No. Customers who book via campaign then cancel remain permanently suppressed. Re-promoting after voluntary cancellation feels pushy.
+2. **Customer stats RPC scope:** Yes — fix `list_customers_with_stats` to count confirmed bookings only, consistent with all other booking displays.
+3. **Marketing consent wording:** Yes — update consent text to explicitly mention "text messages". Flag for legal review but do not block implementation.
+4. **Send volume limits:** Standard single-number throughput (~1 SMS/sec) is sufficient for launch. No Messaging Service needed yet. If >300 sends per cron run becomes common, add batching as a follow-up.
+5. **Mixed booking type behaviour:** Link CTA confirmed. Mixed events are promoted with a booking page link (reply-to-book is too simplistic for mixed pricing/seating).
 
 ## 18. Testing Strategy
 
