@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { randomUUID } from "crypto";
 import { createSupabaseActionClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { logAuthEvent } from "@/lib/audit-log";
 
 /**
@@ -58,6 +59,21 @@ export async function GET(req: NextRequest) {
       }
     } else {
       return NextResponse.redirect(`${baseUrl}/login?error=missing_token`);
+    }
+
+    // Check if the user is deactivated — block them from completing any auth flow
+    const { data: { user: confirmedUserForCheck } } = await supabase.auth.getUser();
+    if (confirmedUserForCheck) {
+      const adminDb = createSupabaseAdminClient();
+      const { data: userStatus } = await adminDb
+        .from("users")
+        .select("deactivated_at")
+        .eq("id", confirmedUserForCheck.id)
+        .single();
+
+      if (userStatus?.deactivated_at) {
+        return NextResponse.redirect(`${baseUrl}/deactivated`);
+      }
     }
 
     // Redirect based on flow type — invite and recovery always go to password setup.

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { createClient } from "@supabase/supabase-js";
 import { validateSession, SESSION_COOKIE_NAME, makeSessionCookieOptions } from "@/lib/auth/session";
 
 // ─── Configuration ────────────────────────────────────────────────────────────
@@ -16,6 +17,7 @@ const PUBLIC_PATH_PREFIXES = new Set([
   "/reset-password",  // Pre-auth password update form
   "/auth/confirm",    // Token exchange — no session required
   "/unauthorized",    // Shown to authenticated-but-unauthorised users
+  "/deactivated",     // Shown to deactivated users after redirect
   "/l",               // Event landing pages — publicly accessible without auth
 ]);
 
@@ -287,7 +289,36 @@ export async function middleware(req: NextRequest) {
     return redirectRes;
   }
 
-  // Step 6: Refresh cookie lifetime when DB expiry was extended (sliding window).
+  // Step 6: Deactivation check — block deactivated users from accessing protected routes
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (supabaseServiceKey) {
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+    const { data: userStatus } = await supabaseAdmin
+      .from("users")
+      .select("deactivated_at")
+      .eq("id", user.id)
+      .single();
+
+    if (userStatus?.deactivated_at) {
+      // Destroy the session cookie and redirect to deactivated page
+      await supabase.auth.signOut({ scope: "local" });
+      const deactivatedUrl = req.nextUrl.clone();
+      deactivatedUrl.pathname = "/deactivated";
+      deactivatedUrl.search = "";
+      const deactivatedRes = NextResponse.redirect(deactivatedUrl);
+      deactivatedRes.cookies.set(SESSION_COOKIE_NAME, "", {
+        ...makeSessionCookieOptions(),
+        maxAge: 0
+      });
+      for (const cookie of res.headers.getSetCookie()) {
+        deactivatedRes.headers.append("set-cookie", cookie);
+      }
+      applySecurityHeaders(deactivatedRes, nonce);
+      return deactivatedRes;
+    }
+  }
+
+  // Step 7: Refresh cookie lifetime when DB expiry was extended (sliding window).
   // Must be on the final success path — after all redirect/mismatch checks have passed.
   if (session.refreshed && session.newExpiresAt) {
     const newMaxAge = Math.floor((session.newExpiresAt.getTime() - Date.now()) / 1000);

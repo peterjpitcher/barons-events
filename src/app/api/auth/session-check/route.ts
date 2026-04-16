@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { validateSession, SESSION_COOKIE_NAME } from "@/lib/auth/session";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export async function GET(): Promise<NextResponse> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -40,6 +41,21 @@ export async function GET(): Promise<NextResponse> {
 
   if (session.userId !== user.id) {
     return NextResponse.json({ valid: false }, { status: 401 });
+  }
+
+  // Check if user has been deactivated since their session was created
+  const adminClient = createSupabaseAdminClient();
+  const { data: userStatus } = await adminClient
+    .from("users")
+    .select("deactivated_at")
+    .eq("id", user.id)
+    .single();
+
+  if (userStatus?.deactivated_at) {
+    return NextResponse.json(
+      { valid: false, reason: "session_deactivated" },
+      { status: 401 }
+    );
   }
 
   return NextResponse.json({ valid: true }, { status: 200 });

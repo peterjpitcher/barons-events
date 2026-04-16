@@ -152,6 +152,25 @@ export async function signInAction(_: SignInState | undefined, formData: FormDat
     return { success: false, message: "Sign-in failed. Please try again." };
   }
 
+  // Check if user is deactivated before creating a session
+  const adminClient = createSupabaseAdminClient();
+  const { data: userRow } = await adminClient
+    .from("users")
+    .select("deactivated_at")
+    .eq("id", data.user.id)
+    .single();
+
+  if (userRow?.deactivated_at) {
+    await logAuthEvent({
+      event: "auth.login.failure",
+      userId: data.user.id,
+      ipAddress: ip,
+      meta: { reason: "account_deactivated" }
+    });
+    await supabase.auth.signOut();
+    return { success: false, message: "Your account has been deactivated. Contact your administrator." };
+  }
+
   // Clear lockout counter for this IP on successful sign-in
   try {
     const { clearLockoutForIp } = await import("@/lib/auth/session");

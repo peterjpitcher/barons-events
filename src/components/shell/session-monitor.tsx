@@ -17,8 +17,21 @@ export function SessionMonitor(): React.ReactNode {
         credentials: "same-origin",
       });
       if (response.status === 401) {
-        const redirectedFrom = encodeURIComponent(window.location.pathname + window.location.search);
-        window.location.href = `/login?reason=session_expired&redirectedFrom=${redirectedFrom}`;
+        let reason = "session_expired";
+        try {
+          const body = await response.json();
+          if (body?.reason === "session_deactivated") {
+            reason = "session_deactivated";
+          }
+        } catch {
+          // Fall through with default reason
+        }
+        if (reason === "session_deactivated") {
+          window.location.href = "/deactivated";
+        } else {
+          const redirectedFrom = encodeURIComponent(window.location.pathname + window.location.search);
+          window.location.href = `/login?reason=${reason}&redirectedFrom=${redirectedFrom}`;
+        }
         return; // Keep overlay visible during redirect
       }
     } catch {
