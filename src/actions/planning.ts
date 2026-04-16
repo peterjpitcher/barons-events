@@ -443,13 +443,30 @@ async function ensureOwnsParentItemOfTask(
   const supabase = await createSupabaseReadonlyClient();
   const { data: task } = await supabase
     .from("planning_tasks")
-    .select("planning_item_id")
+    .select("planning_item_id, assignee_id")
     .eq("id", taskId)
     .single();
   if (!task) {
     return { success: false, message: "Task not found." };
   }
-  return ensureOwnsParentItem(userId, userRole, task.planning_item_id);
+
+  // Check 1: Parent planning item owner
+  const ownershipError = await ensureOwnsParentItem(userId, userRole, task.planning_item_id);
+  if (!ownershipError) return null;
+
+  // Check 2: Assigned via junction table (multi-assignee)
+  const { data: assigneeRow } = await supabase
+    .from("planning_task_assignees")
+    .select("id")
+    .eq("task_id", taskId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (assigneeRow) return null;
+
+  // Check 3: Legacy single assignee
+  if (task.assignee_id === userId) return null;
+
+  return { success: false, message: "You can only manage tasks on your own planning items." };
 }
 
 const createTaskSchema = z.object({
@@ -568,6 +585,7 @@ export async function togglePlanningTaskStatusAction(input: unknown): Promise<Pl
       console.error("Failed to update blocked status:", blockErr);
     }
     revalidatePath("/planning");
+    revalidatePath("/");
     return { success: true };
   } catch (err: unknown) {
     return { success: false, message: err instanceof Error ? err.message : "Failed to update task status" };

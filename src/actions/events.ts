@@ -1467,6 +1467,7 @@ export async function reviewerDecisionAction(
 
     revalidatePath(`/events/${parsedId.data}`);
     revalidatePath("/reviews");
+    revalidatePath("/");
     return {
       success: true,
       message: websiteCopyPayload ? "Decision recorded and website copy generated." : "Decision recorded."
@@ -1899,6 +1900,7 @@ export async function revertToDraftAction(
     revalidatePath(`/events/${event.id}`);
     revalidatePath("/events");
     revalidatePath("/reviews");
+    revalidatePath("/");
 
     return { success: true, message: "Event reverted to draft." };
   } catch (error) {

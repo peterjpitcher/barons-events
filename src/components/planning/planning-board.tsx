@@ -11,7 +11,7 @@ import { PlanningItemCard, EventOverlayCard, InspirationItemCard } from "@/compo
 import { PlanningItemEditor } from "@/components/planning/planning-item-editor";
 import { PlanningListView } from "@/components/planning/planning-list-view";
 import { PlanningModal } from "@/components/planning/planning-modal";
-import { PlanningTodosByPersonView } from "@/components/planning/planning-todos-by-person-view";
+import { UnifiedTodoList } from "@/components/todos/unified-todo-list";
 import type { PlanningViewEntry } from "@/components/planning/view-types";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -25,7 +25,7 @@ import type {
   PlanningVenueOption,
   TodoAlertFilter
 } from "@/lib/planning/types";
-import { bucketForDayOffset, daysBetween } from "@/lib/planning/utils";
+import { bucketForDayOffset, daysBetween, planningItemsToTodoItems } from "@/lib/planning/utils";
 import { canCreatePlanningItems, canManageOwnPlanningItems, canManageAllPlanning } from "@/lib/roles";
 import type { UserRole } from "@/lib/types";
 
@@ -506,13 +506,13 @@ export function PlanningBoard({ data, venues, canApproveEvents, userRole, curren
       ) : null}
 
       {viewMode === "todos_by_person" ? (
-        <PlanningTodosByPersonView
-          items={filteredPlanningItems}
-          today={data.today}
-          currentUserId={currentUserId}
-          canEdit={userRole ? canManageAllPlanning(userRole) : false}
+        <UnifiedTodoList
+          mode="planning"
+          items={planningItemsToTodoItems(filteredPlanningItems, data.today, userRole ? canManageAllPlanning(userRole) : false, currentUserId ?? "")}
+          currentUserId={currentUserId ?? ""}
+          users={data.users}
           alertFilter={todoAlertFilter}
-          onOpenPlanningItem={(item) => setActiveItemId(item.id)}
+          onOpenPlanningItemId={(id) => setActiveItemId(id)}
         />
       ) : null}
 

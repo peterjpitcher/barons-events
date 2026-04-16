@@ -1,192 +1,187 @@
-import type { ReactNode } from "react";
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth";
-import { getStatusCounts, listEventsForUser, listReviewQueue, findConflicts } from "@/lib/events";
+import {
+  listEventsForUser,
+  getStatusCounts,
+  listReviewQueue,
+  findConflicts,
+} from "@/lib/events";
+import {
+  getDashboardTodoItems,
+  getDebriefsDue,
+  getExecutiveSummaryStats,
+  getRecentActivity,
+} from "@/lib/dashboard";
+import { UnifiedTodoList } from "@/components/todos/unified-todo-list";
+import { UpcomingEventsCard } from "@/components/dashboard/context-cards/upcoming-events-card";
+import { PipelineCard } from "@/components/dashboard/context-cards/pipeline-card";
+import { ConflictsCard } from "@/components/dashboard/context-cards/conflicts-card";
+import { DebriefsOutstandingCard } from "@/components/dashboard/context-cards/debriefs-outstanding-card";
+import { SummaryStatsCard } from "@/components/dashboard/context-cards/summary-stats-card";
+import { RecentActivityCard } from "@/components/dashboard/context-cards/recent-activity-card";
+import { londonDateString } from "@/lib/planning/utils";
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 const roleCopy: Record<string, { heading: string; body: string }> = {
   administrator: {
-    heading: "Today’s planning view",
-    body: "Check in on pending submissions, watch for clashes, and keep the pipeline moving."
+    heading: "Command Centre",
+    body: "Your personal overview of tasks, pipeline status, and upcoming events.",
   },
   office_worker: {
-    heading: "Your upcoming plans",
-    body: "Draft fresh ideas, tidy earlier submissions, and stay on top of feedback."
+    heading: "Your Dashboard",
+    body: "Stay on top of your tasks, submissions, and upcoming plans.",
   },
   executive: {
-    heading: "Snapshot",
-    body: "Track event totals and key updates at a glance."
-  }
+    heading: "Executive Snapshot",
+    body: "Track event totals, activity, and key updates at a glance.",
+  },
 };
 
-export default async function OverviewPage() {
+/** Safely resolve a promise, returning null on failure. */
+async function safeFetch<T>(promise: Promise<T>): Promise<T | null> {
+  try {
+    return await promise;
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
+
+export default async function OverviewPage(): Promise<React.ReactNode> {
   const user = await getCurrentUser();
   if (!user) {
     redirect("/login");
   }
 
-  const copy = roleCopy[user.role] ?? roleCopy["administrator"];
+  const copy = roleCopy[user.role] ?? roleCopy.administrator;
+  const today = londonDateString();
 
-  const cards: ReactNode[] = [];
-  let upcoming: Awaited<ReturnType<typeof listEventsForUser>> = [];
+  // Fetch todo items (all roles)
+  const todoResult = await safeFetch(getDashboardTodoItems(user, today));
 
-  function computeUpcoming(events: Awaited<ReturnType<typeof listEventsForUser>>) {
-    return events
-      .filter((event) => new Date(event.start_at) >= new Date())
-      .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
-      .slice(0, 5);
-  }
+  // Fetch upcoming events (all roles)
+  const allEvents = await safeFetch(listEventsForUser(user));
+  const upcomingEvents = allEvents
+    ? allEvents
+        .filter((event) => new Date(event.start_at) >= new Date())
+        .sort(
+          (a, b) =>
+            new Date(a.start_at).getTime() - new Date(b.start_at).getTime()
+        )
+        .slice(0, 4)
+    : null;
+
+  // Role-specific additional fetches
+  let statusCounts: Record<string, number> | null = null;
+  let conflicts: Awaited<ReturnType<typeof findConflicts>> | null = null;
+  let debriefsDue: Awaited<ReturnType<typeof getDebriefsDue>> | null = null;
+  let summaryStats: Awaited<ReturnType<typeof getExecutiveSummaryStats>> | null =
+    null;
+  let recentActivity: Awaited<ReturnType<typeof getRecentActivity>> | null =
+    null;
 
   if (user.role === "administrator") {
-    const [events, statusCounts, queue, conflicts] = await Promise.all([
-      listEventsForUser(user),
-      getStatusCounts(),
-      listReviewQueue(user),
-      findConflicts()
+    const [sc, cf, dd] = await Promise.all([
+      safeFetch(getStatusCounts()),
+      safeFetch(findConflicts()),
+      safeFetch(getDebriefsDue(user)),
     ]);
-
-    upcoming = computeUpcoming(events);
-
-    cards.push(
-      <Card key="status">
-        <CardHeader>
-          <CardTitle>Pipeline at a glance</CardTitle>
-          <CardDescription>See how the workflow is tracking right now.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-3">
-          {Object.entries(statusCounts).map(([status, count]) => (
-            <div key={status} className="rounded-[var(--radius)] border border-[rgba(39,54,64,0.12)] bg-white/80 px-4 py-3 shadow-soft">
-              <p className="text-sm text-subtle">{status.replace(/_/g, " ")}</p>
-              <p className="text-2xl font-semibold text-[var(--color-primary-700)]">{count}</p>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-    );
-
-    cards.push(
-      <Card key="queue">
-        <CardHeader className="flex items-center justify-between">
-          <div>
-            <CardTitle>Reviews needing attention</CardTitle>
-            <CardDescription>Work with reviewers to keep things moving.</CardDescription>
-          </div>
-          <Button asChild variant="secondary">
-            <Link href="/reviews">Open queue</Link>
-          </Button>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {queue.slice(0, 4).map((event) => (
-            <div key={event.id} className="flex flex-col gap-1 rounded-[var(--radius)] border border-[rgba(39,54,64,0.12)] bg-white/80 px-4 py-3 text-sm shadow-soft md:flex-row md:items-center md:justify-between">
-              <div>
-                <Link
-                  href={`/events/${event.id}`}
-                  className="font-medium text-[var(--color-text)] transition-colors hover:text-[var(--color-primary-600)]"
-                >
-                  {event.title}
-                </Link>
-                <p className="text-subtle">{event.venue?.name ?? ""} · {new Date(event.start_at).toLocaleString("en-GB")}</p>
-              </div>
-              <Badge variant="info">{event.status.replace(/_/g, " ")}</Badge>
-            </div>
-          ))}
-          {queue.length === 0 ? <p className="text-sm text-subtle">All caught up.</p> : null}
-        </CardContent>
-      </Card>
-    );
-
-    cards.push(
-      <Card key="conflicts">
-        <CardHeader>
-          <CardTitle>Potential clashes</CardTitle>
-          <CardDescription>Look out for overlapping events in the same space.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {conflicts.length === 0 ? (
-            <p className="text-sm text-subtle">No conflicts spotted in upcoming plans.</p>
-          ) : (
-            conflicts.map((pair, index) => (
-              <div key={`${pair.event.id}-${index}`} className="rounded-[var(--radius)] border border-[rgba(110,60,61,0.3)] bg-white/80 px-4 py-3 text-sm text-[var(--color-antique-burgundy)] shadow-soft">
-                <Link
-                  href={`/events/${pair.event.id}`}
-                  className="font-semibold transition-colors hover:text-[var(--color-primary-600)]"
-                >
-                  {pair.event.title}
-                </Link>
-                <p>
-                  Overlaps with{" "}
-                  <Link
-                    href={`/events/${pair.conflictingWith.id}`}
-                    className="font-medium transition-colors hover:text-[var(--color-primary-600)]"
-                  >
-                    {pair.conflictingWith.title}
-                  </Link>{" "}
-                  in {pair.event.venue_space} – {pair.event.venue?.name}
-                </p>
-              </div>
-            ))
-          )}
-        </CardContent>
-      </Card>
-    );
-  } else {
-    const events = await listEventsForUser(user);
-    upcoming = computeUpcoming(events);
+    statusCounts = sc;
+    conflicts = cf;
+    debriefsDue = dd;
+  } else if (user.role === "executive") {
+    const [ss, ra] = await Promise.all([
+      safeFetch(getExecutiveSummaryStats()),
+      safeFetch(getRecentActivity()),
+    ]);
+    summaryStats = ss;
+    recentActivity = ra;
   }
 
-  cards.push(
-    <Card key="upcoming">
-      <CardHeader className="flex items-center justify-between">
-        <div>
-          <CardTitle>{user.role === "office_worker" ? "Upcoming at your venue" : "Next confirmed events"}</CardTitle>
-          <CardDescription>Keep everyone lined up for the week ahead.</CardDescription>
-        </div>
-        {(user.role === "office_worker" || user.role === "administrator") && (
-          <Button asChild>
-            <Link href="/events/new">New Event</Link>
-          </Button>
-        )}
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {upcoming.length === 0 ? (
-          <p className="text-sm text-subtle">Nothing upcoming yet.</p>
-        ) : (
-          upcoming.map((event) => (
-            <div key={event.id} className="flex flex-col gap-1 rounded-[var(--radius)] border border-[rgba(39,54,64,0.12)] bg-white/80 px-4 py-3 text-sm shadow-soft md:flex-row md:items-center md:justify-between">
-              <div>
-                <Link
-                  href={`/events/${event.id}`}
-                  className="font-medium text-[var(--color-text)] transition-colors hover:text-[var(--color-primary-600)]"
-                >
-                  {event.title}
-                </Link>
-                <p className="text-subtle">{event.venue?.name ?? ""} · {new Date(event.start_at).toLocaleString("en-GB")}</p>
-              </div>
-              <Badge variant="neutral">{event.status.replace(/_/g, " ")}</Badge>
-            </div>
-          ))
-        )}
-      </CardContent>
-    </Card>
-  );
+  // Compute alert badge counts
+  const overdueCount =
+    todoResult?.items.filter((i) => i.urgency === "overdue").length ?? 0;
+  const dueSoonCount =
+    todoResult?.items.filter((i) => i.urgency === "due_soon").length ?? 0;
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="font-brand-serif text-3xl text-[var(--color-primary-700)]">{copy.heading}</h1>
-          <p className="mt-2 max-w-2xl text-base text-subtle">{copy.body}</p>
+          <h1 className="font-brand-serif text-3xl text-[var(--color-primary-700)]">
+            {copy.heading}
+          </h1>
+          <p className="mt-1 max-w-2xl text-base text-subtle">{copy.body}</p>
         </div>
-        {user.role === "office_worker" && (
-          <Button asChild>
-            <Link href="/events/new">New Event</Link>
-          </Button>
-        )}
+        <div className="flex items-center gap-3">
+          {overdueCount > 0 && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-[rgba(141,68,70,0.12)] px-3 py-1 text-xs font-semibold text-[var(--color-antique-burgundy)]">
+              <span aria-hidden="true">&#9650;</span> {overdueCount} overdue
+            </span>
+          )}
+          {dueSoonCount > 0 && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-[rgba(194,149,76,0.15)] px-3 py-1 text-xs font-semibold text-[var(--color-warm-gold-700,#8B6914)]">
+              <span aria-hidden="true">&#9679;</span> {dueSoonCount} due soon
+            </span>
+          )}
+        </div>
       </div>
-      <div className="grid gap-6 lg:grid-cols-2">{cards}</div>
+
+      {/* 60/40 grid */}
+      <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">
+        {/* Left column — Todo list */}
+        <div>
+          <UnifiedTodoList
+            mode="dashboard"
+            items={todoResult?.items ?? []}
+            currentUserId={user.id}
+            failedSources={todoResult?.errors}
+          />
+        </div>
+
+        {/* Right column — Context cards */}
+        <div className="space-y-4">
+          {user.role === "administrator" && (
+            <>
+              <UpcomingEventsCard
+                events={upcomingEvents}
+                userRole={user.role}
+                hasVenue={Boolean(user.venueId)}
+              />
+              <PipelineCard counts={statusCounts} />
+              <ConflictsCard conflicts={conflicts} />
+              <DebriefsOutstandingCard debriefs={debriefsDue} />
+            </>
+          )}
+
+          {user.role === "office_worker" && (
+            <UpcomingEventsCard
+              events={upcomingEvents}
+              userRole={user.role}
+              hasVenue={Boolean(user.venueId)}
+            />
+          )}
+
+          {user.role === "executive" && (
+            <>
+              <SummaryStatsCard stats={summaryStats} />
+              <RecentActivityCard activity={recentActivity} />
+              <UpcomingEventsCard
+                events={upcomingEvents}
+                userRole={user.role}
+                hasVenue={Boolean(user.venueId)}
+              />
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,4 +1,5 @@
-import type { PlanningBucketKey, RecurrenceFrequency } from "@/lib/planning/types";
+import type { PlanningBucketKey, PlanningItem, RecurrenceFrequency } from "@/lib/planning/types";
+import type { TodoItem, TodoSource, TodoUrgency } from "@/components/todos/todo-item-types";
 import { DISPLAY_TIMEZONE } from "@/lib/datetime";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -245,4 +246,73 @@ export function generateOccurrenceDates(params: {
   }
 
   return dates;
+}
+
+// ---------------------------------------------------------------------------
+// Planning → TodoItem mapping (used by planning board + dashboard)
+// ---------------------------------------------------------------------------
+
+/**
+ * Classify urgency for a todo item (client-safe version).
+ *
+ * Mirrors the logic in src/lib/dashboard.ts classifyTodoUrgency but avoids
+ * importing from the server-only module so this utility stays usable in
+ * client components (e.g. planning-board.tsx).
+ */
+function classifyUrgency(dueDate: string | null, today: string): TodoUrgency {
+  if (!dueDate) return "later";
+  const sevenDaysFromNow = addDays(today, 7);
+  if (dueDate < today) return "overdue";
+  if (dueDate <= sevenDaysFromNow) return "due_soon";
+  return "later";
+}
+
+/**
+ * Convert PlanningItem[] (with nested tasks) into TodoItem[] for the
+ * UnifiedTodoList component.
+ */
+export function planningItemsToTodoItems(
+  items: PlanningItem[],
+  today: string,
+  canManageAll: boolean,
+  currentUserId: string
+): TodoItem[] {
+  const result: TodoItem[] = [];
+
+  for (const item of items) {
+    for (const task of item.tasks) {
+      if (task.status !== "open") continue;
+
+      const isSop = Boolean(task.sopSection || task.sopTemplateTaskId);
+      const source: TodoSource = isSop ? "sop" : "planning";
+
+      const isAssignedViaJunction = task.assignees.some(
+        (a) => a.id === currentUserId
+      );
+      const canToggle =
+        canManageAll ||
+        item.ownerId === currentUserId ||
+        task.assigneeId === currentUserId ||
+        isAssignedViaJunction;
+
+      result.push({
+        id: task.id,
+        source,
+        title: task.title,
+        subtitle: `${isSop ? "SOP Task" : "Planning Task"} \u00B7 ${item.venueName ?? "No venue"} \u00B7 Due ${task.dueDate ?? "TBD"}`,
+        dueDate: task.dueDate ?? null,
+        urgency: classifyUrgency(task.dueDate ?? null, today),
+        canToggle,
+        linkHref: "/planning",
+        parentTitle: item.title,
+        venueName: item.venueName ?? undefined,
+        planningTaskId: task.id,
+        planningItemId: item.id,
+        assigneeId: task.assigneeId ?? undefined,
+        assigneeName: task.assigneeName ?? undefined,
+      });
+    }
+  }
+
+  return result;
 }

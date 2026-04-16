@@ -187,6 +187,7 @@ export async function submitDebriefAction(
     await sendPostEventDigestEmail(values.eventId);
 
     revalidatePath(`/events/${values.eventId}`);
+    revalidatePath("/");
     return { success: true, message: "Debrief saved." };
   } catch (error) {
     console.error(error);
