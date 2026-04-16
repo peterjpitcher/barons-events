@@ -100,6 +100,7 @@ export interface Database {
           booking_enabled: boolean;
           total_capacity: number | null;
           max_tickets_per_booking: number;
+          sms_promo_enabled: boolean;
           created_by: string;
           assignee_id: string | null;
           submitted_at: string | null;

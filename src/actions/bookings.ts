@@ -10,7 +10,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { recordAuditLogEntry } from "@/lib/audit-log";
 import { sendBookingConfirmationSms } from "@/lib/sms";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { MARKETING_CONSENT_WORDING } from "@/lib/booking-consent";
+import { upsertCustomerForBooking, linkBookingToCustomer } from "@/lib/customers";
 import { verifyTurnstile } from "@/lib/turnstile";
 
 
@@ -97,60 +97,27 @@ export async function createBookingAction(
 
   // Upsert customer record — non-blocking (booking already confirmed)
   try {
-    const db = createSupabaseAdminClient();
+    const customerId = await upsertCustomerForBooking({
+      mobile: normalisedMobile,
+      firstName: data.firstName,
+      lastName: data.lastName,
+      email: data.email,
+      marketingOptIn: data.marketingOptIn,
+      bookingId,
+    });
 
-    // Step 1: Upsert core fields. Do NOT include marketing_opt_in here —
-    // it is upgrade-only and handled separately below.
-    // name = last-write-wins; email only set when provided (preserves existing email).
-    const upsertPayload: Record<string, unknown> = {
-      mobile:     normalisedMobile,
-      first_name: data.firstName,
-      last_name:  data.lastName ?? null,
-      updated_at: new Date().toISOString(),
-    };
-    if (data.email) upsertPayload.email = data.email;
+    if (customerId) {
+      await linkBookingToCustomer(bookingId, customerId);
 
-    const { data: upserted, error: upsertError } = await db
-      .from("customers")
-      .upsert(upsertPayload, { onConflict: "mobile" })
-      .select("id, marketing_opt_in")
-      .single();
-
-    if (upsertError) {
-      console.error("Customer upsert failed:", upsertError);
-    } else if (upserted) {
-      // Step 2: Upgrade-only opt-in.
-      // Only write marketing_opt_in when the new value is TRUE.
-      // If new value is false, leave the existing DB value unchanged.
-      const previousOptIn = upserted.marketing_opt_in as boolean;
-      if (data.marketingOptIn && !previousOptIn) {
-        await db
-          .from("customers")
-          .update({ marketing_opt_in: true })
-          .eq("id", upserted.id);
-      }
-
-      // Step 3: Log consent event only when value genuinely changes.
-      const newOptIn = data.marketingOptIn;
-      if (newOptIn !== previousOptIn) {
-        const { error: consentError } = await db
-          .from("customer_consent_events")
-          .insert({
-            customer_id:     upserted.id,
-            event_type:      newOptIn ? "opt_in" : "opt_out",
-            consent_wording: MARKETING_CONSENT_WORDING,
-            booking_id:      bookingId,
-          });
-        if (consentError) {
-          console.error("Consent event insert failed:", consentError);
-        }
-      }
-
-      // Step 4: Link booking to customer
+      // Campaign suppression: mark any pending SMS campaign send as converted
+      const db = createSupabaseAdminClient();
       await db
-        .from("event_bookings")
-        .update({ customer_id: upserted.id })
-        .eq("id", bookingId);
+        .from("sms_campaign_sends")
+        .update({ converted_at: new Date().toISOString() })
+        .eq("customer_id", customerId)
+        .eq("event_id", data.eventId)
+        .eq("status", "sent")
+        .is("converted_at", null);
     }
   } catch (customerErr) {
     console.error("Customer upsert pipeline failed:", customerErr);

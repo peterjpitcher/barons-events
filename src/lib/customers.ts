@@ -1,5 +1,6 @@
 import "server-only";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { MARKETING_CONSENT_WORDING } from "@/lib/booking-consent";
 import type { AppUser, Customer, CustomerWithStats } from "@/lib/types";
 
 function rowToCustomer(row: Record<string, unknown>): Customer {
@@ -119,4 +120,116 @@ export async function getCustomerById(
   }
 
   return { ...rowToCustomer(customerRow as Record<string, unknown>), bookings };
+}
+
+/**
+ * Look up a customer by E.164 mobile number.
+ * Returns a camelCase Customer object or null if not found.
+ */
+export async function findCustomerByMobile(mobile: string): Promise<Customer | null> {
+  const db = createSupabaseAdminClient();
+  const { data, error } = await db
+    .from("customers")
+    .select("*")
+    .eq("mobile", mobile)
+    .maybeSingle();
+
+  if (error) {
+    console.error("findCustomerByMobile failed:", error);
+    return null;
+  }
+  if (!data) return null;
+  return rowToCustomer(data as Record<string, unknown>);
+}
+
+export interface UpsertCustomerForBookingParams {
+  mobile: string;
+  firstName: string;
+  lastName: string | null;
+  email: string | null;
+  marketingOptIn?: boolean;
+  bookingId?: string;
+}
+
+/**
+ * Upsert a customer by mobile (natural key).
+ * - Name is last-write-wins; email only set when provided (preserves existing).
+ * - marketing_opt_in is upgrade-only: only set to true, never downgrade.
+ * - Logs consent events when opt-in status genuinely changes.
+ * Returns the customer ID or null on failure.
+ */
+export async function upsertCustomerForBooking(
+  params: UpsertCustomerForBookingParams,
+): Promise<string | null> {
+  const { mobile, firstName, lastName, email, marketingOptIn = false, bookingId } = params;
+  const db = createSupabaseAdminClient();
+
+  // Step 1: Upsert core fields (not marketing_opt_in — that's upgrade-only)
+  const upsertPayload: Record<string, unknown> = {
+    mobile,
+    first_name: firstName,
+    last_name: lastName ?? null,
+    updated_at: new Date().toISOString(),
+  };
+  if (email) upsertPayload.email = email;
+
+  const { data: upserted, error: upsertError } = await db
+    .from("customers")
+    .upsert(upsertPayload, { onConflict: "mobile" })
+    .select("id, marketing_opt_in")
+    .single();
+
+  if (upsertError) {
+    console.error("Customer upsert failed:", upsertError);
+    return null;
+  }
+  if (!upserted) return null;
+
+  const customerId = upserted.id as string;
+  const previousOptIn = upserted.marketing_opt_in as boolean;
+
+  // Step 2: Upgrade-only opt-in — only write when new value is TRUE and old is FALSE
+  if (marketingOptIn && !previousOptIn) {
+    await db
+      .from("customers")
+      .update({ marketing_opt_in: true })
+      .eq("id", customerId);
+  }
+
+  // Step 3: Log consent event only when value genuinely changes
+  if (marketingOptIn !== previousOptIn) {
+    const { error: consentError } = await db
+      .from("customer_consent_events")
+      .insert({
+        customer_id: customerId,
+        event_type: marketingOptIn ? "opt_in" : "opt_out",
+        consent_wording: MARKETING_CONSENT_WORDING,
+        booking_id: bookingId ?? null,
+      });
+    if (consentError) {
+      console.error("Consent event insert failed:", consentError);
+    }
+  }
+
+  return customerId;
+}
+
+/**
+ * Link a booking to a customer by setting event_bookings.customer_id.
+ */
+export async function linkBookingToCustomer(
+  bookingId: string,
+  customerId: string,
+): Promise<boolean> {
+  const db = createSupabaseAdminClient();
+  const { error } = await db
+    .from("event_bookings")
+    .update({ customer_id: customerId })
+    .eq("id", bookingId);
+
+  if (error) {
+    console.error("linkBookingToCustomer failed:", error);
+    return false;
+  }
+  return true;
 }
