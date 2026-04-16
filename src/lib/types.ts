@@ -29,6 +29,8 @@ export interface UserImpactSummary {
   eventArtistsCreated: number;
   shortLinksCreated: number;
   venueDefaults: number;
+  eventsManagerResponsible: number;
+  venueDefaultManager: number;
   sopDefaultAssignees: number;
   approvalsReviewed: number;
   eventVersionsSubmitted: number;

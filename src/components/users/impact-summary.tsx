@@ -7,7 +7,9 @@ const ownershipItems: { key: keyof UserImpactSummary; label: string }[] = [
   { key: "eventsAssigned", label: "Events assigned" },
   { key: "planningTasks", label: "Planning tasks" },
   { key: "planningSeriesOwned", label: "Planning series" },
+  { key: "eventsManagerResponsible", label: "Events as manager" },
   { key: "venueDefaults", label: "Venue defaults" },
+  { key: "venueDefaultManager", label: "Venue default manager" },
   { key: "artistsCreated", label: "Artists created" },
   { key: "shortLinksCreated", label: "Short links" },
 ];

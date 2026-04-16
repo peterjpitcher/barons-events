@@ -378,7 +378,8 @@ export async function getUserImpactSummary(
     shortLinksCreated, venueDefaults,
     approvalsReviewed, eventVersionsSubmitted,
     debriefsSubmitted, eventsDeletedBy,
-    tasksCompletedBy, venueOverridesCreated
+    tasksCompletedBy, venueOverridesCreated,
+    eventsManagerResponsible, venueDefaultManager
   ] = await Promise.all([
     db.from("events").select("id", { count: "exact", head: true }).eq("created_by", userId),
     db.from("events").select("id", { count: "exact", head: true }).eq("assignee_id", userId),
@@ -400,6 +401,8 @@ export async function getUserImpactSummary(
     db.from("events").select("id", { count: "exact", head: true }).eq("deleted_by", userId),
     db.from("planning_tasks").select("id", { count: "exact", head: true }).eq("completed_by", userId),
     db.from("venue_opening_overrides").select("id", { count: "exact", head: true }).eq("created_by", userId),
+    db.from("events").select("id", { count: "exact", head: true }).eq("manager_responsible_id", userId).is("deleted_at", null),
+    db.from("venues").select("id", { count: "exact", head: true }).eq("default_manager_responsible_id", userId),
   ]);
 
   return {
@@ -417,6 +420,8 @@ export async function getUserImpactSummary(
       eventArtistsCreated: eventArtistsCreated.count ?? 0,
       shortLinksCreated: shortLinksCreated.count ?? 0,
       venueDefaults: venueDefaults.count ?? 0,
+      eventsManagerResponsible: eventsManagerResponsible.count ?? 0,
+      venueDefaultManager: venueDefaultManager.count ?? 0,
       sopDefaultAssignees: 0, // SOP array query requires custom SQL — acceptable to show 0 in UI
       approvalsReviewed: approvalsReviewed.count ?? 0,
       eventVersionsSubmitted: eventVersionsSubmitted.count ?? 0,
