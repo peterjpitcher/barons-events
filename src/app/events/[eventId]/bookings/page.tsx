@@ -4,7 +4,9 @@ import { ChevronLeft } from "lucide-react";
 import { requireAuth } from "@/lib/auth";
 import { getEventDetail } from "@/lib/events";
 import { getBookingsForEvent, getConfirmedTicketCount } from "@/lib/bookings";
+import { getCampaignStatsForEvent } from "@/lib/sms-campaign";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { SmsCampaignStats } from "@/components/events/sms-campaign-stats";
 import { Badge } from "@/components/ui/badge";
 import { CancelBookingButton } from "@/components/bookings/cancel-booking-button";
 
@@ -50,9 +52,10 @@ export default async function BookingsPage({
     redirect("/events");
   }
 
-  const [bookings, totalTickets] = await Promise.all([
+  const [bookings, totalTickets, campaignStats] = await Promise.all([
     getBookingsForEvent(eventId),
     getConfirmedTicketCount(eventId),
+    getCampaignStatsForEvent(eventId),
   ]);
 
   const confirmedBookings = bookings.filter((b) => b.status === "confirmed");
@@ -165,6 +168,9 @@ export default async function BookingsPage({
           </table>
         </div>
       )}
+
+      {/* SMS Campaign Stats */}
+      <SmsCampaignStats stats={campaignStats} />
     </div>
   );
 }
