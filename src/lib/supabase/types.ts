@@ -240,7 +240,7 @@ export interface Database {
           user_id: string;
           created_at: string;
           last_activity_at: string;
-          expires_at: string;
+          expires_at: string | null;
           user_agent: string | null;
           ip_address: string | null;
         };

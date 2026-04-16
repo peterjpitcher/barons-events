@@ -64,7 +64,6 @@ describe("GET /api/auth/session-check", () => {
       userId: "user-123",
       createdAt: new Date(),
       lastActivityAt: new Date(),
-      expiresAt: new Date(Date.now() + 86400000),
       metadata: {},
     });
 
@@ -120,7 +119,6 @@ describe("GET /api/auth/session-check", () => {
       userId: "different-user-456",
       createdAt: new Date(),
       lastActivityAt: new Date(),
-      expiresAt: new Date(Date.now() + 86400000),
       metadata: {},
     });
 
