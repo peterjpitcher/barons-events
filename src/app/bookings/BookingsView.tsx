@@ -68,11 +68,14 @@ export function BookingsView({ groups }: Props) {
 
         if (bookings.length === 0) return null;
 
+        // Only count confirmed bookings in summary totals
+        const confirmedBookings = bookings.filter((b) => b.status === "confirmed");
+
         return {
           ...group,
           bookings,
-          totalBookings: bookings.length,
-          totalTickets: bookings.reduce((s, b) => s + b.ticketCount, 0),
+          totalBookings: confirmedBookings.length,
+          totalTickets: confirmedBookings.reduce((s, b) => s + b.ticketCount, 0),
         };
       })
       .filter((g): g is BookingGroup => g !== null);

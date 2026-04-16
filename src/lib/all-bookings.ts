@@ -111,17 +111,23 @@ export async function listAllBookingsForUser(
     const group   = groupMap.get(eventId)!;
     const tickets = row.ticket_count as number;
 
+    const status = row.status as BookingStatus;
+
     group.bookings.push({
       id:          row.id as string,
       firstName:   row.first_name as string,
       lastName:    (row.last_name as string | null) ?? null,
       mobile:      row.mobile as string,
       ticketCount: tickets,
-      status:      row.status as BookingStatus,
+      status,
       createdAt:   new Date(row.created_at as string),
     });
-    group.totalBookings++;
-    group.totalTickets += tickets;
+
+    // Only count confirmed bookings in summary totals
+    if (status === "confirmed") {
+      group.totalBookings++;
+      group.totalTickets += tickets;
+    }
   }
 
   // Sort groups by event start_at descending

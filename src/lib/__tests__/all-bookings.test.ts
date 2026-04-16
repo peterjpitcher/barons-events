@@ -263,4 +263,30 @@ describe("listAllBookingsForUser", () => {
     expect(groups[0].totalBookings).toBe(2);
     expect(groups[0].totalTickets).toBe(8);
   });
+
+  // -------------------------------------------------------------------------
+  // 7. Cancelled bookings excluded from totals but included in bookings array
+  // -------------------------------------------------------------------------
+  it("excludes cancelled bookings from totalBookings and totalTickets", async () => {
+    const rows = [
+      makeRow({ id: "b1", ticket_count: 3, status: "confirmed" }),
+      makeRow({ id: "b2", ticket_count: 2, status: "cancelled" }),
+      makeRow({ id: "b3", ticket_count: 4, status: "confirmed" }),
+    ];
+
+    const { proxy } = buildQueryMock({ data: rows, error: null });
+    (createSupabaseAdminClient as ReturnType<typeof vi.fn>).mockReturnValue({
+      from: () => ({ select: () => ({ order: () => proxy }) }),
+    });
+
+    const groups = await listAllBookingsForUser(administrator);
+    expect(groups).toHaveLength(1);
+
+    // All 3 bookings should be in the array (admins need to see cancellations)
+    expect(groups[0].bookings).toHaveLength(3);
+
+    // Totals should only count confirmed (b1: 3 tickets + b3: 4 tickets)
+    expect(groups[0].totalBookings).toBe(2);
+    expect(groups[0].totalTickets).toBe(7);
+  });
 });
