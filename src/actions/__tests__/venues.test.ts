@@ -65,6 +65,7 @@ describe("createVenueAction", () => {
       name: "Test Venue",
       defaultApproverId: null,
       defaultManagerResponsibleId: managerId,
+      category: "pub",
     });
   });
 
@@ -92,6 +93,7 @@ describe("createVenueAction", () => {
       name: "Test Venue",
       defaultApproverId: null,
       defaultManagerResponsibleId: null,
+      category: "pub",
     });
   });
 });

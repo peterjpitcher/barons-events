@@ -25,7 +25,15 @@ const ACTIONS_DIR = join(__dirname, "..");
 // Set of `<file>.ts:<functionName>` entries that are intentionally exempt.
 // Add with a one-line reason; remove when the underlying gap is closed.
 const AUDIT_COVERAGE_ALLOWLIST = new Set<string>([
-  // Currently empty — all Wave 0.3 gaps closed in Batches A/B/C.
+  // Wave 3 — pre-event proposal + approval delegate all DB mutations to
+  // SECURITY DEFINER RPCs that insert audit rows internally
+  // (create_multi_venue_event_proposals, pre_approve_event_proposal).
+  "pre-event.ts:proposeEventAction",
+  "pre-event.ts:preApproveEventAction",
+  // Wave 5 — upload request inserts the attachment row but the audit for
+  // attachment.uploaded fires on confirmation (confirmAttachmentUploadAction)
+  // once the object is actually in storage. Pending rows are not audited.
+  "attachments.ts:requestAttachmentUploadAction"
 ]);
 
 const MUTATION_PATTERN = /\.(insert|update|delete|upsert|rpc)\s*\(/;

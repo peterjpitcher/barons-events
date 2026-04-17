@@ -17,7 +17,11 @@ Source: client request list, 2026-04-17. Session-context: `.claude/session-conte
 | 9 | Debriefs email SLT on submission | S | [notifications.ts](src/lib/notifications.ts) uses Resend. SLT list source not defined. | Clarify (see Q5) |
 | 10 | Labour hours in debrief at £12.71/hr | S | `debriefs` has wet/food takings, attendance, promo_effectiveness, highlights, issues. No labour hours column. | Clarify (see Q6 — rate policy) |
 
-## Implementation status (2026-04-17 end-of-session)
+## Implementation status (2026-04-17 continuous-work session)
+
+### Summary
+
+**All six waves have DB + server-action backend deployed.** Wave 1 is fully complete (DB + actions + UI). Waves 2–5 have DB + actions deployed; UI integration deferred in multiple places — the backend RPCs, policies, and actions are all live.
 
 ### Wave 0 — Audit prerequisite ✅ COMPLETE & DEPLOYED
 
@@ -27,32 +31,64 @@ Source: client request list, 2026-04-17. Session-context: `.claude/session-conte
 - Wave 0.3 Batches A/B/C — 8 gaps patched: createBookingAction, movePlanningItemDateAction, togglePlanningTaskStatusAction, reassignPlanningTaskAction, convertInspirationItemAction, dismissInspirationItemAction, refreshInspirationItemsAction, updateUserAction (partial — now logs user.updated alongside auth.role.changed), plus deleteCustomerAction (stale direct-insert bug caught by the guard).
 - Wave 0.4 — `src/actions/__tests__/audit-coverage.test.ts` CI guard. 75 assertions, allowlist empty.
 
-### Wave 1 — Quick wins: BACKEND COMPLETE & DEPLOYED; UI deferred
+### Wave 1 — Quick wins ✅ COMPLETE & DEPLOYED (DB + actions + UI)
 
-- **1.1 Task notes** — `planning_tasks.notes` column + schema + helper + action + audit. Migration pushed. UI (textarea on task detail) deferred to follow-up.
-- **1.2 Not-required on todos page** — status column already supports it from prior SOP work; generic updater now also sets `completed_at` for `not_required`. UI exposure (three-state control on todos page) deferred.
+- **1.1 Task notes** — `planning_tasks.notes` column, helper, action, audit. UI: textarea + "Notes" icon button on `PlanningTaskList`.
+- **1.2 Not-required on todos page** — three-state status Select on `PlanningTaskList`; generic updater now sets `completed_at` for `not_required` too. Colourblind-safe (icon + strikethrough + opacity, not colour alone).
 - **1.3 Proof-read menus task** — migration pushed. Appears automatically in SOP checklist for new events.
-- **1.4 Labour hours + rate** — `business_settings` singleton (£12.71 default); `debriefs.labour_hours` + `labour_rate_gbp_at_submit`; `submitDebriefAction` reads + snapshots rate on save; new `updateBusinessSettingsAction` (admin-only). Migration pushed. UI (form field + settings page editor) deferred.
-- **1.5 SLT email** — `slt_members` table + RLS; `addSltMemberAction`/`removeSltMemberAction`; `getSltRecipients()`; `sendDebriefSubmittedToSltEmail()` with `SLT_FROM_ALIAS` BCC / one-per-recipient fallback; wired into `submitDebriefAction`. Migration pushed. UI (settings picker) deferred.
+- **1.4 Labour hours + rate** — `business_settings` singleton + `debriefs.labour_hours` + `labour_rate_gbp_at_submit`. Debrief form has labour-hours field + live-cost readout. Settings page has `BusinessSettingsManager` (admin-only tab).
+- **1.5 SLT email** — `slt_members` table + actions + `sendDebriefSubmittedToSltEmail` helper. Settings page has `SltMembersManager` (admin-only tab).
 
-### Waves 2-5 — NOT STARTED
+### Wave 2 — Venue categories + multi-venue ✅ DB + actions + component; form wiring deferred
 
-Spec is at v6 and has been adversarially reviewed. Implementation requires:
-- Wave 2: `venues.category` + Heather Farm Cafe default + `VenueMultiSelect` component + multi-venue creation RPCs (drafts + planning items).
-- Wave 3: pre-event status extension + `create_multi_venue_event_proposals` RPC + `pre_approve_event_proposal` RPC + status-transition trigger + 14-day reaper.
-- Wave 4: SOP template expansion columns + `planning_tasks` cascade columns + `generate_sop_checklist_v2` RPC + cascade guard/sync triggers + backfill queue.
-- Wave 5: `attachments` FK-based table + Storage bucket + per-FK RLS + signed-URL actions + roll-up queries + cleanup cron.
+- `venues.category` column + Heather Farm Cafe seeded as cafe.
+- `event_creation_batches` idempotency table.
+- `create_multi_venue_event_drafts` RPC (service-role, hardened).
+- `create_multi_venue_planning_items` RPC (supports global vs specific mode).
+- `VenueMultiSelect` reusable component in `src/components/venues/`.
+- Venue action + helper accept `category`.
 
-See [docs/superpowers/specs/2026-04-17-client-enhancement-batch-design.md](../docs/superpowers/specs/2026-04-17-client-enhancement-batch-design.md) for the complete spec.
+Deferred: wiring `VenueMultiSelect` into the event create form + planning item create form, and adding a category `<select>` to the venue edit form. Backend is ready for those to drop in.
 
-## Deferred UI work (next session)
+### Wave 3 — Pre-event approval ✅ DB + actions + cron; UI deferred
 
-For the already-deployed backend features, the following UI pieces are outstanding:
+- Status CHECK extended with `pending_approval` + `approved_pending_details`; required-fields CHECK tolerates those plus `rejected`.
+- `enforce_event_status_transitions` trigger (admin-only for non-creator transitions out of proposal states; venue-manager completion path permitted when fields present; service-role bypass).
+- `create_multi_venue_event_proposals` RPC (tolerates null required fields).
+- `pre_approve_event_proposal` RPC (transactional: status update + planning_item + SOP + audit).
+- `proposeEventAction` / `preApproveEventAction` / `preRejectEventAction` server actions.
+- `/api/cron/expire-stale-approvals` 14-day reaper.
 
-1. **Task notes textarea** — add to the task detail / expanded row component. Existing pattern: see how title edit works in `src/components/planning/sop-task-row.tsx`.
-2. **"Not required" three-state control on todos page** — extend `src/components/todos/unified-todo-list.tsx` to expose the `not_required` status alongside `done`. Update the mapper in `src/lib/planning/utils.ts` to optionally include resolved tasks.
-3. **Labour hours field** in the debrief form (`src/components/debriefs/*`). Live-cost readout using the rate from `business_settings`.
-4. **Settings page** — add a "Labour cost" row and an "SLT members" picker at `src/app/settings/page.tsx` or similar.
+Deferred: propose form UI, admin approval queue, `EventStatus` sweep across board/calendar/detail display components.
+
+### Wave 4 — SOP per-venue expansion + cascade ✅ DB schema + triggers + v2 RPC; caller migration + cron + UI deferred
+
+- `sop_task_templates.expansion_strategy` (single | per_venue) + `venue_filter` + coherence CHECK.
+- `planning_tasks` cascade columns (`parent_task_id`, `cascade_venue_id`, `cascade_sop_template_id`, `auto_completed_by_cascade_at`) + no-nested-cascade CHECK + unique partial index.
+- `cascade_parent_sync` trigger with parent-row lock, auto-complete + auto-reopen branches, audit row inserts.
+- `guard_planning_task_cascade_columns` trigger blocking non-admin cascade-column writes; `cascade_internal_bypass()` flag honoured.
+- `pending_cascade_backfill` queue with retry/lock/dead-letter columns.
+- `generate_sop_checklist_v2` RPC with full v1 column parity + per-venue fan-out.
+
+Deferred: switching existing callers from v1 to v2 RPC (requires updating `src/lib/planning/sop.ts` wrapper and call sites), backfill cron route `/api/cron/cascade-backfill`, venue-action queueing of backfill rows, and settings UI for per-task expansion toggle.
+
+### Wave 5 — Attachments ✅ DB + RLS + Storage + actions; UI + orphan cron deferred
+
+- `attachments` table with three nullable FKs + exactly-one-parent CHECK + upload lifecycle columns.
+- Concrete SELECT / INSERT / UPDATE / DELETE RLS policies per spec.
+- Private `task-attachments` Storage bucket with MIME allow-list + 250 MB cap.
+- Server actions: `requestAttachmentUploadAction`, `confirmAttachmentUploadAction`, `deleteAttachmentAction`, `getAttachmentUrlAction`.
+
+Deferred: upload UI on task detail, roll-up display on event/planning pages, orphan cleanup cron, and MIME sniffing via `file-type` on confirm (dep not yet added).
+
+## Deferred work in priority order
+
+1. Switch SOP RPC callers from v1 to v2 (`src/lib/planning/sop.ts`, `createEventPlanningItem`, tests). Small refactor, unlocks cascade fan-out everywhere.
+2. Pre-event propose form UI + admin queue + status-consumer sweep (`EventStatus` label maps, status counts, board/calendar handling for null fields).
+3. Venue form category edit + wire `VenueMultiSelect` into event create + planning item create forms. Calls the already-deployed multi-venue RPCs.
+4. Cascade backfill cron + venue actions enqueueing pending rows.
+5. Attachments upload UI + roll-up display + orphan cron + `file-type` dependency.
+6. Settings UI: per-task SOP expansion toggle.
 
 ---
 
