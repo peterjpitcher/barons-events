@@ -1,10 +1,10 @@
-# Client Enhancement Batch — Design Spec (v4)
+# Client Enhancement Batch — Design Spec (v5)
 
-_Revised 2026-04-17 after three rounds of adversarial review. Prior reviews: [v1](../../../tasks/codex-qa-review/2026-04-17-client-enhancement-batch-spec-adversarial-review.md), [v2](../../../tasks/codex-qa-review/2026-04-17-client-enhancement-batch-spec-v2-adversarial-review.md), [v3 AB](../../../tasks/codex-qa-review/2026-04-17-client-enhancement-batch-spec-v3-assumption-breaker-report.md), [v3 ST](../../../tasks/codex-qa-review/2026-04-17-client-enhancement-batch-spec-v3-spec-trace-auditor-report.md). Implementation triage: [tasks/todo.md](../../../tasks/todo.md)._
+_Revised 2026-04-17 after four rounds of adversarial review. Prior reviews: [v1](../../../tasks/codex-qa-review/2026-04-17-client-enhancement-batch-spec-adversarial-review.md), [v2](../../../tasks/codex-qa-review/2026-04-17-client-enhancement-batch-spec-v2-adversarial-review.md), [v3 AB](../../../tasks/codex-qa-review/2026-04-17-client-enhancement-batch-spec-v3-assumption-breaker-report.md), [v3 ST](../../../tasks/codex-qa-review/2026-04-17-client-enhancement-batch-spec-v3-spec-trace-auditor-report.md), [v4 AB](../../../tasks/codex-qa-review/2026-04-17-client-enhancement-batch-spec-v4-assumption-breaker-report.md), [v4 ST](../../../tasks/codex-qa-review/2026-04-17-client-enhancement-batch-spec-v4-spec-trace-auditor-report.md). Implementation triage: [tasks/todo.md](../../../tasks/todo.md)._
 
 ## Revision notes
 
-**v4 addresses the 9 blocking issues found in the v3 review.** Architectural decisions from v2 are unchanged:
+**v5 addresses 9 blocking issues + 4 medium severity issues from the v4 review.** Architectural decisions from v2 are unchanged:
 1. SOP templates absorb cascade (new `expansion_strategy` and `venue_filter` columns).
 2. Labour rate lives in a typed `business_settings` singleton.
 3. Attachments use three nullable FKs with an "exactly one set" CHECK.
@@ -21,6 +21,7 @@ Key v3→v4 changes:
 - **Stale-approval reaper predicate** written as `greatest(start_at, updated_at) < now() - interval '14 days'`.
 - **SECURITY DEFINER hardening** applied consistently to every function snippet.
 - **Status trigger known limit documented** — it guards proposal states only; other state-machine transitions remain server-action-enforced (broadening is out of this batch's scope).
+- **Concrete SQL added** for `generate_sop_checklist_v2`, `create_multi_venue_event_drafts`, `create_multi_venue_event_proposals`, and the Wave 0.1 audit migration. No more contract-only placeholders.
 
 Full v1→v3 architectural decisions preserved:
 
@@ -54,14 +55,15 @@ Ten client enhancement requests landing together. They span field additions, cro
 - **Validation:** Zod schemas before DB writes.
 - **Phone numbers:** inline `parsePhoneNumber(x, "GB").format("E.164")` from `libphonenumber-js`.
 - **Server action shape:** `(_: ActionResult | undefined, formData: FormData): Promise<ActionResult>` is canonical for form-submit actions.
-- **SECURITY DEFINER hardening (workspace convention):** every new `SECURITY DEFINER` function follows the pattern set in [supabase/migrations/20260410120000_harden_security_definer_rpcs.sql](../../../supabase/migrations/20260410120000_harden_security_definer_rpcs.sql):
-  ```sql
-  alter function public.<fn_name>() owner to postgres;
-  alter function public.<fn_name>() set search_path = pg_catalog, public;
-  revoke execute on function public.<fn_name>() from public, authenticated;
-  grant execute on function public.<fn_name>() to service_role;
-  ```
-  Apply this to every trigger function and RPC introduced by this spec.
+- **SECURITY DEFINER hardening (workspace convention):** every new `SECURITY DEFINER` function follows the pattern set in [supabase/migrations/20260410120000_harden_security_definer_rpcs.sql](../../../supabase/migrations/20260410120000_harden_security_definer_rpcs.sql). Two variants:
+  - **Direct-call RPCs** (functions called via `.rpc(...)` from app code). All four lines:
+    ```sql
+    alter function public.<fn_name>(...) owner to postgres;
+    alter function public.<fn_name>(...) set search_path = pg_catalog, public;
+    revoke execute on function public.<fn_name>(...) from public, authenticated;
+    grant execute on function public.<fn_name>(...) to service_role;
+    ```
+  - **Trigger functions** (called only by the attached trigger, never by clients). Owner + `search_path` + `revoke from public, authenticated`. **No `grant to service_role`** — trigger functions run under the trigger's owner privileges and should not be invokable from user code. The revoke is defence-in-depth.
 - **Cascade-internal bypass flag (new workspace convention):** when a SECURITY DEFINER trigger or RPC needs to write to columns that the cascade guard trigger protects (`parent_task_id`, `cascade_venue_id`, `cascade_sop_template_id`, `auto_completed_by_cascade_at`), the function first calls `perform set_config('app.cascade_internal', 'on', true);` — the `true` third argument makes it transaction-local, so the flag auto-clears on commit or rollback. The guard trigger checks this flag before rejecting non-admin writes.
 
 ---
@@ -104,7 +106,7 @@ auth.logout, auth.password_reset.requested, auth.password_updated,
 auth.invite.sent, auth.invite.accepted, auth.invite.resent,
 auth.role.changed, auth.session.expired.idle, auth.session.expired.absolute,
 customer.erased, booking.cancelled,
-user.deactivated, user.reactivated, user.deleted,
+user.deactivated, user.reactivated, user.deleted, user.sensitive_column_changed,
 venue.created, venue.updated, venue.deleted,
 artist.created, artist.updated, artist.archived, artist.restored,
 event_type.created, event_type.updated, event_type.deleted,
@@ -127,19 +129,108 @@ opening_hours.override_updated, opening_hours.override_deleted
 
 Before merging Wave 0, re-run the grep from `src/` and diff against the enumerated list. Anything missing gets added.
 
-Wave 0 also introduces the cascade-internal bypass helper function used by later waves:
+**Migration SQL (Wave 0.1):**
 
 ```sql
-create function public.cascade_internal_bypass() returns boolean as $$
+-- =============================================================================
+-- Wave 0.1 — Audit prerequisite
+-- Widens audit_log CHECK constraints to include:
+--   (a) values currently written by the app (restoring silent-failing rows)
+--   (b) new values introduced by the client enhancement batch
+-- Also adds the cascade_internal_bypass helper used by Wave 4 triggers / RPCs.
+-- =============================================================================
+
+-- Entity CHECK
+alter table public.audit_log drop constraint if exists audit_log_entity_check;
+alter table public.audit_log
+  add constraint audit_log_entity_check
+  check (entity in (
+    -- existing, kept
+    'event', 'sop_template', 'planning_task', 'auth',
+    'customer', 'booking', 'user',
+    -- restored (written by repo today; previously rejected silently)
+    'venue', 'artist', 'event_type', 'link', 'opening_hours', 'planning',
+    -- new for this batch
+    'slt_member', 'business_settings', 'attachment'
+  )) not valid;
+
+-- Action CHECK
+alter table public.audit_log drop constraint if exists audit_log_action_check;
+alter table public.audit_log
+  add constraint audit_log_action_check
+  check (action in (
+    -- event
+    'event.created', 'event.updated', 'event.artists_updated',
+    'event.submitted', 'event.approved', 'event.needs_revisions',
+    'event.rejected', 'event.completed', 'event.assignee_changed',
+    'event.deleted', 'event.status_changed', 'event.website_copy_generated',
+    'event.debrief_updated', 'event.terms_generated',
+    'event.draft_saved', 'event.booking_settings_updated',
+    -- SOP
+    'sop_section.created', 'sop_section.updated', 'sop_section.deleted',
+    'sop_task_template.created', 'sop_task_template.updated', 'sop_task_template.deleted',
+    'sop_dependency.created', 'sop_dependency.deleted',
+    'sop_checklist.generated', 'sop_checklist.dates_recalculated', 'sop_backfill_completed',
+    -- planning (entity 'planning', both old and new)
+    'planning.item_created', 'planning.item_updated', 'planning.item_deleted',
+    'planning.series_created', 'planning.series_updated', 'planning.series_paused',
+    'planning.task_created', 'planning.task_updated', 'planning.task_deleted',
+    -- planning_task (existing + new cascade + notes)
+    'planning_task.status_changed', 'planning_task.reassigned',
+    -- auth
+    'auth.login.success', 'auth.login.failure', 'auth.login.service_error',
+    'auth.lockout', 'auth.logout',
+    'auth.password_reset.requested', 'auth.password_updated',
+    'auth.invite.sent', 'auth.invite.accepted', 'auth.invite.resent',
+    'auth.role.changed',
+    'auth.session.expired.idle', 'auth.session.expired.absolute',
+    -- customer / booking
+    'customer.erased', 'booking.cancelled',
+    -- user management
+    'user.deactivated', 'user.reactivated', 'user.deleted',
+    -- user sensitive-column trigger (from 20260414160001_users_sensitive_column_audit.sql)
+    'user.sensitive_column_changed',
+    -- venue
+    'venue.created', 'venue.updated', 'venue.deleted',
+    -- artist
+    'artist.created', 'artist.updated', 'artist.archived', 'artist.restored',
+    -- event_type
+    'event_type.created', 'event_type.updated', 'event_type.deleted',
+    -- link
+    'link.created', 'link.updated', 'link.deleted',
+    -- opening_hours
+    'opening_hours.service_type_created', 'opening_hours.service_type_updated',
+    'opening_hours.service_type_deleted', 'opening_hours.hours_saved',
+    'opening_hours.multi_venue_hours_saved',
+    'opening_hours.override_created', 'opening_hours.override_updated',
+    'opening_hours.override_deleted',
+    -- NEW — this batch
+    'planning_task.notes_updated',
+    'planning_task.cascade_spawn',
+    'planning_task.cascade_autocompleted',
+    'planning_task.cascade_reopened',
+    'slt_member.added', 'slt_member.removed', 'slt_email.delivery_failed',
+    'business_settings.updated',
+    'attachment.uploaded', 'attachment.upload_failed', 'attachment.deleted',
+    'event.proposed', 'event.pre_approved', 'event.pre_rejected', 'event.pre_expired',
+    'venue.category_changed',
+    'sop_task_template.expansion_changed'
+  )) not valid;
+
+-- cascade_internal_bypass helper — used by Wave 4 triggers and the SOP v2 RPC.
+create or replace function public.cascade_internal_bypass() returns boolean as $$
   select coalesce(current_setting('app.cascade_internal', true), '') = 'on';
 $$ language sql stable;
 
--- SECURITY DEFINER hardening (workspace convention)
 alter function public.cascade_internal_bypass() owner to postgres;
 alter function public.cascade_internal_bypass() set search_path = pg_catalog, public;
 revoke execute on function public.cascade_internal_bypass() from public;
 grant execute on function public.cascade_internal_bypass() to authenticated, service_role;
+
+notify pgrst, 'reload schema';
 ```
+
+The `cascade_internal_bypass()` helper is defined inside the Wave 0.1 migration block above — used by Wave 4 triggers and `generate_sop_checklist_v2`. See the `create or replace` snippet in the migration SQL.
 
 ### 0.2 Audit gap map
 
@@ -429,10 +520,11 @@ Return shape:
 ```json
 {
   "batch_id": "<uuid>",
-  "events": [{"venue_id": "<uuid>", "event_id": "<uuid>"}, ...],
-  "sop_generated": {"total": 0, "skipped_venues": []}
+  "events": [{"venue_id": "<uuid>", "event_id": "<uuid>"}, ...]
 }
 ```
+
+SOP fan-out happens per event via `generate_sop_checklist` (v1 today, `generate_sop_checklist_v2` after Wave 4). The draft RPC does not aggregate SOP return values — any SQL error inside `generate_sop_checklist` bubbles up and rolls back the whole transaction. For SOP skip details (e.g. per-venue manager gaps), switch to `generate_sop_checklist_v2` in Wave 4 and capture its JSONB return.
 
 **Idempotency:** the RPC records the `idempotency_key` in a new lightweight `event_creation_batches` table. If the same key is submitted again, the RPC returns the same result without re-creating rows.
 
@@ -466,6 +558,147 @@ Everything happens inside one transaction. If any step fails, the batch row is n
 
 **Caller migration for SOP v1 → v2:** until Wave 4 merges, this RPC uses `generate_sop_checklist` (v1). In the Wave 4 PR that creates `generate_sop_checklist_v2`, every caller of `generate_sop_checklist` in server actions and RPCs switches to v2 in the same commit. Document this in the Wave 4 PR description.
 
+**RPC SQL:**
+```sql
+create or replace function public.create_multi_venue_event_drafts(
+  p_payload jsonb,
+  p_idempotency_key uuid
+) returns jsonb
+language plpgsql
+security definer
+as $$
+declare
+  v_batch_id uuid;
+  v_existing jsonb;
+  v_created_by uuid;
+  v_user_role text;
+  v_user_venue uuid;
+  v_user_deactivated timestamptz;
+  v_venue_id uuid;
+  v_venue_ids uuid[];
+  v_event_id uuid;
+  v_planning_item_id uuid;
+  v_target_date date;
+  v_events jsonb := '[]'::jsonb;
+  v_result jsonb;
+begin
+  -- 1. Idempotency: try to claim the key. If already claimed, return stored result.
+  insert into public.event_creation_batches (idempotency_key, created_by, batch_payload)
+  values (p_idempotency_key, (p_payload->>'created_by')::uuid, p_payload)
+  on conflict (idempotency_key) do nothing
+  returning id into v_batch_id;
+
+  if v_batch_id is null then
+    select result, id into v_existing, v_batch_id
+    from   public.event_creation_batches
+    where  idempotency_key = p_idempotency_key;
+
+    if v_existing is not null then
+      return v_existing;
+    end if;
+    raise exception 'Batch % already claimed but result not yet stored', p_idempotency_key;
+  end if;
+
+  -- 2. Pre-authorisation. Match canManageEvents(role, venueId) semantics:
+  --    administrator: any venue
+  --    office_worker with venue_id = target: allowed for that target only
+  --    office_worker without venue_id: read-only (reject)
+  --    executive: read-only (reject)
+  --    anything else: reject
+  v_created_by := (p_payload->>'created_by')::uuid;
+  select role, venue_id, deactivated_at into v_user_role, v_user_venue, v_user_deactivated
+  from   public.users where id = v_created_by;
+
+  if v_user_deactivated is not null then
+    raise exception 'Deactivated users cannot create events';
+  end if;
+
+  if v_user_role not in ('administrator', 'office_worker') then
+    raise exception 'User role % cannot create events', v_user_role;
+  end if;
+
+  if v_user_role = 'office_worker' and v_user_venue is null then
+    raise exception 'Office workers without a venue assignment cannot create events';
+  end if;
+
+  v_venue_ids := (select array_agg((x)::uuid)
+                  from jsonb_array_elements_text(p_payload->'venue_ids') x);
+
+  foreach v_venue_id in array v_venue_ids loop
+    if v_user_role = 'office_worker' and v_user_venue != v_venue_id then
+      raise exception 'Office worker % cannot manage venue %', v_created_by, v_venue_id;
+    end if;
+  end loop;
+
+  -- 3. Insert one event + planning item + SOP per venue (all within this transaction)
+  v_target_date := ((p_payload->>'start_at')::timestamptz)::date;
+
+  foreach v_venue_id in array v_venue_ids loop
+    v_event_id := gen_random_uuid();
+
+    insert into public.events (
+      id, venue_id, created_by, title, event_type,
+      start_at, end_at, venue_space, expected_headcount,
+      wet_promo, food_promo, goal_focus, notes,
+      cost_total, cost_details, status
+    ) values (
+      v_event_id, v_venue_id, v_created_by,
+      p_payload->>'title', p_payload->>'event_type',
+      (p_payload->>'start_at')::timestamptz,
+      (p_payload->>'end_at')::timestamptz,
+      p_payload->>'venue_space',
+      nullif(p_payload->>'expected_headcount','')::int,
+      p_payload->>'wet_promo', p_payload->>'food_promo',
+      p_payload->>'goal_focus', p_payload->>'notes',
+      nullif(p_payload->>'cost_total','')::numeric,
+      p_payload->>'cost_details',
+      'draft'
+    );
+
+    v_planning_item_id := gen_random_uuid();
+    insert into public.planning_items (
+      id, event_id, venue_id, target_date, type_label, title, created_by, status
+    ) values (
+      v_planning_item_id, v_event_id, v_venue_id, v_target_date,
+      p_payload->>'event_type', p_payload->>'title',
+      v_created_by, 'planned'
+    );
+
+    -- v1 RPC until Wave 4 merges; Wave 4 PR switches this line to generate_sop_checklist_v2.
+    perform public.generate_sop_checklist(v_planning_item_id, v_target_date, v_created_by);
+
+    insert into public.audit_log (entity, entity_id, action, meta, actor_id)
+    values (
+      'event', v_event_id, 'event.created',
+      jsonb_build_object('multi_venue_batch_id', v_batch_id,
+                         'venue_count', array_length(v_venue_ids, 1),
+                         'via', 'create_multi_venue_event_drafts'),
+      v_created_by
+    );
+
+    v_events := v_events || jsonb_build_object('venue_id', v_venue_id, 'event_id', v_event_id);
+  end loop;
+
+  -- 4. Store result atomically inside the same transaction
+  v_result := jsonb_build_object(
+    'batch_id', v_batch_id,
+    'events', v_events
+  );
+
+  update public.event_creation_batches
+  set    result = v_result
+  where  id = v_batch_id;
+
+  return v_result;
+end;
+$$;
+
+alter function public.create_multi_venue_event_drafts(jsonb, uuid) owner to postgres;
+alter function public.create_multi_venue_event_drafts(jsonb, uuid) set search_path = pg_catalog, public;
+revoke execute on function public.create_multi_venue_event_drafts(jsonb, uuid) from public, authenticated;
+grant execute on function public.create_multi_venue_event_drafts(jsonb, uuid) to service_role;
+```
+
 **Security grants:** `GRANT EXECUTE ON FUNCTION public.create_multi_venue_event_drafts TO service_role;`. The action calls it via the admin client.
 
 **Audit:** one `audit_log` row per event created, with `meta.multi_venue_batch_id = batch_id`.
@@ -487,6 +720,103 @@ Exactly the same shape and mechanics as `create_multi_venue_event_drafts`, with 
 - Inserts one `audit_log` row per proposal with `action = 'event.proposed'`, `meta.multi_venue_batch_id = batch_id`.
 
 This RPC is the one Wave 3.3's `proposeEventAction` calls — not `create_multi_venue_event_drafts`.
+
+**RPC SQL:**
+```sql
+create or replace function public.create_multi_venue_event_proposals(
+  p_payload jsonb,
+  p_idempotency_key uuid
+) returns jsonb
+language plpgsql
+security definer
+as $$
+declare
+  v_batch_id uuid;
+  v_existing jsonb;
+  v_created_by uuid;
+  v_user_role text;
+  v_user_venue uuid;
+  v_user_deactivated timestamptz;
+  v_venue_id uuid;
+  v_venue_ids uuid[];
+  v_event_id uuid;
+  v_events jsonb := '[]'::jsonb;
+  v_result jsonb;
+begin
+  insert into public.event_creation_batches (idempotency_key, created_by, batch_payload)
+  values (p_idempotency_key, (p_payload->>'created_by')::uuid, p_payload)
+  on conflict (idempotency_key) do nothing
+  returning id into v_batch_id;
+
+  if v_batch_id is null then
+    select result, id into v_existing, v_batch_id
+    from   public.event_creation_batches
+    where  idempotency_key = p_idempotency_key;
+    if v_existing is not null then return v_existing; end if;
+    raise exception 'Batch % already claimed but result not yet stored', p_idempotency_key;
+  end if;
+
+  v_created_by := (p_payload->>'created_by')::uuid;
+  select role, venue_id, deactivated_at into v_user_role, v_user_venue, v_user_deactivated
+  from   public.users where id = v_created_by;
+  if v_user_deactivated is not null then
+    raise exception 'Deactivated users cannot propose events';
+  end if;
+
+  if v_user_role not in ('administrator', 'office_worker') then
+    raise exception 'User role % cannot propose events', v_user_role;
+  end if;
+  if v_user_role = 'office_worker' and v_user_venue is null then
+    raise exception 'Office workers without a venue assignment cannot propose events';
+  end if;
+
+  v_venue_ids := (select array_agg((x)::uuid)
+                  from jsonb_array_elements_text(p_payload->'venue_ids') x);
+
+  foreach v_venue_id in array v_venue_ids loop
+    if v_user_role = 'office_worker' and v_user_venue != v_venue_id then
+      raise exception 'Office worker % cannot propose for venue %', v_created_by, v_venue_id;
+    end if;
+  end loop;
+
+  -- Pre-event proposals create events with nulls tolerated by the CHECK.
+  -- No planning item; no SOP generation. Those happen on admin approve.
+  foreach v_venue_id in array v_venue_ids loop
+    v_event_id := gen_random_uuid();
+
+    insert into public.events (
+      id, venue_id, created_by, title,
+      event_type, venue_space, start_at, end_at,
+      notes, status
+    ) values (
+      v_event_id, v_venue_id, v_created_by, p_payload->>'title',
+      null, null, (p_payload->>'start_at')::timestamptz, null,
+      p_payload->>'notes', 'pending_approval'
+    );
+
+    insert into public.audit_log (entity, entity_id, action, meta, actor_id)
+    values (
+      'event', v_event_id, 'event.proposed',
+      jsonb_build_object('multi_venue_batch_id', v_batch_id,
+                         'venue_count', array_length(v_venue_ids, 1)),
+      v_created_by
+    );
+
+    v_events := v_events || jsonb_build_object('venue_id', v_venue_id, 'event_id', v_event_id);
+  end loop;
+
+  v_result := jsonb_build_object('batch_id', v_batch_id, 'events', v_events);
+
+  update public.event_creation_batches set result = v_result where id = v_batch_id;
+  return v_result;
+end;
+$$;
+
+alter function public.create_multi_venue_event_proposals(jsonb, uuid) owner to postgres;
+alter function public.create_multi_venue_event_proposals(jsonb, uuid) set search_path = pg_catalog, public;
+revoke execute on function public.create_multi_venue_event_proposals(jsonb, uuid) from public, authenticated;
+grant execute on function public.create_multi_venue_event_proposals(jsonb, uuid) to service_role;
+```
 
 ### 2.4 Multi-venue planning item creation
 
@@ -586,11 +916,12 @@ begin
     if v_user_deactivated is not null then
       raise exception 'Deactivated users cannot update events';
     end if;
-    if v_user_role = 'office_worker' and (v_user_venue is null or v_user_venue = new.venue_id) then
+    -- No-venue office workers are read-only — they cannot complete proposals.
+    if v_user_role = 'office_worker' and v_user_venue is not null and v_user_venue = new.venue_id then
       return new;
     end if;
 
-    raise exception 'Only the creator, a venue-scoped office worker, or an administrator can complete this proposal';
+    raise exception 'Only the creator, a venue-scoped office worker at the event venue, or an administrator can complete this proposal';
   end if;
 
   -- All other transitions out of pending_approval / approved_pending_details require administrator.
@@ -614,7 +945,7 @@ create trigger trg_events_status_transition before update on events
 ### 3.3 Server actions
 
 - `proposeEventAction(FormData)` — creates events in `pending_approval`. Calls `create_multi_venue_event_proposals` (the proposal-specific RPC defined in Wave 2.3b), NOT `create_multi_venue_event_drafts` — proposals tolerate null `event_type/venue_space/end_at`.
-- `preApproveEventAction(FormData)` — admin only. Rejects if `start_at < now()`. Transitions to `approved_pending_details`. Generates the SOP checklist for the event's planning item at this point (the proposal had none). Emails the creator.
+- `preApproveEventAction(FormData)` — admin only. Rejects if `start_at < now()`. In a single transaction: (1) transition status to `approved_pending_details`; (2) create the linked `planning_items` row (the proposal RPC does not create one) using the event's `venue_id`, `start_at::date` as target_date, `title` and a placeholder `type_label`; (3) call `generate_sop_checklist(planning_item_id, start_at::date, admin_id)` (or `generate_sop_checklist_v2` post-Wave 4) so the venue manager finds an SOP checklist when they open the event; (4) audit `event.pre_approved`; (5) email the creator. If any step fails, the whole transaction rolls back and the status stays `pending_approval`.
 - `preRejectEventAction(FormData)` — admin only. Parses reason, writes `approvals.feedback_text`, transitions to `rejected`. Emails the creator.
 - `saveEventDraftAction` (existing, extended): when called on an event in `approved_pending_details`, and all required fields (`event_type`, `venue_space`, `end_at`) are present in the payload, the action explicitly sets `status = 'draft'` in the UPDATE. This is the venue-manager completion path. The status-transition trigger permits it for the creator or a venue-scoped office worker.
 
@@ -729,7 +1060,9 @@ create index planning_tasks_open_cascade_master_idx on planning_tasks (cascade_s
 
 ### 4.2 `generate_sop_checklist_v2` RPC
 
-`generate_sop_checklist_v2` keeps the existing `generate_sop_checklist` stable and introduces a new function with richer JSONB return.
+Keeps the existing `generate_sop_checklist(uuid, date, uuid) returns integer` stable and introduces a new function with the same three-argument signature but a richer JSONB return.
+
+**Signature:** `generate_sop_checklist_v2(p_planning_item_id uuid, p_target_date date, p_created_by uuid) returns jsonb`
 
 **Return shape:**
 ```json
@@ -737,35 +1070,243 @@ create index planning_tasks_open_cascade_master_idx on planning_tasks (cascade_s
   "created": <int>,
   "masters_created": [{"task_id": "<uuid>", "template_id": "<uuid>"}, ...],
   "children_created": [{"task_id": "<uuid>", "venue_id": "<uuid>", "master_id": "<uuid>"}, ...],
-  "skipped_venues": [{"venue_id": "<uuid>", "venue_name": "...", "reason": "no_active_default_manager"}, ...]
+  "skipped_venues": [{"venue_id": "<uuid>", "venue_name": "...", "reason": "no_default_manager" | "default_manager_deactivated"}, ...],
+  "idempotent_skip": <true only when existing SOP tasks are found, else absent>
 }
 ```
 
-**Implementation contract.** `generate_sop_checklist_v2(planning_item_id uuid) returns jsonb` must:
+**SQL body (preserves v1 column population; adds per-venue fan-out):**
 
-1. Set `app.cascade_internal = 'on'` transaction-local flag before any insert that writes cascade columns.
-2. Iterate `sop_task_templates` joined to `sop_sections`, ordered by section sort + template sort.
-3. For each template, based on `expansion_strategy`:
-   - **`single`**: insert one `planning_tasks` row that preserves every column populated by v1 `generate_sop_checklist` — notably `sop_section`, `sop_t_minus_days`, `sop_template_task_id`, `title`, `assignee_id` (from `default_assignee_ids[1]`), `due_date` (computed from the planning item's target date minus `t_minus_days`), `status = 'open'`, `sort_order`. Then insert `planning_task_assignees` rows for every uuid in `default_assignee_ids`. Then insert `planning_task_dependencies` rows for every entry in `sop_task_dependencies` where the dependent template matches. This mirrors v1 behaviour exactly.
-   - **`per_venue`**: insert one **master** row with the same column population as the `single` case (including `due_date`, `sop_template_task_id`, `sop_section`, `sop_t_minus_days`) plus `cascade_sop_template_id = template.id`. Then for each venue matching `venue_filter` (`all`, `pub`, or `cafe`):
-     - Skip the venue (and record in `skipped_venues`) when `venues.default_manager_responsible_id IS NULL` or the referenced user has `deactivated_at IS NOT NULL`.
-     - Insert a **child** row with: `title = template.title || ' — ' || venue.name`, `planning_item_id`, `sop_section`, `sop_t_minus_days`, `due_date` (same as master), `status = 'open'`, `sort_order`, `parent_task_id = master.id`, `cascade_venue_id = venue.id`, `created_by = null`, AND **`sop_template_task_id = NULL`**. Children must NOT set `sop_template_task_id` — the master holds it. This avoids conflicting with the existing `planning_tasks_sop_template_task_unique` partial index on `(planning_item_id, sop_template_task_id)`.
-     - Children do not replicate assignee junctions or dependencies; those live on the master. Completion rules derive from the parent-sync trigger.
-     - Insert a `planning_task.cascade_spawn` audit row per child.
-
-4. Return the aggregated result. If called twice for the same planning item, the `ON CONFLICT DO NOTHING` clauses on the idempotent indexes (`planning_tasks_sop_template_task_unique` for masters / singles; `planning_tasks_cascade_unique` for children) make the second call a no-op beyond returning the existing row count.
-
-**The v1 RPC remains the reference implementation** for everything except per-venue fan-out. The Wave 4 PR that ships `generate_sop_checklist_v2` must include a Vitest test comparing its output for `expansion_strategy = 'single'` with v1's output to prove column parity.
-
-**SECURITY DEFINER hardening (workspace convention):**
 ```sql
-alter function public.generate_sop_checklist_v2(uuid) owner to postgres;
-alter function public.generate_sop_checklist_v2(uuid) set search_path = pg_catalog, public;
-revoke execute on function public.generate_sop_checklist_v2(uuid) from public, authenticated;
-grant execute on function public.generate_sop_checklist_v2(uuid) to service_role;
+create or replace function public.generate_sop_checklist_v2(
+  p_planning_item_id uuid,
+  p_target_date      date,
+  p_created_by       uuid
+)
+returns jsonb
+language plpgsql
+security definer
+as $$
+declare
+  v_tmpl_id             uuid;
+  v_section_id          uuid;
+  v_section_label       text;
+  v_section_sort        integer;
+  v_section_assignees   uuid[];
+  v_task_title          text;
+  v_task_sort           integer;
+  v_t_minus_days        integer;
+  v_task_assignees      uuid[];
+  v_expansion_strategy  text;
+  v_venue_filter        text;
+
+  v_master_id           uuid;
+  v_child_id            uuid;
+  v_due_date            date;
+  v_sort_order          integer;
+  v_first_user_id       uuid;
+  v_user_id             uuid;
+
+  v_venue               record;
+  v_default_manager     uuid;
+
+  v_existing_count      integer;
+  v_created_count       integer := 0;
+  v_masters_created     jsonb := '[]'::jsonb;
+  v_children_created    jsonb := '[]'::jsonb;
+  v_skipped_venues      jsonb := '[]'::jsonb;
+
+  v_id_map              jsonb := '{}'::jsonb;
+  v_dep_task_template_id       uuid;
+  v_dep_depends_on_template_id uuid;
+  v_mapped_task_id             uuid;
+  v_mapped_depends_on_id       uuid;
+begin
+  -- 1. Idempotency — if any SOP-derived tasks exist, return early
+  select count(*)
+  into   v_existing_count
+  from   public.planning_tasks
+  where  planning_item_id = p_planning_item_id
+  and    sop_template_task_id is not null;
+
+  if v_existing_count > 0 then
+    return jsonb_build_object(
+      'created', 0,
+      'masters_created', '[]'::jsonb,
+      'children_created', '[]'::jsonb,
+      'skipped_venues', '[]'::jsonb,
+      'idempotent_skip', true
+    );
+  end if;
+
+  -- 2. Enter cascade-internal bypass so the guard trigger allows cascade column writes
+  perform set_config('app.cascade_internal', 'on', true);
+
+  -- 3. Iterate templates in (section_sort, template_sort) order
+  for
+    v_tmpl_id, v_section_id, v_section_label, v_section_sort, v_section_assignees,
+    v_task_title, v_task_sort, v_t_minus_days, v_task_assignees,
+    v_expansion_strategy, v_venue_filter
+  in
+    select t.id, s.id, s.label, s.sort_order, s.default_assignee_ids,
+           t.title, t.sort_order, t.t_minus_days, t.default_assignee_ids,
+           t.expansion_strategy, t.venue_filter
+    from   public.sop_task_templates t
+    join   public.sop_sections s on s.id = t.section_id
+    order  by s.sort_order, t.sort_order
+  loop
+    v_master_id  := gen_random_uuid();
+    v_due_date   := p_target_date - (v_t_minus_days * interval '1 day');
+    v_sort_order := (v_section_sort * 1000) + v_task_sort;
+
+    -- 3a. Insert master / single row (full v1 column population)
+    insert into public.planning_tasks (
+      id, planning_item_id, title, assignee_id, due_date, status, sort_order,
+      created_by, sop_section, sop_template_task_id, sop_t_minus_days, is_blocked,
+      cascade_sop_template_id
+    ) values (
+      v_master_id, p_planning_item_id, v_task_title, null, v_due_date, 'open', v_sort_order,
+      p_created_by, v_section_label, v_tmpl_id, v_t_minus_days, false,
+      case when v_expansion_strategy = 'per_venue' then v_tmpl_id else null end
+    );
+
+    -- 3b. Resolve assignees for master / single (matches v1 behaviour)
+    declare v_candidate_ids uuid[];
+    begin
+      v_candidate_ids :=
+        case when array_length(v_task_assignees, 1) > 0 then v_task_assignees
+             else v_section_assignees end;
+
+      v_first_user_id := null;
+      if array_length(v_candidate_ids, 1) > 0 then
+        foreach v_user_id in array v_candidate_ids loop
+          if exists (select 1 from public.users where id = v_user_id and deactivated_at is null) then
+            insert into public.planning_task_assignees (task_id, user_id)
+            values (v_master_id, v_user_id)
+            on conflict (task_id, user_id) do nothing;
+
+            if v_first_user_id is null then
+              v_first_user_id := v_user_id;
+            end if;
+          end if;
+        end loop;
+
+        if v_first_user_id is not null then
+          update public.planning_tasks set assignee_id = v_first_user_id where id = v_master_id;
+        end if;
+      end if;
+    end;
+
+    v_id_map := v_id_map || jsonb_build_object(v_tmpl_id::text, v_master_id::text);
+    v_created_count := v_created_count + 1;
+    v_masters_created := v_masters_created || jsonb_build_object(
+      'task_id', v_master_id, 'template_id', v_tmpl_id
+    );
+
+    -- 3c. Per-venue fan-out
+    if v_expansion_strategy = 'per_venue' then
+      for v_venue in
+        select v.id, v.name, v.category, v.default_manager_responsible_id
+        from   public.venues v
+        where  v_venue_filter = 'all' or v.category = v_venue_filter
+        order  by v.name
+      loop
+        if v_venue.default_manager_responsible_id is null then
+          v_skipped_venues := v_skipped_venues || jsonb_build_object(
+            'venue_id', v_venue.id, 'venue_name', v_venue.name, 'reason', 'no_default_manager'
+          );
+          continue;
+        end if;
+
+        select id into v_default_manager
+        from   public.users
+        where  id = v_venue.default_manager_responsible_id and deactivated_at is null;
+
+        if v_default_manager is null then
+          v_skipped_venues := v_skipped_venues || jsonb_build_object(
+            'venue_id', v_venue.id, 'venue_name', v_venue.name, 'reason', 'default_manager_deactivated'
+          );
+          continue;
+        end if;
+
+        v_child_id := gen_random_uuid();
+        insert into public.planning_tasks (
+          id, planning_item_id, title, assignee_id, due_date, status, sort_order,
+          created_by, sop_section,
+          sop_template_task_id,  -- NULL on children to avoid idempotency-index conflict
+          sop_t_minus_days, is_blocked, parent_task_id, cascade_venue_id
+        ) values (
+          v_child_id, p_planning_item_id, v_task_title || ' — ' || v_venue.name,
+          v_default_manager, v_due_date, 'open', v_sort_order,
+          p_created_by, v_section_label,
+          null,
+          v_t_minus_days, false, v_master_id, v_venue.id
+        );
+
+        insert into public.planning_task_assignees (task_id, user_id)
+        values (v_child_id, v_default_manager)
+        on conflict (task_id, user_id) do nothing;
+
+        insert into public.audit_log (entity, entity_id, action, meta, actor_id)
+        values (
+          'planning_task', v_child_id, 'planning_task.cascade_spawn',
+          jsonb_build_object('master_id', v_master_id, 'venue_id', v_venue.id, 'template_id', v_tmpl_id),
+          null
+        );
+
+        v_created_count := v_created_count + 1;
+        v_children_created := v_children_created || jsonb_build_object(
+          'task_id', v_child_id, 'venue_id', v_venue.id, 'master_id', v_master_id
+        );
+      end loop;
+    end if;
+  end loop;
+
+  -- 4. Wire dependencies between masters (children have no own deps)
+  for v_dep_task_template_id, v_dep_depends_on_template_id in
+    select task_template_id, depends_on_template_id from public.sop_task_dependencies
+  loop
+    v_mapped_task_id       := (v_id_map ->> v_dep_task_template_id::text)::uuid;
+    v_mapped_depends_on_id := (v_id_map ->> v_dep_depends_on_template_id::text)::uuid;
+
+    if v_mapped_task_id is not null and v_mapped_depends_on_id is not null then
+      insert into public.planning_task_dependencies (task_id, depends_on_task_id)
+      values (v_mapped_task_id, v_mapped_depends_on_id)
+      on conflict (task_id, depends_on_task_id) do nothing;
+    end if;
+  end loop;
+
+  -- 5. Recompute is_blocked on masters with open dependencies
+  update public.planning_tasks pt
+  set    is_blocked = true
+  where  pt.planning_item_id = p_planning_item_id
+  and    pt.parent_task_id is null
+  and    exists (
+    select 1
+    from   public.planning_task_dependencies d
+    join   public.planning_tasks dep on dep.id = d.depends_on_task_id
+    where  d.task_id  = pt.id
+    and    dep.status = 'open'
+  );
+
+  return jsonb_build_object(
+    'created', v_created_count,
+    'masters_created', v_masters_created,
+    'children_created', v_children_created,
+    'skipped_venues', v_skipped_venues
+  );
+end;
+$$;
+
+alter function public.generate_sop_checklist_v2(uuid, date, uuid) owner to postgres;
+alter function public.generate_sop_checklist_v2(uuid, date, uuid) set search_path = pg_catalog, public;
+revoke execute on function public.generate_sop_checklist_v2(uuid, date, uuid) from public, authenticated;
+grant execute on function public.generate_sop_checklist_v2(uuid, date, uuid) to service_role;
 ```
 
-**Caller migration (in the same Wave 4 PR that creates v2):** every call site of `generate_sop_checklist` switches to `generate_sop_checklist_v2`. This includes `createEventPlanningItem`, `createPlanningItemAction`, the Wave 2 multi-venue RPCs, and any test fixtures. The old function remains in the schema during the migration window and is removed in a follow-up migration once no callers remain.
+**The v1 RPC remains the reference implementation** for single-task behaviour. The Wave 4 PR that ships v2 must include a Vitest parity test: for a planning item that has only `single` templates, v1 and v2 produce the same rows modulo the JSONB wrapper.
+
+**Caller migration (in the same Wave 4 PR):** every call site of `generate_sop_checklist(p_planning_item_id, p_target_date, p_created_by)` switches to `generate_sop_checklist_v2(...)` with identical arguments. Callers: `createEventPlanningItem` in `src/lib/events.ts`, `createPlanningItemAction` in `src/actions/planning.ts`, `sop_backfill_completed` path in `src/actions/sop.ts`, the Wave 2 multi-venue RPCs, and any Vitest fixtures. The old function remains in the schema during the migration window and is removed in a follow-up migration once no callers remain.
 
 ### 4.3 Cascade parent-sync trigger
 
@@ -914,12 +1455,50 @@ create policy pending_cascade_backfill_service_only on pending_cascade_backfill 
   with check (public.current_user_role() = 'administrator');
 ```
 
-`createVenueAction` and `updateVenueAction` (when category changes) insert a row into this queue via the service-role client. Cron `/api/cron/cascade-backfill` runs every minute:
-1. `SELECT ... FROM pending_cascade_backfill WHERE processed_at IS NULL AND is_dead_letter = false AND (next_attempt_at IS NULL OR next_attempt_at <= now()) FOR UPDATE SKIP LOCKED LIMIT 10`.
-2. For each row: `UPDATE ... SET locked_at = now(), locked_by = <cron_run_id>, attempt_count = attempt_count + 1, last_attempt_at = now()`.
-3. Run backfill: for each open master (status = 'open' and cascade_sop_template_id IS NOT NULL and parent_task_id IS NULL) whose template's filter matches the venue's category, insert a missing child (via the SOP RPC's bypass pattern).
-4. If backfill succeeds: `UPDATE ... SET processed_at = now()`.
-5. If it fails: `UPDATE ... SET error = <message>, locked_at = null, next_attempt_at = now() + interval '5 minutes' * power(2, attempt_count)`. If `attempt_count >= 5`, set `is_dead_letter = true`.
+`createVenueAction` and `updateVenueAction` (when category changes) insert a row into this queue via the service-role client. Cron `/api/cron/cascade-backfill` runs every minute. Each cron invocation opens one transaction that SELECTs + claims + processes a batch of rows, ensuring the lock held by `FOR UPDATE SKIP LOCKED` covers the full lifecycle of each row's handling:
+
+```sql
+-- Cron body (pseudo-SQL; actual implementation is a server route calling this via RPC):
+begin;
+
+with claimed as (
+  select id from public.pending_cascade_backfill
+  where  processed_at is null
+    and  is_dead_letter = false
+    and  locked_at is null
+    and  (next_attempt_at is null or next_attempt_at <= now())
+  order by queued_at
+  for update skip locked
+  limit 10
+)
+update public.pending_cascade_backfill b
+   set locked_at = now(),
+       locked_by = <cron_run_id>,
+       attempt_count = attempt_count + 1,
+       last_attempt_at = now()
+  from claimed
+ where b.id = claimed.id
+returning b.id, b.venue_id;
+
+-- For each returned row: run the backfill (open master scan + per-venue child spawn
+-- via generate_sop_checklist_v2 with cascade_internal_bypass). On per-row success:
+update public.pending_cascade_backfill
+   set processed_at = now(), error = null
+ where id = <row_id>;
+
+-- On per-row failure (caught exception):
+update public.pending_cascade_backfill
+   set error = <exception_message>,
+       locked_at = null,
+       locked_by = null,
+       next_attempt_at = now() + interval '5 minutes' * power(2, attempt_count),
+       is_dead_letter = (attempt_count >= 5)
+ where id = <row_id>;
+
+commit;
+```
+
+The `locked_at is null` predicate in the selector prevents overlapping cron invocations from picking up rows already in-flight with another worker. A failed row has `locked_at` cleared so the next cron attempt can reclaim it (subject to `next_attempt_at` backoff).
 
 **Category change handling:**
 - Category change INTO a filter (e.g. cafe → pub): queue a backfill row.
@@ -1256,21 +1835,21 @@ Order matters. Wave 0 first, then the rest follow wave order. Each is tested loc
 5. `004_add_proof_read_menus_task.sql` — Wave 1.3.
 6. `005_add_venue_category.sql` — Wave 2.1 (includes Heather Farm Cafe update).
 7. `006_add_event_creation_batches.sql` — Wave 2.3 (idempotency).
-8. `007_add_multi_venue_event_rpc.sql` — Wave 2.3 (drafts).
-9. `008_add_multi_venue_event_proposal_rpc.sql` — Wave 2.3b (proposals; tolerates null required fields, creates pending_approval rows).
-10. `009_add_multi_venue_planning_item_rpc.sql` — Wave 2.4.
-11. `010_relax_event_required_fields_and_extend_status.sql` — Wave 3. **Not additive.**
-12. `011_enforce_event_status_transitions.sql` — Wave 3.2.
-13. `012_extend_sop_for_expansion.sql` — Wave 4.1.
-14. `013_add_planning_task_cascade_columns.sql` — Wave 4.1.
-15. `014_cascade_guard_and_sync_triggers.sql` — Wave 4.3 + 4.4.
-16. `015_generate_sop_checklist_v2.sql` — Wave 4.2. **Same PR migrates all Wave 2 RPC callers from v1 to v2.**
+8. `007_add_multi_venue_event_rpc.sql` — Wave 2.3 (drafts; inserts events with full fields into a `draft` status that the current CHECK permits).
+9. `008_add_multi_venue_planning_item_rpc.sql` — Wave 2.4.
+10. `009_relax_event_required_fields_and_extend_status.sql` — Wave 3. **Not additive.** Adds `pending_approval` and `approved_pending_details` statuses and relaxes `event_type`/`venue_space`/`end_at` to nullable for those statuses.
+11. `010_enforce_event_status_transitions.sql` — Wave 3.2.
+12. `011_add_multi_venue_event_proposal_rpc.sql` — Wave 2.3b. **Runs AFTER migration 009** because it inserts events with null `event_type/venue_space/end_at` and `status = 'pending_approval'`, both of which require the schema relaxation to be in place.
+13. `012_extend_sop_for_expansion.sql` — Wave 4.1a (SOP template columns).
+14. `013_add_planning_task_cascade_columns.sql` — Wave 4.1b (planning_tasks columns + indexes).
+15. `014_generate_sop_checklist_v2.sql` — Wave 4.2. **Same PR migrates all Wave 2 RPC callers from v1 to v2.**
+16. `015_cascade_guard_and_sync_triggers.sql` — Wave 4.3 + 4.4.
 17. `016_add_pending_cascade_backfill.sql` — Wave 4.5.
 18. `017_add_attachments.sql` — Wave 5.2 + 5.3.
 
 ## Rollback plan
 
-- **Wave 0:** restoring the previous audit CHECK is safe if no new audit values have been written. If they have, they must be removed or migrated first. `cascade_internal_bypass` can be dropped safely.
+- **Wave 0:** restoring the previous audit CHECK is safe if no new audit values have been written (otherwise the new values must be removed first). **Do NOT drop `cascade_internal_bypass()` until Wave 4 has been rolled back** — the cascade guard/sync triggers call this helper. Order: revert Waves 5 → 4 → 3 → 2 → 1 first, then Wave 0.
 - **Wave 1 columns:** `planning_tasks.notes`, `debriefs.labour_hours`, `debriefs.labour_rate_gbp_at_submit`, `business_settings`, `slt_members` — all safe to drop; data loss only.
 - **Wave 1.3:** `DELETE FROM sop_task_templates WHERE id = '<deterministic uuid>';`.
 - **Wave 2.1 venue category:** drop the column if no code references it.
@@ -1307,6 +1886,22 @@ Wave 5 (attachments) — depends on Wave 0 only; independent of the rest.
 - Per-venue or per-role labour rates.
 - Nested cascades (children-of-children).
 - Attachment sensitivity classification (beyond the current executive-read-all).
+
+## Change log (v5 vs v4)
+
+- **AB-V4-001 / SPEC-V4-003 fixed:** multi-venue RPCs now reject `executive` role and no-venue `office_worker` — matches `canManageEvents(role, venueId)` semantics.
+- **AB-V4-002 fixed:** draft RPC inserts `planning_items.status = 'planned'` (was invalid `'open'`).
+- **AB-V4-003 / SPEC-V4-007 fixed:** Wave 0 audit action CHECK now includes `user.sensitive_column_changed` (written by the existing DB trigger in `20260414160001_users_sensitive_column_audit.sql`).
+- **AB-V4-004 / SPEC-V4-005 fixed:** draft RPC return shape simplified to `{batch_id, events}`. Spec explains why (`generate_sop_checklist` v1 returns integer; switching to v2 in Wave 4 adds richer SOP metadata).
+- **AB-V4-005 / SPEC-V4-002 fixed:** `preApproveEventAction` now creates the planning item and generates SOP in the same transaction as the status transition. Proposal creation doesn't create a planning item; approval does.
+- **AB-V4-006 addressed:** Wave 4 caller migration made explicit — the SOP v2 migration PR updates `create_multi_venue_event_drafts` to call v2 instead of v1.
+- **AB-V4-008 fixed:** duplicate `cascade_internal_bypass()` definition in Wave 0 removed. The function is defined once in the migration SQL block.
+- **MIG-V4-001 / SPEC-V4-001 fixed:** migration list reordered. `009_relax_event_required_fields_and_extend_status.sql` now runs before `011_add_multi_venue_event_proposal_rpc.sql`. Proposal RPC won't attempt null inserts against a non-null schema.
+- **SPEC-V4-004 fixed:** status-transition trigger's venue check requires `v_user_venue is not null` — no-venue office workers cannot complete proposals.
+- **SPEC-V4-006 fixed:** SECURITY DEFINER convention now distinguishes direct-call RPCs (grant to service_role) from trigger functions (no grant). Applies consistently.
+- **SPEC-V4-009 fixed:** backfill cron SQL shown concretely. `locked_at is null` is in the selector. Whole cycle runs in one transaction so locks cover select + claim + process + release.
+- **SPEC-V4-010 fixed:** migration list reordered within Wave 4 — 4.1 data model → 4.2 SOP v2 RPC → 4.3 + 4.4 triggers → 4.5 backfill.
+- **SPEC-V4-011 fixed:** rollback plan states Wave 0's `cascade_internal_bypass()` is dropped last (after Waves 1–5 are reverted).
 
 ## Change log (v4 vs v3)
 
