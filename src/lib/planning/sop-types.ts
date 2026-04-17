@@ -7,6 +7,9 @@ export interface SopSection {
   updatedAt: string;
 }
 
+export type SopExpansionStrategy = "single" | "per_venue";
+export type SopVenueFilter = "all" | "pub" | "cafe";
+
 export interface SopTaskTemplate {
   id: string;
   sectionId: string;
@@ -14,6 +17,8 @@ export interface SopTaskTemplate {
   sortOrder: number;
   defaultAssigneeIds: string[];
   tMinusDays: number;
+  expansionStrategy: SopExpansionStrategy;
+  venueFilter: SopVenueFilter | null;
   createdAt: string;
   updatedAt: string;
 }

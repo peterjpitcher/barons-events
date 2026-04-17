@@ -123,12 +123,15 @@ export async function updateBlockedStatus(
  */
 export async function loadSopTemplate(): Promise<SopTemplateTree> {
   const db = createSupabaseAdminClient();
-  const { data, error } = await db
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (db as any)
     .from("sop_sections")
     .select(`
       id, label, sort_order, default_assignee_ids, created_at, updated_at,
       tasks:sop_task_templates(
-        id, section_id, title, sort_order, default_assignee_ids, t_minus_days, created_at, updated_at,
+        id, section_id, title, sort_order, default_assignee_ids, t_minus_days,
+        expansion_strategy, venue_filter,
+        created_at, updated_at,
         dependencies:sop_task_dependencies!sop_task_dependencies_task_template_id_fkey(depends_on_template_id)
       )
     `)
@@ -150,6 +153,8 @@ export async function loadSopTemplate(): Promise<SopTemplateTree> {
       sort_order: number;
       default_assignee_ids: string[] | null;
       t_minus_days: number;
+      expansion_strategy: string | null;
+      venue_filter: string | null;
       created_at: string;
       updated_at: string;
       dependencies: Array<{ depends_on_template_id: string }>;
@@ -170,6 +175,12 @@ export async function loadSopTemplate(): Promise<SopTemplateTree> {
         sortOrder: t.sort_order,
         defaultAssigneeIds: t.default_assignee_ids ?? [],
         tMinusDays: t.t_minus_days,
+        expansionStrategy: (t.expansion_strategy === "per_venue" ? "per_venue" : "single") as
+          | "single"
+          | "per_venue",
+        venueFilter: (t.venue_filter === "all" || t.venue_filter === "pub" || t.venue_filter === "cafe")
+          ? (t.venue_filter as "all" | "pub" | "cafe")
+          : null,
         createdAt: t.created_at,
         updatedAt: t.updated_at,
         dependencies: (t.dependencies ?? []).map((d) => ({

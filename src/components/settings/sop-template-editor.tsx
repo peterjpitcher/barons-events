@@ -462,6 +462,13 @@ function TaskRow({
   const [title, setTitle] = useState(task.title);
   const [tMinusDays, setTMinusDays] = useState(task.tMinusDays);
   const [assigneeIds, setAssigneeIds] = useState<string[]>(task.defaultAssigneeIds);
+  // Compose the expansion dropdown into a single value:
+  //   "single" | "per_venue:all" | "per_venue:pub" | "per_venue:cafe"
+  const initialExpansion: string =
+    task.expansionStrategy === "per_venue"
+      ? `per_venue:${task.venueFilter ?? "pub"}`
+      : "single";
+  const [expansion, setExpansion] = useState<string>(initialExpansion);
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -475,6 +482,12 @@ function TaskRow({
   async function handleSave(): Promise<void> {
     if (!title.trim()) return;
     setSaving(true);
+    const [strategyRaw, filterRaw] = expansion.split(":");
+    const expansionStrategy = strategyRaw === "per_venue" ? "per_venue" : "single";
+    const venueFilter =
+      expansionStrategy === "per_venue"
+        ? ((filterRaw === "all" || filterRaw === "pub" || filterRaw === "cafe") ? filterRaw : "pub")
+        : null;
     const result = await updateSopTaskTemplateAction({
       id: task.id,
       sectionId: task.sectionId,
@@ -482,6 +495,8 @@ function TaskRow({
       sortOrder: task.sortOrder,
       defaultAssigneeIds: assigneeIds,
       tMinusDays,
+      expansionStrategy,
+      venueFilter,
     });
     setSaving(false);
     if (result.success) {
@@ -634,6 +649,28 @@ function TaskRow({
         </div>
       </div>
 
+      {/* Expansion strategy */}
+      <div className="space-y-1">
+        <label htmlFor={`task-expansion-${task.id}`} className="text-xs font-medium text-subtle">
+          Create one per
+        </label>
+        <select
+          id={`task-expansion-${task.id}`}
+          value={expansion}
+          onChange={(e) => setExpansion(e.target.value)}
+          disabled={saving}
+          className="h-9 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2 text-sm text-[var(--color-text)]"
+        >
+          <option value="single">Task (single)</option>
+          <option value="per_venue:pub">Pub (one task per pub)</option>
+          <option value="per_venue:cafe">Cafe (one task per cafe)</option>
+          <option value="per_venue:all">Every venue</option>
+        </select>
+        <p className="text-xs text-subtle">
+          &quot;Per venue&quot; tasks generate one master plus one child per matching venue, each assigned to that venue&apos;s default manager.
+        </p>
+      </div>
+
       {/* Assignees multi-select */}
       <div className="space-y-1">
         <span className="text-xs font-medium text-subtle">Default assignees</span>
@@ -707,6 +744,7 @@ function TaskRow({
             setTitle(task.title);
             setTMinusDays(task.tMinusDays);
             setAssigneeIds(task.defaultAssigneeIds);
+            setExpansion(initialExpansion);
           }}
         >
           Cancel

@@ -54,6 +54,8 @@ const sopTaskTemplateSchema = z.object({
   sortOrder: z.number().int().min(0),
   defaultAssigneeIds: z.array(z.string().min(1)).max(10).default([]),
   tMinusDays: z.number().int().min(0),
+  expansionStrategy: z.enum(["single", "per_venue"]).default("single"),
+  venueFilter: z.enum(["all", "pub", "cafe"]).nullable().optional(),
 });
 
 const sopTaskTemplateUpdateSchema = sopTaskTemplateSchema.extend({
@@ -232,12 +234,20 @@ export async function createSopTaskTemplateAction(
     }
 
     const db = createSupabaseAdminClient();
-    const { error } = await db.from("sop_task_templates").insert({
+    // Enforce the coherence CHECK: venue_filter null iff expansion_strategy = 'single'.
+    const venueFilter =
+      parsed.data.expansionStrategy === "per_venue"
+        ? (parsed.data.venueFilter ?? "pub")
+        : null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (db as any).from("sop_task_templates").insert({
       section_id: parsed.data.sectionId,
       title: parsed.data.title,
       sort_order: parsed.data.sortOrder,
       default_assignee_ids: parsed.data.defaultAssigneeIds,
       t_minus_days: parsed.data.tMinusDays,
+      expansion_strategy: parsed.data.expansionStrategy,
+      venue_filter: venueFilter,
     });
 
     if (error) {
@@ -275,7 +285,12 @@ export async function updateSopTaskTemplateAction(
     }
 
     const db = createSupabaseAdminClient();
-    const { error } = await db
+    const venueFilter =
+      parsed.data.expansionStrategy === "per_venue"
+        ? (parsed.data.venueFilter ?? "pub")
+        : null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (db as any)
       .from("sop_task_templates")
       .update({
         section_id: parsed.data.sectionId,
@@ -283,6 +298,8 @@ export async function updateSopTaskTemplateAction(
         sort_order: parsed.data.sortOrder,
         default_assignee_ids: parsed.data.defaultAssigneeIds,
         t_minus_days: parsed.data.tMinusDays,
+        expansion_strategy: parsed.data.expansionStrategy,
+        venue_filter: venueFilter,
       })
       .eq("id", parsed.data.id);
 

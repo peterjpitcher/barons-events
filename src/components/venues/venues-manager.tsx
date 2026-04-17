@@ -61,7 +61,7 @@ function VenueCreateForm({ reviewers, users }: { reviewers: ReviewerOption[]; us
         <CardDescription>Manage your venues in a table so updates stay consistent and quick.</CardDescription>
       </CardHeader>
       <CardContent>
-        <form ref={formRef} action={formAction} className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,2fr)_auto]" noValidate>
+        <form ref={formRef} action={formAction} className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,2fr)_minmax(0,2fr)_auto]" noValidate>
           <div className="space-y-2">
             <Label htmlFor="new-venue-name">Venue name</Label>
             <Input
@@ -74,6 +74,13 @@ function VenueCreateForm({ reviewers, users }: { reviewers: ReviewerOption[]; us
               className={nameError ? errorInputClass : undefined}
             />
             <FieldError id="new-venue-name-error" message={nameError} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="new-venue-category">Category</Label>
+            <Select id="new-venue-category" name="category" defaultValue="pub">
+              <option value="pub">🍺 Pub</option>
+              <option value="cafe">☕ Cafe</option>
+            </Select>
           </div>
           <div className="space-y-2">
             <Label htmlFor="new-venue-default-manager">Default manager responsible</Label>
@@ -126,6 +133,7 @@ function VenueTable({ venues, reviewers, users }: VenuesManagerProps) {
         <thead>
           <tr className="bg-[var(--color-muted-surface)] text-left text-xs font-semibold uppercase tracking-[0.14em] text-subtle">
             <th scope="col" className="px-4 py-3">Venue</th>
+            <th scope="col" className="px-4 py-3">Category</th>
             <th scope="col" className="px-4 py-3">Manager Responsible</th>
             <th scope="col" className="px-4 py-3">Default Reviewer</th>
             <th scope="col" className="px-4 py-3">Google Review URL</th>
@@ -174,8 +182,8 @@ function VenueRowEditor({ venue, reviewers, users }: { venue: VenueRow; reviewer
 
   return (
     <tr className="border-t border-[var(--color-border)]">
-      <td colSpan={6} className="px-4 py-3">
-        <div className="grid gap-3 md:grid-cols-[minmax(0,18fr)_minmax(0,18fr)_minmax(0,16fr)_minmax(0,28fr)_auto_auto] md:items-start">
+      <td colSpan={7} className="px-4 py-3">
+        <div className="grid gap-3 md:grid-cols-[minmax(0,16fr)_minmax(0,10fr)_minmax(0,16fr)_minmax(0,14fr)_minmax(0,24fr)_auto_auto] md:items-start">
           <form id={`venue-form-${venue.id}`} action={formAction} className="contents" noValidate>
             <input type="hidden" name="venueId" value={venue.id} />
             <div className="space-y-2">
@@ -192,6 +200,20 @@ function VenueRowEditor({ venue, reviewers, users }: { venue: VenueRow; reviewer
                 className={cn(nameError ? errorInputClass : undefined)}
               />
               <FieldError id={nameErrorId} message={nameError} />
+            </div>
+            <div className="space-y-2">
+              <label className="sr-only" htmlFor={`venue-category-${venue.id}`}>
+                Category
+              </label>
+              <Select
+                id={`venue-category-${venue.id}`}
+                name="category"
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                defaultValue={(venue as any).category ?? "pub"}
+              >
+                <option value="pub">🍺 Pub</option>
+                <option value="cafe">☕ Cafe</option>
+              </Select>
             </div>
             <div className="space-y-2">
               <label className="sr-only" htmlFor={`venue-manager-${venue.id}`}>

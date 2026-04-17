@@ -18,6 +18,22 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/form-errors", () => ({
   getFieldErrors: vi.fn(() => ({})),
 }));
+vi.mock("@/lib/audit-log", () => ({
+  recordAuditLogEntry: vi.fn().mockResolvedValue(undefined),
+}));
+// createSupabaseAdminClient is used to (a) read the existing venue.category
+// before update, (b) insert into pending_cascade_backfill. Both are
+// best-effort; we return chainable mocks that no-op.
+vi.mock("@/lib/supabase/admin", () => {
+  const maybeSingle = vi.fn().mockResolvedValue({ data: { category: "pub" }, error: null });
+  const eq = vi.fn(() => ({ maybeSingle }));
+  const select = vi.fn(() => ({ eq }));
+  const insert = vi.fn().mockResolvedValue({ error: null });
+  const from = vi.fn(() => ({ select, insert }));
+  return {
+    createSupabaseAdminClient: vi.fn(() => ({ from })),
+  };
+});
 
 import { getCurrentUser } from "@/lib/auth";
 import { createVenue, updateVenue } from "@/lib/venues";
