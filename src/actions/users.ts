@@ -84,6 +84,20 @@ export async function updateUserAction(
       }
     });
 
+    // Capture all field changes (not just role) so non-role edits are auditable.
+    const changedFields: string[] = [];
+    if ((currentUserData?.role ?? null) !== parsed.data.role) changedFields.push("role");
+    if ((currentUserData?.venue_id ?? null) !== (parsed.data.venueId || null)) changedFields.push("venue_id");
+    if (parsed.data.fullName !== undefined) changedFields.push("full_name");
+
+    await recordAuditLogEntry({
+      entity: "user",
+      entityId: parsed.data.userId,
+      action: "user.updated",
+      actorId: currentUser.id,
+      meta: { changed_fields: changedFields }
+    });
+
     revalidatePath("/users");
     return { success: true, message: "User updated." };
   } catch (error) {

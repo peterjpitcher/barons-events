@@ -180,6 +180,14 @@ export async function movePlanningItemDateAction(input: unknown): Promise<Planni
 
     await movePlanningItemDate(parsed.data.itemId, parsed.data.targetDate);
 
+    recordAuditLogEntry({
+      entity: "planning",
+      entityId: parsed.data.itemId,
+      action: "planning.item_updated",
+      actorId: null,
+      meta: { changed_fields: ["target_date"], target_date: parsed.data.targetDate }
+    }).catch(() => {});
+
     try {
       await recalculateSopDates(parsed.data.itemId, parsed.data.targetDate);
     } catch (sopError) {
@@ -759,6 +767,14 @@ export async function convertInspirationItemAction(
     if (dismissalError) {
       console.warn("convertInspirationItemAction: dismissal insert failed (item may reappear on board)", dismissalError);
     }
+
+    recordAuditLogEntry({
+      entity: "planning",
+      entityId: newItem.id,
+      action: "planning.item_created",
+      actorId: user.id,
+      meta: { source: "inspiration", inspiration_item_id: id }
+    }).catch(() => {});
 
     revalidatePath("/planning");
     return { success: true, message: "Added to your plan." };
