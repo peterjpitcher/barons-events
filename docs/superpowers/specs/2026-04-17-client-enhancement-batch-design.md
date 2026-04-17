@@ -716,7 +716,7 @@ grant execute on function public.create_multi_venue_event_drafts(jsonb, uuid) to
 Exactly the same shape and mechanics as `create_multi_venue_event_drafts`, with these differences:
 - Payload has fewer required fields: `{created_by, venue_ids, title, start_at, notes}`. No `event_type`, `end_at`, or `venue_space` (those get filled in after approval).
 - Created events have `status = 'pending_approval'` (not `'draft'`).
-- SOP generation is **skipped** at proposal time. SOP checklists are generated when the admin approves (transition `pending_approval → approved_pending_details` triggers SOP generation via an after-update hook, or by the admin approve action calling `generate_sop_checklist` explicitly). The spec's acceptance criterion is that pending proposals do not yet have SOP tasks.
+- SOP generation is **skipped** at proposal time. SOP checklists are generated when the admin approves, by the `pre_approve_event_proposal` RPC (Wave 3.3). Pending proposals do not yet have SOP tasks.
 - Inserts one `audit_log` row per proposal with `action = 'event.proposed'`, `meta.multi_venue_batch_id = batch_id`.
 
 This RPC is the one Wave 3.3's `proposeEventAction` calls — not `create_multi_venue_event_drafts`.
@@ -1853,12 +1853,13 @@ Order matters. Wave 0 first, then the rest follow wave order. Each is tested loc
 10. `009_relax_event_required_fields_and_extend_status.sql` — Wave 3. **Not additive.** Adds `pending_approval` and `approved_pending_details` statuses and relaxes `event_type`/`venue_space`/`end_at` to nullable for those statuses.
 11. `010_enforce_event_status_transitions.sql` — Wave 3.2.
 12. `011_add_multi_venue_event_proposal_rpc.sql` — Wave 2.3b. **Runs AFTER migration 009** because it inserts events with null `event_type/venue_space/end_at` and `status = 'pending_approval'`, both of which require the schema relaxation to be in place. **Ships in the Wave 3 PR** (not Wave 2) because `proposeEventAction` depends on this RPC and that action is part of Wave 3. The migration file sits alongside Wave 3's other migrations so the Wave 3 branch carries everything proposals need to work end-to-end.
-13. `012_extend_sop_for_expansion.sql` — Wave 4.1a (SOP template columns).
-14. `013_add_planning_task_cascade_columns.sql` — Wave 4.1b (planning_tasks columns + indexes).
-15. `014_generate_sop_checklist_v2.sql` — Wave 4.2. **Same PR migrates all Wave 2 RPC callers from v1 to v2.**
-16. `015_cascade_guard_and_sync_triggers.sql` — Wave 4.3 + 4.4.
-17. `016_add_pending_cascade_backfill.sql` — Wave 4.5.
-18. `017_add_attachments.sql` — Wave 5.2 + 5.3.
+13. `012_add_pre_approve_event_proposal_rpc.sql` — Wave 3.3. Creates the `pre_approve_event_proposal(p_event_id uuid, p_admin_id uuid) returns jsonb` RPC that does the approval DB work atomically (status update + planning_items insert + SOP generation + audit). SECURITY DEFINER with direct-call hardening (owner postgres, search_path pinned, revoke from public+authenticated, grant to service_role). Ships in the same PR as migration 011.
+14. `013_extend_sop_for_expansion.sql` — Wave 4.1a (SOP template columns).
+15. `014_add_planning_task_cascade_columns.sql` — Wave 4.1b (planning_tasks columns + indexes).
+16. `015_generate_sop_checklist_v2.sql` — Wave 4.2. **Same PR migrates all Wave 2 RPC callers from v1 to v2** — including `pre_approve_event_proposal` switching from v1 to v2.
+17. `016_cascade_guard_and_sync_triggers.sql` — Wave 4.3 + 4.4.
+18. `017_add_pending_cascade_backfill.sql` — Wave 4.5.
+19. `018_add_attachments.sql` — Wave 5.2 + 5.3.
 
 ## Rollback plan
 
