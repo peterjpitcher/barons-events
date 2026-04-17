@@ -33,7 +33,15 @@ const AUDIT_COVERAGE_ALLOWLIST = new Set<string>([
   // Wave 5 — upload request inserts the attachment row but the audit for
   // attachment.uploaded fires on confirmation (confirmAttachmentUploadAction)
   // once the object is actually in storage. Pending rows are not audited.
-  "attachments.ts:requestAttachmentUploadAction"
+  "attachments.ts:requestAttachmentUploadAction",
+  // Wave 2 — multi-venue event draft creation delegates all DB mutations to
+  // create_multi_venue_event_drafts RPC which inserts event.created audit
+  // rows per venue internally.
+  "events.ts:saveEventDraftsMultiAction",
+  // Wave 2 — multi-venue planning item creation delegates all DB mutations to
+  // create_multi_venue_planning_items RPC which inserts planning.item_created
+  // audit rows per venue internally.
+  "planning.ts:createMultiVenuePlanningItemsAction"
 ]);
 
 const MUTATION_PATTERN = /\.(insert|update|delete|upsert|rpc)\s*\(/;

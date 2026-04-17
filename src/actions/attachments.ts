@@ -2,10 +2,57 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { fileTypeFromBuffer } from "file-type";
 import { getCurrentUser } from "@/lib/auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { recordAuditLogEntry } from "@/lib/audit-log";
 import type { ActionResult } from "@/lib/types";
+
+// file-type detects the raw container format. Some declared types collapse
+// to a shared magic-byte signature, so a strict string-equality check would
+// reject legitimate uploads. Express the allowed equivalences here so we can
+// "trust" a detected type when it's a known synonym for the declared one.
+//
+// (Known limitation: .doc/.xls/.ppt OLE Compound Document files share the
+// application/x-cfb container signature. Declared Office/legacy types are
+// accepted provided the detected type is application/x-cfb — we don't have a
+// way to distinguish .doc vs .xls beyond filename/extension heuristics.)
+const MIME_SYNONYMS: Record<string, Set<string>> = {
+  "application/pdf": new Set(["application/pdf"]),
+  // Modern Office formats are OOXML = ZIP containers. file-type emits the
+  // specific subtype when known, or falls back to "application/zip".
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": new Set([
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/zip"
+  ]),
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": new Set([
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/zip"
+  ]),
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation": new Set([
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "application/zip"
+  ]),
+  // Legacy Office binary formats are OLE CFB containers.
+  "application/msword": new Set(["application/msword", "application/x-cfb"]),
+  "application/vnd.ms-excel": new Set(["application/vnd.ms-excel", "application/x-cfb"]),
+  "application/vnd.ms-powerpoint": new Set([
+    "application/vnd.ms-powerpoint",
+    "application/x-cfb"
+  ]),
+  "image/jpeg": new Set(["image/jpeg"]),
+  "image/png": new Set(["image/png"]),
+  "image/heic": new Set(["image/heic"]),
+  "image/webp": new Set(["image/webp"]),
+  "video/mp4": new Set(["video/mp4"]),
+  "video/quicktime": new Set(["video/quicktime", "video/mp4"])
+};
+
+function detectedTypeMatchesDeclared(declared: string, detected: string): boolean {
+  const expected = MIME_SYNONYMS[declared];
+  if (!expected) return false;
+  return expected.has(detected);
+}
 
 const ALLOWED_MIME_TYPES = new Set([
   "application/pdf",
@@ -155,9 +202,52 @@ export async function confirmAttachmentUploadAction(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: existing, error: existErr } = await (db as any)
     .storage.from("task-attachments")
-    .createSignedUrl(row.storage_path, 5);
+    .createSignedUrl(row.storage_path, 30);
   if (existErr || !existing?.signedUrl) {
     return { success: false, message: "Upload not yet visible in storage. Retry in a moment." };
+  }
+
+  // Sniff the first 16 KB to verify the uploaded bytes match the declared
+  // MIME type. Renamed executables or content mismatches are rejected and the
+  // storage object is removed. file-type is robust for all allowed formats
+  // except legacy .doc/.xls/.ppt (all OLE CFB — we can't disambiguate).
+  try {
+    const response = await fetch(existing.signedUrl, { headers: { Range: "bytes=0-16383" } });
+    if (!response.ok && response.status !== 206) {
+      console.error("confirmAttachmentUploadAction sniff fetch failed:", response.status);
+      await (db as unknown as { storage: { from: (b: string) => { remove: (p: string[]) => Promise<unknown> } } })
+        .storage.from("task-attachments")
+        .remove([row.storage_path]);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (db as any)
+        .from("attachments")
+        .update({ upload_status: "failed", uploaded_at: new Date().toISOString() })
+        .eq("id", parsed.data.attachmentId);
+      return { success: false, message: "Upload verification failed." };
+    }
+    const buffer = Buffer.from(await response.arrayBuffer());
+    const detected = await fileTypeFromBuffer(buffer);
+    if (!detected || !detectedTypeMatchesDeclared(row.mime_type, detected.mime)) {
+      console.warn(
+        "confirmAttachmentUploadAction MIME mismatch:",
+        { declared: row.mime_type, detected: detected?.mime }
+      );
+      await (db as unknown as { storage: { from: (b: string) => { remove: (p: string[]) => Promise<unknown> } } })
+        .storage.from("task-attachments")
+        .remove([row.storage_path]);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (db as any)
+        .from("attachments")
+        .update({ upload_status: "failed", uploaded_at: new Date().toISOString() })
+        .eq("id", parsed.data.attachmentId);
+      return {
+        success: false,
+        message: "File contents don't match the declared type. Upload rejected."
+      };
+    }
+  } catch (sniffError) {
+    console.error("confirmAttachmentUploadAction sniff threw:", sniffError);
+    return { success: false, message: "Could not verify upload. Try again in a moment." };
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

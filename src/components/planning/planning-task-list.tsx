@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { AttachmentUploadButton } from "@/components/attachments/attachment-upload-button";
 import type { PlanningPerson, PlanningTask, PlanningTaskStatus } from "@/lib/planning/types";
 
 type PlanningTaskListProps = {
@@ -198,6 +199,13 @@ export function PlanningTaskList({ itemId, tasks, users, onChanged }: PlanningTa
                       aria-hidden="true"
                     />
                   </Button>
+                  <AttachmentUploadButton
+                    parentType="planning_task"
+                    parentId={task.id}
+                    label=""
+                    variant="ghost"
+                    onUploaded={onChanged}
+                  />
                   <Button
                     type="button"
                     variant="ghost"
