@@ -102,8 +102,9 @@ describe('convertInspirationItemAction', () => {
 
     expect(result.success).toBe(true);
     expect(result.message).toMatch(/added to your plan/i);
-    // Two inserts: one for planning_items, one for planning_inspiration_dismissals
-    expect(db.insert).toHaveBeenCalledTimes(2);
+    // Three inserts: planning_items, planning_inspiration_dismissals, audit_log
+    // (the audit row uses the same mocked action client).
+    expect(db.insert).toHaveBeenCalledTimes(3);
   });
 });
 

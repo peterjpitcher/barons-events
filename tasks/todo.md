@@ -17,6 +17,45 @@ Source: client request list, 2026-04-17. Session-context: `.claude/session-conte
 | 9 | Debriefs email SLT on submission | S | [notifications.ts](src/lib/notifications.ts) uses Resend. SLT list source not defined. | Clarify (see Q5) |
 | 10 | Labour hours in debrief at £12.71/hr | S | `debriefs` has wet/food takings, attendance, promo_effectiveness, highlights, issues. No labour hours column. | Clarify (see Q6 — rate policy) |
 
+## Implementation status (2026-04-17 end-of-session)
+
+### Wave 0 — Audit prerequisite ✅ COMPLETE & DEPLOYED
+
+- `20260417120000_audit_entities_and_actions.sql` — entity + action CHECK widened to cover every repo usage; `cascade_internal_bypass()` helper added. **Pushed.**
+- `20260417130000_audit_actions_batch_a.sql` — 4 new action values for Wave 0.3 patches. **Pushed.**
+- `tasks/audit-gap-map.md` — survey of 13 action files, 8 gaps identified.
+- Wave 0.3 Batches A/B/C — 8 gaps patched: createBookingAction, movePlanningItemDateAction, togglePlanningTaskStatusAction, reassignPlanningTaskAction, convertInspirationItemAction, dismissInspirationItemAction, refreshInspirationItemsAction, updateUserAction (partial — now logs user.updated alongside auth.role.changed), plus deleteCustomerAction (stale direct-insert bug caught by the guard).
+- Wave 0.4 — `src/actions/__tests__/audit-coverage.test.ts` CI guard. 75 assertions, allowlist empty.
+
+### Wave 1 — Quick wins: BACKEND COMPLETE & DEPLOYED; UI deferred
+
+- **1.1 Task notes** — `planning_tasks.notes` column + schema + helper + action + audit. Migration pushed. UI (textarea on task detail) deferred to follow-up.
+- **1.2 Not-required on todos page** — status column already supports it from prior SOP work; generic updater now also sets `completed_at` for `not_required`. UI exposure (three-state control on todos page) deferred.
+- **1.3 Proof-read menus task** — migration pushed. Appears automatically in SOP checklist for new events.
+- **1.4 Labour hours + rate** — `business_settings` singleton (£12.71 default); `debriefs.labour_hours` + `labour_rate_gbp_at_submit`; `submitDebriefAction` reads + snapshots rate on save; new `updateBusinessSettingsAction` (admin-only). Migration pushed. UI (form field + settings page editor) deferred.
+- **1.5 SLT email** — `slt_members` table + RLS; `addSltMemberAction`/`removeSltMemberAction`; `getSltRecipients()`; `sendDebriefSubmittedToSltEmail()` with `SLT_FROM_ALIAS` BCC / one-per-recipient fallback; wired into `submitDebriefAction`. Migration pushed. UI (settings picker) deferred.
+
+### Waves 2-5 — NOT STARTED
+
+Spec is at v6 and has been adversarially reviewed. Implementation requires:
+- Wave 2: `venues.category` + Heather Farm Cafe default + `VenueMultiSelect` component + multi-venue creation RPCs (drafts + planning items).
+- Wave 3: pre-event status extension + `create_multi_venue_event_proposals` RPC + `pre_approve_event_proposal` RPC + status-transition trigger + 14-day reaper.
+- Wave 4: SOP template expansion columns + `planning_tasks` cascade columns + `generate_sop_checklist_v2` RPC + cascade guard/sync triggers + backfill queue.
+- Wave 5: `attachments` FK-based table + Storage bucket + per-FK RLS + signed-URL actions + roll-up queries + cleanup cron.
+
+See [docs/superpowers/specs/2026-04-17-client-enhancement-batch-design.md](../docs/superpowers/specs/2026-04-17-client-enhancement-batch-design.md) for the complete spec.
+
+## Deferred UI work (next session)
+
+For the already-deployed backend features, the following UI pieces are outstanding:
+
+1. **Task notes textarea** — add to the task detail / expanded row component. Existing pattern: see how title edit works in `src/components/planning/sop-task-row.tsx`.
+2. **"Not required" three-state control on todos page** — extend `src/components/todos/unified-todo-list.tsx` to expose the `not_required` status alongside `done`. Update the mapper in `src/lib/planning/utils.ts` to optionally include resolved tasks.
+3. **Labour hours field** in the debrief form (`src/components/debriefs/*`). Live-cost readout using the rate from `business_settings`.
+4. **Settings page** — add a "Labour cost" row and an "SLT members" picker at `src/app/settings/page.tsx` or similar.
+
+---
+
 ## Execution plan
 
 ### Wave 1 — Quick wins (one PR each, no blockers)
