@@ -7,7 +7,6 @@ import { Calendar, Check, ClipboardList, GripVertical, Pencil, Trash2, X } from 
 import { ApproveEventButton } from "@/components/events/approve-event-button";
 import {
   convertInspirationItemAction,
-  createMultiVenuePlanningItemsAction,
   deletePlanningItemAction,
   dismissInspirationItemAction,
   updatePlanningItemAction
@@ -237,55 +236,21 @@ export function PlanningItemCard({
     }
 
     if (field === "venueId") {
+      // One planning item, multiple venues. Empty array makes the item global.
       const ids = selectedVenueIds;
-      // 0 picks → global. 1 pick → single-venue update. 2+ picks → update
-      // this item to the first venue and spawn additional planning items
-      // (with fresh SOP checklists) at the remaining venues via the RPC.
-      if (ids.length <= 1) {
-        runAction(
-          () =>
-            updatePlanningItemAction({
-              itemId: item.id,
-              venueId: ids[0] ?? ""
-            }),
-          ids.length === 0 ? "Moved to global." : "Venue updated.",
-          () => setEditingField(null)
-        );
-        return;
-      }
-
-      const [primary, ...rest] = ids;
-      startTransition(async () => {
-        const primaryResult = (await updatePlanningItemAction({
-          itemId: item.id,
-          venueId: primary
-        })) as { success?: boolean; message?: string } | undefined;
-        if (primaryResult?.success === false) {
-          toast.error(primaryResult.message ?? "Could not update venue.");
-          return;
-        }
-
-        const cloneResult = (await createMultiVenuePlanningItemsAction({
-          title: item.title,
-          description: item.description ?? null,
-          typeLabel: item.typeLabel,
-          venueIds: rest,
-          ownerId: item.ownerId ?? "",
-          targetDate: item.targetDate,
-          status: "planned"
-        })) as { success?: boolean; message?: string } | undefined;
-        if (cloneResult?.success === false) {
-          toast.error(
-            cloneResult.message ?? `Current venue updated, but couldn't create copies for ${rest.length} venue(s).`
-          );
-        } else {
-          toast.success(
-            `Current venue updated; created ${rest.length} linked planning item${rest.length === 1 ? "" : "s"}.`
-          );
-        }
-        setEditingField(null);
-        onChanged();
-      });
+      runAction(
+        () =>
+          updatePlanningItemAction({
+            itemId: item.id,
+            venueIds: ids
+          }),
+        ids.length === 0
+          ? "Moved to global."
+          : ids.length === 1
+            ? "Venue updated."
+            : `Linked to ${ids.length} venues.`,
+        () => setEditingField(null)
+      );
       return;
     }
 
@@ -589,7 +554,7 @@ export function PlanningItemCard({
                 disabled={isPending}
               />
               <p className="text-[11px] text-subtle">
-                Pick no venues for a global item, one to move this item, or two or more to create linked planning items at the extra venues.
+                Pick no venues for a global item, or one or more venues to link this item to. Tasks with a "one per venue" SOP setting will fan out automatically.
               </p>
               <div className="flex justify-end">
                 <InlineFieldActions field="venueId" />

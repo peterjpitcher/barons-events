@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Plus, Repeat } from "lucide-react";
-import { createMultiVenuePlanningItemsAction, createPlanningItemAction, createPlanningSeriesAction } from "@/actions/planning";
+import { createPlanningItemAction, createPlanningSeriesAction } from "@/actions/planning";
 import { VenueMultiSelect, type VenueOption } from "@/components/venues/venue-multi-select";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -127,40 +127,26 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
       return;
     }
 
-    // Administrators can select multiple venues → create one planning item per venue.
-    // Non-admins (and admins who pick 0 or 1 venue) use the single-item action.
-    if (isAdmin && itemVenueIds.length > 1) {
-      const count = itemVenueIds.length;
-      runAction(
-        () =>
-          createMultiVenuePlanningItemsAction({
-            title: itemTitle,
-            typeLabel: itemType,
-            description: itemDescription,
-            venueIds: itemVenueIds,
-            ownerId: itemOwnerId,
-            targetDate: itemTargetDate,
-            status: "planned"
-          }),
-        `Created ${count} planning items.`
-      );
-      resetSingleForm();
-      return;
-    }
+    // One planning item, any number of venues. Admins use the multi-select;
+    // non-admins fall back to the single venue Select.
+    const venueIds = isAdmin ? itemVenueIds : itemVenueId ? [itemVenueId] : [];
+    const successMessage =
+      venueIds.length <= 1
+        ? "Planning item created."
+        : `Planning item created, linked to ${venueIds.length} venues.`;
 
-    const effectiveVenueId = isAdmin && itemVenueIds.length === 1 ? itemVenueIds[0] : itemVenueId;
     runAction(
       () =>
         createPlanningItemAction({
           title: itemTitle,
           typeLabel: itemType,
           description: itemDescription,
-          venueId: effectiveVenueId,
+          venueIds,
           ownerId: itemOwnerId,
           targetDate: itemTargetDate,
           status: "planned"
         }),
-      "Planning item created."
+      successMessage
     );
 
     resetSingleForm();
@@ -309,7 +295,7 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                       disabled={isPending}
                     />
                     <p className="mt-1 text-xs text-subtle">
-                      Pick no venues for a global item, one for a single venue, or two or more to create one item per venue.
+                      Pick no venues for a global item, or tick one or more to link this item to those venues. Tasks with a "one per venue" SOP setting will fan out automatically.
                     </p>
                   </div>
                 ) : (
@@ -325,10 +311,7 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
               </div>
             </div>
             <Button type="button" disabled={isPending} onClick={submitSingleItem}>
-              <Plus className="mr-1 h-4 w-4" aria-hidden="true" />{" "}
-              {isAdmin && itemVenueIds.length > 1
-                ? `Add ${itemVenueIds.length} planning items`
-                : "Add planning item"}
+              <Plus className="mr-1 h-4 w-4" aria-hidden="true" /> Add planning item
             </Button>
           </div>
         ) : (

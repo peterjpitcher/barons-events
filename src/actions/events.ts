@@ -17,7 +17,6 @@ import { sendAssigneeReassignmentEmail, sendEventSubmittedEmail, sendReviewDecis
 import { recordAuditLogEntry } from "@/lib/audit-log";
 import { generateTermsAndConditions, generateWebsiteCopy, type GeneratedWebsiteCopy } from "@/lib/ai";
 import { normaliseEventDateTimeForStorage } from "@/lib/datetime";
-import { randomUUID } from "crypto";
 import {
   normaliseOptionalText as normaliseOptionalTextField,
   normaliseOptionalNumber as normaliseOptionalNumberField,
@@ -25,6 +24,24 @@ import {
 } from "@/lib/normalise";
 
 const reviewerFallback = z.string().uuid().optional();
+
+/**
+ * Keeps the event_venues join table in sync with the picked venue list.
+ * Calls the set_event_venues SECURITY DEFINER helper — first id becomes
+ * primary, parent events.venue_id is updated to match.
+ */
+async function syncEventVenueAttachments(eventId: string, venueIds: string[]): Promise<void> {
+  if (!eventId) return;
+  const db = createSupabaseAdminClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (db as any).rpc("set_event_venues", {
+    p_event_id: eventId,
+    p_venue_ids: venueIds
+  });
+  if (error) {
+    console.error("syncEventVenueAttachments RPC failed:", error);
+  }
+}
 
 type WebsiteCopyValues = {
   publicTitle: string | null;
@@ -589,137 +606,6 @@ async function autoApproveEvent(params: {
   return { warnings };
 }
 
-/**
- * Wave 2.3 — multi-venue event draft creation.
- *
- * Creates N draft events (one per venue) in a single transactional RPC call.
- * Used by the create-event form when the user selects 2+ venues.
- *
- * For single-venue create or any edit operation, use saveEventDraftAction
- * below — that path retains image upload, artist sync, and event version
- * history, which are per-event concerns not handled by the RPC.
- *
- * Authorisation is enforced by the SECURITY DEFINER RPC:
- *   - administrator: any venue
- *   - office_worker with venue_id: only venues matching user.venue_id
- *   - executive / no-venue office_worker: rejected
- */
-export async function saveEventDraftsMultiAction(
-  _: ActionResult | undefined,
-  formData: FormData
-): Promise<ActionResult> {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
-  if (!canManageEvents(user.role, user.venueId)) {
-    return { success: false, message: "You don't have permission to create events." };
-  }
-
-  const venueIds = formData
-    .getAll("venueIds")
-    .filter((v): v is string => typeof v === "string" && v.length > 0);
-
-  if (venueIds.length === 0) {
-    return {
-      success: false,
-      message: "Pick at least one venue.",
-      fieldErrors: { venueId: "Choose a venue" }
-    };
-  }
-
-  const multiSchema = eventDraftSchema.omit({ venueId: true, eventId: true }).refine(
-    (data: { startAt?: string; endAt?: string }) => !data.endAt || !data.startAt || new Date(data.endAt) > new Date(data.startAt),
-    { message: "End time must be after start time", path: ["endAt"] }
-  );
-
-  const parsed = multiSchema.safeParse({
-    title: formData.get("title") ?? "",
-    eventType: formData.get("eventType") ?? "",
-    startAt: formData.get("startAt") ?? "",
-    endAt: formData.get("endAt") ?? "",
-    venueSpace: normaliseVenueSpacesField(formData.get("venueSpace")),
-    expectedHeadcount: formData.get("expectedHeadcount") ?? undefined,
-    wetPromo: formData.get("wetPromo") ?? undefined,
-    foodPromo: formData.get("foodPromo") ?? undefined,
-    bookingType: formData.get("bookingType") ?? undefined,
-    ticketPrice: formData.get("ticketPrice") ?? undefined,
-    checkInCutoffMinutes: formData.get("checkInCutoffMinutes") ?? undefined,
-    agePolicy: formData.get("agePolicy") ?? undefined,
-    accessibilityNotes: formData.get("accessibilityNotes") ?? undefined,
-    cancellationWindowHours: formData.get("cancellationWindowHours") ?? undefined,
-    termsAndConditions: formData.get("termsAndConditions") ?? undefined,
-    artistNames: formData.get("artistNames") ?? undefined,
-    goalFocus: formData.getAll("goalFocus").length
-      ? formData.getAll("goalFocus").join(",")
-      : formData.get("goalFocus") ?? undefined,
-    costTotal: formData.get("costTotal") ?? undefined,
-    costDetails: formData.get("costDetails") ?? undefined,
-    notes: formData.get("notes") ?? undefined,
-    managerResponsibleId: formData.get("managerResponsibleId") ?? undefined,
-    publicTitle: formData.get("publicTitle") ?? undefined,
-    publicTeaser: formData.get("publicTeaser") ?? undefined,
-    publicDescription: formData.get("publicDescription") ?? undefined,
-    publicHighlights: formData.get("publicHighlights") ?? undefined,
-    bookingUrl: formData.get("bookingUrl") ?? undefined,
-    seoTitle: formData.get("seoTitle") ?? undefined,
-    seoDescription: formData.get("seoDescription") ?? undefined,
-    seoSlug: formData.get("seoSlug") ?? undefined
-  });
-
-  if (!parsed.success) {
-    return {
-      success: false,
-      message: "Check the highlighted fields.",
-      fieldErrors: getFieldErrors(parsed.error)
-    };
-  }
-
-  const values = parsed.data;
-  const startAtIso = normaliseEventDateTimeForStorage(values.startAt);
-  const endAtIso = normaliseEventDateTimeForStorage(values.endAt);
-
-  const idempotencyKey = (formData.get("idempotencyKey") as string) || randomUUID();
-  const db = createSupabaseAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (db as any).rpc("create_multi_venue_event_drafts", {
-    p_payload: {
-      created_by: user.id,
-      venue_ids: venueIds,
-      title: values.title,
-      event_type: values.eventType,
-      start_at: startAtIso,
-      end_at: endAtIso,
-      venue_space: values.venueSpace,
-      expected_headcount: values.expectedHeadcount ?? null,
-      wet_promo: values.wetPromo ?? null,
-      food_promo: values.foodPromo ?? null,
-      goal_focus: values.goalFocus ?? null,
-      notes: values.notes ?? null,
-      cost_total: values.costTotal ?? null,
-      cost_details: values.costDetails ?? null
-    },
-    p_idempotency_key: idempotencyKey
-  });
-
-  if (error) {
-    console.error("[events] saveEventDraftsMultiAction RPC failed:", error);
-    return {
-      success: false,
-      message: error.message ?? "Could not create the events. Please try again."
-    };
-  }
-
-  revalidatePath("/events");
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const events = Array.isArray((data as any)?.events) ? ((data as any).events as Array<{ event_id: string }>) : [];
-  if (events.length === 1) {
-    redirect(`/events/${events[0].event_id}`);
-  }
-  return {
-    success: true,
-    message: `Created ${venueIds.length} draft events. Open each to add artists, images, and remaining details.`
-  };
-}
-
 export async function saveEventDraftAction(_: ActionResult | undefined, formData: FormData): Promise<ActionResult> {
   const user = await getCurrentUser();
   if (!user) {
@@ -731,18 +617,35 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
 
   const rawEventId = formData.get("eventId");
   const eventId = typeof rawEventId === "string" ? rawEventId.trim() || undefined : undefined;
-  const venueIdValue = formData.get("venueId");
-  const requestedVenueId = typeof venueIdValue === "string" ? venueIdValue : "";
-  const venueId = user.role === "office_worker" ? (user.venueId ?? "") : requestedVenueId;
+
+  // Multi-venue: read the full list of picked venue IDs. Fall back to the
+  // legacy single `venueId` field so existing callers keep working.
+  const rawVenueIds = formData
+    .getAll("venueIds")
+    .filter((v): v is string => typeof v === "string" && v.length > 0);
+  const fallbackVenueIdValue = formData.get("venueId");
+  const fallbackVenueId = typeof fallbackVenueIdValue === "string" ? fallbackVenueIdValue : "";
+  const requestedVenueIds =
+    rawVenueIds.length > 0 ? rawVenueIds : fallbackVenueId ? [fallbackVenueId] : [];
+
+  // Office workers are pinned to their linked venue regardless of UI state.
+  const venueIds = user.role === "office_worker"
+    ? (user.venueId ? [user.venueId] : [])
+    : requestedVenueIds;
+  const venueId = venueIds[0] ?? "";
 
   if (user.role === "office_worker" && !user.venueId) {
     return { success: false, message: "Your account is not linked to a venue." };
   }
 
-  if (user.role === "office_worker" && requestedVenueId && requestedVenueId !== user.venueId) {
+  if (
+    user.role === "office_worker" &&
+    requestedVenueIds.length > 0 &&
+    requestedVenueIds.some((id) => id !== user.venueId)
+  ) {
     return {
       success: false,
-      message: "Venue managers can only create events for their linked venue.",
+      message: "Venue managers can only save events for their linked venue.",
       fieldErrors: { venueId: "Venue mismatch" }
     };
   }
@@ -893,6 +796,9 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
         throw updateError; // Let outer catch handle
       }
 
+      // Sync multi-venue attachments — mirror what the create path does.
+      await syncEventVenueAttachments(values.eventId, venueIds);
+
       const artistIds = normaliseArtistIdList(formData.get("artistIds"));
       const artistNames = normaliseArtistNameList(values.artistNames ?? null);
       let artistVersionNames = artistNames;
@@ -1020,6 +926,11 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
       seoDescription: values.seoDescription ?? null,
       seoSlug: values.seoSlug ?? null
     });
+
+    // Sync multi-venue attachments via the helper RPC (primary = venueIds[0]
+    // which matches the events.venue_id we just wrote).
+    await syncEventVenueAttachments(created.id, venueIds);
+
     // Create linked planning item and generate SOP checklist
     try {
       await createEventPlanningItem(
@@ -1139,11 +1050,24 @@ export async function submitEventForReviewAction(
       }
       targetEventId = parsedId.data;
     } else {
-      const venueIdValue = formData.get("venueId");
-      const requestedVenueId = typeof venueIdValue === "string" ? venueIdValue : "";
-      const venueId = user.role === "office_worker" ? (user.venueId ?? "") : requestedVenueId;
+      const rawVenueIds = formData
+        .getAll("venueIds")
+        .filter((v): v is string => typeof v === "string" && v.length > 0);
+      const fallbackVenueIdValue = formData.get("venueId");
+      const fallbackVenueId = typeof fallbackVenueIdValue === "string" ? fallbackVenueIdValue : "";
+      const requestedVenueIds =
+        rawVenueIds.length > 0 ? rawVenueIds : fallbackVenueId ? [fallbackVenueId] : [];
+      const venueIds = user.role === "office_worker"
+        ? (user.venueId ? [user.venueId] : [])
+        : requestedVenueIds;
+      const venueId = venueIds[0] ?? "";
+      const requestedVenueId = venueId;
 
-      if (user.role === "office_worker" && requestedVenueId && requestedVenueId !== user.venueId) {
+      if (
+        user.role === "office_worker" &&
+        requestedVenueIds.length > 0 &&
+        requestedVenueIds.some((id) => id !== user.venueId)
+      ) {
         return {
           success: false,
           message: "Venue managers can only submit events for their linked venue.",
@@ -1248,6 +1172,8 @@ export async function submitEventForReviewAction(
         seoDescription: values.seoDescription ?? null,
         seoSlug: values.seoSlug ?? null
       });
+
+      await syncEventVenueAttachments(created.id, venueIds);
 
       const artistSync = await syncEventArtists({
         eventId: created.id,

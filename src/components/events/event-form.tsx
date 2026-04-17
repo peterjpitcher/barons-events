@@ -8,7 +8,6 @@ import {
   generateWebsiteCopyAction,
   generateWebsiteCopyFromFormAction,
   saveEventDraftAction,
-  saveEventDraftsMultiAction,
   submitEventForReviewAction
 } from "@/actions/events";
 import { VenueMultiSelect, type VenueOption } from "@/components/venues/venue-multi-select";
@@ -159,7 +158,6 @@ export function EventForm({
   users
 }: EventFormProps) {
   const [draftState, draftAction, isSavingPending] = useActionState(saveEventDraftAction, undefined);
-  const [multiDraftState, multiDraftAction, isSavingMultiPending] = useActionState(saveEventDraftsMultiAction, undefined);
   const [submitState, submitAction, isSubmittingPending] = useActionState(submitEventForReviewAction, undefined);
   const [websiteCopyState, websiteCopyAction, isGeneratingEditPending] = useActionState(generateWebsiteCopyAction, undefined);
   const [websiteCopyFormState, websiteCopyFormAction, isGeneratingFormPending] = useActionState(generateWebsiteCopyFromFormAction, undefined);
@@ -214,15 +212,6 @@ export function EventForm({
     }
   }, [draftState]);
 
-  useEffect(() => {
-    if (multiDraftState?.message) {
-      if (multiDraftState.success) {
-        toast.success(multiDraftState.message);
-      } else if (!multiDraftState.fieldErrors) {
-        toast.error(multiDraftState.message);
-      }
-    }
-  }, [multiDraftState]);
 
   useEffect(() => {
     if (submitState?.message) {
@@ -280,12 +269,6 @@ export function EventForm({
       setLastSavedAt(new Date());
     }
   }, [draftState]);
-  useEffect(() => {
-    if (multiDraftState?.success) {
-      setIsDirty(false);
-      setLastSavedAt(new Date());
-    }
-  }, [multiDraftState]);
   useEffect(() => {
     if (submitState?.success) {
       setIsDirty(false);
@@ -584,15 +567,11 @@ export function EventForm({
     });
   }
 
-  // Multi-venue create mode: render multi-select and route draft saves through
-  // saveEventDraftsMultiAction. Administrators only — office workers are
-  // restricted to their linked venue, so single-venue selection suffices there.
-  const isMultiCapable = mode === "create" && role === "administrator" && venues.length > 1;
-  const multiVenueCount = selectedVenueIds.length;
-  const isMultiMode = isMultiCapable && multiVenueCount > 1;
+  // Multi-venue capability: administrators can tick multiple venues. One
+  // event is produced that's linked to all selected venues — no more N-events.
+  const isMultiCapable = role === "administrator" && venues.length > 1;
 
-  const activeState =
-    intent === "submit" ? submitState : isMultiMode ? multiDraftState : draftState;
+  const activeState = intent === "submit" ? submitState : draftState;
   const fieldErrors = activeState?.fieldErrors ?? {};
 
   // Error indicators per tab
@@ -630,8 +609,7 @@ export function EventForm({
     return () => clearTimeout(timer);
   }, [hasFieldErrors, tabErrors.eventDetails, tabErrors.accelerateGrowth, tabErrors.websiteListings]);
 
-  const isPending =
-    isSavingPending || isSavingMultiPending || isSubmittingPending || isGeneratingPending;
+  const isPending = isSavingPending || isSubmittingPending || isGeneratingPending;
 
   // Show slow-save warning after 8 seconds
   useEffect(() => {
@@ -647,16 +625,13 @@ export function EventForm({
   const eventStatus = defaultValues?.status ?? "draft";
 
   const primaryLabel = (() => {
-    if (mode === "create") return isMultiMode ? `Save ${multiVenueCount} drafts` : "Save draft";
+    if (mode === "create") return "Save draft";
     if (eventStatus === "approved_pending_details") return "Save details";
     if (role === "administrator" && eventStatus === "approved") return "Save & re-publish";
     return "Save changes";
   })();
 
   const showSecondaryAction = (() => {
-    // Multi-venue create mode only supports "Save drafts"; each resulting event
-    // must be submitted individually for review.
-    if (isMultiMode) return false;
     // Pre-event proposal flow: approved_pending_details transitions to draft
     // automatically when the required fields are saved. No separate "submit"
     // button is needed until it reaches normal draft state.
@@ -747,13 +722,8 @@ export function EventForm({
               } satisfies VenueOption))}
               selectedIds={selectedVenueIds}
               onChange={handleVenueMultiChange}
-              hiddenFieldName={isMultiMode ? "venueIds" : undefined}
+              hiddenFieldName="venueIds"
             />
-            {/* When exactly one venue is selected, post venueId (single-venue action).
-                When multiple selected, post venueIds[] (multi action). */}
-            {!isMultiMode ? (
-              <input type="hidden" name="venueId" value={selectedVenueId} />
-            ) : null}
           </>
         ) : canChooseVenue ? (
           <Select
@@ -794,14 +764,9 @@ export function EventForm({
         <FieldError id="venue-error" message={fieldErrors.venueId} />
         <p className="text-xs text-subtle">
           {isMultiCapable
-            ? "Pick one venue for a single draft, or two or more for a set of linked drafts (one per venue)."
+            ? "Pick one or more venues — the event will be linked to all of them. Tasks marked \"one per venue\" on the SOP will fan out automatically."
             : "Pick the host venue—this controls which spaces appear below."}
         </p>
-        {isMultiMode ? (
-          <p className="text-xs text-subtle">
-            Multi-venue mode creates one draft per venue. Open each to add artists, images, and remaining details.
-          </p>
-        ) : null}
       </div>
     </div>
   );
@@ -1786,7 +1751,7 @@ export function EventForm({
       <EventFormContext.Provider value={contextValue}>
         <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start">
           <div className="min-w-0">
-            <form ref={formRef} action={isMultiMode ? multiDraftAction : draftAction} noValidate onSubmit={handleSubmit} onChange={() => setIsDirty(true)}>
+            <form ref={formRef} action={draftAction} noValidate onSubmit={handleSubmit} onChange={() => setIsDirty(true)}>
               <input type="hidden" name="eventId" defaultValue={defaultValues?.id} />
               {activeState && !activeState.success && activeState.message && !activeState.fieldErrors && (
                 <div className="mb-4 rounded-lg border border-[var(--color-danger)] bg-[var(--color-danger)]/10 p-4 text-sm text-[var(--color-danger)]" role="alert">
@@ -1935,7 +1900,7 @@ export function EventForm({
   return (
     <EventFormContext.Provider value={contextValue}>
       <>
-        <form action={isMultiMode ? multiDraftAction : draftAction} className="space-y-6" noValidate onSubmit={handleSubmit} onChange={() => setIsDirty(true)}>
+        <form action={draftAction} className="space-y-6" noValidate onSubmit={handleSubmit} onChange={() => setIsDirty(true)}>
           <input type="hidden" name="eventId" defaultValue={defaultValues?.id} />
           <button ref={legacySubmitRef} type="submit" formAction={submitAction} data-intent="submit" className="sr-only" aria-hidden tabIndex={-1} />
           {activeState && !activeState.success && activeState.message && !activeState.fieldErrors && (

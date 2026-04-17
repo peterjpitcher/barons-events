@@ -24,7 +24,6 @@ import { generateInspirationItems } from "@/lib/planning/inspiration";
 import { generateSopChecklist, recalculateSopDates, updateBlockedStatus } from "@/lib/planning/sop";
 import { recordAuditLogEntry } from "@/lib/audit-log";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { randomUUID } from "crypto";
 
 export type PlanningActionResult = {
   success: boolean;
@@ -65,11 +64,30 @@ const createItemSchema = z.object({
   title: z.string().min(2, "Add a title").max(160),
   description: z.string().max(2000).optional().nullable(),
   typeLabel: z.string().min(2, "Add a planning type").max(120),
+  /** Legacy single-venue field — kept as a fallback for callers that only
+   * pick one venue. `venueIds` is preferred. */
   venueId: optionalUuidSchema,
+  /** Multi-venue selection. Empty or missing → global item. First entry is
+   * treated as the primary venue for the denormalised venue_id column. */
+  venueIds: z.array(z.string().uuid()).optional(),
   ownerId: optionalUuidSchema,
   targetDate: dateSchema,
   status: planningStatusSchema.optional()
 });
+
+/** Calls the set_planning_item_venues helper to sync the join table. */
+async function syncPlanningItemVenueAttachments(itemId: string, venueIds: string[]): Promise<void> {
+  if (!itemId) return;
+  const db = createSupabaseAdminClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (db as any).rpc("set_planning_item_venues", {
+    p_item_id: itemId,
+    p_venue_ids: venueIds
+  });
+  if (error) {
+    console.error("syncPlanningItemVenueAttachments RPC failed:", error);
+  }
+}
 
 export async function createPlanningItemAction(input: unknown): Promise<PlanningActionResult> {
   try {
@@ -83,16 +101,29 @@ export async function createPlanningItemAction(input: unknown): Promise<Planning
       };
     }
 
+    // Prefer the multi-venue array; fall back to the single venueId field
+    // for older callers. An empty selection means the item is global.
+    const venueIds = parsed.data.venueIds && parsed.data.venueIds.length > 0
+      ? parsed.data.venueIds
+      : parsed.data.venueId
+        ? [parsed.data.venueId]
+        : [];
+    const primaryVenueId = venueIds[0] ?? null;
+
     const item = await createPlanningItem({
       title: parsed.data.title,
       description: parsed.data.description ?? null,
       typeLabel: parsed.data.typeLabel,
-      venueId: parsed.data.venueId ? parsed.data.venueId : null,
+      venueId: primaryVenueId,
       ownerId: parsed.data.ownerId ? parsed.data.ownerId : null,
       targetDate: parsed.data.targetDate,
       status: (parsed.data.status ?? "planned") as PlanningItemStatus,
       createdBy: user.id
     });
+
+    // Keep the join table in sync with the full venue list (primary + any
+    // extras). Global items (empty list) clear any existing attachments.
+    await syncPlanningItemVenueAttachments(item.id, venueIds);
 
     try {
       await generateSopChecklist(item.id, item.target_date, user.id);
@@ -105,90 +136,19 @@ export async function createPlanningItemAction(input: unknown): Promise<Planning
       entityId: item.id,
       action: "planning.item_created",
       actorId: user.id,
-      meta: { title: parsed.data.title }
+      meta: { title: parsed.data.title, venue_count: venueIds.length }
     }).catch(() => {});
-    revalidatePath("/planning");
-    return { success: true, message: "Planning item created." };
-  } catch (error) {
-    console.error("Failed to create planning item", error);
-    return { success: false, message: "Could not create planning item." };
-  }
-}
-
-const createItemsMultiSchema = z.object({
-  title: z.string().min(2, "Add a title").max(160),
-  description: z.string().max(2000).optional().nullable(),
-  typeLabel: z.string().min(2, "Add a planning type").max(120),
-  venueIds: z.array(z.string().uuid()).min(1, "Pick at least one venue").max(30),
-  ownerId: optionalUuidSchema,
-  targetDate: dateSchema,
-  status: planningStatusSchema.optional(),
-  idempotencyKey: z.string().uuid().optional()
-});
-
-/**
- * Wave 2.4 — creates one planning item per selected venue via the
- * create_multi_venue_planning_items RPC. SOP checklist generation is done
- * per created item after the RPC returns; a single RPC failure means no items
- * are created (transactional).
- */
-export async function createMultiVenuePlanningItemsAction(input: unknown): Promise<PlanningActionResult> {
-  try {
-    const user = await ensureUser();
-    const parsed = createItemsMultiSchema.safeParse(input);
-    if (!parsed.success) {
-      return {
-        success: false,
-        message: "Check the highlighted fields.",
-        fieldErrors: zodFieldErrors(parsed.error)
-      };
-    }
-
-    const db = createSupabaseAdminClient();
-    const idempotencyKey = parsed.data.idempotencyKey ?? randomUUID();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data, error } = await (db as any).rpc("create_multi_venue_planning_items", {
-      p_payload: {
-        created_by: user.id,
-        mode: "specific",
-        venue_ids: parsed.data.venueIds,
-        title: parsed.data.title,
-        description: parsed.data.description ?? null,
-        type_label: parsed.data.typeLabel,
-        owner_id: parsed.data.ownerId ?? "",
-        target_date: parsed.data.targetDate,
-        status: parsed.data.status ?? "planned"
-      },
-      p_idempotency_key: idempotencyKey
-    });
-
-    if (error) {
-      console.error("createMultiVenuePlanningItemsAction RPC failed:", error);
-      return { success: false, message: error.message ?? "Could not create planning items." };
-    }
-
-    // Generate SOP per created item (outside the RPC to avoid nesting transactions).
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const items = Array.isArray((data as any)?.items)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      ? ((data as any).items as Array<{ item_id: string }>)
-      : [];
-    for (const item of items) {
-      try {
-        await generateSopChecklist(item.item_id, parsed.data.targetDate, user.id);
-      } catch (sopError) {
-        console.error("SOP checklist generation failed for item", item.item_id, sopError);
-      }
-    }
-
     revalidatePath("/planning");
     return {
       success: true,
-      message: `Created ${parsed.data.venueIds.length} planning items.`
+      message:
+        venueIds.length <= 1
+          ? "Planning item created."
+          : `Planning item created, linked to ${venueIds.length} venues.`
     };
   } catch (error) {
-    console.error("Failed to create multi-venue planning items", error);
-    return { success: false, message: "Could not create planning items." };
+    console.error("Failed to create planning item", error);
+    return { success: false, message: "Could not create planning item." };
   }
 }
 
@@ -198,6 +158,9 @@ const updateItemSchema = z.object({
   description: z.string().max(2000).optional().nullable(),
   typeLabel: z.string().min(2).max(120).optional(),
   venueId: optionalUuidSchema,
+  /** Multi-venue selection. When present, replaces the item's full venue
+   * attachment list (empty array → global). Primary venue is the first id. */
+  venueIds: z.array(z.string().uuid()).optional(),
   ownerId: optionalUuidSchema,
   targetDate: dateSchema.optional(),
   status: planningStatusSchema.optional()
@@ -215,22 +178,48 @@ export async function updatePlanningItemAction(input: unknown): Promise<Planning
       };
     }
 
+    // When venueIds is provided, it's the authoritative list (primary first).
+    // When only venueId is provided, treat it as a single-venue update (for
+    // back-compat with older callers).
+    const hasVenueIds = parsed.data.venueIds !== undefined;
+    const hasVenueId = parsed.data.venueId !== undefined;
+    const effectiveVenueIds = hasVenueIds
+      ? parsed.data.venueIds!
+      : hasVenueId
+        ? parsed.data.venueId
+          ? [parsed.data.venueId]
+          : []
+        : null; // null = no change
+    const primaryVenueId = effectiveVenueIds && effectiveVenueIds.length > 0
+      ? effectiveVenueIds[0]
+      : null;
+
     await updatePlanningItem(parsed.data.itemId, {
       title: parsed.data.title,
       description: parsed.data.description,
       typeLabel: parsed.data.typeLabel,
-      venueId: parsed.data.venueId ? parsed.data.venueId : null,
+      // Only touch venue_id when the caller actually sent a venue update.
+      ...(effectiveVenueIds !== null ? { venueId: primaryVenueId } : {}),
       ownerId: parsed.data.ownerId ? parsed.data.ownerId : null,
       targetDate: parsed.data.targetDate,
       status: parsed.data.status as PlanningItemStatus | undefined
     });
+
+    // Re-sync the join table when a venue update was requested.
+    if (effectiveVenueIds !== null) {
+      await syncPlanningItemVenueAttachments(parsed.data.itemId, effectiveVenueIds);
+    }
 
     recordAuditLogEntry({
       entity: "planning",
       entityId: parsed.data.itemId,
       action: "planning.item_updated",
       actorId: user.id,
-      meta: { title: parsed.data.title, status: parsed.data.status }
+      meta: {
+        title: parsed.data.title,
+        status: parsed.data.status,
+        ...(effectiveVenueIds !== null ? { venue_count: effectiveVenueIds.length } : {})
+      }
     }).catch(() => {});
     revalidatePath("/planning");
     return { success: true, message: "Planning item updated." };
