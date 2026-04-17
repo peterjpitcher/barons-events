@@ -2,6 +2,7 @@
 
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth";
+import { recordAuditLogEntry } from "@/lib/audit-log";
 
 export type DeleteCustomerResult = { success: boolean; error?: string };
 
@@ -62,13 +63,12 @@ export async function deleteCustomerAction(
     console.error("deleteCustomerAction: bookings update failed", bookingsError);
   }
 
-  // Write audit entry directly — recordAuditLogEntry restricts entity to "event"
-  await db.from("audit_log").insert({
-    entity:    "customer",
-    entity_id: customerId,
-    action:    "customer.erased",
-    meta:      {},
-    actor_id:  user.id,
+  await recordAuditLogEntry({
+    entity:   "customer",
+    entityId: customerId,
+    action:   "customer.erased",
+    meta:     {},
+    actorId:  user.id,
   });
 
   return { success: true };
