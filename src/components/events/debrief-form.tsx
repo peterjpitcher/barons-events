@@ -12,6 +12,8 @@ import { formatCurrency, formatPercent } from "@/lib/utils/format";
 
 type DebriefFormProps = {
   eventId: string;
+  /** Current labour rate from business_settings. Form uses it for live cost preview. */
+  labourRateGbp?: number;
   defaults?: {
     attendance: number | null;
     baseline_attendance: number | null;
@@ -26,6 +28,7 @@ type DebriefFormProps = {
     operational_notes: string | null;
     would_book_again: boolean | null;
     next_time_actions: string | null;
+    labour_hours: number | null;
   } | null;
 };
 
@@ -36,7 +39,7 @@ function asNumber(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-export function DebriefForm({ eventId, defaults }: DebriefFormProps) {
+export function DebriefForm({ eventId, defaults, labourRateGbp = 12.71 }: DebriefFormProps) {
   const [state, formAction] = useActionState(submitDebriefAction, undefined);
   const [eventWetTakings, setEventWetTakings] = useState(defaults?.wet_takings != null ? String(defaults.wet_takings) : "");
   const [eventFoodTakings, setEventFoodTakings] = useState(defaults?.food_takings != null ? String(defaults.food_takings) : "");
@@ -46,6 +49,15 @@ export function DebriefForm({ eventId, defaults }: DebriefFormProps) {
   const [baselineFoodTakings, setBaselineFoodTakings] = useState(
     defaults?.baseline_food_takings != null ? String(defaults.baseline_food_takings) : ""
   );
+  const [labourHours, setLabourHours] = useState(
+    defaults?.labour_hours != null ? String(defaults.labour_hours) : ""
+  );
+
+  const labourCost = useMemo(() => {
+    const hours = asNumber(labourHours);
+    if (hours === null || hours < 0) return null;
+    return hours * labourRateGbp;
+  }, [labourHours, labourRateGbp]);
 
   useEffect(() => {
     if (state?.message) {
@@ -180,6 +192,32 @@ export function DebriefForm({ eventId, defaults }: DebriefFormProps) {
           </p>
           <p>
             <span className="font-medium text-[var(--color-text)]">Uplift %:</span> {formatPercent(uplift.upliftPercent)}
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="labourHours">Labour hours (total across all staff)</Label>
+          <Input
+            id="labourHours"
+            name="labourHours"
+            type="number"
+            step="0.25"
+            min={0}
+            max={2000}
+            value={labourHours}
+            onChange={(event) => setLabourHours(event.target.value)}
+            placeholder="e.g. 42"
+          />
+          <p className="text-xs text-subtle">
+            {labourCost !== null ? (
+              <>
+                Estimated labour cost: {formatCurrency(labourCost)} (at £{labourRateGbp.toFixed(2)}/hour)
+              </>
+            ) : (
+              <>Rate: £{labourRateGbp.toFixed(2)}/hour · administrators can update in Settings</>
+            )}
           </p>
         </div>
       </div>

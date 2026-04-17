@@ -1,16 +1,19 @@
 import { redirect } from "next/navigation";
 import { ArchivedArtistsManager } from "@/components/settings/archived-artists-manager";
+import { BusinessSettingsManager } from "@/components/settings/business-settings-manager";
 import { EventTypesManager } from "@/components/settings/event-types-manager";
 import { ServiceTypesManager } from "@/components/settings/service-types-manager";
+import { SltMembersManager } from "@/components/settings/slt-members-manager";
 import { SopTemplateEditor } from "@/components/settings/sop-template-editor";
 import { SopBackfillButton } from "@/components/settings/sop-backfill-button";
 import { SettingsTabs } from "@/components/settings/settings-tabs";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCurrentUser } from "@/lib/auth";
 import { listArchivedArtists } from "@/lib/artists";
 import { listEventTypes } from "@/lib/event-types";
 import { listServiceTypes } from "@/lib/opening-hours";
 import { canViewSopTemplate } from "@/lib/roles";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export const metadata = {
   title: "Settings · BaronsHub",
@@ -26,13 +29,63 @@ export default async function SettingsPage() {
     redirect("/unauthorized");
   }
 
-  const [eventTypes, archivedArtists, serviceTypes] = await Promise.all([
+  const db = createSupabaseAdminClient();
+
+  const [eventTypes, archivedArtists, serviceTypes, businessSettings, sltRows, userRows] = await Promise.all([
     listEventTypes(),
     listArchivedArtists(),
-    listServiceTypes()
+    listServiceTypes(),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (db as any).from("business_settings").select("*").eq("id", true).maybeSingle().then((r: any) => r.data),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (db as any)
+      .from("slt_members")
+      .select("user_id, users:user_id(id, full_name, email, deactivated_at)")
+      .then((r: any) => r.data ?? []),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (db as any)
+      .from("users")
+      .select("id, full_name, email, deactivated_at")
+      .is("deactivated_at", null)
+      .order("full_name")
+      .then((r: any) => r.data ?? [])
   ]);
 
+  const labourRateGbp = Number(businessSettings?.labour_rate_gbp ?? 12.71);
+
+  type SltRowShape = { users?: { id?: string; full_name?: string | null; email?: string | null; deactivated_at?: string | null } };
+  const members = (sltRows as SltRowShape[])
+    .filter((row) => row.users?.id && row.users?.email && !row.users?.deactivated_at)
+    .map((row) => ({
+      id: row.users!.id!,
+      name: row.users!.full_name ?? row.users!.email!,
+      email: row.users!.email!
+    }));
+
+  type UserRowShape = { id: string; full_name: string | null; email: string | null };
+  const candidates = (userRows as UserRowShape[])
+    .filter((u) => u.email)
+    .map((u) => ({ id: u.id, name: u.full_name ?? u.email!, email: u.email! }));
+
   const tabs = [
+    {
+      value: "business",
+      label: "Business",
+      description: "Labour cost and other operational defaults used across BaronsHub.",
+      content: (
+        <BusinessSettingsManager
+          labourRateGbp={labourRateGbp}
+          updatedAt={businessSettings?.updated_at ?? null}
+          updatedBy={businessSettings?.updated_by ?? null}
+        />
+      ),
+    },
+    {
+      value: "slt",
+      label: "SLT Distribution",
+      description: "Senior leadership team members receive a BCC'd email whenever a debrief is submitted.",
+      content: <SltMembersManager members={members} candidates={candidates} />,
+    },
     {
       value: "event-types",
       label: "Event Types",
