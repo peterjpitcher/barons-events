@@ -8,6 +8,28 @@ import { createVenue, deleteVenue, updateVenue } from "@/lib/venues";
 import { getFieldErrors } from "@/lib/form-errors";
 import type { ActionResult } from "@/lib/types";
 import { recordAuditLogEntry } from "@/lib/audit-log";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+
+/**
+ * Queue a cascade backfill row so open per-venue SOP masters get a child
+ * spawned for this venue. Called on venue create and on category change.
+ * Safe to call even when an unprocessed row already exists — the partial
+ * unique index prevents duplicates.
+ */
+async function queueCascadeBackfill(venueId: string): Promise<void> {
+  try {
+    const db = createSupabaseAdminClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (db as any)
+      .from("pending_cascade_backfill")
+      .insert({ venue_id: venueId });
+    if (error && error.code !== "23505") {
+      console.warn("queueCascadeBackfill failed", venueId, error);
+    }
+  } catch (err) {
+    console.warn("queueCascadeBackfill threw", venueId, err);
+  }
+}
 
 const uuidOrUndefined = z.preprocess(
   (value) => {
@@ -62,13 +84,20 @@ export async function createVenueAction(
       defaultManagerResponsibleId: parsed.data.defaultManagerResponsibleId || null,
       category: parsed.data.category ?? "pub"
     });
+    const newVenueId =
+      typeof created === "object" && created !== null && "id" in created
+        ? (created as { id: string }).id
+        : "unknown";
     recordAuditLogEntry({
       entity: "venue",
-      entityId: typeof created === "object" && created !== null && "id" in created ? (created as { id: string }).id : "unknown",
+      entityId: newVenueId,
       action: "venue.created",
       actorId: user.id,
-      meta: { name: parsed.data.name }
+      meta: { name: parsed.data.name, category: parsed.data.category ?? "pub" }
     }).catch(() => {});
+    if (newVenueId !== "unknown") {
+      await queueCascadeBackfill(newVenueId);
+    }
     revalidatePath("/venues");
     return { success: true, message: "Venue added." };
   } catch (error) {
@@ -110,6 +139,16 @@ export async function updateVenueAction(
   }
 
   try {
+    // Read existing category so we can detect a transition.
+    const adminClient = createSupabaseAdminClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: existing } = await (adminClient as any)
+      .from("venues")
+      .select("category")
+      .eq("id", parsed.data.venueId)
+      .maybeSingle();
+    const previousCategory: string | null = existing?.category ?? null;
+
     await updateVenue(parsed.data.venueId, {
       name: parsed.data.name,
       defaultApproverId: parsed.data.defaultApproverId ?? null,
@@ -122,8 +161,22 @@ export async function updateVenueAction(
       entityId: parsed.data.venueId,
       action: "venue.updated",
       actorId: user.id,
-      meta: { name: parsed.data.name }
+      meta: { name: parsed.data.name, category: parsed.data.category ?? previousCategory }
     }).catch(() => {});
+
+    // Log category change + queue a cascade backfill so newly matching
+    // per-venue masters pick up this venue.
+    if (parsed.data.category && previousCategory && parsed.data.category !== previousCategory) {
+      recordAuditLogEntry({
+        entity: "venue",
+        entityId: parsed.data.venueId,
+        action: "venue.category_changed",
+        actorId: user.id,
+        meta: { from: previousCategory, to: parsed.data.category }
+      }).catch(() => {});
+      await queueCascadeBackfill(parsed.data.venueId);
+    }
+
     revalidatePath("/venues");
     return { success: true, message: "Venue updated." };
   } catch (error) {

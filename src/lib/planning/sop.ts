@@ -3,8 +3,15 @@ import type { SopSectionWithTasks, SopTemplateTree } from "./sop-types";
 
 /**
  * Generate SOP checklist tasks for a planning item.
- * Calls the Postgres RPC function which runs inside a single transaction.
- * Returns the number of tasks created (0 if already generated).
+ *
+ * Calls the v2 RPC which runs inside a single transaction. v2 adds
+ * per-venue expansion for `sop_task_templates.expansion_strategy =
+ * 'per_venue'` while preserving v1 column population for `'single'`
+ * templates. The task count is extracted from the JSONB return for
+ * backward compatibility with existing callers.
+ *
+ * Returns 0 when the planning item already has SOP-derived tasks
+ * (idempotent skip).
  */
 export async function generateSopChecklist(
   planningItemId: string,
@@ -12,13 +19,19 @@ export async function generateSopChecklist(
   createdBy: string
 ): Promise<number> {
   const db = createSupabaseAdminClient();
-  const { data, error } = await db.rpc("generate_sop_checklist", {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (db as any).rpc("generate_sop_checklist_v2", {
     p_planning_item_id: planningItemId,
     p_target_date: targetDate,
     p_created_by: createdBy,
   });
   if (error) throw new Error(error.message);
-  return data ?? 0;
+  // v2 returns a JSONB object: { created, masters_created, children_created, skipped_venues, idempotent_skip? }
+  if (data && typeof data === "object" && "created" in data) {
+    return Number((data as { created: number }).created) || 0;
+  }
+  // Defensive fallback — if somehow an integer comes back (e.g. transitional state), honour it.
+  return typeof data === "number" ? data : 0;
 }
 
 /**

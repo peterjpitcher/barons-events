@@ -32,7 +32,8 @@ describe("generateSopChecklist", () => {
   });
 
   it("calls RPC with the correct parameters and returns task count", async () => {
-    const mockClient = makeClientWithRpc({ data: 12, error: null });
+    // v2 RPC returns a JSONB object; wrapper extracts the `created` count.
+    const mockClient = makeClientWithRpc({ data: { created: 12 }, error: null });
     (createSupabaseAdminClient as Mock).mockReturnValue(mockClient);
 
     const result = await generateSopChecklist(
@@ -42,7 +43,7 @@ describe("generateSopChecklist", () => {
     );
 
     expect(createSupabaseAdminClient).toHaveBeenCalledOnce();
-    expect(mockClient.rpc).toHaveBeenCalledWith("generate_sop_checklist", {
+    expect(mockClient.rpc).toHaveBeenCalledWith("generate_sop_checklist_v2", {
       p_planning_item_id: "planning-item-abc",
       p_target_date: "2026-06-15",
       p_created_by: "user-xyz",
