@@ -880,7 +880,13 @@ export async function updatePlanningTask(taskId: string, updates: UpdatePlanning
   }
   if (Object.prototype.hasOwnProperty.call(updates, "status")) {
     updatePayload["status"] = updates.status;
-    updatePayload["completed_at"] = updates.status === "done" ? new Date().toISOString() : null;
+    updatePayload["completed_at"] =
+      updates.status === "done" || updates.status === "not_required"
+        ? new Date().toISOString()
+        : null;
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, "notes")) {
+    updatePayload["notes"] = updates.notes ?? null;
   }
 
   const { data, error } = await supabase

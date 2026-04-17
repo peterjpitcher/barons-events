@@ -531,7 +531,8 @@ const updateTaskSchema = z.object({
   assigneeId: optionalUuidSchema,
   dueDate: dateSchema.optional(),
   status: taskStatusSchema.optional(),
-  sortOrder: z.number().int().min(0).max(999).optional()
+  sortOrder: z.number().int().min(0).max(999).optional(),
+  notes: z.string().max(10_000).nullable().optional()
 });
 
 export async function updatePlanningTaskAction(input: unknown): Promise<PlanningActionResult> {
@@ -559,16 +560,33 @@ export async function updatePlanningTaskAction(input: unknown): Promise<Planning
         : undefined,
       dueDate: parsed.data.dueDate,
       status: parsed.data.status as PlanningTaskStatus | undefined,
-      sortOrder: parsed.data.sortOrder
+      sortOrder: parsed.data.sortOrder,
+      notes: Object.prototype.hasOwnProperty.call(parsed.data, "notes")
+        ? (parsed.data.notes ?? null)
+        : undefined
     });
 
     recordAuditLogEntry({
       entity: "planning",
       entityId: parsed.data.taskId,
       action: "planning.task_updated",
-      actorId: null,
+      actorId: user.id,
       meta: { title: parsed.data.title, status: parsed.data.status }
     }).catch(() => {});
+
+    // Dedicated audit line for notes changes — makes it easy to trace
+    // notes history without scanning every planning.task_updated row.
+    // Note text is intentionally not included in meta (PII hygiene).
+    if (Object.prototype.hasOwnProperty.call(parsed.data, "notes")) {
+      recordAuditLogEntry({
+        entity: "planning_task",
+        entityId: parsed.data.taskId,
+        action: "planning_task.notes_updated",
+        actorId: user.id,
+        meta: { changed_fields: ["notes"] }
+      }).catch(() => {});
+    }
+
     revalidatePath("/planning");
     return { success: true, message: "Task updated." };
   } catch (error) {

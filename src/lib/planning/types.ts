@@ -180,4 +180,5 @@ export type UpdatePlanningTaskInput = {
   dueDate?: string;
   status?: PlanningTaskStatus;
   sortOrder?: number;
+  notes?: string | null;
 };
