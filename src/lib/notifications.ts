@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import { createSupabaseReadonlyClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/types";
 import { formatSpacesLabel } from "@/lib/venue-spaces";
 
@@ -701,6 +702,119 @@ export async function sendPostEventDigestEmail(eventId: string) {
     });
   } catch (error) {
     console.warn("Failed to send post-event digest email", error);
+  }
+}
+
+/**
+ * Returns active SLT members' email addresses.
+ * Admin-only RLS on slt_members means callers must use the admin client.
+ */
+async function getSltRecipients(): Promise<string[]> {
+  const db = createSupabaseAdminClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (db as any)
+    .from("slt_members")
+    .select("user_id, users:user_id(email, deactivated_at)");
+  if (error || !data) {
+    console.warn("Failed to load SLT recipients", error);
+    return [];
+  }
+  return data
+    .filter(
+      (row: { users?: { email?: string | null; deactivated_at?: string | null } }) =>
+        row.users?.email && !row.users?.deactivated_at
+    )
+    .map((row: { users?: { email?: string | null } }) => row.users!.email!) as string[];
+}
+
+/**
+ * Sends a debrief digest to SLT members.
+ *
+ * Privacy: uses BCC so members don't see each other's addresses.
+ * If SLT_FROM_ALIAS is set, sends one email with the alias in `to:` and
+ * members in `bcc:`. Otherwise sends one email per recipient to avoid
+ * leaking the list.
+ *
+ * Fire-and-audit pattern: failures are logged + audited but not thrown —
+ * the debrief submission succeeds even if email delivery fails.
+ */
+export async function sendDebriefSubmittedToSltEmail(eventId: string): Promise<void> {
+  const resend = getResendClient();
+  if (!resend) return;
+
+  try {
+    const event = await fetchEventContext(eventId);
+    if (!event?.debrief) return;
+
+    const recipients = await getSltRecipients();
+    if (!recipients.length) {
+      console.warn("SLT recipient list is empty — no email sent for debrief", eventId);
+      return;
+    }
+
+    const debrief = event.debrief;
+    const body: string[] = [];
+    if (debrief.attendance != null) body.push(`Attendance: ${debrief.attendance}.`);
+    if (debrief.wet_takings != null || debrief.food_takings != null) {
+      const parts: string[] = [];
+      if (debrief.wet_takings != null) parts.push(`Wet £${Number(debrief.wet_takings).toFixed(2)}`);
+      if (debrief.food_takings != null) parts.push(`Food £${Number(debrief.food_takings).toFixed(2)}`);
+      body.push(`Takings: ${parts.join(" · ")}.`);
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const d = debrief as any;
+    if (typeof d.labour_hours === "number" && typeof d.labour_rate_gbp_at_submit === "number") {
+      const cost = (d.labour_hours * d.labour_rate_gbp_at_submit).toFixed(2);
+      body.push(`Labour: ${d.labour_hours}h at £${d.labour_rate_gbp_at_submit.toFixed(2)}/hr — £${cost}.`);
+    }
+    if (debrief.promo_effectiveness != null) {
+      body.push(`Promo effectiveness scored ${debrief.promo_effectiveness}/5.`);
+    }
+    if (debrief.highlights) body.push(`Highlights: ${debrief.highlights}`);
+    if (debrief.issues) body.push(`Issues: ${debrief.issues}`);
+
+    const { html, text } = renderEmailTemplate({
+      headline: `Debrief submitted: ${event.title}`,
+      intro: `${event.creator?.full_name ?? "A venue manager"} has submitted the debrief for "${event.title}".`,
+      body,
+      button: { label: "View debrief", url: eventLink(eventId) },
+      meta: [
+        `Venue: ${event.venue?.name ?? "Unknown venue"}`,
+        `When: ${formatEventWindow(event)}`
+      ],
+      footerNote: "You're receiving this because you're a member of the SLT distribution list in BaronsHub."
+    });
+
+    const subject = `Debrief submitted: ${event.title}`;
+    const alias = process.env.SLT_FROM_ALIAS;
+
+    if (alias) {
+      // Single email: alias in `to`, members bcc'd. Members don't see each other.
+      await resend.emails.send({
+        from: RESEND_FROM_ADDRESS,
+        to: [alias],
+        bcc: recipients,
+        subject,
+        html,
+        text
+      });
+    } else {
+      // No alias — send one email per recipient so nobody sees the list.
+      await Promise.all(
+        recipients.map((to) =>
+          resend.emails.send({
+            from: RESEND_FROM_ADDRESS,
+            to: [to],
+            subject,
+            html,
+            text
+          })
+        )
+      );
+    }
+  } catch (error) {
+    console.warn("Failed to send SLT debrief email", error);
+    // No throw — debrief submission is already authoritative.
   }
 }
 

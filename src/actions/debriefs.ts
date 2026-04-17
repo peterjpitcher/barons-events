@@ -7,7 +7,7 @@ import { upsertDebrief } from "@/lib/debriefs";
 import { debriefSchema } from "@/lib/validation";
 import { createSupabaseActionClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { sendPostEventDigestEmail } from "@/lib/notifications";
+import { sendPostEventDigestEmail, sendDebriefSubmittedToSltEmail } from "@/lib/notifications";
 import { recordAuditLogEntry } from "@/lib/audit-log";
 import type { ActionResult } from "@/lib/types";
 import { normaliseOptionalText as normaliseText } from "@/lib/normalise";
@@ -209,6 +209,10 @@ export async function submitDebriefAction(
     });
 
     await sendPostEventDigestEmail(values.eventId);
+    // Separate mailing list (administrators' digest goes via sendPostEventDigestEmail;
+    // SLT goes via this helper). Fire-and-forget at the edge — helper already
+    // catches and logs any Resend failure.
+    void sendDebriefSubmittedToSltEmail(values.eventId);
 
     revalidatePath(`/events/${values.eventId}`);
     revalidatePath("/");
