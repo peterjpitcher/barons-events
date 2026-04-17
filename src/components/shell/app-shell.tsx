@@ -29,6 +29,8 @@ const NAV_SECTIONS: NavSection[] = [
     label: "Events",
     items: [
       { label: "Events", href: "/events", roles: ["administrator"] },
+      { label: "Propose an event", href: "/events/propose", roles: ["administrator", "office_worker"] },
+      { label: "Pending proposals", href: "/events/pending", roles: ["administrator"] },
       { label: "Bookings", href: "/bookings", roles: ["administrator"] },
       { label: "Customers", href: "/customers", roles: ["administrator"] },
       { label: "Artists", href: "/artists", roles: ["administrator"] },
