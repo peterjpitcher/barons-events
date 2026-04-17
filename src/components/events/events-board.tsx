@@ -56,6 +56,8 @@ const statusConfig: Record<
   EventSummary["status"],
   { label: string; tone: Parameters<typeof Badge>[0]["variant"] }
 > = {
+  pending_approval: { label: "Proposal — awaiting approval", tone: "info" },
+  approved_pending_details: { label: "Approved — add details", tone: "info" },
   draft: { label: "Draft", tone: "neutral" },
   submitted: { label: "Waiting review", tone: "info" },
   needs_revisions: { label: "Needs tweaks", tone: "warning" },
@@ -68,6 +70,14 @@ const statusAccentStyles: Record<
   EventSummary["status"],
   { badge: string; dot: string }
 > = {
+  pending_approval: {
+    badge: "bg-[var(--color-info)] text-white border border-[var(--color-accent-cool-dark)]",
+    dot: "bg-white"
+  },
+  approved_pending_details: {
+    badge: "bg-[var(--color-info)] text-white border border-[var(--color-accent-cool-dark)]",
+    dot: "bg-white"
+  },
   draft: {
     badge: "bg-[var(--color-primary-100)] text-[var(--color-primary-900)] border border-[var(--color-primary-400)]",
     dot: "bg-[var(--color-primary-700)]"
@@ -95,6 +105,8 @@ const statusAccentStyles: Record<
 };
 
 const statusSortOrder: Record<EventSummary["status"], number> = {
+  pending_approval: -2,
+  approved_pending_details: -1,
   draft: 0,
   submitted: 1,
   needs_revisions: 2,
@@ -108,11 +120,19 @@ const localStorageHidePastKey = "events-board-hide-past";
 
 function normaliseEvents(events: EventSummary[]): EventWithDates[] {
   return events
-    .map((event) => ({
-      ...event,
-      start: dayjs.utc(event.start_at).tz("Europe/London"),
-      end: dayjs.utc(event.end_at).tz("Europe/London")
-    }))
+    .map((event) => {
+      const start = dayjs.utc(event.start_at).tz("Europe/London");
+      // Proposal-state events (pending_approval / approved_pending_details) can
+      // have a null end_at — default to start + 2h so grid rendering doesn't crash.
+      const end = event.end_at
+        ? dayjs.utc(event.end_at).tz("Europe/London")
+        : start.add(2, "hour");
+      return {
+        ...event,
+        start,
+        end
+      };
+    })
     .sort((a, b) => a.start.valueOf() - b.start.valueOf());
 }
 
@@ -478,6 +498,16 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
           {canCreate ? (
             <Button asChild variant="primary">
               <Link href="/events/new">New event</Link>
+            </Button>
+          ) : null}
+          {canCreate ? (
+            <Button asChild variant="secondary">
+              <Link href="/events/propose">Propose an event</Link>
+            </Button>
+          ) : null}
+          {user.role === "administrator" ? (
+            <Button asChild variant="ghost">
+              <Link href="/events/pending">Pending proposals</Link>
             </Button>
           ) : null}
           <div className="flex items-center gap-1 rounded-full border border-[var(--color-border)] bg-white p-1">

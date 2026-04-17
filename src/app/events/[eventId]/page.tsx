@@ -26,10 +26,14 @@ import { formatCurrency, formatPercent } from "@/lib/utils/format";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { canViewPlanning } from "@/lib/roles";
 import { SopChecklistView } from "@/components/planning/sop-checklist-view";
+import { AttachmentsPanel } from "@/components/attachments/attachments-panel";
+import { listEventAttachmentsRollup } from "@/lib/attachments";
 import type { PlanningTask, PlanningPerson, PlanningTaskStatus } from "@/lib/planning/types";
 
 const statusCopy: Record<string, { label: string; tone: "neutral" | "info" | "success" | "warning" | "danger" }> = {
   draft: { label: "Draft", tone: "neutral" },
+  pending_approval: { label: "Proposal — awaiting approval", tone: "info" },
+  approved_pending_details: { label: "Approved — add details", tone: "info" },
   submitted: { label: "Waiting review", tone: "info" },
   needs_revisions: { label: "Needs tweaks", tone: "warning" },
   approved: { label: "Approved", tone: "success" },
@@ -104,13 +108,16 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
     await updateAssigneeAction(formData);
   };
 
-  const [venues, assignableUsers, eventTypes, auditLog, artists] = await Promise.all([
+  const [venues, assignableUsers, eventTypes, auditLog, artists, attachments] = await Promise.all([
     listVenues(),
     listAssignableUsers(),
     listEventTypes(),
     listAuditLogForEvent(event.id),
-    listArtists()
+    listArtists(),
+    listEventAttachmentsRollup(event.id)
   ]);
+
+  const canUploadAttachments = user.role === "administrator" || isVenueScoped;
 
   // ─── Fetch linked planning item & SOP tasks for this event ────────────────
   let sopTasks: PlanningTask[] = [];
@@ -569,8 +576,8 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
             </CardTitle>
             <Badge variant={status.tone}>{status.label}</Badge>
             <CardDescription>
-              {event.venue?.name ?? ""} · {formatter.format(new Date(event.start_at))} →{" "}
-              {formatter.format(new Date(event.end_at))}
+              {event.venue?.name ?? ""} · {formatter.format(new Date(event.start_at))}
+              {event.end_at ? <> → {formatter.format(new Date(event.end_at))}</> : <> → <span className="italic">end time TBC</span></>}
             </CardDescription>
           </div>
           <div className="flex flex-col items-start gap-3 lg:items-end">
@@ -640,6 +647,15 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
               />
 
               {sopChecklistCard}
+              <AttachmentsPanel
+                parentType="event"
+                parentId={event.id}
+                attachments={attachments}
+                canUpload={canUploadAttachments}
+                viewerId={user.id}
+                isAdmin={user.role === "administrator"}
+                description="Files attached to this event or any of its planning tasks."
+              />
               {reviewDecisionCard}
               {assignmentCard}
               {reviewerTimelineCard}
@@ -658,6 +674,15 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
             {debriefSubmitCard}
             {debriefSnapshotCard}
             {sopChecklistCard}
+            <AttachmentsPanel
+              parentType="event"
+              parentId={event.id}
+              attachments={attachments}
+              canUpload={canUploadAttachments}
+              viewerId={user.id}
+              isAdmin={user.role === "administrator"}
+              description="Files attached to this event or any of its planning tasks."
+            />
 
             {canRevertToDraft ? (
               <Card>

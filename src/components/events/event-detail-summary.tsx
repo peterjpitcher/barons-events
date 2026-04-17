@@ -104,7 +104,8 @@ export function EventDetailSummary({ event }: EventDetailSummaryProps) {
         ) : null}
         <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
           <p>
-            <span className="font-semibold text-[var(--color-text)]">Type:</span> {event.event_type}
+            <span className="font-semibold text-[var(--color-text)]">Type:</span>{" "}
+            {event.event_type ? event.event_type : <span className="italic text-subtle">TBC</span>}
           </p>
           <p>
             <span className="font-semibold text-[var(--color-text)]">
@@ -118,7 +119,7 @@ export function EventDetailSummary({ event }: EventDetailSummaryProps) {
           </p>
           <p>
             <span className="font-semibold text-[var(--color-text)]">End:</span>{" "}
-            {formatter.format(new Date(event.end_at))}
+            {event.end_at ? formatter.format(new Date(event.end_at)) : <span className="italic text-subtle">TBC</span>}
           </p>
           {event.expected_headcount ? (
             <p>
