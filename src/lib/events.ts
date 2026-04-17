@@ -116,8 +116,17 @@ function labelsForUpdatedValues(previous: EventRow, updates: Partial<EventRow>):
   return labels;
 }
 
+/** Venue attachment as surfaced on the API surface — primary first, then alpha. */
+export type EventVenueAttachment = {
+  id: string;
+  name: string;
+  isPrimary: boolean;
+};
+
 export type EventSummary = EventRow & {
   venue: Pick<VenueRow, "id" | "name">;
+  /** Full venue list when loaded with attachments; primary appears first. */
+  venues?: EventVenueAttachment[];
   artists?: Array<
     Pick<EventArtistRow, "id" | "artist_id" | "billing_order"> & {
       artist: Pick<ArtistRow, "id" | "name"> | null;
@@ -127,6 +136,7 @@ export type EventSummary = EventRow & {
 
 export type EventDetail = EventRow & {
   venue: VenueRow;
+  venues: EventVenueAttachment[];
   versions: VersionRow[];
   approvals: ApprovalRow[];
   debrief: DebriefRow | null;
@@ -166,7 +176,7 @@ export async function listEventsForUser(user: AppUser): Promise<EventSummary[]> 
 
   let query = supabase
     .from("events")
-    .select("*, venue:venues(id,name), artists:event_artists(id,artist_id,billing_order,artist:artists(id,name))")
+    .select("*, venue:venues(id,name), event_venues(venue_id,is_primary,venue:venues(id,name)), artists:event_artists(id,artist_id,billing_order,artist:artists(id,name))")
     .is("deleted_at", null)
     .order("start_at", { ascending: true });
 
@@ -197,8 +207,14 @@ export async function listEventsForUser(user: AppUser): Promise<EventSummary[]> 
   type RawArtistEntry = Pick<EventArtistRow, "id" | "artist_id" | "billing_order"> & {
     artist: Pick<ArtistRow, "id" | "name"> | Pick<ArtistRow, "id" | "name">[] | null;
   };
+  type RawVenueAttachment = {
+    venue_id: string;
+    is_primary: boolean;
+    venue: { id: string; name: string } | { id: string; name: string }[] | null;
+  };
   type RawEventRow = EventRow & {
     venue: EventSummary["venue"] | EventSummary["venue"][];
+    event_venues?: RawVenueAttachment[] | null;
     artists: RawArtistEntry[] | null;
   };
 
@@ -207,6 +223,7 @@ export async function listEventsForUser(user: AppUser): Promise<EventSummary[]> 
   return rows.map((item) => ({
     ...item,
     venue: Array.isArray(item.venue) ? item.venue[0] : (item.venue as EventSummary["venue"]),
+    venues: normaliseVenueAttachments(item.event_venues ?? []),
     artists: Array.isArray(item.artists)
       ? item.artists
           .map((entry: RawArtistEntry) => {
@@ -231,6 +248,33 @@ export async function listEventsForUser(user: AppUser): Promise<EventSummary[]> 
   }));
 }
 
+/**
+ * Shared helper that flattens the nested event_venues / planning_item_venues
+ * rows Supabase returns into the UI-friendly EventVenueAttachment shape,
+ * with the primary venue first and the rest alphabetical.
+ */
+function normaliseVenueAttachments(
+  attachments: Array<{
+    venue_id: string;
+    is_primary: boolean;
+    venue: { id: string; name: string } | { id: string; name: string }[] | null;
+  }>
+): EventVenueAttachment[] {
+  return attachments
+    .map((a) => {
+      const v = Array.isArray(a.venue) ? a.venue[0] : a.venue;
+      return {
+        id: a.venue_id,
+        name: v?.name ?? "Unknown venue",
+        isPrimary: Boolean(a.is_primary)
+      };
+    })
+    .sort((a, b) => {
+      if (a.isPrimary !== b.isPrimary) return a.isPrimary ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+}
+
 export async function getEventDetail(eventId: string): Promise<EventDetail | null> {
   const supabase = await createSupabaseReadonlyClient();
 
@@ -239,6 +283,7 @@ export async function getEventDetail(eventId: string): Promise<EventDetail | nul
     .select(
       `*,
       venue:venues(*),
+      event_venues(venue_id, is_primary, venue:venues(id,name)),
       versions:event_versions(*),
       approvals(*),
       debrief:debriefs(*),
@@ -258,6 +303,11 @@ export async function getEventDetail(eventId: string): Promise<EventDetail | nul
 
   type RawDetailRecord = EventRow & {
     venue: VenueRow | VenueRow[] | null;
+    event_venues?: Array<{
+      venue_id: string;
+      is_primary: boolean;
+      venue: { id: string; name: string } | { id: string; name: string }[] | null;
+    }> | null;
     versions: VersionRow[] | null;
     approvals: ApprovalRow[] | null;
     debrief: DebriefRow | DebriefRow[] | null;
@@ -342,6 +392,7 @@ export async function getEventDetail(eventId: string): Promise<EventDetail | nul
   return {
     ...record,
     venue: Array.isArray(record.venue) ? record.venue[0] : (record.venue as VenueRow),
+    venues: normaliseVenueAttachments(record.event_venues ?? []),
     versions,
     approvals: Array.isArray(record.approvals) ? record.approvals : [],
     debrief: Array.isArray(record.debrief) ? record.debrief[0] ?? null : (record.debrief as DebriefRow | null),

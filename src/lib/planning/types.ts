@@ -52,6 +52,9 @@ export type PlanningItem = {
   typeLabel: string;
   venueId: string | null;
   venueName: string | null;
+  /** Full list of venues attached to this item. When the item has a primary
+   * venue, it appears first. Empty when the item is global. */
+  venues: Array<{ id: string; name: string; isPrimary: boolean }>;
   ownerId: string | null;
   ownerName: string | null;
   targetDate: string;

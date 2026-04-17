@@ -149,6 +149,11 @@ type RawPlanningItemRow = PlanningItemRow & {
   owner?: RawUserRelation | RawUserRelation[] | null;
   venue?: { id: string; name: string } | Array<{ id: string; name: string }> | null;
   tasks?: RawPlanningTaskRow[] | null;
+  planning_item_venues?: Array<{
+    venue_id: string;
+    is_primary: boolean;
+    venue?: { id: string; name: string } | Array<{ id: string; name: string }> | null;
+  }>;
 };
 
 function toPlanningItem(row: RawPlanningItemRow): PlanningItem {
@@ -162,6 +167,18 @@ function toPlanningItem(row: RawPlanningItemRow): PlanningItem {
       })
     : [];
 
+  // Full venue attachment list with primary first, then alphabetical.
+  const attachments = Array.isArray(row?.planning_item_venues) ? row.planning_item_venues : [];
+  const venues = attachments
+    .map((attachment) => {
+      const v = resolveSingleRelation(attachment.venue);
+      return { id: attachment.venue_id, name: v?.name ?? "Unknown venue", isPrimary: Boolean(attachment.is_primary) };
+    })
+    .sort((a, b) => {
+      if (a.isPrimary !== b.isPrimary) return a.isPrimary ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+
   return {
     id: row.id,
     source: "planning",
@@ -173,6 +190,7 @@ function toPlanningItem(row: RawPlanningItemRow): PlanningItem {
     typeLabel: row.type_label,
     venueId: row.venue_id,
     venueName: venue?.name ?? null,
+    venues,
     ownerId: row.owner_id,
     ownerName: owner?.full_name ?? owner?.email ?? null,
     targetDate: row.target_date,
@@ -500,6 +518,7 @@ export async function listPlanningBoardData(params?: {
       created_at,
       updated_at,
       venue:venues(id,name),
+      planning_item_venues(venue_id, is_primary, venue:venues(id,name)),
       owner:users!planning_items_owner_id_fkey(id,full_name,email),
       tasks:planning_tasks(
         id,
