@@ -123,6 +123,7 @@ export function LinksManager({ links: initialLinks, canEdit }: LinksManagerProps
 
   for (const { parent, variants } of groups) {
     const isExpanded = expandedGroups.has(parent.name);
+    const totalClicks = parent.clicks + variants.reduce((sum, v) => sum + v.clicks, 0);
 
     rows.push(
       <LinkRow
@@ -134,6 +135,7 @@ export function LinksManager({ links: initialLinks, canEdit }: LinksManagerProps
         fieldErrors={editingId === parent.id ? editFieldErrors : undefined}
         isPending={isPending}
         variantCount={variants.length}
+        totalClicks={totalClicks}
         isExpanded={isExpanded}
         onToggleExpand={() =>
           setExpandedGroups((prev) => {

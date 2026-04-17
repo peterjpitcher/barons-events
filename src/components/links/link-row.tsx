@@ -14,6 +14,7 @@ type LinkRowProps = {
   fieldErrors?:     Record<string, string>;
   isPending:        boolean;
   variantCount?:    number;
+  totalClicks?:     number;
   isExpanded?:      boolean;
   onToggleExpand?:  () => void;
   onNewVariant?:    (link: ShortLink) => void;
@@ -50,6 +51,7 @@ export function LinkRow({
   fieldErrors,
   isPending,
   variantCount = 0,
+  totalClicks,
   isExpanded = false,
   onToggleExpand,
   onNewVariant,
@@ -133,9 +135,9 @@ export function LinkRow({
         </Badge>
       </td>
 
-      {/* Clicks */}
+      {/* Clicks — sum of this link + any variants */}
       <td className="px-4 py-3 text-right tabular-nums text-sm text-[var(--color-text)]">
-        {link.clicks.toLocaleString()}
+        {(totalClicks ?? link.clicks).toLocaleString()}
       </td>
 
       {/* Expires */}
