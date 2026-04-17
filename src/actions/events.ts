@@ -17,6 +17,7 @@ import { sendAssigneeReassignmentEmail, sendEventSubmittedEmail, sendReviewDecis
 import { recordAuditLogEntry } from "@/lib/audit-log";
 import { generateTermsAndConditions, generateWebsiteCopy, type GeneratedWebsiteCopy } from "@/lib/ai";
 import { normaliseEventDateTimeForStorage } from "@/lib/datetime";
+import { randomUUID } from "crypto";
 import {
   normaliseOptionalText as normaliseOptionalTextField,
   normaliseOptionalNumber as normaliseOptionalNumberField,
@@ -588,6 +589,137 @@ async function autoApproveEvent(params: {
   return { warnings };
 }
 
+/**
+ * Wave 2.3 — multi-venue event draft creation.
+ *
+ * Creates N draft events (one per venue) in a single transactional RPC call.
+ * Used by the create-event form when the user selects 2+ venues.
+ *
+ * For single-venue create or any edit operation, use saveEventDraftAction
+ * below — that path retains image upload, artist sync, and event version
+ * history, which are per-event concerns not handled by the RPC.
+ *
+ * Authorisation is enforced by the SECURITY DEFINER RPC:
+ *   - administrator: any venue
+ *   - office_worker with venue_id: only venues matching user.venue_id
+ *   - executive / no-venue office_worker: rejected
+ */
+export async function saveEventDraftsMultiAction(
+  _: ActionResult | undefined,
+  formData: FormData
+): Promise<ActionResult> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  if (!canManageEvents(user.role, user.venueId)) {
+    return { success: false, message: "You don't have permission to create events." };
+  }
+
+  const venueIds = formData
+    .getAll("venueIds")
+    .filter((v): v is string => typeof v === "string" && v.length > 0);
+
+  if (venueIds.length === 0) {
+    return {
+      success: false,
+      message: "Pick at least one venue.",
+      fieldErrors: { venueId: "Choose a venue" }
+    };
+  }
+
+  const multiSchema = eventDraftSchema.omit({ venueId: true, eventId: true }).refine(
+    (data: { startAt?: string; endAt?: string }) => !data.endAt || !data.startAt || new Date(data.endAt) > new Date(data.startAt),
+    { message: "End time must be after start time", path: ["endAt"] }
+  );
+
+  const parsed = multiSchema.safeParse({
+    title: formData.get("title") ?? "",
+    eventType: formData.get("eventType") ?? "",
+    startAt: formData.get("startAt") ?? "",
+    endAt: formData.get("endAt") ?? "",
+    venueSpace: normaliseVenueSpacesField(formData.get("venueSpace")),
+    expectedHeadcount: formData.get("expectedHeadcount") ?? undefined,
+    wetPromo: formData.get("wetPromo") ?? undefined,
+    foodPromo: formData.get("foodPromo") ?? undefined,
+    bookingType: formData.get("bookingType") ?? undefined,
+    ticketPrice: formData.get("ticketPrice") ?? undefined,
+    checkInCutoffMinutes: formData.get("checkInCutoffMinutes") ?? undefined,
+    agePolicy: formData.get("agePolicy") ?? undefined,
+    accessibilityNotes: formData.get("accessibilityNotes") ?? undefined,
+    cancellationWindowHours: formData.get("cancellationWindowHours") ?? undefined,
+    termsAndConditions: formData.get("termsAndConditions") ?? undefined,
+    artistNames: formData.get("artistNames") ?? undefined,
+    goalFocus: formData.getAll("goalFocus").length
+      ? formData.getAll("goalFocus").join(",")
+      : formData.get("goalFocus") ?? undefined,
+    costTotal: formData.get("costTotal") ?? undefined,
+    costDetails: formData.get("costDetails") ?? undefined,
+    notes: formData.get("notes") ?? undefined,
+    managerResponsibleId: formData.get("managerResponsibleId") ?? undefined,
+    publicTitle: formData.get("publicTitle") ?? undefined,
+    publicTeaser: formData.get("publicTeaser") ?? undefined,
+    publicDescription: formData.get("publicDescription") ?? undefined,
+    publicHighlights: formData.get("publicHighlights") ?? undefined,
+    bookingUrl: formData.get("bookingUrl") ?? undefined,
+    seoTitle: formData.get("seoTitle") ?? undefined,
+    seoDescription: formData.get("seoDescription") ?? undefined,
+    seoSlug: formData.get("seoSlug") ?? undefined
+  });
+
+  if (!parsed.success) {
+    return {
+      success: false,
+      message: "Check the highlighted fields.",
+      fieldErrors: getFieldErrors(parsed.error)
+    };
+  }
+
+  const values = parsed.data;
+  const startAtIso = normaliseEventDateTimeForStorage(values.startAt);
+  const endAtIso = normaliseEventDateTimeForStorage(values.endAt);
+
+  const idempotencyKey = (formData.get("idempotencyKey") as string) || randomUUID();
+  const db = createSupabaseAdminClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (db as any).rpc("create_multi_venue_event_drafts", {
+    p_payload: {
+      created_by: user.id,
+      venue_ids: venueIds,
+      title: values.title,
+      event_type: values.eventType,
+      start_at: startAtIso,
+      end_at: endAtIso,
+      venue_space: values.venueSpace,
+      expected_headcount: values.expectedHeadcount ?? null,
+      wet_promo: values.wetPromo ?? null,
+      food_promo: values.foodPromo ?? null,
+      goal_focus: values.goalFocus ?? null,
+      notes: values.notes ?? null,
+      cost_total: values.costTotal ?? null,
+      cost_details: values.costDetails ?? null
+    },
+    p_idempotency_key: idempotencyKey
+  });
+
+  if (error) {
+    console.error("[events] saveEventDraftsMultiAction RPC failed:", error);
+    return {
+      success: false,
+      message: error.message ?? "Could not create the events. Please try again."
+    };
+  }
+
+  revalidatePath("/events");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const events = Array.isArray((data as any)?.events) ? ((data as any).events as Array<{ event_id: string }>) : [];
+  if (events.length === 1) {
+    redirect(`/events/${events[0].event_id}`);
+  }
+  return {
+    success: true,
+    message: `Created ${venueIds.length} draft events. Open each to add artists, images, and remaining details.`
+  };
+}
+
 export async function saveEventDraftAction(_: ActionResult | undefined, formData: FormData): Promise<ActionResult> {
   const user = await getCurrentUser();
   if (!user) {
@@ -690,17 +822,29 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
 
       // Only admin or event creator can set manager_responsible_id
       let managerResponsibleIdValue: string | null = values.managerResponsibleId || null;
+      // Fetch created_by + status in one go so we can also decide whether to
+      // transition approved_pending_details → draft on this save.
+      const supabaseCheck = await createSupabaseActionClient();
+      const { data: ownerCheck } = await supabaseCheck
+        .from("events")
+        .select("created_by, status")
+        .eq("id", values.eventId)
+        .single();
       if (managerResponsibleIdValue && user.role !== "administrator") {
-        const supabaseCheck = await createSupabaseActionClient();
-        const { data: ownerCheck } = await supabaseCheck
-          .from("events")
-          .select("created_by")
-          .eq("id", values.eventId)
-          .single();
         if (ownerCheck?.created_by !== user.id) {
           managerResponsibleIdValue = null; // Strip — user is not admin or creator
         }
       }
+
+      // Pre-event completion: when the current status is approved_pending_details
+      // and the venue manager provides the required fields (event_type, end_at,
+      // venue_space), transition the row back to normal draft state. The DB
+      // trigger enforces that the required fields are actually present.
+      const shouldTransitionToDraft =
+        (ownerCheck as { status?: string } | null)?.status === "approved_pending_details" &&
+        Boolean(values.eventType) &&
+        Boolean(values.venueSpace) &&
+        Boolean(endAtIso);
 
       try {
         const result = await updateEventDraft(values.eventId, {
@@ -710,6 +854,7 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
           start_at: startAtIso,
           end_at: endAtIso,
           venue_space: values.venueSpace,
+          ...(shouldTransitionToDraft ? { status: "draft" as EventStatus } : {}),
           expected_headcount: values.expectedHeadcount ?? null,
           wet_promo: values.wetPromo ?? null,
           food_promo: values.foodPromo ?? null,

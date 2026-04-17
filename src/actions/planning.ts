@@ -23,6 +23,8 @@ import { createSupabaseActionClient, createSupabaseReadonlyClient } from "@/lib/
 import { generateInspirationItems } from "@/lib/planning/inspiration";
 import { generateSopChecklist, recalculateSopDates, updateBlockedStatus } from "@/lib/planning/sop";
 import { recordAuditLogEntry } from "@/lib/audit-log";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { randomUUID } from "crypto";
 
 export type PlanningActionResult = {
   success: boolean;
@@ -110,6 +112,83 @@ export async function createPlanningItemAction(input: unknown): Promise<Planning
   } catch (error) {
     console.error("Failed to create planning item", error);
     return { success: false, message: "Could not create planning item." };
+  }
+}
+
+const createItemsMultiSchema = z.object({
+  title: z.string().min(2, "Add a title").max(160),
+  description: z.string().max(2000).optional().nullable(),
+  typeLabel: z.string().min(2, "Add a planning type").max(120),
+  venueIds: z.array(z.string().uuid()).min(1, "Pick at least one venue").max(30),
+  ownerId: optionalUuidSchema,
+  targetDate: dateSchema,
+  status: planningStatusSchema.optional(),
+  idempotencyKey: z.string().uuid().optional()
+});
+
+/**
+ * Wave 2.4 — creates one planning item per selected venue via the
+ * create_multi_venue_planning_items RPC. SOP checklist generation is done
+ * per created item after the RPC returns; a single RPC failure means no items
+ * are created (transactional).
+ */
+export async function createMultiVenuePlanningItemsAction(input: unknown): Promise<PlanningActionResult> {
+  try {
+    const user = await ensureUser();
+    const parsed = createItemsMultiSchema.safeParse(input);
+    if (!parsed.success) {
+      return {
+        success: false,
+        message: "Check the highlighted fields.",
+        fieldErrors: zodFieldErrors(parsed.error)
+      };
+    }
+
+    const db = createSupabaseAdminClient();
+    const idempotencyKey = parsed.data.idempotencyKey ?? randomUUID();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (db as any).rpc("create_multi_venue_planning_items", {
+      p_payload: {
+        created_by: user.id,
+        mode: "specific",
+        venue_ids: parsed.data.venueIds,
+        title: parsed.data.title,
+        description: parsed.data.description ?? null,
+        type_label: parsed.data.typeLabel,
+        owner_id: parsed.data.ownerId ?? "",
+        target_date: parsed.data.targetDate,
+        status: parsed.data.status ?? "planned"
+      },
+      p_idempotency_key: idempotencyKey
+    });
+
+    if (error) {
+      console.error("createMultiVenuePlanningItemsAction RPC failed:", error);
+      return { success: false, message: error.message ?? "Could not create planning items." };
+    }
+
+    // Generate SOP per created item (outside the RPC to avoid nesting transactions).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const items = Array.isArray((data as any)?.items)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ? ((data as any).items as Array<{ item_id: string }>)
+      : [];
+    for (const item of items) {
+      try {
+        await generateSopChecklist(item.item_id, parsed.data.targetDate, user.id);
+      } catch (sopError) {
+        console.error("SOP checklist generation failed for item", item.item_id, sopError);
+      }
+    }
+
+    revalidatePath("/planning");
+    return {
+      success: true,
+      message: `Created ${parsed.data.venueIds.length} planning items.`
+    };
+  } catch (error) {
+    console.error("Failed to create multi-venue planning items", error);
+    return { success: false, message: "Could not create planning items." };
   }
 }
 

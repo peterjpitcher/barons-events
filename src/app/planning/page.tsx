@@ -33,7 +33,9 @@ export default async function PlanningPage() {
       data={boardData}
       venues={venues.map((venue) => ({
         id: venue.id,
-        name: venue.name
+        name: venue.name,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        category: (venue as any).category === "cafe" ? "cafe" : "pub"
       }))}
       canApproveEvents={canReviewEvents(user.role)}
       userRole={user.role}

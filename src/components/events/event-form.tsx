@@ -8,8 +8,10 @@ import {
   generateWebsiteCopyAction,
   generateWebsiteCopyFromFormAction,
   saveEventDraftAction,
+  saveEventDraftsMultiAction,
   submitEventForReviewAction
 } from "@/actions/events";
+import { VenueMultiSelect, type VenueOption } from "@/components/venues/venue-multi-select";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { DeleteEventButton } from "@/components/events/delete-event-button";
 import { Button } from "@/components/ui/button";
@@ -157,6 +159,7 @@ export function EventForm({
   users
 }: EventFormProps) {
   const [draftState, draftAction, isSavingPending] = useActionState(saveEventDraftAction, undefined);
+  const [multiDraftState, multiDraftAction, isSavingMultiPending] = useActionState(saveEventDraftsMultiAction, undefined);
   const [submitState, submitAction, isSubmittingPending] = useActionState(submitEventForReviewAction, undefined);
   const [websiteCopyState, websiteCopyAction, isGeneratingEditPending] = useActionState(generateWebsiteCopyAction, undefined);
   const [websiteCopyFormState, websiteCopyFormAction, isGeneratingFormPending] = useActionState(generateWebsiteCopyFromFormAction, undefined);
@@ -210,6 +213,16 @@ export function EventForm({
       }
     }
   }, [draftState]);
+
+  useEffect(() => {
+    if (multiDraftState?.message) {
+      if (multiDraftState.success) {
+        toast.success(multiDraftState.message);
+      } else if (!multiDraftState.fieldErrors) {
+        toast.error(multiDraftState.message);
+      }
+    }
+  }, [multiDraftState]);
 
   useEffect(() => {
     if (submitState?.message) {
@@ -268,6 +281,12 @@ export function EventForm({
     }
   }, [draftState]);
   useEffect(() => {
+    if (multiDraftState?.success) {
+      setIsDirty(false);
+      setLastSavedAt(new Date());
+    }
+  }, [multiDraftState]);
+  useEffect(() => {
     if (submitState?.success) {
       setIsDirty(false);
       setLastSavedAt(new Date());
@@ -316,6 +335,9 @@ export function EventForm({
   const [titleValue, setTitleValue] = useState(defaultValues?.title ?? "");
   const [eventTypeValue, setEventTypeValue] = useState(defaultValues?.event_type ?? "");
   const [selectedVenueId, setSelectedVenueId] = useState(defaultVenueId);
+  const [selectedVenueIds, setSelectedVenueIds] = useState<string[]>(
+    defaultVenueId ? [defaultVenueId] : []
+  );
   const [venueSpaceValue, setVenueSpaceValue] = useState(defaultValues?.venue_space ?? "");
   const [startValue, setStartValue] = useState(toLocalInputValue(defaultValues?.start_at ?? initialStartAt));
   const [endValue, setEndValue] = useState(toLocalInputValue(defaultValues?.end_at ?? initialEndAt));
@@ -441,10 +463,24 @@ export function EventForm({
 
   function handleVenueChange(value: string) {
     setSelectedVenueId(value);
+    setSelectedVenueIds(value ? [value] : []);
     if (!managerDirty) {
       const venue = venues.find((v) => v.id === value);
       setManagerResponsibleId(venue?.default_manager_responsible_id ?? "");
     }
+  }
+
+  function handleVenueMultiChange(ids: string[]) {
+    setSelectedVenueIds(ids);
+    // Keep the single selectedVenueId in sync with the first selection, so the
+    // single-venue fallback path (and downstream state like defaultManager) still works.
+    const primary = ids[0] ?? "";
+    setSelectedVenueId(primary);
+    if (!managerDirty) {
+      const venue = venues.find((v) => v.id === primary);
+      setManagerResponsibleId(venue?.default_manager_responsible_id ?? "");
+    }
+    setIsDirty(true);
   }
 
   useEffect(() => {
@@ -548,7 +584,15 @@ export function EventForm({
     });
   }
 
-  const activeState = intent === "submit" ? submitState : draftState;
+  // Multi-venue create mode: render multi-select and route draft saves through
+  // saveEventDraftsMultiAction. Administrators only — office workers are
+  // restricted to their linked venue, so single-venue selection suffices there.
+  const isMultiCapable = mode === "create" && role === "administrator" && venues.length > 1;
+  const multiVenueCount = selectedVenueIds.length;
+  const isMultiMode = isMultiCapable && multiVenueCount > 1;
+
+  const activeState =
+    intent === "submit" ? submitState : isMultiMode ? multiDraftState : draftState;
   const fieldErrors = activeState?.fieldErrors ?? {};
 
   // Error indicators per tab
@@ -586,7 +630,8 @@ export function EventForm({
     return () => clearTimeout(timer);
   }, [hasFieldErrors, tabErrors.eventDetails, tabErrors.accelerateGrowth, tabErrors.websiteListings]);
 
-  const isPending = isSavingPending || isSubmittingPending || isGeneratingPending;
+  const isPending =
+    isSavingPending || isSavingMultiPending || isSubmittingPending || isGeneratingPending;
 
   // Show slow-save warning after 8 seconds
   useEffect(() => {
@@ -602,12 +647,23 @@ export function EventForm({
   const eventStatus = defaultValues?.status ?? "draft";
 
   const primaryLabel = (() => {
-    if (mode === "create") return "Save draft";
+    if (mode === "create") return isMultiMode ? `Save ${multiVenueCount} drafts` : "Save draft";
+    if (eventStatus === "approved_pending_details") return "Save details";
     if (role === "administrator" && eventStatus === "approved") return "Save & re-publish";
     return "Save changes";
   })();
 
   const showSecondaryAction = (() => {
+    // Multi-venue create mode only supports "Save drafts"; each resulting event
+    // must be submitted individually for review.
+    if (isMultiMode) return false;
+    // Pre-event proposal flow: approved_pending_details transitions to draft
+    // automatically when the required fields are saved. No separate "submit"
+    // button is needed until it reaches normal draft state.
+    if (eventStatus === "approved_pending_details") return false;
+    // pending_approval is not editable via this form — the admin approves/
+    // rejects via the pending queue. Guard anyway.
+    if (eventStatus === "pending_approval") return false;
     if (role === "administrator") {
       // No secondary for approved or completed — primary handles it
       return eventStatus !== "approved" && eventStatus !== "completed";
@@ -679,8 +735,27 @@ export function EventForm({
         <p className="text-xs text-subtle">This is the headline guests will see on the website and in reviewer dashboards.</p>
       </div>
       <div className="space-y-2">
-        <Label htmlFor="venueId">Venue</Label>
-        {canChooseVenue ? (
+        <Label htmlFor="venueId">{isMultiCapable ? "Venues" : "Venue"}</Label>
+        {isMultiCapable ? (
+          <>
+            <VenueMultiSelect
+              venues={venues.map((venue) => ({
+                id: venue.id,
+                name: venue.name,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                category: (venue as any).category === "cafe" ? "cafe" : "pub"
+              } satisfies VenueOption))}
+              selectedIds={selectedVenueIds}
+              onChange={handleVenueMultiChange}
+              hiddenFieldName={isMultiMode ? "venueIds" : undefined}
+            />
+            {/* When exactly one venue is selected, post venueId (single-venue action).
+                When multiple selected, post venueIds[] (multi action). */}
+            {!isMultiMode ? (
+              <input type="hidden" name="venueId" value={selectedVenueId} />
+            ) : null}
+          </>
+        ) : canChooseVenue ? (
           <Select
             id="venueId"
             name="venueId"
@@ -717,7 +792,16 @@ export function EventForm({
           </>
         )}
         <FieldError id="venue-error" message={fieldErrors.venueId} />
-        <p className="text-xs text-subtle">Pick the host venue—this controls which spaces appear below.</p>
+        <p className="text-xs text-subtle">
+          {isMultiCapable
+            ? "Pick one venue for a single draft, or two or more for a set of linked drafts (one per venue)."
+            : "Pick the host venue—this controls which spaces appear below."}
+        </p>
+        {isMultiMode ? (
+          <p className="text-xs text-subtle">
+            Multi-venue mode creates one draft per venue. Open each to add artists, images, and remaining details.
+          </p>
+        ) : null}
       </div>
     </div>
   );
@@ -1702,7 +1786,7 @@ export function EventForm({
       <EventFormContext.Provider value={contextValue}>
         <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start">
           <div className="min-w-0">
-            <form ref={formRef} action={draftAction} noValidate onSubmit={handleSubmit} onChange={() => setIsDirty(true)}>
+            <form ref={formRef} action={isMultiMode ? multiDraftAction : draftAction} noValidate onSubmit={handleSubmit} onChange={() => setIsDirty(true)}>
               <input type="hidden" name="eventId" defaultValue={defaultValues?.id} />
               {activeState && !activeState.success && activeState.message && !activeState.fieldErrors && (
                 <div className="mb-4 rounded-lg border border-[var(--color-danger)] bg-[var(--color-danger)]/10 p-4 text-sm text-[var(--color-danger)]" role="alert">
@@ -1851,7 +1935,7 @@ export function EventForm({
   return (
     <EventFormContext.Provider value={contextValue}>
       <>
-        <form action={draftAction} className="space-y-6" noValidate onSubmit={handleSubmit} onChange={() => setIsDirty(true)}>
+        <form action={isMultiMode ? multiDraftAction : draftAction} className="space-y-6" noValidate onSubmit={handleSubmit} onChange={() => setIsDirty(true)}>
           <input type="hidden" name="eventId" defaultValue={defaultValues?.id} />
           <button ref={legacySubmitRef} type="submit" formAction={submitAction} data-intent="submit" className="sr-only" aria-hidden tabIndex={-1} />
           {activeState && !activeState.success && activeState.message && !activeState.fieldErrors && (

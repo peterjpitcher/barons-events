@@ -3,7 +3,8 @@
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Plus, Repeat } from "lucide-react";
-import { createPlanningItemAction, createPlanningSeriesAction } from "@/actions/planning";
+import { createMultiVenuePlanningItemsAction, createPlanningItemAction, createPlanningSeriesAction } from "@/actions/planning";
+import { VenueMultiSelect, type VenueOption } from "@/components/venues/venue-multi-select";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -65,6 +66,7 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
   const [itemType, setItemType] = useState("");
   const [itemDescription, setItemDescription] = useState("");
   const [itemVenueId, setItemVenueId] = useState("");
+  const [itemVenueIds, setItemVenueIds] = useState<string[]>([]);
   const [itemOwnerId, setItemOwnerId] = useState(defaultOwnerId);
   const [itemTargetDate, setItemTargetDate] = useState(today);
 
@@ -99,6 +101,7 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
     setItemType("");
     setItemDescription("");
     setItemVenueId("");
+    setItemVenueIds([]);
     setItemOwnerId(defaultOwnerId);
     setItemTargetDate(today);
   }
@@ -124,13 +127,35 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
       return;
     }
 
+    // Administrators can select multiple venues → create one planning item per venue.
+    // Non-admins (and admins who pick 0 or 1 venue) use the single-item action.
+    if (isAdmin && itemVenueIds.length > 1) {
+      const count = itemVenueIds.length;
+      runAction(
+        () =>
+          createMultiVenuePlanningItemsAction({
+            title: itemTitle,
+            typeLabel: itemType,
+            description: itemDescription,
+            venueIds: itemVenueIds,
+            ownerId: itemOwnerId,
+            targetDate: itemTargetDate,
+            status: "planned"
+          }),
+        `Created ${count} planning items.`
+      );
+      resetSingleForm();
+      return;
+    }
+
+    const effectiveVenueId = isAdmin && itemVenueIds.length === 1 ? itemVenueIds[0] : itemVenueId;
     runAction(
       () =>
         createPlanningItemAction({
           title: itemTitle,
           typeLabel: itemType,
           description: itemDescription,
-          venueId: itemVenueId,
+          venueId: effectiveVenueId,
           ownerId: itemOwnerId,
           targetDate: itemTargetDate,
           status: "planned"
@@ -271,18 +296,39 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
               </div>
               <div className="space-y-1">
                 <Label htmlFor="planning-item-venue">Venue</Label>
-                <Select id="planning-item-venue" value={itemVenueId} disabled={isPending} onChange={(event) => setItemVenueId(event.target.value)}>
-                  <option value="">Global</option>
-                  {venues.map((venue) => (
-                    <option key={venue.id} value={venue.id}>
-                      {venue.name}
-                    </option>
-                  ))}
-                </Select>
+                {isAdmin ? (
+                  <div className="rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] p-2">
+                    <VenueMultiSelect
+                      venues={venues.map((venue) => ({
+                        id: venue.id,
+                        name: venue.name,
+                        category: venue.category ?? "pub"
+                      } satisfies VenueOption))}
+                      selectedIds={itemVenueIds}
+                      onChange={setItemVenueIds}
+                      disabled={isPending}
+                    />
+                    <p className="mt-1 text-xs text-subtle">
+                      Pick no venues for a global item, one for a single venue, or two or more to create one item per venue.
+                    </p>
+                  </div>
+                ) : (
+                  <Select id="planning-item-venue" value={itemVenueId} disabled={isPending} onChange={(event) => setItemVenueId(event.target.value)}>
+                    <option value="">Global</option>
+                    {venues.map((venue) => (
+                      <option key={venue.id} value={venue.id}>
+                        {venue.name}
+                      </option>
+                    ))}
+                  </Select>
+                )}
               </div>
             </div>
             <Button type="button" disabled={isPending} onClick={submitSingleItem}>
-              <Plus className="mr-1 h-4 w-4" aria-hidden="true" /> Add planning item
+              <Plus className="mr-1 h-4 w-4" aria-hidden="true" />{" "}
+              {isAdmin && itemVenueIds.length > 1
+                ? `Add ${itemVenueIds.length} planning items`
+                : "Add planning item"}
             </Button>
           </div>
         ) : (

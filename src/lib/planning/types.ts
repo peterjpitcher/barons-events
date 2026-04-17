@@ -18,6 +18,7 @@ export type PlanningPerson = {
 export type PlanningVenueOption = {
   id: string;
   name: string;
+  category?: "pub" | "cafe";
 };
 
 export type PlanningTask = {
