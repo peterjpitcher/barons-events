@@ -27,6 +27,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { canViewPlanning } from "@/lib/roles";
 import { SopChecklistView } from "@/components/planning/sop-checklist-view";
 import { AttachmentsPanel } from "@/components/attachments/attachments-panel";
+import { ProposalDecisionCard } from "@/components/events/proposal-decision-card";
 import { listEventAttachmentsRollup } from "@/lib/attachments";
 import type { PlanningTask, PlanningPerson, PlanningTaskStatus } from "@/lib/planning/types";
 
@@ -89,11 +90,21 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
     user.venueId != null &&
     event.venue_id === user.venueId;
 
+  // Pre-event proposal creators (any role) can continue editing their own
+  // proposal once an admin approves it, so they can fill in the remaining
+  // details. The saveEventDraftAction auto-transitions
+  // approved_pending_details → draft once required fields are provided.
+  const isCreator = event.created_by === user.id;
+
   const canEdit =
-    (user.role === "administrator" && ["draft", "submitted", "needs_revisions", "approved"].includes(event.status)) ||
-    (isVenueScoped && ["draft", "needs_revisions"].includes(event.status));
+    (user.role === "administrator" &&
+      ["draft", "submitted", "needs_revisions", "approved", "approved_pending_details"].includes(event.status)) ||
+    (isVenueScoped && ["draft", "needs_revisions", "approved_pending_details"].includes(event.status)) ||
+    (isCreator && event.status === "approved_pending_details");
   const canReview =
     (user.role === "administrator" && ["submitted", "needs_revisions"].includes(event.status));
+  const canPreReview =
+    user.role === "administrator" && event.status === "pending_approval";
   const canSubmitDebrief =
     (isVenueScoped && ["approved", "completed"].includes(event.status)) ||
     (user.role === "administrator" && ["approved", "completed"].includes(event.status));
@@ -669,6 +680,9 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
         /* Read-only / non-editable layout */
         <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start">
           <div className="space-y-6">
+            {canPreReview ? (
+              <ProposalDecisionCard eventId={event.id} eventTitle={event.title} />
+            ) : null}
             <EventDetailSummary event={event} />
 
             {debriefSubmitCard}
