@@ -11,6 +11,7 @@ type NavItem = {
   href: string;
   roles: UserRole[];
   newUntil?: string; // ISO date; show "New" badge until end of this date
+  children?: NavItem[]; // Rendered indented under the parent
 };
 
 type NavSection = {
@@ -28,9 +29,15 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: "Events",
     items: [
-      { label: "Events", href: "/events", roles: ["administrator"] },
-      { label: "Propose an event", href: "/events/propose", roles: ["administrator", "office_worker"] },
-      { label: "Pending proposals", href: "/events/pending", roles: ["administrator"] },
+      {
+        label: "Events",
+        href: "/events",
+        roles: ["administrator"],
+        children: [
+          { label: "Propose an event", href: "/events/propose", roles: ["administrator", "office_worker"] },
+          { label: "Pending proposals", href: "/events/pending", roles: ["administrator"] }
+        ]
+      },
       { label: "Bookings", href: "/bookings", roles: ["administrator"] },
       { label: "Customers", href: "/customers", roles: ["administrator"] },
       { label: "Artists", href: "/artists", roles: ["administrator"] },
@@ -77,7 +84,12 @@ export function AppShell({ user, children }: AppShellProps) {
 
   const sections = NAV_SECTIONS.map((section) => ({
     ...section,
-    items: section.items.filter((item) => item.roles.includes(user.role))
+    items: section.items
+      .filter((item) => item.roles.includes(user.role))
+      .map((item) => ({
+        ...item,
+        children: item.children?.filter((child) => child.roles.includes(user.role))
+      }))
   })).filter((section) => section.items.length > 0);
 
   return (
@@ -102,12 +114,25 @@ export function AppShell({ user, children }: AppShellProps) {
               <p className="px-3 text-[0.65rem] uppercase tracking-[0.2em] text-[rgba(255,255,255,0.55)]">{section.label}</p>
               <div className="flex flex-col gap-1">
                 {section.items.map((item) => (
-                  <NavLink
-                    key={item.href}
-                    href={item.href}
-                    label={item.label}
-                    showNew={item.newUntil ? todayIso <= item.newUntil : false}
-                  />
+                  <div key={item.href} className="flex flex-col gap-1">
+                    <NavLink
+                      href={item.href}
+                      label={item.label}
+                      showNew={item.newUntil ? todayIso <= item.newUntil : false}
+                    />
+                    {item.children && item.children.length > 0 ? (
+                      <div className="ml-4 flex flex-col gap-1 border-l border-white/15 pl-2">
+                        {item.children.map((child) => (
+                          <NavLink
+                            key={child.href}
+                            href={child.href}
+                            label={child.label}
+                            showNew={child.newUntil ? todayIso <= child.newUntil : false}
+                          />
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
                 ))}
               </div>
             </div>

@@ -4,9 +4,16 @@ import { useCallback, useEffect, useState } from "react";
 import { Menu, X } from "lucide-react";
 import { NavLink } from "./nav-link";
 
+type MobileNavItem = {
+  label: string;
+  href: string;
+  newUntil?: string;
+  children?: MobileNavItem[];
+};
+
 type MobileNavSection = {
   label: string;
-  items: { label: string; href: string; newUntil?: string }[];
+  items: MobileNavItem[];
 };
 
 type MobileNavProps = {
@@ -75,13 +82,27 @@ export function MobileNav({ sections, todayIso }: MobileNavProps) {
               <p className="px-3 text-[0.65rem] uppercase tracking-[0.2em] text-[rgba(255,255,255,0.55)]">{section.label}</p>
               <div className="flex flex-col gap-1">
                 {section.items.map((item) => (
-                  <NavLink
-                    key={item.href}
-                    href={item.href}
-                    label={item.label}
-                    showNew={item.newUntil ? todayIso <= item.newUntil : false}
-                    onClick={close}
-                  />
+                  <div key={item.href} className="flex flex-col gap-1">
+                    <NavLink
+                      href={item.href}
+                      label={item.label}
+                      showNew={item.newUntil ? todayIso <= item.newUntil : false}
+                      onClick={close}
+                    />
+                    {item.children && item.children.length > 0 ? (
+                      <div className="ml-4 flex flex-col gap-1 border-l border-white/15 pl-2">
+                        {item.children.map((child) => (
+                          <NavLink
+                            key={child.href}
+                            href={child.href}
+                            label={child.label}
+                            showNew={child.newUntil ? todayIso <= child.newUntil : false}
+                            onClick={close}
+                          />
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
                 ))}
               </div>
             </div>
