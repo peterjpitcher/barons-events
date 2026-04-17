@@ -192,5 +192,6 @@ export const debriefSchema = z.object({
     },
     z.boolean().optional()
   ),
-  nextTimeActions: optionalText(2000)
+  nextTimeActions: optionalText(2000),
+  labourHours: optionalNumberMin(0)
 });

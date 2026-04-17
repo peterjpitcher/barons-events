@@ -66,7 +66,8 @@ export async function submitDebriefAction(
     guestSentimentNotes: formData.get("guestSentimentNotes") ?? undefined,
     operationalNotes: formData.get("operationalNotes") ?? undefined,
     wouldBookAgain: formData.get("wouldBookAgain") ?? undefined,
-    nextTimeActions: formData.get("nextTimeActions") ?? undefined
+    nextTimeActions: formData.get("nextTimeActions") ?? undefined,
+    labourHours: formData.get("labourHours") ?? undefined
   });
 
   if (!parsed.success) {
@@ -108,6 +109,19 @@ export async function submitDebriefAction(
       .eq("event_id", values.eventId)
       .maybeSingle();
 
+    // Read the current labour rate from business_settings and snapshot it on
+    // the debrief row so future rate changes don't rewrite historical cost.
+    let labourRateGbpAtSubmit: number | null = null;
+    if (values.labourHours !== undefined && values.labourHours !== null) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: rateRow } = await (supabase as any)
+        .from("business_settings")
+        .select("labour_rate_gbp")
+        .eq("id", true)
+        .maybeSingle();
+      labourRateGbpAtSubmit = rateRow?.labour_rate_gbp ?? 12.71;
+    }
+
     const savedDebrief = await upsertDebrief({
       eventId: values.eventId,
       submittedBy: user.id,
@@ -123,7 +137,9 @@ export async function submitDebriefAction(
       guestSentimentNotes: values.guestSentimentNotes ?? null,
       operationalNotes: values.operationalNotes ?? null,
       wouldBookAgain: values.wouldBookAgain ?? null,
-      nextTimeActions: values.nextTimeActions ?? null
+      nextTimeActions: values.nextTimeActions ?? null,
+      labourHours: values.labourHours ?? null,
+      labourRateGbpAtSubmit
     });
 
     let statusUpdated = false;

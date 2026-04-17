@@ -19,11 +19,14 @@ export interface DebriefInput {
   operationalNotes?: string | null;
   wouldBookAgain?: boolean | null;
   nextTimeActions?: string | null;
+  labourHours?: number | null;
+  labourRateGbpAtSubmit?: number | null;
 }
 
 export async function upsertDebrief(input: DebriefInput): Promise<DebriefRow> {
   const supabase = await createSupabaseActionClient();
 
+  // any: business_settings labour columns aren't in the generated debrief types yet.
   const { data, error } = await supabase
     .from("debriefs")
     .upsert(
@@ -42,8 +45,11 @@ export async function upsertDebrief(input: DebriefInput): Promise<DebriefRow> {
         operational_notes: input.operationalNotes ?? null,
         would_book_again: input.wouldBookAgain ?? null,
         next_time_actions: input.nextTimeActions ?? null,
-        submitted_by: input.submittedBy
-      },
+        submitted_by: input.submittedBy,
+        labour_hours: input.labourHours ?? null,
+        labour_rate_gbp_at_submit: input.labourRateGbpAtSubmit ?? null
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any,
       { onConflict: "event_id" }
     )
     .select()
