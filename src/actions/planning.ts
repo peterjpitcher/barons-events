@@ -805,6 +805,14 @@ export async function dismissInspirationItemAction(
       return { success: false, message: "Failed to hide item." };
     }
 
+    recordAuditLogEntry({
+      entity: "planning",
+      entityId: id,
+      action: "planning.inspiration_dismissed",
+      actorId: user.id,
+      meta: {}
+    }).catch(() => {});
+
     revalidatePath("/planning");
     return { success: true };
   } catch (error) {
@@ -825,6 +833,14 @@ export async function refreshInspirationItemsAction(): Promise<{ success: boolea
     windowEnd.setDate(today.getDate() + 180);
 
     const count = await generateInspirationItems(today, windowEnd);
+
+    recordAuditLogEntry({
+      entity: "planning",
+      entityId: user.id,
+      action: "planning.inspiration_refreshed",
+      actorId: user.id,
+      meta: { count, window_end: windowEnd.toISOString() }
+    }).catch(() => {});
 
     revalidatePath("/planning");
     return { success: true, message: `Inspiration items refreshed — ${count} occasions found.` };
