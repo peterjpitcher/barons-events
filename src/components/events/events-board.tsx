@@ -908,7 +908,14 @@ function EventsListTable({ events, allFilteredCount, hidePastEvents }: { events:
           ) : (
             sortedEvents.map((event) => {
               const status = statusConfig[event.status] ?? statusConfig.draft;
-              const venueName = event.venue?.name ?? "Unknown venue";
+              const allVenues = Array.isArray(event.venues) && event.venues.length > 0
+                ? event.venues.map((v) => v.name)
+                : event.venue?.name
+                  ? [event.venue.name]
+                  : ["Unknown venue"];
+              const venueName = allVenues.length > 1
+                ? `${allVenues[0]} + ${allVenues.length - 1} more`
+                : allVenues[0];
               const artistLabel = getEventArtistLabel(event);
               const spaceName = event.venue_space?.trim().length ? event.venue_space : "Space to be confirmed";
               return (

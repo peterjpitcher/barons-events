@@ -587,7 +587,11 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
             </CardTitle>
             <Badge variant={status.tone}>{status.label}</Badge>
             <CardDescription>
-              {event.venue?.name ?? ""} · {formatter.format(new Date(event.start_at))}
+              {event.venues.length > 0
+                ? event.venues.map((v) => v.name).join(", ")
+                : event.venue?.name ?? ""}
+              {" · "}
+              {formatter.format(new Date(event.start_at))}
               {event.end_at ? <> → {formatter.format(new Date(event.end_at))}</> : <> → <span className="italic">end time TBC</span></>}
             </CardDescription>
           </div>

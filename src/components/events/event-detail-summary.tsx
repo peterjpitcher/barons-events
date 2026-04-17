@@ -56,6 +56,11 @@ type EventDetailSummaryProps = {
 
 export function EventDetailSummary({ event }: EventDetailSummaryProps) {
   const venueSpaces = parseVenueSpaces(event.venue_space);
+  const venueNames = Array.isArray(event.venues) && event.venues.length > 0
+    ? event.venues.map((v) => v.name)
+    : event.venue?.name
+      ? [event.venue.name]
+      : [];
   const goalValues = parseGoalFocus(event.goal_focus);
   const goalDetails = Array.from(new Set(goalValues)).map((value) => {
     const config = EVENT_GOALS_BY_VALUE[value];
@@ -106,6 +111,12 @@ export function EventDetailSummary({ event }: EventDetailSummaryProps) {
           <p>
             <span className="font-semibold text-[var(--color-text)]">Type:</span>{" "}
             {event.event_type ? event.event_type : <span className="italic text-subtle">TBC</span>}
+          </p>
+          <p>
+            <span className="font-semibold text-[var(--color-text)]">
+              {venueNames.length > 1 ? "Venues" : "Venue"}:
+            </span>{" "}
+            {venueNames.length ? venueNames.join(", ") : <span className="italic text-subtle">Not specified</span>}
           </p>
           <p>
             <span className="font-semibold text-[var(--color-text)]">

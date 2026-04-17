@@ -517,7 +517,7 @@ export async function listPlanningBoardData(params?: {
       created_by,
       created_at,
       updated_at,
-      venue:venues(id,name),
+      venue:venues!planning_items_venue_id_fkey(id,name),
       planning_item_venues(venue_id, is_primary, venue:venues(id,name)),
       owner:users!planning_items_owner_id_fkey(id,full_name,email),
       tasks:planning_tasks(

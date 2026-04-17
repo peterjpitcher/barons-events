@@ -319,7 +319,11 @@ export function PlanningItemCard({
   const isDone = status === "done" || status === "cancelled";
   const canDrag = typeof onDragStart === "function";
   const ownerName = users.find((user) => user.id === ownerId)?.name ?? "Unassigned";
-  const venueName = venues.find((venue) => venue.id === venueId)?.name ?? "Global";
+  const venueName = (() => {
+    if (item.venues.length === 0) return "Global";
+    if (item.venues.length === 1) return item.venues[0].name;
+    return `${item.venues[0].name} + ${item.venues.length - 1} more`;
+  })();
 
   if (compact) {
     return (
@@ -369,7 +373,14 @@ export function PlanningItemCard({
             <span className="font-semibold text-[var(--color-text)]">Owner:</span> {item.ownerName ?? "Unassigned"}
           </p>
           <p>
-            <span className="font-semibold text-[var(--color-text)]">Venue:</span> {item.venueName ?? "Global"}
+            <span className="font-semibold text-[var(--color-text)]">
+              {item.venues.length > 1 ? "Venues" : "Venue"}:
+            </span>{" "}
+            {item.venues.length === 0
+              ? "Global"
+              : item.venues.length === 1
+                ? item.venues[0].name
+                : `${item.venues[0].name} + ${item.venues.length - 1} more`}
           </p>
           <p>
             <span className="font-semibold text-[var(--color-text)]">Recurring:</span> {item.seriesId ? "Yes" : "No"}

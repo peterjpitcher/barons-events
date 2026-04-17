@@ -176,7 +176,9 @@ export async function listEventsForUser(user: AppUser): Promise<EventSummary[]> 
 
   let query = supabase
     .from("events")
-    .select("*, venue:venues(id,name), event_venues(venue_id,is_primary,venue:venues(id,name)), artists:event_artists(id,artist_id,billing_order,artist:artists(id,name))")
+    .select(
+      "*, venue:venues!events_venue_id_fkey(id,name), event_venues(venue_id,is_primary,venue:venues(id,name)), artists:event_artists(id,artist_id,billing_order,artist:artists(id,name))"
+    )
     .is("deleted_at", null)
     .order("start_at", { ascending: true });
 
@@ -282,7 +284,7 @@ export async function getEventDetail(eventId: string): Promise<EventDetail | nul
     .from("events")
     .select(
       `*,
-      venue:venues(*),
+      venue:venues!events_venue_id_fkey(*),
       event_venues(venue_id, is_primary, venue:venues(id,name)),
       versions:event_versions(*),
       approvals(*),
