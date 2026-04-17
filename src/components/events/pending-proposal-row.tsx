@@ -14,7 +14,10 @@ type PendingProposal = {
   title: string;
   startAt: string;
   notes: string | null;
+  /** Display summary — e.g. "The Cricketers" or "The Cricketers + 2 more". */
   venueName: string;
+  /** Full list of venue names (primary first). Rendered in the expanded view. */
+  venueNames?: string[];
   creatorName: string;
 };
 
@@ -108,8 +111,14 @@ export function PendingProposalRow({ proposal }: { proposal: PendingProposal }) 
           <dl className="grid gap-2 text-sm sm:grid-cols-[120px_minmax(0,1fr)]">
             <dt className="font-semibold text-subtle">Title</dt>
             <dd className="text-[var(--color-text)]">{proposal.title}</dd>
-            <dt className="font-semibold text-subtle">Venue</dt>
-            <dd className="text-[var(--color-text)]">{proposal.venueName}</dd>
+            <dt className="font-semibold text-subtle">
+              {proposal.venueNames && proposal.venueNames.length > 1 ? "Venues" : "Venue"}
+            </dt>
+            <dd className="text-[var(--color-text)]">
+              {proposal.venueNames && proposal.venueNames.length > 0
+                ? proposal.venueNames.join(", ")
+                : proposal.venueName}
+            </dd>
             <dt className="font-semibold text-subtle">Start</dt>
             <dd className="text-[var(--color-text)]">{formattedStart}</dd>
             <dt className="font-semibold text-subtle">Proposed by</dt>

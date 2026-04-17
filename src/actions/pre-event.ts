@@ -76,9 +76,13 @@ export async function proposeEventAction(
   }
 
   revalidatePath("/events");
+  const venueCount = parsed.data.venueIds.length;
   return {
     success: true,
-    message: `Proposal submitted for ${parsed.data.venueIds.length} venue(s).`,
+    message:
+      venueCount === 1
+        ? "Proposal submitted."
+        : `Proposal submitted for ${venueCount} venues.`,
     // Expose batch data for UI use if needed. We omit it from the type for
     // simplicity — the toast + redirect is the primary success signal.
     ...(data ? { meta: data } : {})

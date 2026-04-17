@@ -21,30 +21,50 @@ export default async function PendingProposalsPage() {
     .from("events")
     .select(`
       id, title, start_at, status, created_by, venue_id, notes, created_at,
-      venue:venue_id(name),
+      event_venues(venue_id, is_primary, venue:venues(id,name)),
       creator:created_by(id, full_name, email)
     `)
     .eq("status", "pending_approval")
     .is("deleted_at", null)
     .order("created_at", { ascending: true });
 
+  type RawAttachment = {
+    venue_id: string;
+    is_primary: boolean;
+    venue: { id: string; name: string } | { id: string; name: string }[] | null;
+  };
   type Row = {
     id: string;
     title: string;
     start_at: string;
     notes: string | null;
-    venue: { name: string | null } | Array<{ name: string | null }> | null;
+    event_venues?: RawAttachment[] | null;
     creator: { full_name: string | null; email: string | null } | Array<{ full_name: string | null; email: string | null }> | null;
   };
   const proposals = ((rows ?? []) as Row[]).map((r) => {
-    const venue = Array.isArray(r.venue) ? r.venue[0] : r.venue;
     const creator = Array.isArray(r.creator) ? r.creator[0] : r.creator;
+    const attachments = Array.isArray(r.event_venues) ? r.event_venues : [];
+    const venues = attachments
+      .map((a) => {
+        const v = Array.isArray(a.venue) ? a.venue[0] : a.venue;
+        return { name: v?.name ?? "Unknown venue", isPrimary: Boolean(a.is_primary) };
+      })
+      .sort((a, b) => {
+        if (a.isPrimary !== b.isPrimary) return a.isPrimary ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+    const venueName = venues.length === 0
+      ? "No venue"
+      : venues.length === 1
+        ? venues[0].name
+        : `${venues[0].name} + ${venues.length - 1} more`;
     return {
       id: r.id,
       title: r.title,
       startAt: r.start_at,
       notes: r.notes,
-      venueName: venue?.name ?? "Unknown venue",
+      venueName,
+      venueNames: venues.map((v) => v.name),
       creatorName: creator?.full_name ?? creator?.email ?? "Unknown"
     };
   });
