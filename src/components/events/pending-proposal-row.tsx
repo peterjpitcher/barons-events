@@ -1,9 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { Check, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, X } from "lucide-react";
 import { preApproveEventAction, preRejectEventAction } from "@/actions/pre-event";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -22,6 +23,7 @@ export function PendingProposalRow({ proposal }: { proposal: PendingProposal }) 
   const [isPending, startTransition] = useTransition();
   const [showRejectForm, setShowRejectForm] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
+  const [isExpanded, setIsExpanded] = useState(false);
 
   function runAction(action: () => Promise<unknown>, successMessage: string) {
     startTransition(async () => {
@@ -53,84 +55,139 @@ export function PendingProposalRow({ proposal }: { proposal: PendingProposal }) 
   }
 
   const formattedStart = new Intl.DateTimeFormat("en-GB", {
-    dateStyle: "medium",
-    timeStyle: "short"
+    dateStyle: "full",
+    timeStyle: "short",
+    timeZone: "Europe/London"
   }).format(new Date(proposal.startAt));
 
-  return (
-    <li className="rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0 flex-1">
-          <h4 className="text-sm font-semibold text-[var(--color-text)]">{proposal.title}</h4>
-          <p className="mt-0.5 text-xs text-subtle">
-            {proposal.venueName} · {formattedStart} · proposed by {proposal.creatorName}
-          </p>
-          {proposal.notes ? (
-            <p className="mt-2 whitespace-pre-wrap text-sm text-[var(--color-text)]">{proposal.notes}</p>
-          ) : null}
-        </div>
-        <div className="flex flex-shrink-0 items-start gap-1">
-          <Button
-            type="button"
-            variant="primary"
-            size="sm"
-            disabled={isPending}
-            onClick={handleApprove}
-            aria-label={`Approve proposal ${proposal.title}`}
-          >
-            <Check className="mr-1 h-4 w-4" aria-hidden="true" /> Approve
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            disabled={isPending}
-            onClick={() => setShowRejectForm((v) => !v)}
-            aria-label={`Reject proposal ${proposal.title}`}
-            aria-pressed={showRejectForm}
-          >
-            <X className="mr-1 h-4 w-4" aria-hidden="true" /> Reject
-          </Button>
-        </div>
-      </div>
+  const summaryStart = new Intl.DateTimeFormat("en-GB", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Europe/London"
+  }).format(new Date(proposal.startAt));
 
-      {showRejectForm ? (
-        <div className="mt-3 space-y-2 rounded-[var(--radius-sm)] border border-dashed border-[var(--color-border)] p-3">
-          <label htmlFor={`reject-reason-${proposal.id}`} className="text-xs font-medium text-subtle">
-            Rejection reason
-          </label>
-          <Textarea
-            id={`reject-reason-${proposal.id}`}
-            rows={3}
-            maxLength={1000}
-            value={rejectReason}
-            onChange={(e) => setRejectReason(e.target.value)}
-            placeholder="Let the creator know why you're rejecting the proposal."
-            disabled={isPending}
-          />
-          <div className="flex justify-end gap-1">
+  const detailsId = `proposal-details-${proposal.id}`;
+  const notesPreview = proposal.notes
+    ? proposal.notes.length > 80
+      ? `${proposal.notes.slice(0, 80).trim()}…`
+      : proposal.notes
+    : null;
+
+  return (
+    <li className="rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface)]">
+      <button
+        type="button"
+        className="flex w-full items-start gap-2 p-4 text-left hover:bg-[var(--color-muted-surface)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
+        onClick={() => setIsExpanded((v) => !v)}
+        aria-expanded={isExpanded}
+        aria-controls={detailsId}
+      >
+        <span className="mt-0.5 flex-shrink-0">
+          {isExpanded ? (
+            <ChevronDown className="h-4 w-4" aria-hidden="true" />
+          ) : (
+            <ChevronRight className="h-4 w-4" aria-hidden="true" />
+          )}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold text-[var(--color-text)]">{proposal.title}</span>
+          <span className="mt-0.5 block text-xs text-subtle">
+            {proposal.venueName} · {summaryStart} · proposed by {proposal.creatorName}
+          </span>
+          {notesPreview && !isExpanded ? (
+            <span className="mt-1 block truncate text-xs text-subtle">“{notesPreview}”</span>
+          ) : null}
+        </span>
+        <span className="flex-shrink-0 text-xs text-subtle">
+          {isExpanded ? "Hide details" : "Show details"}
+        </span>
+      </button>
+
+      {isExpanded ? (
+        <div id={detailsId} className="space-y-3 border-t border-[var(--color-border)] px-4 py-3">
+          <dl className="grid gap-2 text-sm sm:grid-cols-[120px_minmax(0,1fr)]">
+            <dt className="font-semibold text-subtle">Title</dt>
+            <dd className="text-[var(--color-text)]">{proposal.title}</dd>
+            <dt className="font-semibold text-subtle">Venue</dt>
+            <dd className="text-[var(--color-text)]">{proposal.venueName}</dd>
+            <dt className="font-semibold text-subtle">Start</dt>
+            <dd className="text-[var(--color-text)]">{formattedStart}</dd>
+            <dt className="font-semibold text-subtle">Proposed by</dt>
+            <dd className="text-[var(--color-text)]">{proposal.creatorName}</dd>
+            <dt className="font-semibold text-subtle">Notes</dt>
+            <dd className="whitespace-pre-wrap text-[var(--color-text)]">
+              {proposal.notes?.trim() ? proposal.notes : <span className="italic text-subtle">No notes provided.</span>}
+            </dd>
+          </dl>
+          <p className="text-xs text-subtle">
+            Need even more context?{" "}
+            <Link href={`/events/${proposal.id}`} className="underline">
+              Open the event page
+            </Link>
+            .
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              disabled={isPending}
+              onClick={handleApprove}
+              aria-label={`Approve proposal ${proposal.title}`}
+            >
+              <Check className="mr-1 h-4 w-4" aria-hidden="true" /> Approve
+            </Button>
             <Button
               type="button"
               variant="ghost"
               size="sm"
               disabled={isPending}
-              onClick={() => {
-                setShowRejectForm(false);
-                setRejectReason("");
-              }}
+              onClick={() => setShowRejectForm((v) => !v)}
+              aria-label={`Reject proposal ${proposal.title}`}
+              aria-pressed={showRejectForm}
             >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="primary"
-              size="sm"
-              disabled={isPending || !rejectReason.trim()}
-              onClick={handleReject}
-            >
-              Confirm rejection
+              <X className="mr-1 h-4 w-4" aria-hidden="true" /> Reject
             </Button>
           </div>
+          {showRejectForm ? (
+            <div className="space-y-2 rounded-[var(--radius-sm)] border border-dashed border-[var(--color-border)] p-3">
+              <label htmlFor={`reject-reason-${proposal.id}`} className="text-xs font-medium text-subtle">
+                Rejection reason
+              </label>
+              <Textarea
+                id={`reject-reason-${proposal.id}`}
+                rows={3}
+                maxLength={1000}
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="Let the creator know why you're rejecting the proposal."
+                disabled={isPending}
+              />
+              <div className="flex justify-end gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={isPending}
+                  onClick={() => {
+                    setShowRejectForm(false);
+                    setRejectReason("");
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  disabled={isPending || !rejectReason.trim()}
+                  onClick={handleReject}
+                >
+                  Confirm rejection
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </li>
