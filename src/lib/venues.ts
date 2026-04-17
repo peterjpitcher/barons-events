@@ -19,13 +19,16 @@ export async function createVenue(payload: {
   address?: string | null;
   defaultApproverId?: string | null;
   defaultManagerResponsibleId?: string | null;
+  category?: "pub" | "cafe";
 }) {
   const supabase = await createSupabaseActionClient();
-  const { error } = await supabase.from("venues").insert({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).from("venues").insert({
     name: payload.name,
     address: payload.address ?? null,
     default_approver_id: payload.defaultApproverId ?? null,
     default_manager_responsible_id: payload.defaultManagerResponsibleId ?? null,
+    category: payload.category ?? "pub",
   });
 
   if (error) {
@@ -39,6 +42,7 @@ export async function updateVenue(id: string, updates: {
   defaultApproverId?: string | null;
   defaultManagerResponsibleId?: string | null;
   googleReviewUrl?: string | null;
+  category?: "pub" | "cafe";
 }) {
   const supabase = await createSupabaseActionClient();
   const updatePayload: {
@@ -47,6 +51,7 @@ export async function updateVenue(id: string, updates: {
     default_manager_responsible_id?: string | null;
     address?: string | null;
     google_review_url?: string | null;
+    category?: string;
   } = {
     name: updates.name,
     default_approver_id: updates.defaultApproverId ?? null,
@@ -64,7 +69,12 @@ export async function updateVenue(id: string, updates: {
     updatePayload.google_review_url = updates.googleReviewUrl ?? null;
   }
 
-  const { error } = await supabase
+  if (Object.prototype.hasOwnProperty.call(updates, "category") && updates.category) {
+    updatePayload.category = updates.category;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any)
     .from("venues")
     .update(updatePayload)
     .eq("id", id);

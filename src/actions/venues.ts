@@ -24,7 +24,8 @@ const venueSchema = z.object({
   name: z.string().min(2, "Add a venue name"),
   defaultApproverId: uuidOrUndefined,
   defaultManagerResponsibleId: uuidOrUndefined,
-  googleReviewUrl: z.string().url("Enter a valid URL").optional().or(z.literal(""))
+  googleReviewUrl: z.string().url("Enter a valid URL").optional().or(z.literal("")),
+  category: z.enum(["pub", "cafe"]).optional()
 });
 
 export async function createVenueAction(
@@ -43,6 +44,7 @@ export async function createVenueAction(
     name: typeof formData.get("name") === "string" ? formData.get("name") : "",
     defaultApproverId: typeof formData.get("defaultApproverId") === "string" ? formData.get("defaultApproverId") : "",
     defaultManagerResponsibleId: typeof formData.get("defaultManagerResponsibleId") === "string" ? formData.get("defaultManagerResponsibleId") : "",
+    category: typeof formData.get("category") === "string" ? formData.get("category") : "pub"
   });
 
   if (!parsed.success) {
@@ -58,6 +60,7 @@ export async function createVenueAction(
       name: parsed.data.name,
       defaultApproverId: parsed.data.defaultApproverId ?? null,
       defaultManagerResponsibleId: parsed.data.defaultManagerResponsibleId || null,
+      category: parsed.data.category ?? "pub"
     });
     recordAuditLogEntry({
       entity: "venue",
@@ -91,7 +94,8 @@ export async function updateVenueAction(
     name: typeof formData.get("name") === "string" ? formData.get("name") : "",
     defaultApproverId: typeof formData.get("defaultApproverId") === "string" ? formData.get("defaultApproverId") : "",
     defaultManagerResponsibleId: typeof formData.get("defaultManagerResponsibleId") === "string" ? formData.get("defaultManagerResponsibleId") : "",
-    googleReviewUrl: typeof formData.get("googleReviewUrl") === "string" ? formData.get("googleReviewUrl") : ""
+    googleReviewUrl: typeof formData.get("googleReviewUrl") === "string" ? formData.get("googleReviewUrl") : "",
+    category: typeof formData.get("category") === "string" ? formData.get("category") : undefined
   });
 
   if (!parsed.success) {
@@ -110,7 +114,8 @@ export async function updateVenueAction(
       name: parsed.data.name,
       defaultApproverId: parsed.data.defaultApproverId ?? null,
       defaultManagerResponsibleId: parsed.data.defaultManagerResponsibleId || null,
-      googleReviewUrl: parsed.data.googleReviewUrl || null
+      googleReviewUrl: parsed.data.googleReviewUrl || null,
+      category: parsed.data.category
     });
     recordAuditLogEntry({
       entity: "venue",
