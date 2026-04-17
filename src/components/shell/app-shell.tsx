@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { signOutAction } from "@/actions/auth";
 import { Button } from "@/components/ui/button";
 import type { AppUser, UserRole } from "@/lib/types";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { MobileNav } from "./mobile-nav";
 import { NavLink } from "./nav-link";
 import { SessionMonitor } from "./session-monitor";
@@ -79,17 +80,48 @@ type AppShellProps = {
   children: ReactNode;
 };
 
-export function AppShell({ user, children }: AppShellProps) {
+async function countPendingProposals(): Promise<number> {
+  const db = createSupabaseAdminClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { count } = await (db as any)
+    .from("events")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "pending_approval")
+    .is("deleted_at", null);
+  return typeof count === "number" ? count : 0;
+}
+
+export async function AppShell({ user, children }: AppShellProps) {
   const todayIso = new Date().toISOString().slice(0, 10);
+
+  // Admins see "Pending proposals" only when there's a non-zero queue, with
+  // a count badge. Non-admins never see this item regardless.
+  const pendingCount = user.role === "administrator" ? await countPendingProposals() : 0;
 
   const sections = NAV_SECTIONS.map((section) => ({
     ...section,
     items: section.items
       .filter((item) => item.roles.includes(user.role))
-      .map((item) => ({
-        ...item,
-        children: item.children?.filter((child) => child.roles.includes(user.role))
-      }))
+      .map((item) => {
+        const filteredChildren = item.children
+          ?.filter((child) => child.roles.includes(user.role))
+          .filter((child) => {
+            // Hide Pending proposals when the queue is empty — no point
+            // navigating to an empty list.
+            if (child.href === "/events/pending") return pendingCount > 0;
+            return true;
+          })
+          .map((child) => ({
+            ...child,
+            // Append a count badge to the label itself so the existing NavLink
+            // renders it without further plumbing.
+            label: child.href === "/events/pending" ? `${child.label} (${pendingCount})` : child.label
+          }));
+        return {
+          ...item,
+          children: filteredChildren
+        };
+      })
   })).filter((section) => section.items.length > 0);
 
   return (
