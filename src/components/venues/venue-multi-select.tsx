@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
-import { Check } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Check, ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export type VenueOption = {
@@ -17,16 +17,20 @@ type VenueMultiSelectProps = {
   disabled?: boolean;
   /** HTML `name` for hidden inputs that carry the selection into a form action. Optional. */
   hiddenFieldName?: string;
+  /** Initial expand state. Defaults to expanded when nothing is selected yet, collapsed otherwise. */
+  defaultExpanded?: boolean;
 };
 
 /**
  * Reusable multi-select for venues with quick-select buttons and a category-
  * grouped checkbox list.
  *
+ * - Collapsible header shows a summary of the current selection; the full
+ *   picker only takes vertical space when the user opens it.
  * - Categories grouped into "Pubs" and "Cafes".
  * - Quick actions: Select all, Select all pubs, Clear.
  * - Accessibility: each checkbox has a visible label; category headings use
- *   <h5> to preserve heading hierarchy.
+ *   <h5> to preserve heading hierarchy; the toggle uses aria-expanded.
  * - Colour-independent: quick-action counts and the "Selected N" summary use
  *   text, not colour.
  * - Optional hidden-input rendering (via `hiddenFieldName`) makes this usable
@@ -37,7 +41,8 @@ export function VenueMultiSelect({
   selectedIds,
   onChange,
   disabled = false,
-  hiddenFieldName
+  hiddenFieldName,
+  defaultExpanded
 }: VenueMultiSelectProps) {
   const { pubs, cafes } = useMemo(() => {
     const sorted = [...venues].sort((a, b) => a.name.localeCompare(b.name));
@@ -48,6 +53,12 @@ export function VenueMultiSelect({
   }, [venues]);
 
   const selected = useMemo(() => new Set(selectedIds), [selectedIds]);
+
+  // Default expansion: explicit prop wins, otherwise start collapsed so the
+  // picker stays compact — users expand when they need to pick.
+  const [isExpanded, setIsExpanded] = useState<boolean>(() =>
+    typeof defaultExpanded === "boolean" ? defaultExpanded : selectedIds.length === 0
+  );
 
   function toggle(id: string) {
     if (disabled) return;
@@ -71,6 +82,16 @@ export function VenueMultiSelect({
     if (disabled) return;
     onChange([]);
   }
+
+  // Short summary for the collapsed header: "None", venue name, or "N venues".
+  const summary = useMemo(() => {
+    if (selectedIds.length === 0) return "None selected";
+    if (selectedIds.length === 1) {
+      const only = venues.find((v) => v.id === selectedIds[0]);
+      return only?.name ?? "1 venue";
+    }
+    return `${selectedIds.length} venues selected`;
+  }, [selectedIds, venues]);
 
   function renderGroup(heading: string, group: VenueOption[]) {
     if (group.length === 0) return null;
@@ -104,33 +125,52 @@ export function VenueMultiSelect({
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" variant="ghost" size="sm" onClick={selectAll} disabled={disabled || venues.length === 0}>
-          Select all ({venues.length})
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={selectAllPubs}
-          disabled={disabled || pubs.length === 0}
-        >
-          Select all pubs ({pubs.length})
-        </Button>
-        <Button type="button" variant="ghost" size="sm" onClick={clear} disabled={disabled || selected.size === 0}>
-          Clear
-        </Button>
-        <span className="ml-auto text-xs text-subtle">Selected {selected.size}</span>
-      </div>
+    <div className="space-y-2">
+      <button
+        type="button"
+        onClick={() => setIsExpanded((v) => !v)}
+        aria-expanded={isExpanded}
+        className="flex w-full items-center gap-2 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1.5 text-left text-sm hover:bg-[var(--color-muted-surface)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
+      >
+        {isExpanded ? (
+          <ChevronDown className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
+        ) : (
+          <ChevronRight className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
+        )}
+        <span className="flex-1 font-medium text-[var(--color-text)]">{summary}</span>
+        <span className="text-xs text-subtle">{isExpanded ? "Hide" : "Choose venues"}</span>
+      </button>
 
-      <div className="space-y-3">
-        {renderGroup("Pubs", pubs)}
-        {renderGroup("Cafes", cafes)}
-        {venues.length === 0 ? (
-          <p className="text-sm text-subtle">No venues configured.</p>
-        ) : null}
-      </div>
+      {isExpanded ? (
+        <div className="space-y-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] p-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="ghost" size="sm" onClick={selectAll} disabled={disabled || venues.length === 0}>
+              Select all ({venues.length})
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={selectAllPubs}
+              disabled={disabled || pubs.length === 0}
+            >
+              Select all pubs ({pubs.length})
+            </Button>
+            <Button type="button" variant="ghost" size="sm" onClick={clear} disabled={disabled || selected.size === 0}>
+              Clear
+            </Button>
+            <span className="ml-auto text-xs text-subtle">Selected {selected.size}</span>
+          </div>
+
+          <div className="space-y-3">
+            {renderGroup("Pubs", pubs)}
+            {renderGroup("Cafes", cafes)}
+            {venues.length === 0 ? (
+              <p className="text-sm text-subtle">No venues configured.</p>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       {hiddenFieldName ? (
         <>
