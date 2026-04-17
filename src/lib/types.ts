@@ -41,6 +41,8 @@ export interface UserImpactSummary {
 }
 
 export type EventStatus =
+  | "pending_approval"
+  | "approved_pending_details"
   | "draft"
   | "submitted"
   | "needs_revisions"

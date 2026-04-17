@@ -770,6 +770,8 @@ export async function getStatusCounts(): Promise<Record<EventStatus, number>> {
   );
 
   const base: Record<EventStatus, number> = {
+    pending_approval: 0,
+    approved_pending_details: 0,
     draft: 0,
     submitted: 0,
     needs_revisions: 0,
