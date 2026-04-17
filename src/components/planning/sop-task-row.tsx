@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { Check, MessageSquare, Minus, Users } from "lucide-react";
+import { Check, Minus, Pencil, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -225,23 +225,24 @@ export function SopTaskRow({ task, allTasks, users, onStatusChange, onChanged }:
         )}
       </div>
 
-      {/* Notes toggle — visible for all statuses so reviewers can read existing notes */}
+      {/* Notes edit toggle — notes themselves render below the row persistently */}
       <button
         type="button"
-        aria-label={notesOpen ? "Hide notes" : hasNotes ? "Show notes" : "Add notes"}
+        aria-label={hasNotes ? "Edit notes" : "Add notes"}
         aria-pressed={notesOpen}
         onClick={() => {
           if (notesOpen) {
             setNotesOpen(false);
             setNotesDraft(task.notes ?? "");
           } else {
+            setNotesDraft(task.notes ?? "");
             setNotesOpen(true);
           }
         }}
-        title={hasNotes ? "Notes" : "Add notes"}
+        title={hasNotes ? "Edit notes" : "Add notes"}
         className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full hover:bg-[rgba(39,54,64,0.12)]"
       >
-        <MessageSquare
+        <Pencil
           className={cn("h-4 w-4", hasNotes ? "text-[var(--color-primary-700)]" : "text-[var(--color-text)]/70")}
           aria-hidden="true"
         />
