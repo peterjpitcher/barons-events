@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { Check, Minus, Users } from "lucide-react";
+import { Check, MessageSquare, Minus, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { reassignPlanningTaskAction } from "@/actions/planning";
+import { reassignPlanningTaskAction, updatePlanningTaskAction } from "@/actions/planning";
+import { AttachmentUploadButton } from "@/components/attachments/attachment-upload-button";
 import type { PlanningPerson, PlanningTask, PlanningTaskStatus } from "@/lib/planning/types";
 
 type SopTaskRowProps = {
@@ -63,6 +64,12 @@ export function SopTaskRow({ task, allTasks, users, onStatusChange, onChanged }:
   );
   const [savingAssignees, setSavingAssignees] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Notes state — inline textarea below the row, toggled by the speech-bubble icon.
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [notesDraft, setNotesDraft] = useState(task.notes ?? "");
+  const [savingNotes, setSavingNotes] = useState(false);
+  const hasNotes = Boolean(task.notes && task.notes.trim().length);
 
   const isOpen = task.status === "open";
   const isDone = task.status === "done";
@@ -125,6 +132,23 @@ export function SopTaskRow({ task, allTasks, users, onStatusChange, onChanged }:
     }
   }
 
+  async function handleSaveNotes(): Promise<void> {
+    setSavingNotes(true);
+    const trimmed = notesDraft.trim();
+    const result = await updatePlanningTaskAction({
+      taskId: task.id,
+      notes: trimmed.length ? notesDraft : null
+    });
+    setSavingNotes(false);
+    if (result.success) {
+      toast.success("Notes saved.");
+      setNotesOpen(false);
+      onChanged?.();
+    } else {
+      toast.error(result.message ?? "Could not save notes.");
+    }
+  }
+
   // Only dim the row when the menu is closed — dropdown inherits parent opacity and becomes unreadable
   const rowOpacity = (menuOpen || reassignOpen)
     ? ""
@@ -134,10 +158,11 @@ export function SopTaskRow({ task, allTasks, users, onStatusChange, onChanged }:
   return (
     <div
       className={cn(
-        "flex items-start gap-2.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-muted-surface)] px-2.5 py-1.5",
+        "rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-muted-surface)] px-2.5 py-1.5",
         rowOpacity
       )}
     >
+    <div className="flex items-start gap-2.5">
       {/* Checkbox area */}
       <button
         type="button"
@@ -199,6 +224,37 @@ export function SopTaskRow({ task, allTasks, users, onStatusChange, onChanged }:
           </p>
         )}
       </div>
+
+      {/* Notes toggle — visible for all statuses so reviewers can read existing notes */}
+      <button
+        type="button"
+        aria-label={notesOpen ? "Hide notes" : hasNotes ? "Show notes" : "Add notes"}
+        aria-pressed={notesOpen}
+        onClick={() => {
+          if (notesOpen) {
+            setNotesOpen(false);
+            setNotesDraft(task.notes ?? "");
+          } else {
+            setNotesOpen(true);
+          }
+        }}
+        title={hasNotes ? "Notes" : "Add notes"}
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full hover:bg-[rgba(39,54,64,0.12)]"
+      >
+        <MessageSquare
+          className={cn("h-4 w-4", hasNotes ? "text-[var(--color-primary-700)]" : "text-[var(--color-text)]/70")}
+          aria-hidden="true"
+        />
+      </button>
+
+      {/* Attachments — quick file picker */}
+      <AttachmentUploadButton
+        parentType="planning_task"
+        parentId={task.id}
+        label=""
+        variant="ghost"
+        onUploaded={onChanged}
+      />
 
       {/* Actions dropdown */}
       {(isActionable || isDone || isNotRequired) && (
@@ -325,6 +381,47 @@ export function SopTaskRow({ task, allTasks, users, onStatusChange, onChanged }:
           )}
         </div>
       )}
+    </div>
+
+    {/* Inline notes editor — toggled by the speech-bubble icon above */}
+    {notesOpen ? (
+      <div className="mt-2 space-y-1.5">
+        <textarea
+          className="w-full resize-y rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1.5 text-sm text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
+          rows={4}
+          maxLength={10_000}
+          placeholder="Add any context, links, or reminders for this task"
+          value={notesDraft}
+          disabled={savingNotes}
+          onChange={(event) => setNotesDraft(event.target.value)}
+        />
+        <div className="flex justify-end gap-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={savingNotes}
+            onClick={() => {
+              setNotesOpen(false);
+              setNotesDraft(task.notes ?? "");
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            disabled={savingNotes || notesDraft === (task.notes ?? "")}
+            onClick={() => void handleSaveNotes()}
+          >
+            {savingNotes ? "Saving…" : "Save"}
+          </Button>
+        </div>
+      </div>
+    ) : hasNotes ? (
+      <p className="mt-1.5 whitespace-pre-wrap break-words text-xs text-subtle">{task.notes}</p>
+    ) : null}
     </div>
   );
 }
