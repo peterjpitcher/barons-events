@@ -5,9 +5,16 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { Calendar, Check, ClipboardList, GripVertical, Pencil, Trash2, X } from "lucide-react";
 import { ApproveEventButton } from "@/components/events/approve-event-button";
-import { convertInspirationItemAction, deletePlanningItemAction, dismissInspirationItemAction, updatePlanningItemAction } from "@/actions/planning";
+import {
+  convertInspirationItemAction,
+  createMultiVenuePlanningItemsAction,
+  deletePlanningItemAction,
+  dismissInspirationItemAction,
+  updatePlanningItemAction
+} from "@/actions/planning";
 import { PlanningTaskList } from "@/components/planning/planning-task-list";
 import { SopChecklistView } from "@/components/planning/sop-checklist-view";
+import { VenueMultiSelect, type VenueOption } from "@/components/venues/venue-multi-select";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -98,6 +105,7 @@ export function PlanningItemCard({
   const [description, setDescription] = useState(item.description ?? "");
   const [ownerId, setOwnerId] = useState(item.ownerId ?? "");
   const [venueId, setVenueId] = useState(item.venueId ?? "");
+  const [selectedVenueIds, setSelectedVenueIds] = useState<string[]>(item.venueId ? [item.venueId] : []);
   const [status, setStatus] = useState<PlanningItem["status"]>(item.status);
   const [targetDate, setTargetDate] = useState(item.targetDate);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -126,6 +134,7 @@ export function PlanningItemCard({
     setDescription(item.description ?? "");
     setOwnerId(item.ownerId ?? "");
     setVenueId(item.venueId ?? "");
+    setSelectedVenueIds(item.venueId ? [item.venueId] : []);
     setStatus(item.status);
     setTargetDate(item.targetDate);
     setConfirmDelete(false);
@@ -228,15 +237,55 @@ export function PlanningItemCard({
     }
 
     if (field === "venueId") {
-      runAction(
-        () =>
-          updatePlanningItemAction({
-            itemId: item.id,
-            venueId
-          }),
-        "Venue updated.",
-        () => setEditingField(null)
-      );
+      const ids = selectedVenueIds;
+      // 0 picks → global. 1 pick → single-venue update. 2+ picks → update
+      // this item to the first venue and spawn additional planning items
+      // (with fresh SOP checklists) at the remaining venues via the RPC.
+      if (ids.length <= 1) {
+        runAction(
+          () =>
+            updatePlanningItemAction({
+              itemId: item.id,
+              venueId: ids[0] ?? ""
+            }),
+          ids.length === 0 ? "Moved to global." : "Venue updated.",
+          () => setEditingField(null)
+        );
+        return;
+      }
+
+      const [primary, ...rest] = ids;
+      startTransition(async () => {
+        const primaryResult = (await updatePlanningItemAction({
+          itemId: item.id,
+          venueId: primary
+        })) as { success?: boolean; message?: string } | undefined;
+        if (primaryResult?.success === false) {
+          toast.error(primaryResult.message ?? "Could not update venue.");
+          return;
+        }
+
+        const cloneResult = (await createMultiVenuePlanningItemsAction({
+          title: item.title,
+          description: item.description ?? null,
+          typeLabel: item.typeLabel,
+          venueIds: rest,
+          ownerId: item.ownerId ?? "",
+          targetDate: item.targetDate,
+          status: "planned"
+        })) as { success?: boolean; message?: string } | undefined;
+        if (cloneResult?.success === false) {
+          toast.error(
+            cloneResult.message ?? `Current venue updated, but couldn't create copies for ${rest.length} venue(s).`
+          );
+        } else {
+          toast.success(
+            `Current venue updated; created ${rest.length} linked planning item${rest.length === 1 ? "" : "s"}.`
+          );
+        }
+        setEditingField(null);
+        onChanged();
+      });
       return;
     }
 
@@ -266,6 +315,7 @@ export function PlanningItemCard({
       setOwnerId(item.ownerId ?? "");
     } else if (field === "venueId") {
       setVenueId(item.venueId ?? "");
+      setSelectedVenueIds(item.venueId ? [item.venueId] : []);
     } else if (field === "description") {
       setDescription(item.description ?? "");
     }
@@ -527,16 +577,23 @@ export function PlanningItemCard({
         <div className="rounded-[var(--radius-sm)] border border-[var(--color-border)] px-2 py-1.5 text-xs text-subtle">
           <p className="font-semibold text-[var(--color-text)]">Venue</p>
           {editingField === "venueId" ? (
-            <div className="mt-0.5 flex items-center gap-1.5">
-              <Select value={venueId} disabled={isPending} onChange={(event) => setVenueId(event.target.value)}>
-                <option value="">Global</option>
-                {venues.map((venue) => (
-                  <option key={venue.id} value={venue.id}>
-                    {venue.name}
-                  </option>
-                ))}
-              </Select>
-              <InlineFieldActions field="venueId" />
+            <div className="mt-0.5 space-y-2">
+              <VenueMultiSelect
+                venues={venues.map((venue) => ({
+                  id: venue.id,
+                  name: venue.name,
+                  category: venue.category ?? "pub"
+                } satisfies VenueOption))}
+                selectedIds={selectedVenueIds}
+                onChange={setSelectedVenueIds}
+                disabled={isPending}
+              />
+              <p className="text-[11px] text-subtle">
+                Pick no venues for a global item, one to move this item, or two or more to create linked planning items at the extra venues.
+              </p>
+              <div className="flex justify-end">
+                <InlineFieldActions field="venueId" />
+              </div>
             </div>
           ) : (
             <div className="mt-0.5 flex items-center gap-1">
