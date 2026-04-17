@@ -105,6 +105,7 @@ type RawPlanningTaskRow = PlanningTaskRow & {
   is_blocked?: boolean;
   due_date_manually_overridden?: boolean;
   completed_by?: string | null;
+  notes?: string | null;
 };
 
 function toPlanningTask(task: RawPlanningTaskRow): PlanningTask {
@@ -514,6 +515,7 @@ export async function listPlanningBoardData(params?: {
         sop_template_task_id,
         is_blocked,
         due_date_manually_overridden,
+        notes,
         assignee:users!planning_tasks_assignee_id_fkey(id,full_name,email),
         assignees:planning_task_assignees(user:users(id,full_name,email)),
         dependencies:planning_task_dependencies!planning_task_dependencies_task_id_fkey(depends_on_task_id)

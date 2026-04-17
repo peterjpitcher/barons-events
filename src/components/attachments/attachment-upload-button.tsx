@@ -19,6 +19,8 @@ type AttachmentUploadButtonProps = {
   onUploaded?: () => void;
   label?: string;
   variant?: "primary" | "secondary" | "ghost";
+  /** Compact icon-only rendering (h-7 w-7 round button) to sit alongside other row controls. */
+  compact?: boolean;
 };
 
 // 250 MB cap — keep in sync with src/actions/attachments.ts.
@@ -45,7 +47,8 @@ export function AttachmentUploadButton({
   parentId,
   onUploaded,
   label = "Attach file",
-  variant = "ghost"
+  variant = "ghost",
+  compact = false
 }: AttachmentUploadButtonProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isPending, startTransition] = useTransition();
@@ -139,6 +142,31 @@ export function AttachmentUploadButton({
       toast.success("File attached.");
       onUploaded?.();
     });
+  }
+
+  if (compact) {
+    const uploadingLabel = progress != null ? `Uploading ${progress}%` : "Uploading…";
+    return (
+      <>
+        <input
+          ref={inputRef}
+          type="file"
+          className="sr-only"
+          onChange={handleChange}
+          disabled={isPending}
+        />
+        <button
+          type="button"
+          onClick={handleClick}
+          disabled={isPending}
+          aria-label={isPending ? uploadingLabel : label || "Attach file"}
+          title={isPending ? uploadingLabel : label || "Attach file"}
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full hover:bg-[rgba(39,54,64,0.12)] disabled:opacity-60"
+        >
+          <Paperclip className="h-4 w-4 text-[var(--color-text)]/70" aria-hidden="true" />
+        </button>
+      </>
+    );
   }
 
   return (

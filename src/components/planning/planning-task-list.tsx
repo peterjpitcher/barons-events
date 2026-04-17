@@ -202,8 +202,7 @@ export function PlanningTaskList({ itemId, tasks, users, onChanged }: PlanningTa
                   <AttachmentUploadButton
                     parentType="planning_task"
                     parentId={task.id}
-                    label=""
-                    variant="ghost"
+                    compact
                     onUploaded={onChanged}
                   />
                   <Button

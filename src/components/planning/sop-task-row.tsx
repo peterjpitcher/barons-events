@@ -248,12 +248,11 @@ export function SopTaskRow({ task, allTasks, users, onStatusChange, onChanged }:
         />
       </button>
 
-      {/* Attachments — quick file picker */}
+      {/* Attachments — quick file picker (compact icon matches other row controls) */}
       <AttachmentUploadButton
         parentType="planning_task"
         parentId={task.id}
-        label=""
-        variant="ghost"
+        compact
         onUploaded={onChanged}
       />
 
