@@ -37,6 +37,7 @@ export type PlanningTask = {
   isBlocked: boolean;
   dueDateManuallyOverridden: boolean;
   dependsOnTaskIds: string[];
+  notes: string | null;
 };
 
 export type PlanningItem = {

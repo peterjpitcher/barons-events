@@ -123,7 +123,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
         id, target_date,
         tasks:planning_tasks(
           id, planning_item_id, title, assignee_id, due_date, status, completed_at, completed_by,
-          sort_order, sop_section, sop_template_task_id, is_blocked, due_date_manually_overridden,
+          sort_order, sop_section, sop_template_task_id, is_blocked, due_date_manually_overridden, notes,
           assignee:users!planning_tasks_assignee_id_fkey(id, full_name, email),
           assignees:planning_task_assignees(user:users(id, full_name, email)),
           dependencies:planning_task_dependencies!planning_task_dependencies_task_id_fkey(depends_on_task_id)
@@ -152,6 +152,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
         sop_template_task_id: string | null;
         is_blocked: boolean;
         due_date_manually_overridden: boolean;
+        notes: string | null;
         assignee: RawUser | RawUser[] | null;
         assignees: RawAssigneeJunction[];
         dependencies: RawDep[];
@@ -183,6 +184,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
           dependsOnTaskIds: Array.isArray(task?.dependencies)
             ? task.dependencies.map((d: RawDep) => d.depends_on_task_id).filter(Boolean)
             : [],
+          notes: task.notes ?? null,
         };
       });
     }

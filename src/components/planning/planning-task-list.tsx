@@ -2,16 +2,17 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, MessageSquare } from "lucide-react";
 import {
   createPlanningTaskAction,
   deletePlanningTaskAction,
-  togglePlanningTaskStatusAction
+  togglePlanningTaskStatusAction,
+  updatePlanningTaskAction
 } from "@/actions/planning";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import type { PlanningPerson, PlanningTask } from "@/lib/planning/types";
+import type { PlanningPerson, PlanningTask, PlanningTaskStatus } from "@/lib/planning/types";
 
 type PlanningTaskListProps = {
   itemId: string;
@@ -70,6 +71,10 @@ export function PlanningTaskList({ itemId, tasks, users, onChanged }: PlanningTa
     [tasks]
   );
 
+  // Track which task has its notes expanded (only one at a time).
+  const [expandedNotesTaskId, setExpandedNotesTaskId] = useState<string | null>(null);
+  const [notesDraft, setNotesDraft] = useState<string>("");
+
   useEffect(() => {
     if (!title.trim().length) {
       setAssigneeId(defaultAssigneeFromTasks(tasks));
@@ -121,49 +126,137 @@ export function PlanningTaskList({ itemId, tasks, users, onChanged }: PlanningTa
       <ul className="space-y-1.5">
         {sortedTasks.map((task) => {
           const isOverdue = task.status === "open" && task.dueDate < new Date().toISOString().slice(0, 10);
+          const isResolved = task.status === "done" || task.status === "not_required";
+          const titleClass = isResolved ? "line-through text-subtle" : "font-medium";
+          const notesExpanded = expandedNotesTaskId === task.id;
+          const hasNotes = Boolean(task.notes && task.notes.trim().length);
+
           return (
             <li
               key={task.id}
-              className="rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-muted-surface)] px-2.5 py-1.5"
+              className={`rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-muted-surface)] px-2.5 py-1.5 ${
+                task.status === "not_required" ? "opacity-60" : ""
+              }`}
             >
               <div className="flex items-start justify-between gap-2">
-                <label className="flex items-start gap-2 text-sm text-[var(--color-text)]">
-                  <input
-                    type="checkbox"
-                    checked={task.status === "done"}
+                <div className="flex min-w-0 flex-1 items-start gap-2 text-sm text-[var(--color-text)]">
+                  <Select
+                    aria-label={`Status for ${task.title}`}
+                    value={task.status}
                     disabled={isPending}
-                    className="mt-1 h-4 w-4"
-                    onChange={(event) =>
+                    className="mt-0.5 h-7 w-[9rem] py-0 text-xs"
+                    onChange={(event) => {
+                      const next = event.currentTarget.value as PlanningTaskStatus;
+                      const message =
+                        next === "done"
+                          ? "Task completed."
+                          : next === "not_required"
+                            ? "Task marked not required."
+                            : "Task reopened.";
                       runTaskAction(
-                        () =>
-                          togglePlanningTaskStatusAction({
-                            taskId: task.id,
-                            status: event.currentTarget.checked ? "done" : "open"
-                          }),
-                        event.currentTarget.checked ? "Task completed." : "Task reopened."
-                      )
-                    }
-                  />
-                  <span>
-                    <span className={task.status === "done" ? "line-through text-subtle" : "font-medium"}>
-                      {task.title}
-                    </span>
+                        () => togglePlanningTaskStatusAction({ taskId: task.id, status: next }),
+                        message
+                      );
+                    }}
+                  >
+                    <option value="open">○ Open</option>
+                    <option value="done">✓ Done</option>
+                    <option value="not_required">— Not required</option>
+                  </Select>
+                  <span className="min-w-0">
+                    <span className={titleClass}>{task.title}</span>
+                    {task.status === "not_required" ? (
+                      <span className="ml-1 text-[10px] italic text-subtle">(not required)</span>
+                    ) : null}
                     <br />
                     <span className={`text-xs ${isOverdue ? "text-[var(--color-danger)]" : "text-subtle"}`}>
                       {task.assigneeName} · due {formatDueDate(task.dueDate)}
                     </span>
                   </span>
-                </label>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={isPending}
-                  onClick={() => runTaskAction(() => deletePlanningTaskAction({ taskId: task.id }), "Task removed.")}
-                >
-                  <Trash2 className="h-4 w-4" aria-hidden="true" />
-                </Button>
+                </div>
+                <div className="flex shrink-0 items-start gap-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-label={notesExpanded ? "Hide notes" : hasNotes ? "Show notes" : "Add notes"}
+                    aria-pressed={notesExpanded}
+                    disabled={isPending}
+                    onClick={() => {
+                      if (notesExpanded) {
+                        setExpandedNotesTaskId(null);
+                        setNotesDraft("");
+                      } else {
+                        setExpandedNotesTaskId(task.id);
+                        setNotesDraft(task.notes ?? "");
+                      }
+                    }}
+                    title={hasNotes ? "Notes" : "Add notes"}
+                  >
+                    <MessageSquare
+                      className={`h-4 w-4 ${hasNotes ? "text-[var(--color-primary)]" : ""}`}
+                      aria-hidden="true"
+                    />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={isPending}
+                    onClick={() => runTaskAction(() => deletePlanningTaskAction({ taskId: task.id }), "Task removed.")}
+                  >
+                    <Trash2 className="h-4 w-4" aria-hidden="true" />
+                  </Button>
+                </div>
               </div>
+
+              {notesExpanded ? (
+                <div className="mt-2 space-y-1.5">
+                  <textarea
+                    className="w-full resize-y rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1.5 text-sm text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
+                    rows={4}
+                    maxLength={10_000}
+                    placeholder="Add any context, links, or reminders for this task"
+                    value={notesDraft}
+                    disabled={isPending}
+                    onChange={(event) => setNotesDraft(event.target.value)}
+                  />
+                  <div className="flex justify-end gap-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={isPending}
+                      onClick={() => {
+                        setExpandedNotesTaskId(null);
+                        setNotesDraft("");
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="sm"
+                      disabled={isPending || notesDraft === (task.notes ?? "")}
+                      onClick={() =>
+                        runTaskAction(
+                          () =>
+                            updatePlanningTaskAction({
+                              taskId: task.id,
+                              notes: notesDraft.trim().length ? notesDraft : null
+                            }),
+                          "Notes saved."
+                        )
+                      }
+                    >
+                      Save
+                    </Button>
+                  </div>
+                </div>
+              ) : hasNotes ? (
+                <p className="mt-1.5 whitespace-pre-wrap break-words text-xs text-subtle">{task.notes}</p>
+              ) : null}
             </li>
           );
         })}

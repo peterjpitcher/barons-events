@@ -139,6 +139,8 @@ function toPlanningTask(task: RawPlanningTaskRow): PlanningTask {
     dependsOnTaskIds: Array.isArray(task?.dependencies)
       ? task.dependencies.map((d: RawDependencyRelation) => d.depends_on_task_id).filter(Boolean)
       : [],
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    notes: (task as any).notes ?? null,
   };
 }
 
