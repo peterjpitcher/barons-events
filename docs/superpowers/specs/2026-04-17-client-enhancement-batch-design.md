@@ -1,10 +1,10 @@
-# Client Enhancement Batch — Design Spec (v5)
+# Client Enhancement Batch — Design Spec (v6)
 
-_Revised 2026-04-17 after four rounds of adversarial review. Prior reviews: [v1](../../../tasks/codex-qa-review/2026-04-17-client-enhancement-batch-spec-adversarial-review.md), [v2](../../../tasks/codex-qa-review/2026-04-17-client-enhancement-batch-spec-v2-adversarial-review.md), [v3 AB](../../../tasks/codex-qa-review/2026-04-17-client-enhancement-batch-spec-v3-assumption-breaker-report.md), [v3 ST](../../../tasks/codex-qa-review/2026-04-17-client-enhancement-batch-spec-v3-spec-trace-auditor-report.md), [v4 AB](../../../tasks/codex-qa-review/2026-04-17-client-enhancement-batch-spec-v4-assumption-breaker-report.md), [v4 ST](../../../tasks/codex-qa-review/2026-04-17-client-enhancement-batch-spec-v4-spec-trace-auditor-report.md). Implementation triage: [tasks/todo.md](../../../tasks/todo.md)._
+_Revised 2026-04-17 after five rounds of adversarial review. Prior review artefacts in [tasks/codex-qa-review/](../../../tasks/codex-qa-review/). Implementation triage: [tasks/todo.md](../../../tasks/todo.md)._
 
 ## Revision notes
 
-**v5 addresses 9 blocking issues + 4 medium severity issues from the v4 review.** Architectural decisions from v2 are unchanged:
+**v6 addresses 5 issues found in the v5 review** (2 blockers + 3 prose cleanups). Architectural decisions from v2 are unchanged:
 1. SOP templates absorb cascade (new `expansion_strategy` and `venue_filter` columns).
 2. Labour rate lives in a typed `business_settings` singleton.
 3. Attachments use three nullable FKs with an "exactly one set" CHECK.
@@ -549,7 +549,7 @@ create policy event_creation_batches_own on event_creation_batches for all
 1. Acquire an advisory lock on `idempotency_key` (or use `INSERT ... ON CONFLICT (idempotency_key) DO NOTHING RETURNING id` and a second SELECT if already present) to serialise concurrent retries.
 2. If an `event_creation_batches` row already exists for this key: return the stored `result` without side effects.
 3. Otherwise insert a new `event_creation_batches` row with the payload and a pending `result`.
-4. Pre-authorisation: load every `venue_id` in the payload. For each, verify `canManageEvents(role, venue_id)` via a helper AND, for office workers, that `u.venue_id IS NULL OR u.venue_id = venue_id`. If any venue fails, `RAISE EXCEPTION` — the whole function aborts and nothing is committed.
+4. Pre-authorisation: load the caller. Reject if the caller is deactivated. Reject unless the caller is an administrator OR an office_worker with `user.venue_id IS NOT NULL`. For office workers, every `venue_id` in the payload must equal the caller's `user.venue_id`; if any does not, `RAISE EXCEPTION`. Executives and no-venue office workers are read-only and cannot call this RPC. The whole function aborts on any failure and nothing is committed.
 5. Insert one `events` row per venue + one `planning_items` row per venue. Call `generate_sop_checklist(planning_item_id)` (**v1 RPC** until Wave 4 lands — see "Caller migration" below) for each; bubble up any SQL error.
 6. UPDATE the `event_creation_batches` row with the final `result`.
 7. Function returns — Postgres commits the implicit transaction.
@@ -945,7 +945,20 @@ create trigger trg_events_status_transition before update on events
 ### 3.3 Server actions
 
 - `proposeEventAction(FormData)` — creates events in `pending_approval`. Calls `create_multi_venue_event_proposals` (the proposal-specific RPC defined in Wave 2.3b), NOT `create_multi_venue_event_drafts` — proposals tolerate null `event_type/venue_space/end_at`.
-- `preApproveEventAction(FormData)` — admin only. Rejects if `start_at < now()`. In a single transaction: (1) transition status to `approved_pending_details`; (2) create the linked `planning_items` row (the proposal RPC does not create one) using the event's `venue_id`, `start_at::date` as target_date, `title` and a placeholder `type_label`; (3) call `generate_sop_checklist(planning_item_id, start_at::date, admin_id)` (or `generate_sop_checklist_v2` post-Wave 4) so the venue manager finds an SOP checklist when they open the event; (4) audit `event.pre_approved`; (5) email the creator. If any step fails, the whole transaction rolls back and the status stays `pending_approval`.
+- `preApproveEventAction(FormData)` — admin only. Validates, then calls a dedicated RPC `pre_approve_event_proposal(p_event_id uuid, p_admin_id uuid)` for the rollbackable DB work. After the RPC commits, the action sends the approval email (fire-and-forget on failure — see "Known limit" below).
+
+  **The `pre_approve_event_proposal` RPC (security definer, service-role-only grant):**
+  1. Rejects if the event is not in `pending_approval` status, or if `start_at < now()`.
+  2. Within a single implicit transaction:
+     - Updates `events.status = 'approved_pending_details'` (the status-transition trigger permits this because the caller is administrator).
+     - Inserts one `planning_items` row with: `event_id = p_event_id`, `venue_id = event.venue_id`, `target_date = event.start_at::date`, `title = event.title`, `type_label = 'Event'`, `status = 'planned'`, `created_by = p_admin_id`. (This matches the shape used by `createEventPlanningItem` in [src/lib/events.ts:543-567](../../../src/lib/events.ts).)
+     - Calls `generate_sop_checklist(planning_item_id, event.start_at::date, p_admin_id)` (v1 today; Wave 4 PR switches to v2).
+     - Inserts an `audit_log` row: `entity = 'event'`, `action = 'event.pre_approved'`.
+  3. Returns `{event_id, planning_item_id}`.
+  If any step fails, Postgres rolls back the whole transaction; status stays `pending_approval`.
+
+  **Known limit — email delivery:** email is sent by the server action after the RPC commits. If the email helper fails, the approval is still in place (DB work is done); the failure is logged and audited. Email cannot be part of a DB transaction.
+
 - `preRejectEventAction(FormData)` — admin only. Parses reason, writes `approvals.feedback_text`, transitions to `rejected`. Emails the creator.
 - `saveEventDraftAction` (existing, extended): when called on an event in `approved_pending_details`, and all required fields (`event_type`, `venue_space`, `end_at`) are present in the payload, the action explicitly sets `status = 'draft'` in the UPDATE. This is the venue-manager completion path. The status-transition trigger permits it for the creator or a venue-scoped office worker.
 
@@ -1839,7 +1852,7 @@ Order matters. Wave 0 first, then the rest follow wave order. Each is tested loc
 9. `008_add_multi_venue_planning_item_rpc.sql` — Wave 2.4.
 10. `009_relax_event_required_fields_and_extend_status.sql` — Wave 3. **Not additive.** Adds `pending_approval` and `approved_pending_details` statuses and relaxes `event_type`/`venue_space`/`end_at` to nullable for those statuses.
 11. `010_enforce_event_status_transitions.sql` — Wave 3.2.
-12. `011_add_multi_venue_event_proposal_rpc.sql` — Wave 2.3b. **Runs AFTER migration 009** because it inserts events with null `event_type/venue_space/end_at` and `status = 'pending_approval'`, both of which require the schema relaxation to be in place.
+12. `011_add_multi_venue_event_proposal_rpc.sql` — Wave 2.3b. **Runs AFTER migration 009** because it inserts events with null `event_type/venue_space/end_at` and `status = 'pending_approval'`, both of which require the schema relaxation to be in place. **Ships in the Wave 3 PR** (not Wave 2) because `proposeEventAction` depends on this RPC and that action is part of Wave 3. The migration file sits alongside Wave 3's other migrations so the Wave 3 branch carries everything proposals need to work end-to-end.
 13. `012_extend_sop_for_expansion.sql` — Wave 4.1a (SOP template columns).
 14. `013_add_planning_task_cascade_columns.sql` — Wave 4.1b (planning_tasks columns + indexes).
 15. `014_generate_sop_checklist_v2.sql` — Wave 4.2. **Same PR migrates all Wave 2 RPC callers from v1 to v2.**
@@ -1886,6 +1899,14 @@ Wave 5 (attachments) — depends on Wave 0 only; independent of the rest.
 - Per-venue or per-role labour rates.
 - Nested cascades (children-of-children).
 - Attachment sensitivity classification (beyond the current executive-read-all).
+
+## Change log (v6 vs v5)
+
+- **AB-V5-001 fixed:** `pre_approve_event_proposal` RPC specifies every required `planning_items` column explicitly (`event_id`, `venue_id`, `target_date`, `title`, `type_label = 'Event'`, `status = 'planned'`, `created_by`).
+- **AB-V5-002 fixed:** approval work moved into a dedicated `pre_approve_event_proposal` DB RPC so the DB mutations are a real Postgres transaction. Email is sent by the server action after commit; failure is logged and does not roll back the DB work. Removed "email rolls back with DB" language.
+- **AB-V5-003 fixed:** draft RPC behaviour step 4 now states the correct rule — administrator OR office worker with `user.venue_id IS NOT NULL` matching every target venue. No more "venue_id IS NULL OR match" shorthand.
+- **Part D (Wave 2.3b PR ownership) fixed:** migration 011 (proposal RPC) explicitly ships in the Wave 3 PR so everything `proposeEventAction` depends on is on the Wave 3 branch.
+- **AB-V5-004 fixed:** stale SD-V2-8 changelog line updated to reflect the convention split (trigger functions do not grant `service_role`).
 
 ## Change log (v5 vs v4)
 
@@ -1940,7 +1961,7 @@ Wave 5 (attachments) — depends on Wave 0 only; independent of the rest.
 - **SD-V2-5 fixed:** event roll-up query includes planning-item attachments.
 - **SD-V2-6 fixed:** cascade audit actions all use `planning_task.cascade_*` prefix.
 - **SD-V2-7 fixed:** `create_multi_venue_event_drafts` payload / return / grants specified.
-- **SD-V2-8 fixed:** every new `SECURITY DEFINER` function is hardened (`search_path`, `GRANT EXECUTE TO service_role`).
+- **SD-V2-8 fixed:** every new `SECURITY DEFINER` function is hardened (`search_path`, revoke from public/authenticated). Direct-call RPCs additionally grant `service_role`; trigger functions do not grant (see Cross-cutting principles for the convention split).
 - **SD-V2-9 fixed:** rollback plan covers all new migrations.
 - **SD-V2-10 fixed:** cascade projection sweep includes `src/lib/dashboard.ts` and event-detail page.
 - **WF-V2-1 fixed:** RPC accepts `idempotency_key`; new `event_creation_batches` records completed batches.
