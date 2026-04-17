@@ -579,6 +579,13 @@ export async function togglePlanningTaskStatusAction(input: unknown): Promise<Pl
     if (ownershipError) return ownershipError;
 
     await togglePlanningTaskStatus(parsed.data.taskId, parsed.data.status, user.id);
+    recordAuditLogEntry({
+      entity: "planning_task",
+      entityId: parsed.data.taskId,
+      action: "planning_task.status_changed",
+      actorId: user.id,
+      meta: { new_status: parsed.data.status }
+    }).catch(() => {});
     try {
       await updateBlockedStatus(parsed.data.taskId, parsed.data.status);
     } catch (blockErr) {
@@ -643,6 +650,13 @@ export async function reassignPlanningTaskAction(input: unknown): Promise<Planni
         .eq("id", parsed.data.taskId);
     }
 
+    recordAuditLogEntry({
+      entity: "planning_task",
+      entityId: parsed.data.taskId,
+      action: "planning_task.reassigned",
+      actorId: user.id,
+      meta: { assignee_ids: parsed.data.assigneeIds }
+    }).catch(() => {});
     revalidatePath("/planning");
     return { success: true, message: "Task reassigned." };
   } catch (error) {

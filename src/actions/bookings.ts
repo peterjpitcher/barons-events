@@ -90,6 +90,16 @@ export async function createBookingAction(
 
   const { bookingId } = rpcResult;
 
+  // Audit — public flow has no authenticated user, so actorId is null.
+  // Mobile is omitted from meta; it is PII and the booking row is authoritative.
+  await recordAuditLogEntry({
+    entity: "event",
+    entityId: data.eventId,
+    action: "booking.created",
+    meta: { booking_id: bookingId, ticket_count: data.ticketCount },
+    actorId: null,
+  });
+
   // Fire confirmation SMS asynchronously — don't block the response
   sendBookingConfirmationSms(bookingId).catch((err) => {
     console.warn("Failed to send booking confirmation SMS:", err);
