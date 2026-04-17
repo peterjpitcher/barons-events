@@ -572,7 +572,9 @@ export async function listPlanningBoardData(params?: {
 
   const { data: eventData, error: eventsError } = await admin
     .from("events")
-    .select("id,title,status,start_at,end_at,venue_space,venue_id,public_title,public_teaser,venue:venues(name)")
+    .select(
+      "id,title,status,start_at,end_at,venue_space,venue_id,public_title,public_teaser,venue:venues!events_venue_id_fkey(name)"
+    )
     .gte("start_at", startLowerIso)
     .lte("start_at", startUpperIso)
     .not("status", "in", '("completed","rejected")')
