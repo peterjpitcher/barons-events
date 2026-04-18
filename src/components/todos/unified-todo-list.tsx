@@ -494,6 +494,17 @@ function PlanningMode({
                       // didn't attach the underlying PlanningTask (e.g. for
                       // review/debrief sources in future).
                       if (item.task && item.siblings) {
+                        // Parent label appended to the subtitle so the user
+                        // knows which event / planning item this task belongs
+                        // to. Clickable when we have an open-modal callback.
+                        const parentLabel = item.parentTitle
+                          ? {
+                              title: item.parentTitle,
+                              onOpen: onOpenPlanningItemId && item.planningItemId
+                                ? () => onOpenPlanningItemId(item.planningItemId!)
+                                : undefined
+                            }
+                          : undefined;
                         return (
                           <SopTaskRow
                             key={item.id}
@@ -503,6 +514,7 @@ function PlanningMode({
                             users={users}
                             onStatusChange={handleStatusChange}
                             onChanged={() => router.refresh()}
+                            parentLabel={parentLabel}
                           />
                         );
                       }

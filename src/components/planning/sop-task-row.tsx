@@ -16,6 +16,10 @@ type SopTaskRowProps = {
   users: PlanningPerson[];
   onStatusChange: (taskId: string, status: PlanningTaskStatus) => void;
   onChanged?: () => void;
+  /** Shown appended to the "assignee · due date" subtitle, e.g. in
+   * "Todos by person" where the task's parent isn't implicit. Omit when
+   * rendered inside the parent item's own modal. */
+  parentLabel?: { title: string; onOpen?: () => void };
 };
 
 function formatDueDate(value: string): string {
@@ -55,7 +59,7 @@ function formatCompletedDate(completedAt: string | null): string {
   }).format(parsed);
 }
 
-export function SopTaskRow({ task, allTasks, users, onStatusChange, onChanged }: SopTaskRowProps) {
+export function SopTaskRow({ task, allTasks, users, onStatusChange, onChanged, parentLabel }: SopTaskRowProps) {
   const [isPending, startTransition] = useTransition();
   const [menuOpen, setMenuOpen] = useState(false);
   const [reassignOpen, setReassignOpen] = useState(false);
@@ -258,6 +262,25 @@ export function SopTaskRow({ task, allTasks, users, onStatusChange, onChanged }:
             <span className={dueDateColour(task.dueDate)}>
               due {formatDueDate(task.dueDate)}
             </span>
+            {parentLabel ? (
+              <>
+                <span className="mx-1">&middot;</span>
+                {parentLabel.onOpen ? (
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      parentLabel.onOpen?.();
+                    }}
+                    className="font-medium text-[var(--color-primary-700)] hover:underline focus:outline-none focus-visible:underline"
+                  >
+                    {parentLabel.title}
+                  </button>
+                ) : (
+                  <span className="font-medium text-[var(--color-text)]">{parentLabel.title}</span>
+                )}
+              </>
+            ) : null}
           </p>
         )}
       </div>
