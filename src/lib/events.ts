@@ -148,7 +148,7 @@ export async function listReviewQueue(user: AppUser): Promise<EventSummary[]> {
 
   let query = supabase
     .from("events")
-    .select("*, venue:venues(id,name)")
+    .select("*, venue:venues!events_venue_id_fkey(id,name)")
     .is("deleted_at", null)
     .in("status", ["submitted", "needs_revisions"])
     .order("start_at", { ascending: true });
@@ -872,7 +872,7 @@ export async function findConflicts(): Promise<Array<{ event: EventSummary; conf
 
   const { data, error } = await supabase
     .from("events")
-    .select("*, venue:venues(id,name)")
+    .select("*, venue:venues!events_venue_id_fkey(id,name)")
     .is("deleted_at", null)
     .gte("start_at", now.toISOString())
     .lte("start_at", ceiling.toISOString())

@@ -369,7 +369,7 @@ export async function getArtistDetail(artistId: string): Promise<ArtistDetail | 
           event_type,
           status,
           start_at,
-          venue:venues(name),
+          venue:venues!events_venue_id_fkey(name),
           debrief:debriefs(*)
         )
       )

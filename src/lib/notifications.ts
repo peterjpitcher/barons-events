@@ -236,7 +236,7 @@ async function fetchEventContext(eventId: string): Promise<EventContext | null> 
     .select(
       `
       *,
-      venue:venues(name),
+      venue:venues!events_venue_id_fkey(name),
       creator:users!events_created_by_fkey(id,full_name,email),
       assignee:users!events_assignee_id_fkey(id,full_name,email),
       debrief:debriefs(*)
@@ -916,7 +916,7 @@ export async function sendWeeklyPipelineSummaryEmail() {
 
     const { data: upcomingEvents, error: upcomingError } = await supabase
       .from("events")
-      .select("id,title,start_at,end_at,venue_space, venue:venues(name)")
+      .select("id,title,start_at,end_at,venue_space, venue:venues!events_venue_id_fkey(name)")
       .gte("start_at", new Date().toISOString())
       .order("start_at", { ascending: true })
       .limit(5);

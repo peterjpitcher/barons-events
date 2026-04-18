@@ -28,7 +28,7 @@ export default async function DebriefsPage() {
         title,
         start_at,
         venue_id,
-        venues ( name )
+        venues!events_venue_id_fkey ( name )
       )
     `)
     .order("submitted_at", { ascending: false });
