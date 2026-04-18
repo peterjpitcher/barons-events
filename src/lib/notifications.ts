@@ -210,6 +210,25 @@ function getResendClient() {
   return new Resend(key);
 }
 
+/**
+ * Global kill-switch for all non-auth notification emails. When the env var
+ * NOTIFICATIONS_DISABLED is set to "true", the nine business notifications
+ * (event submitted, review decisions, debrief reminders, SLT digest, etc.)
+ * log a "would have sent" line and return early. Auth emails
+ * (sendInviteEmail, sendPasswordResetEmail) are intentionally excluded and
+ * always attempt to send — users still need to sign in and reset passwords.
+ *
+ * To bring notifications back: remove NOTIFICATIONS_DISABLED (or set it to
+ * anything other than "true") and redeploy / restart the dev server.
+ */
+function areNotificationsEnabled(): boolean {
+  return process.env.NOTIFICATIONS_DISABLED !== "true";
+}
+
+function logNotificationSkipped(label: string, ...context: unknown[]): void {
+  console.log(`[notifications disabled] skipped ${label}`, ...context);
+}
+
 async function fetchEventContext(eventId: string): Promise<EventContext | null> {
   const supabase = await createSupabaseReadonlyClient();
   const { data, error } = await supabase
@@ -306,6 +325,10 @@ function buildGreeting(user: Pick<UserRow, "full_name"> | null | undefined, fall
 }
 
 export async function sendEventSubmittedEmail(eventId: string) {
+  if (!areNotificationsEnabled()) {
+    logNotificationSkipped("sendEventSubmittedEmail", { eventId });
+    return;
+  }
   const resend = getResendClient();
   if (!resend) return;
 
@@ -343,6 +366,10 @@ export async function sendEventSubmittedEmail(eventId: string) {
 }
 
 export async function sendReviewDecisionEmail(eventId: string, decision: string) {
+  if (!areNotificationsEnabled()) {
+    logNotificationSkipped("sendReviewDecisionEmail", { eventId, decision });
+    return;
+  }
   const resend = getResendClient();
   if (!resend) return;
 
@@ -444,6 +471,10 @@ export async function sendPasswordResetEmail(email: string, resetLink: string) {
 }
 
 export async function sendDebriefReminderEmail(eventId: string) {
+  if (!areNotificationsEnabled()) {
+    logNotificationSkipped("sendDebriefReminderEmail", { eventId });
+    return;
+  }
   const resend = getResendClient();
   if (!resend) return;
 
@@ -481,6 +512,10 @@ export async function sendDebriefReminderEmail(eventId: string) {
 }
 
 export async function sendUpcomingEventReminderEmail(eventId: string) {
+  if (!areNotificationsEnabled()) {
+    logNotificationSkipped("sendUpcomingEventReminderEmail", { eventId });
+    return;
+  }
   const resend = getResendClient();
   if (!resend) return;
 
@@ -517,6 +552,10 @@ export async function sendUpcomingEventReminderEmail(eventId: string) {
 }
 
 export async function sendNeedsRevisionsFollowUpEmail(eventId: string) {
+  if (!areNotificationsEnabled()) {
+    logNotificationSkipped("sendNeedsRevisionsFollowUpEmail", { eventId });
+    return;
+  }
   const resend = getResendClient();
   if (!resend) return;
 
@@ -557,6 +596,10 @@ export async function sendAssigneeReassignmentEmail(
   newAssigneeId: string | null,
   previousAssigneeId?: string | null
 ) {
+  if (!areNotificationsEnabled()) {
+    logNotificationSkipped("sendAssigneeReassignmentEmail", { eventId, newAssigneeId, previousAssigneeId });
+    return;
+  }
   const resend = getResendClient();
   if (!resend) return;
 
@@ -621,6 +664,10 @@ export async function sendAssigneeReassignmentEmail(
 }
 
 export async function sendPostEventDigestEmail(eventId: string) {
+  if (!areNotificationsEnabled()) {
+    logNotificationSkipped("sendPostEventDigestEmail", { eventId });
+    return;
+  }
   const resend = getResendClient();
   if (!resend) return;
 
@@ -739,6 +786,10 @@ async function getSltRecipients(): Promise<string[]> {
  * the debrief submission succeeds even if email delivery fails.
  */
 export async function sendDebriefSubmittedToSltEmail(eventId: string): Promise<void> {
+  if (!areNotificationsEnabled()) {
+    logNotificationSkipped("sendDebriefSubmittedToSltEmail", { eventId });
+    return;
+  }
   const resend = getResendClient();
   if (!resend) return;
 
@@ -819,6 +870,10 @@ export async function sendDebriefSubmittedToSltEmail(eventId: string): Promise<v
 }
 
 export async function sendWeeklyPipelineSummaryEmail() {
+  if (!areNotificationsEnabled()) {
+    logNotificationSkipped("sendWeeklyPipelineSummaryEmail");
+    return;
+  }
   const resend = getResendClient();
   if (!resend) return;
 
