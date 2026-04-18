@@ -318,9 +318,17 @@ export function EventForm({
   const [titleValue, setTitleValue] = useState(defaultValues?.title ?? "");
   const [eventTypeValue, setEventTypeValue] = useState(defaultValues?.event_type ?? "");
   const [selectedVenueId, setSelectedVenueId] = useState(defaultVenueId);
-  const [selectedVenueIds, setSelectedVenueIds] = useState<string[]>(
-    defaultVenueId ? [defaultVenueId] : []
-  );
+  // Hydrate from the full venues list so editing a multi-venue event doesn't
+  // silently drop the extras on save (issue-log 2026-04-18 item 03).
+  const initialEventVenueIds = (() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const venuesList = (defaultValues as any)?.venues as Array<{ id: string }> | undefined;
+    if (Array.isArray(venuesList) && venuesList.length > 0) {
+      return venuesList.map((v) => v.id);
+    }
+    return defaultVenueId ? [defaultVenueId] : [];
+  })();
+  const [selectedVenueIds, setSelectedVenueIds] = useState<string[]>(initialEventVenueIds);
   const [venueSpaceValue, setVenueSpaceValue] = useState(defaultValues?.venue_space ?? "");
   const [startValue, setStartValue] = useState(toLocalInputValue(defaultValues?.start_at ?? initialStartAt));
   const [endValue, setEndValue] = useState(toLocalInputValue(defaultValues?.end_at ?? initialEndAt));

@@ -104,7 +104,13 @@ export function PlanningItemCard({
   const [description, setDescription] = useState(item.description ?? "");
   const [ownerId, setOwnerId] = useState(item.ownerId ?? "");
   const [venueId, setVenueId] = useState(item.venueId ?? "");
-  const [selectedVenueIds, setSelectedVenueIds] = useState<string[]>(item.venueId ? [item.venueId] : []);
+  // Hydrate from the full venue list — `item.venueId` is only the primary venue.
+  // Previously hydrating from the scalar alone silently dropped the extra venues
+  // when the editor opened (see issue-log 2026-04-18 item 03).
+  const initialVenueIds = (item.venues?.length
+    ? item.venues.map((v) => v.id)
+    : (item.venueId ? [item.venueId] : []));
+  const [selectedVenueIds, setSelectedVenueIds] = useState<string[]>(initialVenueIds);
   const [status, setStatus] = useState<PlanningItem["status"]>(item.status);
   const [targetDate, setTargetDate] = useState(item.targetDate);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -133,7 +139,9 @@ export function PlanningItemCard({
     setDescription(item.description ?? "");
     setOwnerId(item.ownerId ?? "");
     setVenueId(item.venueId ?? "");
-    setSelectedVenueIds(item.venueId ? [item.venueId] : []);
+    setSelectedVenueIds(item.venues?.length
+      ? item.venues.map((v) => v.id)
+      : (item.venueId ? [item.venueId] : []));
     setStatus(item.status);
     setTargetDate(item.targetDate);
     setConfirmDelete(false);
@@ -280,7 +288,9 @@ export function PlanningItemCard({
       setOwnerId(item.ownerId ?? "");
     } else if (field === "venueId") {
       setVenueId(item.venueId ?? "");
-      setSelectedVenueIds(item.venueId ? [item.venueId] : []);
+      setSelectedVenueIds(item.venues?.length
+        ? item.venues.map((v) => v.id)
+        : (item.venueId ? [item.venueId] : []));
     } else if (field === "description") {
       setDescription(item.description ?? "");
     }
