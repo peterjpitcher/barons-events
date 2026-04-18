@@ -239,7 +239,7 @@ export async function createSopTaskTemplateAction(
       parsed.data.expansionStrategy === "per_venue"
         ? (parsed.data.venueFilter ?? "pub")
         : null;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const { error } = await (db as any).from("sop_task_templates").insert({
       section_id: parsed.data.sectionId,
       title: parsed.data.title,
@@ -289,7 +289,7 @@ export async function updateSopTaskTemplateAction(
       parsed.data.expansionStrategy === "per_venue"
         ? (parsed.data.venueFilter ?? "pub")
         : null;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const { error } = await (db as any)
       .from("sop_task_templates")
       .update({

@@ -26,7 +26,7 @@ export async function addSltMemberAction(
   }
 
   const db = createSupabaseAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { data, error } = await (db as any)
     .from("slt_members")
     .insert({ user_id: parsed.data.userId, added_by: user.id })
@@ -69,7 +69,7 @@ export async function removeSltMemberAction(
   }
 
   const db = createSupabaseAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { data, error } = await (db as any)
     .from("slt_members")
     .delete()

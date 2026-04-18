@@ -35,7 +35,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   let cleanedDeleted = 0;
 
   // 1. Pending rows older than 24 h → mark failed + delete storage object.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { data: pendingRows } = await (db as any)
     .from("attachments")
     .select("id, storage_path")
@@ -44,9 +44,9 @@ export async function GET(request: Request): Promise<NextResponse> {
 
   for (const row of (pendingRows ?? []) as Array<{ id: string; storage_path: string }>) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       await (db as any).storage.from("task-attachments").remove([row.storage_path]).catch(() => {});
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       await (db as any)
         .from("attachments")
         .update({ upload_status: "failed" })
@@ -58,7 +58,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   }
 
   // 2. Failed rows older than 24 h → delete storage object + hard-delete row.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { data: failedRows } = await (db as any)
     .from("attachments")
     .select("id, storage_path")
@@ -67,9 +67,9 @@ export async function GET(request: Request): Promise<NextResponse> {
 
   for (const row of (failedRows ?? []) as Array<{ id: string; storage_path: string }>) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       await (db as any).storage.from("task-attachments").remove([row.storage_path]).catch(() => {});
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       await (db as any).from("attachments").delete().eq("id", row.id);
       cleanedFailed++;
     } catch (err) {
@@ -78,7 +78,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   }
 
   // 3. Soft-deleted rows older than 7 days → delete storage object + hard-delete row.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { data: deletedRows } = await (db as any)
     .from("attachments")
     .select("id, storage_path")
@@ -87,9 +87,9 @@ export async function GET(request: Request): Promise<NextResponse> {
 
   for (const row of (deletedRows ?? []) as Array<{ id: string; storage_path: string }>) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       await (db as any).storage.from("task-attachments").remove([row.storage_path]).catch(() => {});
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       await (db as any).from("attachments").delete().eq("id", row.id);
       cleanedDeleted++;
     } catch (err) {

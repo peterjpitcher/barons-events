@@ -33,7 +33,7 @@ const reviewerFallback = z.string().uuid().optional();
 async function syncEventVenueAttachments(eventId: string, venueIds: string[]): Promise<void> {
   if (!eventId) return;
   const db = createSupabaseAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { error } = await (db as any).rpc("set_event_venues", {
     p_event_id: eventId,
     p_venue_ids: venueIds

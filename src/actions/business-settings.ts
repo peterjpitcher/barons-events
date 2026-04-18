@@ -39,7 +39,7 @@ export async function updateBusinessSettingsAction(
 
   const db = createSupabaseAdminClient();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { data: before } = await (db as any)
     .from("business_settings")
     .select("labour_rate_gbp")
@@ -47,7 +47,7 @@ export async function updateBusinessSettingsAction(
     .maybeSingle();
   const oldValue = before?.labour_rate_gbp ?? null;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { error } = await (db as any)
     .from("business_settings")
     .update({

@@ -48,7 +48,7 @@ export async function upsertDebrief(input: DebriefInput): Promise<DebriefRow> {
         submitted_by: input.submittedBy,
         labour_hours: input.labourHours ?? null,
         labour_rate_gbp_at_submit: input.labourRateGbpAtSubmit ?? null
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
       } as any,
       { onConflict: "event_id" }
     )

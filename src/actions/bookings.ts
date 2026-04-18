@@ -87,7 +87,7 @@ export async function createBookingAction(
   // booking flow must not be blocked by a best-effort pre-check.
   try {
     const db = createSupabaseAdminClient();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const { data: customer } = await (db as any)
       .from("customers")
       .select("id")
@@ -95,7 +95,7 @@ export async function createBookingAction(
       .maybeSingle();
 
     if (customer?.id) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { data: existingBooking } = await (db as any)
         .from("event_bookings")
         .select("id, ticket_count, status")
@@ -217,7 +217,7 @@ export async function updateExistingBookingAction(
 
   const db = createSupabaseAdminClient();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { data: booking, error: bookingError } = await (db as any)
     .from("event_bookings")
     .select("id, event_id, customer_id, ticket_count, status")
@@ -235,7 +235,7 @@ export async function updateExistingBookingAction(
 
   if (delta > 0) {
     // Need to check capacity before growing the booking.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const { data: eventRow } = await (db as any)
       .from("events")
       .select("total_capacity")
@@ -243,7 +243,7 @@ export async function updateExistingBookingAction(
       .maybeSingle();
 
     if (eventRow?.total_capacity != null) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { data: confirmed } = await (db as any)
         .from("event_bookings")
         .select("ticket_count")
@@ -259,7 +259,7 @@ export async function updateExistingBookingAction(
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { error: updateError } = await (db as any)
     .from("event_bookings")
     .update({ ticket_count: parsed.data.ticketCount })

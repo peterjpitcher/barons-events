@@ -35,14 +35,14 @@ export default async function SettingsPage() {
     listEventTypes(),
     listArchivedArtists(),
     listServiceTypes(),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     (db as any).from("business_settings").select("*").eq("id", true).maybeSingle().then((r: any) => r.data),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     (db as any)
       .from("slt_members")
       .select("user_id, users:user_id(id, full_name, email, deactivated_at)")
       .then((r: any) => r.data ?? []),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     (db as any)
       .from("users")
       .select("id, full_name, email, deactivated_at")

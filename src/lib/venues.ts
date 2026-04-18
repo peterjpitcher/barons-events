@@ -22,7 +22,7 @@ export async function createVenue(payload: {
   category?: "pub" | "cafe";
 }) {
   const supabase = await createSupabaseActionClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { error } = await (supabase as any).from("venues").insert({
     name: payload.name,
     address: payload.address ?? null,
@@ -73,7 +73,7 @@ export async function updateVenue(id: string, updates: {
     updatePayload.category = updates.category;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { error } = await (supabase as any)
     .from("venues")
     .update(updatePayload)

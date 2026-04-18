@@ -208,7 +208,7 @@ function VenueRowEditor({ venue, reviewers, users }: { venue: VenueRow; reviewer
               <Select
                 id={`venue-category-${venue.id}`}
                 name="category"
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                 
                 defaultValue={(venue as any).category ?? "pub"}
               >
                 <option value="pub">🍺 Pub</option>

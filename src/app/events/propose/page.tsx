@@ -21,7 +21,7 @@ export default async function ProposeEventPage() {
   const venues: VenueOption[] = venueRows.map((v) => ({
     id: v.id,
     name: v.name,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     category: (((v as any).category ?? "pub") === "cafe" ? "cafe" : "pub") as "pub" | "cafe"
   }));
 

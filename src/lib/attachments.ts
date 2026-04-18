@@ -51,7 +51,7 @@ export async function listAttachmentsForParent(
         ? "planning_item_id"
         : "planning_task_id";
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { data } = await (db as any)
     .from("attachments")
     .select("id, event_id, planning_item_id, planning_task_id, original_filename, mime_type, size_bytes, uploaded_at, uploaded_by")
@@ -73,7 +73,7 @@ export async function listEventAttachmentsRollup(eventId: string): Promise<Attac
   const db = createSupabaseAdminClient();
 
   // Direct event attachments.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { data: direct } = await (db as any)
     .from("attachments")
     .select("id, event_id, planning_item_id, planning_task_id, original_filename, mime_type, size_bytes, uploaded_at, uploaded_by")
@@ -82,7 +82,7 @@ export async function listEventAttachmentsRollup(eventId: string): Promise<Attac
     .is("deleted_at", null);
 
   // Planning items linked to the event.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { data: itemRows } = await (db as any)
     .from("planning_items")
     .select("id")
@@ -92,7 +92,7 @@ export async function listEventAttachmentsRollup(eventId: string): Promise<Attac
   // Attachments on those planning items.
   let itemAttachments: AttachmentRow[] = [];
   if (itemIds.length > 0) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const { data: items } = await (db as any)
       .from("attachments")
       .select("id, event_id, planning_item_id, planning_task_id, original_filename, mime_type, size_bytes, uploaded_at, uploaded_by")
@@ -105,14 +105,14 @@ export async function listEventAttachmentsRollup(eventId: string): Promise<Attac
   // Tasks under those items.
   let taskAttachments: AttachmentRow[] = [];
   if (itemIds.length > 0) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const { data: taskRows } = await (db as any)
       .from("planning_tasks")
       .select("id")
       .in("planning_item_id", itemIds);
     const taskIds = (taskRows ?? []).map((row: { id: string }) => row.id);
     if (taskIds.length > 0) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { data: tasks } = await (db as any)
         .from("attachments")
         .select("id, event_id, planning_item_id, planning_task_id, original_filename, mime_type, size_bytes, uploaded_at, uploaded_by")
@@ -139,7 +139,7 @@ export async function listEventAttachmentsRollup(eventId: string): Promise<Attac
 export async function listPlanningItemAttachmentsRollup(itemId: string): Promise<AttachmentSummary[]> {
   const db = createSupabaseAdminClient();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { data: direct } = await (db as any)
     .from("attachments")
     .select("id, event_id, planning_item_id, planning_task_id, original_filename, mime_type, size_bytes, uploaded_at, uploaded_by")
@@ -147,7 +147,7 @@ export async function listPlanningItemAttachmentsRollup(itemId: string): Promise
     .eq("upload_status", "uploaded")
     .is("deleted_at", null);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { data: taskRows } = await (db as any)
     .from("planning_tasks")
     .select("id")
@@ -156,7 +156,7 @@ export async function listPlanningItemAttachmentsRollup(itemId: string): Promise
 
   let taskAttachments: AttachmentRow[] = [];
   if (taskIds.length > 0) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const { data: tasks } = await (db as any)
       .from("attachments")
       .select("id, event_id, planning_item_id, planning_task_id, original_filename, mime_type, size_bytes, uploaded_at, uploaded_by")

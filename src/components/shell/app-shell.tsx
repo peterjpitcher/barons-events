@@ -82,7 +82,7 @@ type AppShellProps = {
 
 async function countPendingProposals(): Promise<number> {
   const db = createSupabaseAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { count } = await (db as any)
     .from("events")
     .select("id", { count: "exact", head: true })

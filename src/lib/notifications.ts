@@ -758,7 +758,7 @@ export async function sendPostEventDigestEmail(eventId: string) {
  */
 async function getSltRecipients(): Promise<string[]> {
   const db = createSupabaseAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { data, error } = await (db as any)
     .from("slt_members")
     .select("user_id, users:user_id(email, deactivated_at)");
@@ -812,7 +812,7 @@ export async function sendDebriefSubmittedToSltEmail(eventId: string): Promise<v
       if (debrief.food_takings != null) parts.push(`Food £${Number(debrief.food_takings).toFixed(2)}`);
       body.push(`Takings: ${parts.join(" · ")}.`);
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const d = debrief as any;
     if (typeof d.labour_hours === "number" && typeof d.labour_rate_gbp_at_submit === "number") {
       const cost = (d.labour_hours * d.labour_rate_gbp_at_submit).toFixed(2);

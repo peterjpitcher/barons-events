@@ -79,7 +79,7 @@ const createItemSchema = z.object({
 async function syncPlanningItemVenueAttachments(itemId: string, venueIds: string[]): Promise<void> {
   if (!itemId) return;
   const db = createSupabaseAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { error } = await (db as any).rpc("set_planning_item_venues", {
     p_item_id: itemId,
     p_venue_ids: venueIds

@@ -46,7 +46,7 @@ export default async function PlanningItemDetailPage({
   }));
 
   const planningVenues = venueRows.map((venue) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const category: "pub" | "cafe" = (venue as any).category === "cafe" ? "cafe" : "pub";
     return { id: venue.id, name: venue.name, category };
   });

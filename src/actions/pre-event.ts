@@ -58,7 +58,7 @@ export async function proposeEventAction(
 
   const idempotencyKey = (formData.get("idempotencyKey") as string) || randomUUID();
   const db = createSupabaseAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { data, error } = await (db as any).rpc("create_multi_venue_event_proposals", {
     p_payload: {
       created_by: user.id,
@@ -109,7 +109,7 @@ export async function preApproveEventAction(
   }
 
   const db = createSupabaseAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { error } = await (db as any).rpc("pre_approve_event_proposal", {
     p_event_id: parsed.data.eventId,
     p_admin_id: user.id
@@ -151,7 +151,7 @@ export async function preRejectEventAction(
   const db = createSupabaseAdminClient();
 
   // Insert the approvals row with the decision + reason, then transition status.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   await (db as any).from("approvals").insert({
     event_id: parsed.data.eventId,
     reviewer_id: user.id,
@@ -159,7 +159,7 @@ export async function preRejectEventAction(
     feedback_text: parsed.data.reason
   });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { error: statusError } = await (db as any)
     .from("events")
     .update({ status: "rejected" })

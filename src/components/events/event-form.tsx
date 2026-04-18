@@ -321,7 +321,7 @@ export function EventForm({
   // Hydrate from the full venues list so editing a multi-venue event doesn't
   // silently drop the extras on save (issue-log 2026-04-18 item 03).
   const initialEventVenueIds = (() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const venuesList = (defaultValues as any)?.venues as Array<{ id: string }> | undefined;
     if (Array.isArray(venuesList) && venuesList.length > 0) {
       return venuesList.map((v) => v.id);
@@ -725,7 +725,7 @@ export function EventForm({
               venues={venues.map((venue) => ({
                 id: venue.id,
                 name: venue.name,
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                 
                 category: (venue as any).category === "cafe" ? "cafe" : "pub"
               } satisfies VenueOption))}
               selectedIds={selectedVenueIds}

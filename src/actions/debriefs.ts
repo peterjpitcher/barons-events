@@ -113,7 +113,7 @@ export async function submitDebriefAction(
     // the debrief row so future rate changes don't rewrite historical cost.
     let labourRateGbpAtSubmit: number | null = null;
     if (values.labourHours !== undefined && values.labourHours !== null) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { data: rateRow } = await (supabase as any)
         .from("business_settings")
         .select("labour_rate_gbp")

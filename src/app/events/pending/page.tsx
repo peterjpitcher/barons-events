@@ -16,7 +16,7 @@ export default async function PendingProposalsPage() {
   if (user.role !== "administrator") redirect("/unauthorized");
 
   const db = createSupabaseAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { data: rows } = await (db as any)
     .from("events")
     .select(`

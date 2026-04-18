@@ -140,7 +140,7 @@ function toPlanningTask(task: RawPlanningTaskRow): PlanningTask {
     dependsOnTaskIds: Array.isArray(task?.dependencies)
       ? task.dependencies.map((d: RawDependencyRelation) => d.depends_on_task_id).filter(Boolean)
       : [],
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     notes: (task as any).notes ?? null,
     // Attachments default to empty; the detail loader populates them in a
     // second pass so the board query stays lean.
@@ -703,7 +703,7 @@ export async function getPlanningItemDetail(itemId: string): Promise<PlanningIte
   // Kept separate from the board loader so board rendering stays cheap.
   if (item.tasks.length > 0) {
     const taskIds = item.tasks.map((task) => task.id);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const { data: attachmentRows } = await (admin as any)
       .from("attachments")
       .select("id, planning_task_id, original_filename, mime_type, size_bytes")

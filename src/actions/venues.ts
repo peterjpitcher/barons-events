@@ -19,7 +19,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 async function queueCascadeBackfill(venueId: string): Promise<void> {
   try {
     const db = createSupabaseAdminClient();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const { error } = await (db as any)
       .from("pending_cascade_backfill")
       .insert({ venue_id: venueId });
@@ -141,7 +141,7 @@ export async function updateVenueAction(
   try {
     // Read existing category so we can detect a transition.
     const adminClient = createSupabaseAdminClient();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const { data: existing } = await (adminClient as any)
       .from("venues")
       .select("category")

@@ -129,7 +129,7 @@ export async function requestAttachmentUploadAction(
   const ext = safeExtensionFromMime(parsed.data.mimeType);
   const storagePath = `${attachmentId}.${ext}`;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { data: signed, error: signErr } = await (db as any)
     .storage.from("task-attachments")
     .createSignedUploadUrl(storagePath);
@@ -139,7 +139,7 @@ export async function requestAttachmentUploadAction(
     return { success: false, message: "Could not prepare upload." };
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const insertRow: any = {
     id: attachmentId,
     storage_path: storagePath,
@@ -153,7 +153,7 @@ export async function requestAttachmentUploadAction(
   else if (parsed.data.parentType === "planning_item") insertRow.planning_item_id = parsed.data.parentId;
   else insertRow.planning_task_id = parsed.data.parentId;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { error: insertErr } = await (db as any).from("attachments").insert(insertRow);
   if (insertErr) {
     console.error("requestAttachmentUploadAction insert failed:", insertErr);
@@ -182,7 +182,7 @@ export async function confirmAttachmentUploadAction(
   if (!parsed.success) return { success: false, message: "Missing attachment reference." };
 
   const db = createSupabaseAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { data: row, error: readErr } = await (db as any)
     .from("attachments")
     .select("id, uploaded_by, storage_path, mime_type, upload_status")
@@ -199,7 +199,7 @@ export async function confirmAttachmentUploadAction(
     return { success: true, message: "Already confirmed." };
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { data: existing, error: existErr } = await (db as any)
     .storage.from("task-attachments")
     .createSignedUrl(row.storage_path, 30);
@@ -218,7 +218,7 @@ export async function confirmAttachmentUploadAction(
       await (db as unknown as { storage: { from: (b: string) => { remove: (p: string[]) => Promise<unknown> } } })
         .storage.from("task-attachments")
         .remove([row.storage_path]);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       await (db as any)
         .from("attachments")
         .update({ upload_status: "failed", uploaded_at: new Date().toISOString() })
@@ -235,7 +235,7 @@ export async function confirmAttachmentUploadAction(
       await (db as unknown as { storage: { from: (b: string) => { remove: (p: string[]) => Promise<unknown> } } })
         .storage.from("task-attachments")
         .remove([row.storage_path]);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       await (db as any)
         .from("attachments")
         .update({ upload_status: "failed", uploaded_at: new Date().toISOString() })
@@ -250,7 +250,7 @@ export async function confirmAttachmentUploadAction(
     return { success: false, message: "Could not verify upload. Try again in a moment." };
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { error: updateErr } = await (db as any)
     .from("attachments")
     .update({ upload_status: "uploaded", uploaded_at: new Date().toISOString() })
@@ -285,7 +285,7 @@ export async function deleteAttachmentAction(
 
   const db = createSupabaseAdminClient();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { data: row } = await (db as any)
     .from("attachments")
     .select("uploaded_by")
@@ -297,7 +297,7 @@ export async function deleteAttachmentAction(
     return { success: false, message: "You cannot delete this attachment." };
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { error } = await (db as any)
     .from("attachments")
     .update({ deleted_at: new Date().toISOString() })
@@ -333,7 +333,7 @@ export async function getAttachmentUrlAction(
 
   const db = createSupabaseAdminClient();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { data: row, error } = await (db as any)
     .from("attachments")
     .select("storage_path, size_bytes, upload_status, deleted_at")
@@ -345,7 +345,7 @@ export async function getAttachmentUrlAction(
   if (row.upload_status !== "uploaded") return { success: false, message: "Upload still in progress." };
 
   const ttl = row.size_bytes <= 20_000_000 ? 300 : 1800;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { data: signed, error: signErr } = await (db as any)
     .storage.from("task-attachments")
     .createSignedUrl(row.storage_path, ttl);

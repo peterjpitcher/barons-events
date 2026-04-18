@@ -19,7 +19,7 @@ export async function generateSopChecklist(
   createdBy: string
 ): Promise<number> {
   const db = createSupabaseAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { data, error } = await (db as any).rpc("generate_sop_checklist_v2", {
     p_planning_item_id: planningItemId,
     p_target_date: targetDate,
@@ -123,7 +123,7 @@ export async function updateBlockedStatus(
  */
 export async function loadSopTemplate(): Promise<SopTemplateTree> {
   const db = createSupabaseAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { data, error } = await (db as any)
     .from("sop_sections")
     .select(`

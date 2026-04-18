@@ -27,7 +27,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 
   const db = createSupabaseAdminClient();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { data: stale, error } = await (db as any)
     .from("events")
     .select("id, created_by, start_at, status, updated_at")
@@ -49,14 +49,14 @@ export async function GET(request: Request): Promise<NextResponse> {
   let processed = 0;
   for (const row of staleRows) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       await (db as any).from("approvals").insert({
         event_id: row.id,
         decision: "rejected",
         feedback_text: "Proposal expired — not completed within 14 days of start date."
       });
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { error: updateError } = await (db as any)
         .from("events")
         .update({ status: "rejected" })

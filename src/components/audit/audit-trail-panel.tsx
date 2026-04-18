@@ -37,7 +37,7 @@ export async function AuditTrailPanel({ entityType, entityId, title = "Audit tra
   const actorNames = new Map<string, string>();
   if (actorIds.length > 0) {
     const db = createSupabaseAdminClient();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const { data } = await (db as any)
       .from("users")
       .select("id, full_name, email")

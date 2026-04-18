@@ -30,7 +30,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   // doesn't expose FOR UPDATE SKIP LOCKED directly; we accept a small
   // race window (tolerable because the downstream INSERTs are guarded by
   // a unique partial index on (parent_task_id, cascade_venue_id)).
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { data: candidates, error: selErr } = await (db as any)
     .from("pending_cascade_backfill")
     .select("id, venue_id, attempt_count")
@@ -53,7 +53,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   type Candidate = { id: string; venue_id: string; attempt_count: number };
   for (const row of (candidates ?? []) as Candidate[]) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { error: lockErr } = await (db as any)
         .from("pending_cascade_backfill")
         .update({
@@ -67,7 +67,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       if (lockErr) continue; // another worker got it first
 
       // Load venue category.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { data: venue } = await (db as any)
         .from("venues")
         .select("id, name, category, default_manager_responsible_id")
@@ -76,7 +76,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       if (!venue) throw new Error("Venue not found");
 
       // Find open masters whose template filter matches this venue.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { data: masters } = await (db as any)
         .from("planning_tasks")
         .select(
@@ -86,7 +86,7 @@ export async function GET(request: Request): Promise<NextResponse> {
         .not("cascade_sop_template_id", "is", null)
         .is("parent_task_id", null);
       if (!masters || masters.length === 0) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         await (db as any)
           .from("pending_cascade_backfill")
           .update({ processed_at: new Date().toISOString() })
@@ -96,31 +96,31 @@ export async function GET(request: Request): Promise<NextResponse> {
       }
 
       // Filter masters by template's venue_filter matching venue.category.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const templateIds = masters.map((m: any) => m.cascade_sop_template_id).filter(Boolean);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { data: templates } = await (db as any)
         .from("sop_task_templates")
         .select("id, venue_filter")
         .in("id", templateIds);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const matchingTemplateIds = new Set(
         (templates ?? [])
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+           
           .filter((t: any) => t.venue_filter === "all" || t.venue_filter === venue.category)
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+           
           .map((t: any) => t.id)
       );
 
       // For each matching master, spawn a child for this venue if one is missing.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       for (const master of masters as any[]) {
         if (!matchingTemplateIds.has(master.cascade_sop_template_id)) continue;
 
         // Skip the venue if no default manager.
         if (!venue.default_manager_responsible_id) continue;
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const { data: existingChild } = await (db as any)
           .from("planning_tasks")
           .select("id")
@@ -130,10 +130,10 @@ export async function GET(request: Request): Promise<NextResponse> {
         if (existingChild) continue;
 
         // Set the bypass flag for the guard trigger.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         await (db as any).rpc("set_config", { parameter: "app.cascade_internal", value: "on", is_local: true }).catch(() => {});
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const { data: inserted, error: insertErr } = await (db as any)
           .from("planning_tasks")
           .insert({
@@ -157,7 +157,7 @@ export async function GET(request: Request): Promise<NextResponse> {
           continue;
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         await (db as any).from("audit_log").insert({
           entity: "planning_task",
           entity_id: inserted.id,
@@ -172,7 +172,7 @@ export async function GET(request: Request): Promise<NextResponse> {
         });
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       await (db as any)
         .from("pending_cascade_backfill")
         .update({ processed_at: new Date().toISOString(), error: null })
@@ -182,7 +182,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       failed++;
       const message = err instanceof Error ? err.message : "Unknown error";
       const nextAttempt = new Date(Date.now() + 5 * 60 * 1000 * Math.pow(2, row.attempt_count)).toISOString();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       await (db as any)
         .from("pending_cascade_backfill")
         .update({

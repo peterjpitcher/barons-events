@@ -9,7 +9,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 // Form accepts a slightly wider defaults shape (with labour_hours) than
 // getEventDetail currently returns; a cast keeps the page unchanged while
 // the server action handles the extra field independently.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 type DebriefForm_Defaults = any;
 
 export default async function DebriefPage({ params }: { params: Promise<{ eventId: string }> }) {
@@ -35,7 +35,7 @@ export default async function DebriefPage({ params }: { params: Promise<{ eventI
   // Load the current labour rate so the form can show live cost. Fallback
   // to the spec default if the row is missing for any reason.
   const db = createSupabaseAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { data: rateRow } = await (db as any)
     .from("business_settings")
     .select("labour_rate_gbp")

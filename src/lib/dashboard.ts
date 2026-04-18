@@ -160,7 +160,7 @@ async function fetchUserPlanningTasks(user: AppUser, today: string): Promise<Tod
     return true;
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase nested select types are complex
+   
   function mapTask(task: any, ownerId: string | null): void {
     if (!task || task.status !== "open") return;
     if (taskMap.has(task.id)) return;
@@ -187,7 +187,7 @@ async function fetchUserPlanningTasks(user: AppUser, today: string): Promise<Tod
 
   for (const row of assignedTasks ?? []) {
     // Supabase nested joins may return arrays; extract first element
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase nested join types
+     
     const rawTask = row.planning_tasks as any;
     const task = Array.isArray(rawTask) ? rawTask[0] : rawTask;
     const item = task?.planning_items;
@@ -196,7 +196,7 @@ async function fetchUserPlanningTasks(user: AppUser, today: string): Promise<Tod
   }
 
   for (const rawTask of legacyTasks ?? []) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase nested join types
+     
     const task = rawTask as any;
     const item = task.planning_items;
     const planningItem = Array.isArray(item) ? item[0] : item;
@@ -222,7 +222,7 @@ async function fetchReviewQueueTodos(user: AppUser, today: string): Promise<Todo
   const { data, error } = await query;
   if (error) throw error;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase nested join types
+   
   return (data ?? []).map((event: any) => {
     const startDate = event.start_at?.slice(0, 10) ?? null;
     const venue = Array.isArray(event.venues) ? event.venues[0] : event.venues;
@@ -254,7 +254,7 @@ async function fetchRevisionTodos(user: AppUser, today: string): Promise<TodoIte
 
   if (error) throw error;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase nested join types
+   
   return (data ?? []).map((event: any) => {
     const startDate = event.start_at?.slice(0, 10) ?? null;
     const venue = Array.isArray(event.venues) ? event.venues[0] : event.venues;
@@ -294,11 +294,11 @@ async function fetchDebriefTodos(user: AppUser, today: string): Promise<TodoItem
 
   // Filter out events that actually have debriefs (Supabase anti-join workaround)
   const eventsWithoutDebrief = (data ?? []).filter(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase nested types
+     
     (event: any) => !event.debriefs || event.debriefs.length === 0
   );
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase nested types
+   
   return eventsWithoutDebrief.map((event: any) => {
     const endDate = event.end_at?.slice(0, 10) ?? null;
     return {
@@ -346,9 +346,9 @@ export async function getDebriefsDue(user: AppUser): Promise<Array<{
   if (error) throw error;
 
   return (data ?? [])
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase nested types
+     
     .filter((e: any) => !e.debriefs || e.debriefs.length === 0)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase nested types
+     
     .map((e: any) => ({
       id: e.id,
       title: e.title,
