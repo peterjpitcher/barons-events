@@ -5,11 +5,12 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ChevronDown, ChevronRight, User, Users } from "lucide-react";
 import { togglePlanningTaskStatusAction } from "@/actions/planning";
-import type { PlanningPerson, TodoAlertFilter } from "@/lib/planning/types";
+import type { PlanningPerson, PlanningTaskStatus, TodoAlertFilter } from "@/lib/planning/types";
 import type { TodoItem, TodoSource, TodoUrgency } from "./todo-item-types";
 import { UrgencySection } from "./urgency-section";
 import { FilterTabs, type FilterTab } from "./filter-tabs";
 import { TodoRow } from "./todo-row";
+import { SopTaskRow } from "@/components/planning/sop-task-row";
 
 // ---------------------------------------------------------------------------
 // Props (discriminated union)
@@ -345,31 +346,49 @@ function PlanningMode({
   }
 
   function handleToggle(planningTaskId: string): void {
+    handleStatusChange(planningTaskId, "done");
+  }
+
+  /**
+   * Full-status updater used by SopTaskRow. Done / Not required both hide
+   * the row (optimistic); reopening (status = open) just refreshes.
+   */
+  function handleStatusChange(planningTaskId: string, status: PlanningTaskStatus): void {
     const item = items.find((i) => i.planningTaskId === planningTaskId);
     if (!item) return;
 
-    setOptimisticallyDone((current) => new Set(current).add(item.id));
+    const hidesRow = status === "done" || status === "not_required";
+    if (hidesRow) {
+      setOptimisticallyDone((current) => new Set(current).add(item.id));
+    }
 
     startTransition(async () => {
       try {
-        const result = await togglePlanningTaskStatusAction({ taskId: planningTaskId, status: "done" });
+        const result = await togglePlanningTaskStatusAction({ taskId: planningTaskId, status });
         if (!result.success) {
+          if (hidesRow) {
+            setOptimisticallyDone((current) => {
+              const next = new Set(current);
+              next.delete(item.id);
+              return next;
+            });
+          }
+          toast.error(result.message ?? "Could not update task.");
+          return;
+        }
+        if (status === "done") toast.success("Task completed.");
+        else if (status === "not_required") toast.success("Task marked not required.");
+        else toast.success("Task reopened.");
+        router.refresh();
+      } catch {
+        if (hidesRow) {
           setOptimisticallyDone((current) => {
             const next = new Set(current);
             next.delete(item.id);
             return next;
           });
-          toast.error(result.message ?? "Could not mark task as done.");
-          return;
         }
-        router.refresh();
-      } catch {
-        setOptimisticallyDone((current) => {
-          const next = new Set(current);
-          next.delete(item.id);
-          return next;
-        });
-        toast.error("Could not mark task as done.");
+        toast.error("Could not update task.");
       }
     });
   }
@@ -468,16 +487,36 @@ function PlanningMode({
 
                 {!isCollapsed && (
                   <div className="mt-1.5 space-y-1.5">
-                    {sortedItems.map((item) => (
-                      <TodoRow
-                        key={item.id}
-                        item={item}
-                        onToggle={handleToggle}
-                        onViewClick={onOpenPlanningItemId ? handleViewClick : undefined}
-                        isOptimisticallyDone={optimisticallyDone.has(item.id)}
-                        isPending={isPending}
-                      />
-                    ))}
+                    {sortedItems.map((item) => {
+                      if (optimisticallyDone.has(item.id)) return null;
+                      // Rich row: same experience as the planning-item modal.
+                      // Falls back to the slim TodoRow when the transform
+                      // didn't attach the underlying PlanningTask (e.g. for
+                      // review/debrief sources in future).
+                      if (item.task && item.siblings) {
+                        return (
+                          <SopTaskRow
+                            key={item.id}
+                            task={item.task}
+                            allTasks={item.siblings}
+                            currentUserId={currentUserId}
+                            users={users}
+                            onStatusChange={handleStatusChange}
+                            onChanged={() => router.refresh()}
+                          />
+                        );
+                      }
+                      return (
+                        <TodoRow
+                          key={item.id}
+                          item={item}
+                          onToggle={handleToggle}
+                          onViewClick={onOpenPlanningItemId ? handleViewClick : undefined}
+                          isOptimisticallyDone={false}
+                          isPending={isPending}
+                        />
+                      );
+                    })}
                   </div>
                 )}
               </article>

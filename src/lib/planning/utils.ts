@@ -310,6 +310,11 @@ export function planningItemsToTodoItems(
         planningItemId: item.id,
         assigneeId: task.assigneeId ?? undefined,
         assigneeName: task.assigneeName ?? undefined,
+        // Carry the full task + siblings so the rich SopTaskRow can render
+        // notes, attachments, dependency labels, and the status dropdown
+        // without re-fetching anything.
+        task,
+        siblings: item.tasks,
       });
     }
   }
