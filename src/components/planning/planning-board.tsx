@@ -107,7 +107,6 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
   const router = useRouter();
   const [viewMode, setViewMode] = useState<ViewMode>("board");
   const [isCreateModalOpen, setCreateModalOpen] = useState(false);
-  const [activeItemId, setActiveItemId] = useState<string | null>(null);
   const [showLater, setShowLater] = useState(false);
   const [search, setSearch] = useState("");
   const [venueFilter, setVenueFilter] = useState("");
@@ -247,10 +246,6 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
   const hasPastItems = combinedByBucket.past.length > 0;
   const baseBuckets = hasPastItems ? CORE_BUCKETS : CORE_BUCKETS.slice(1);
   const visibleBuckets = showLater ? [...baseBuckets, BUCKETS[4]] : baseBuckets;
-  const activeItem = useMemo(
-    () => data.planningItems.find((item) => item.id === activeItemId) ?? null,
-    [activeItemId, data.planningItems]
-  );
 
   const combinedEntries = useMemo<PlanningViewEntry[]>(() => {
     const sourceOrder: Record<string, number> = { planning: 0, event: 1, inspiration: 2 };
@@ -363,12 +358,6 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
       return left.title.localeCompare(right.title);
     });
   }, [calendarSource, search, venueFilter, eventVisibility, showDoneCancelled]);
-
-  useEffect(() => {
-    if (activeItemId && !activeItem) {
-      setActiveItemId(null);
-    }
-  }, [activeItem, activeItemId]);
 
   function switchView(mode: ViewMode): void {
     setViewMode(mode);
@@ -536,7 +525,7 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
                           venues={venues}
                           onChanged={refreshBoard}
                           compact
-                          onOpenDetails={canEditItem ? (planningItem) => setActiveItemId(planningItem.id) : undefined}
+                          onOpenDetails={canEditItem ? (planningItem) => router.push(`/planning/${planningItem.id}`) : undefined}
                           currentUserId={currentUserId}
                         />
                       );
@@ -580,7 +569,7 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
             today={data.today}
             entries={calendarCombinedEntries}
             onOpenPlanningItem={userRole && canManageOwnPlanningItems(userRole)
-              ? (item) => setActiveItemId(item.id)
+              ? (item) => router.push(`/planning/${item.id}`)
               : undefined}
             onMovePlanningItem={userRole && canManageAllPlanning(userRole)
               ? movePlanningItemInCalendar
@@ -594,7 +583,7 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
           today={data.today}
           entries={combinedEntries}
           onOpenPlanningItem={userRole && canManageOwnPlanningItems(userRole)
-            ? (item) => setActiveItemId(item.id)
+            ? (item) => router.push(`/planning/${item.id}`)
             : undefined}
         />
       ) : null}
@@ -606,7 +595,7 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
           currentUserId={currentUserId ?? ""}
           users={data.users}
           alertFilter={todoAlertFilter}
-          onOpenPlanningItemId={(id) => setActiveItemId(id)}
+          onOpenPlanningItemId={(id) => router.push(`/planning/${id}`)}
         />
       ) : null}
 
@@ -627,23 +616,6 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
             refreshBoard();
           }}
         />
-      </PlanningModal>
-
-      <PlanningModal
-        open={Boolean(activeItem)}
-        onClose={() => setActiveItemId(null)}
-        title={activeItem ? activeItem.title : "Planning item"}
-        description="Edit details, move dates, and manage todo tasks."
-      >
-        {activeItem ? (
-          <PlanningItemCard
-            item={activeItem}
-            users={data.users}
-            venues={venues}
-            onChanged={refreshBoard}
-            currentUserId={currentUserId}
-          />
-        ) : null}
       </PlanningModal>
 
       {isPending ? <p className="text-sm text-subtle">Saving planning updates…</p> : null}
