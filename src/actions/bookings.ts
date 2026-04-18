@@ -29,6 +29,16 @@ export type CreateBookingInput = z.infer<typeof createBookingSchema>;
 
 export type CreateBookingResult =
   | { success: true; bookingId: string }
+  | {
+      success: false;
+      error: "existing_booking";
+      /** ID of the customer's existing confirmed booking for this event. */
+      existingBookingId: string;
+      /** The ticket count already on record. */
+      existingTicketCount: number;
+      /** The ticket count the user asked for this time. */
+      requestedTicketCount: number;
+    }
   | { success: false; error: string };
 
 export async function createBookingAction(
@@ -67,6 +77,46 @@ export async function createBookingAction(
     return { success: false, error: "Invalid mobile number" };
   }
   const normalisedMobile = parsePhoneNumber(data.mobile, "GB").format("E.164");
+
+  // Dedup: if this mobile already has a confirmed booking for this event,
+  // surface the existing booking so the UI can prompt for update rather than
+  // silently creating a duplicate row. Matches peter's 2026-04-18 decision.
+  //
+  // If the dedup check itself fails (admin client can't init, query errors,
+  // etc.) we swallow the error and proceed to the normal insert path — the
+  // booking flow must not be blocked by a best-effort pre-check.
+  try {
+    const db = createSupabaseAdminClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: customer } = await (db as any)
+      .from("customers")
+      .select("id")
+      .eq("mobile", normalisedMobile)
+      .maybeSingle();
+
+    if (customer?.id) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: existingBooking } = await (db as any)
+        .from("event_bookings")
+        .select("id, ticket_count, status")
+        .eq("event_id", data.eventId)
+        .eq("customer_id", customer.id)
+        .eq("status", "confirmed")
+        .maybeSingle();
+
+      if (existingBooking?.id) {
+        return {
+          success: false,
+          error: "existing_booking",
+          existingBookingId: existingBooking.id,
+          existingTicketCount: existingBooking.ticket_count,
+          requestedTicketCount: data.ticketCount
+        };
+      }
+    }
+  } catch (dedupError) {
+    console.warn("createBookingAction dedup pre-check failed:", dedupError);
+  }
 
   // Atomic capacity check + insert via Postgres RPC
   let rpcResult;
@@ -135,6 +185,113 @@ export async function createBookingAction(
   }
 
   return { success: true, bookingId };
+}
+
+const updateExistingBookingSchema = z.object({
+  bookingId: z.string().uuid(),
+  ticketCount: z.number().int().min(1).max(50)
+});
+
+export type UpdateExistingBookingResult =
+  | { success: true; bookingId: string; ticketCount: number }
+  | { success: false; error: string };
+
+/**
+ * Update an existing confirmed booking's ticket count. Called from the
+ * public booking form when the user confirms the "you already have a
+ * booking for this event — update it?" prompt returned by
+ * createBookingAction.
+ *
+ * Capacity is checked in the app layer (current confirmed ticket_count sum
+ * + delta must fit within the event's total_capacity). A small race
+ * window exists — acceptable for the volume of public bookings we see;
+ * can be tightened with a DB-side RPC if contention becomes an issue.
+ */
+export async function updateExistingBookingAction(
+  input: z.infer<typeof updateExistingBookingSchema>
+): Promise<UpdateExistingBookingResult> {
+  const parsed = updateExistingBookingSchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  }
+
+  const db = createSupabaseAdminClient();
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: booking, error: bookingError } = await (db as any)
+    .from("event_bookings")
+    .select("id, event_id, customer_id, ticket_count, status")
+    .eq("id", parsed.data.bookingId)
+    .maybeSingle();
+
+  if (bookingError || !booking) {
+    return { success: false, error: "Booking not found." };
+  }
+  if (booking.status !== "confirmed") {
+    return { success: false, error: "Cannot update a cancelled booking." };
+  }
+
+  const delta = parsed.data.ticketCount - (booking.ticket_count as number);
+
+  if (delta > 0) {
+    // Need to check capacity before growing the booking.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: eventRow } = await (db as any)
+      .from("events")
+      .select("total_capacity")
+      .eq("id", booking.event_id)
+      .maybeSingle();
+
+    if (eventRow?.total_capacity != null) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: confirmed } = await (db as any)
+        .from("event_bookings")
+        .select("ticket_count")
+        .eq("event_id", booking.event_id)
+        .eq("status", "confirmed");
+      const current = ((confirmed ?? []) as Array<{ ticket_count: number }>).reduce(
+        (sum, row) => sum + (row.ticket_count ?? 0),
+        0
+      );
+      if (current + delta > eventRow.total_capacity) {
+        return { success: false, error: "sold_out" };
+      }
+    }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error: updateError } = await (db as any)
+    .from("event_bookings")
+    .update({ ticket_count: parsed.data.ticketCount })
+    .eq("id", parsed.data.bookingId);
+
+  if (updateError) {
+    console.error("updateExistingBookingAction update failed:", updateError);
+    return { success: false, error: "Could not update booking." };
+  }
+
+  await recordAuditLogEntry({
+    entity: "event",
+    entityId: booking.event_id,
+    action: "booking.updated",
+    meta: {
+      booking_id: parsed.data.bookingId,
+      previous_ticket_count: booking.ticket_count,
+      new_ticket_count: parsed.data.ticketCount
+    },
+    actorId: null
+  });
+
+  // Fire a confirmation SMS for the updated count — fire-and-forget.
+  sendBookingConfirmationSms(parsed.data.bookingId).catch((err) => {
+    console.warn("Failed to send update confirmation SMS:", err);
+  });
+
+  return {
+    success: true,
+    bookingId: parsed.data.bookingId,
+    ticketCount: parsed.data.ticketCount
+  };
 }
 
 export type CancelBookingResult = { success: boolean; error?: string };

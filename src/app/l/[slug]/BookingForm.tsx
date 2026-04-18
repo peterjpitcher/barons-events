@@ -1,10 +1,16 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { createBookingAction } from "@/actions/bookings";
+import { createBookingAction, updateExistingBookingAction } from "@/actions/bookings";
 import type { CreateBookingInput } from "@/actions/bookings";
 import { MARKETING_CONSENT_WORDING } from "@/lib/booking-consent";
 import { TurnstileWidget } from "@/components/turnstile-widget";
+
+type ExistingBookingPrompt = {
+  bookingId: string;
+  existingTicketCount: number;
+  requestedTicketCount: number;
+};
 
 interface BookingFormProps {
   eventId: string;
@@ -24,6 +30,7 @@ export function BookingForm({ eventId, maxTickets, isSoldOut, nonce }: BookingFo
   const [success, setSuccess] = useState(false);
   const [bookedMobile, setBookedMobile] = useState("");
   const [marketingOptIn, setMarketingOptIn] = useState(false);
+  const [existingPrompt, setExistingPrompt] = useState<ExistingBookingPrompt | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
   if (isSoldOut) {
@@ -71,6 +78,16 @@ export function BookingForm({ eventId, maxTickets, isSoldOut, nonce }: BookingFo
     setLoading(false);
 
     if (!result.success) {
+      if (result.error === "existing_booking" && "existingBookingId" in result) {
+        // Public-flow dedup: surface an update prompt with the existing and
+        // requested counts side-by-side so the user can confirm the change.
+        setExistingPrompt({
+          bookingId: result.existingBookingId,
+          existingTicketCount: result.existingTicketCount,
+          requestedTicketCount: result.requestedTicketCount
+        });
+        return;
+      }
       if (result.error === "sold_out") {
         setError("Sorry, this event is now fully booked.");
       } else if (result.error === "rate_limited") {
@@ -87,6 +104,79 @@ export function BookingForm({ eventId, maxTickets, isSoldOut, nonce }: BookingFo
 
     setBookedMobile(mobile.trim());
     setSuccess(true);
+  }
+
+  async function handleConfirmUpdate() {
+    if (!existingPrompt) return;
+    setLoading(true);
+    setError(null);
+    const result = await updateExistingBookingAction({
+      bookingId: existingPrompt.bookingId,
+      ticketCount: existingPrompt.requestedTicketCount
+    });
+    setLoading(false);
+    if (!result.success) {
+      if (result.error === "sold_out") {
+        setError("Sorry, there aren't enough seats left to increase this booking.");
+      } else {
+        setError(result.error || "Could not update your booking.");
+      }
+      return;
+    }
+    setExistingPrompt(null);
+    setBookedMobile(mobile.trim());
+    setSuccess(true);
+  }
+
+  if (existingPrompt) {
+    const { existingTicketCount, requestedTicketCount } = existingPrompt;
+    const isSame = existingTicketCount === requestedTicketCount;
+    return (
+      <div className="rounded-lg bg-white border border-[#cbd5db] p-6 space-y-4">
+        <div>
+          <p className="text-lg font-semibold text-[#273640]">You already have a booking</p>
+          {isSame ? (
+            <p className="mt-1 text-sm text-[#637c8c]">
+              We already have a booking for you on this event for{" "}
+              <strong>{existingTicketCount}</strong>{" "}
+              {existingTicketCount === 1 ? "person" : "people"}. Nothing to update.
+            </p>
+          ) : (
+            <p className="mt-1 text-sm text-[#637c8c]">
+              We already have a booking for you on this event for{" "}
+              <strong>{existingTicketCount}</strong>{" "}
+              {existingTicketCount === 1 ? "person" : "people"}. Would you like to change it to{" "}
+              <strong>{requestedTicketCount}</strong>{" "}
+              {requestedTicketCount === 1 ? "person" : "people"}?
+            </p>
+          )}
+        </div>
+        {error ? <p className="text-sm text-red-600">{error}</p> : null}
+        <div className="flex flex-wrap gap-2">
+          {!isSame ? (
+            <button
+              type="button"
+              disabled={loading}
+              onClick={handleConfirmUpdate}
+              className="rounded-full bg-[#273640] px-4 py-2 text-sm font-semibold text-white hover:bg-[#637c8c] disabled:opacity-60"
+            >
+              {loading ? "Updating…" : `Yes, update to ${requestedTicketCount}`}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() => {
+              setExistingPrompt(null);
+              setError(null);
+            }}
+            className="rounded-full border border-[#cbd5db] px-4 py-2 text-sm font-semibold text-[#273640] hover:bg-[#f1f4f6]"
+          >
+            Keep existing booking
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (

@@ -62,6 +62,24 @@ describe("createBookingAction", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockVerifyTurnstile.mockResolvedValue(true);
+
+    // Default admin client mock — returns "no existing customer / booking" so
+    // the dedup short-circuit doesn't trigger. Tests that exercise the dedup
+    // path override this with a mock that returns existing data.
+    const defaultSingle = vi.fn().mockResolvedValue({ data: null, error: null });
+    const defaultEq = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({ maybeSingle: defaultSingle }),
+        maybeSingle: defaultSingle
+      }),
+      maybeSingle: defaultSingle
+    });
+    const defaultSelect = vi.fn().mockReturnValue({ eq: defaultEq });
+    const defaultFrom = vi.fn().mockReturnValue({
+      select: defaultSelect,
+      update: vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({ error: null }) })
+    });
+    mockCreateSupabaseAdminClient.mockReturnValue({ from: defaultFrom } as never);
   });
 
   it("should return error for invalid mobile number", async () => {
@@ -186,10 +204,25 @@ describe("customer upsert", () => {
     const selectMock = vi.fn().mockReturnValue({ single: singleMock });
     const upsertMock = vi.fn().mockReturnValue({ select: selectMock });
 
+    // Dedup pre-check stubs — createBookingAction now queries customers and
+    // event_bookings before inserting so these tests also need a "no
+    // existing customer / booking" fallback. Returns null rows so the
+    // dedup short-circuit doesn't fire.
+    const dedupMaybeSingle = vi.fn().mockResolvedValue({ data: null, error: null });
+    const dedupCustomerEq = vi.fn().mockReturnValue({ maybeSingle: dedupMaybeSingle });
+    const dedupCustomerSelect = vi.fn().mockReturnValue({ eq: dedupCustomerEq });
+    const dedupBookingEq = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({ maybeSingle: dedupMaybeSingle })
+      })
+    });
+    const dedupBookingSelect = vi.fn().mockReturnValue({ eq: dedupBookingEq });
+
     const db = {
       from: vi.fn((table: string) => {
         if (table === "customers") {
           return {
+            select: dedupCustomerSelect,
             upsert: upsertMock,
             update: updateMock,
           };
@@ -199,6 +232,7 @@ describe("customer upsert", () => {
         }
         if (table === "event_bookings") {
           return {
+            select: dedupBookingSelect,
             update: vi.fn().mockReturnValue({
               eq: vi.fn().mockResolvedValue({ error: null }),
             }),
