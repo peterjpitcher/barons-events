@@ -188,7 +188,44 @@ export function SopTaskRow({ task, allTasks, users, onStatusChange, onChanged }:
 
       {/* Content area */}
       <div className="min-w-0 flex-1">
-        <span className={cn("text-sm", titleStyle)}>{task.title}</span>
+        <span className="flex flex-wrap items-baseline gap-x-2 text-sm">
+          <span className={cn(titleStyle)}>{task.title}</span>
+          {notesOpen ? (
+            <input
+              type="text"
+              autoFocus
+              value={notesDraft}
+              maxLength={500}
+              disabled={savingNotes}
+              placeholder="Add a short note (press Enter to save)"
+              aria-label={`Edit notes for ${task.title}`}
+              className="min-w-0 flex-1 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-0.5 text-xs text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
+              onChange={(event) => setNotesDraft(event.target.value.replace(/[\r\n]+/g, " "))}
+              onBlur={() => {
+                // Save if dirty, otherwise just close.
+                if (notesDraft !== (task.notes ?? "")) {
+                  void handleSaveNotes();
+                } else {
+                  setNotesOpen(false);
+                }
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void handleSaveNotes();
+                } else if (event.key === "Escape") {
+                  event.preventDefault();
+                  setNotesOpen(false);
+                  setNotesDraft(task.notes ?? "");
+                }
+              }}
+            />
+          ) : hasNotes ? (
+            <span className="min-w-0 flex-1 truncate text-xs text-subtle">
+              — {task.notes}
+            </span>
+          ) : null}
+        </span>
 
         {isBlocked && (() => {
           const blockerNames = task.dependsOnTaskIds
@@ -383,45 +420,6 @@ export function SopTaskRow({ task, allTasks, users, onStatusChange, onChanged }:
       )}
     </div>
 
-    {/* Inline notes editor — toggled by the speech-bubble icon above */}
-    {notesOpen ? (
-      <div className="mt-2 space-y-1.5">
-        <textarea
-          className="w-full resize-y rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1.5 text-sm text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
-          rows={4}
-          maxLength={10_000}
-          placeholder="Add any context, links, or reminders for this task"
-          value={notesDraft}
-          disabled={savingNotes}
-          onChange={(event) => setNotesDraft(event.target.value)}
-        />
-        <div className="flex justify-end gap-1">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            disabled={savingNotes}
-            onClick={() => {
-              setNotesOpen(false);
-              setNotesDraft(task.notes ?? "");
-            }}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            variant="primary"
-            size="sm"
-            disabled={savingNotes || notesDraft === (task.notes ?? "")}
-            onClick={() => void handleSaveNotes()}
-          >
-            {savingNotes ? "Saving…" : "Save"}
-          </Button>
-        </div>
-      </div>
-    ) : hasNotes ? (
-      <p className="mt-1.5 whitespace-pre-wrap break-words text-xs text-subtle">{task.notes}</p>
-    ) : null}
     </div>
   );
 }

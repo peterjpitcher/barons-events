@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Plus, Trash2, MessageSquare } from "lucide-react";
+import { Plus, Trash2, Pencil } from "lucide-react";
 import {
   createPlanningTaskAction,
   deletePlanningTaskAction,
@@ -164,13 +164,64 @@ export function PlanningTaskList({ itemId, tasks, users, onChanged }: PlanningTa
                     <option value="done">✓ Done</option>
                     <option value="not_required">— Not required</option>
                   </Select>
-                  <span className="min-w-0">
-                    <span className={titleClass}>{task.title}</span>
-                    {task.status === "not_required" ? (
-                      <span className="ml-1 text-[10px] italic text-subtle">(not required)</span>
-                    ) : null}
-                    <br />
-                    <span className={`text-xs ${isOverdue ? "text-[var(--color-danger)]" : "text-subtle"}`}>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex flex-wrap items-baseline gap-x-2">
+                      <span className={titleClass}>{task.title}</span>
+                      {task.status === "not_required" ? (
+                        <span className="text-[10px] italic text-subtle">(not required)</span>
+                      ) : null}
+                      {notesExpanded ? (
+                        <input
+                          type="text"
+                          autoFocus
+                          value={notesDraft}
+                          maxLength={500}
+                          disabled={isPending}
+                          placeholder="Add a short note (press Enter to save)"
+                          aria-label={`Edit notes for ${task.title}`}
+                          className="min-w-0 flex-1 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-0.5 text-xs text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
+                          onChange={(event) =>
+                            setNotesDraft(event.target.value.replace(/[\r\n]+/g, " "))
+                          }
+                          onBlur={() => {
+                            if (notesDraft !== (task.notes ?? "")) {
+                              runTaskAction(
+                                () =>
+                                  updatePlanningTaskAction({
+                                    taskId: task.id,
+                                    notes: notesDraft.trim().length ? notesDraft : null
+                                  }),
+                                "Notes saved."
+                              );
+                            }
+                            setExpandedNotesTaskId(null);
+                            setNotesDraft("");
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              runTaskAction(
+                                () =>
+                                  updatePlanningTaskAction({
+                                    taskId: task.id,
+                                    notes: notesDraft.trim().length ? notesDraft : null
+                                  }),
+                                "Notes saved."
+                              );
+                              setExpandedNotesTaskId(null);
+                              setNotesDraft("");
+                            } else if (event.key === "Escape") {
+                              event.preventDefault();
+                              setExpandedNotesTaskId(null);
+                              setNotesDraft("");
+                            }
+                          }}
+                        />
+                      ) : hasNotes ? (
+                        <span className="min-w-0 flex-1 truncate text-xs text-subtle">— {task.notes}</span>
+                      ) : null}
+                    </span>
+                    <span className={`block text-xs ${isOverdue ? "text-[var(--color-danger)]" : "text-subtle"}`}>
                       {task.assigneeName} · due {formatDueDate(task.dueDate)}
                     </span>
                   </span>
@@ -180,7 +231,7 @@ export function PlanningTaskList({ itemId, tasks, users, onChanged }: PlanningTa
                     type="button"
                     variant="ghost"
                     size="sm"
-                    aria-label={notesExpanded ? "Hide notes" : hasNotes ? "Show notes" : "Add notes"}
+                    aria-label={hasNotes ? "Edit notes" : "Add notes"}
                     aria-pressed={notesExpanded}
                     disabled={isPending}
                     onClick={() => {
@@ -192,10 +243,10 @@ export function PlanningTaskList({ itemId, tasks, users, onChanged }: PlanningTa
                         setNotesDraft(task.notes ?? "");
                       }
                     }}
-                    title={hasNotes ? "Notes" : "Add notes"}
+                    title={hasNotes ? "Edit notes" : "Add notes"}
                   >
-                    <MessageSquare
-                      className={`h-4 w-4 ${hasNotes ? "text-[var(--color-primary)]" : ""}`}
+                    <Pencil
+                      className={`h-4 w-4 ${hasNotes ? "text-[var(--color-primary-700)]" : ""}`}
                       aria-hidden="true"
                     />
                   </Button>
@@ -217,53 +268,6 @@ export function PlanningTaskList({ itemId, tasks, users, onChanged }: PlanningTa
                 </div>
               </div>
 
-              {notesExpanded ? (
-                <div className="mt-2 space-y-1.5">
-                  <textarea
-                    className="w-full resize-y rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1.5 text-sm text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
-                    rows={4}
-                    maxLength={10_000}
-                    placeholder="Add any context, links, or reminders for this task"
-                    value={notesDraft}
-                    disabled={isPending}
-                    onChange={(event) => setNotesDraft(event.target.value)}
-                  />
-                  <div className="flex justify-end gap-1">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      disabled={isPending}
-                      onClick={() => {
-                        setExpandedNotesTaskId(null);
-                        setNotesDraft("");
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="primary"
-                      size="sm"
-                      disabled={isPending || notesDraft === (task.notes ?? "")}
-                      onClick={() =>
-                        runTaskAction(
-                          () =>
-                            updatePlanningTaskAction({
-                              taskId: task.id,
-                              notes: notesDraft.trim().length ? notesDraft : null
-                            }),
-                          "Notes saved."
-                        )
-                      }
-                    >
-                      Save
-                    </Button>
-                  </div>
-                </div>
-              ) : hasNotes ? (
-                <p className="mt-1.5 whitespace-pre-wrap break-words text-xs text-subtle">{task.notes}</p>
-              ) : null}
             </li>
           );
         })}
