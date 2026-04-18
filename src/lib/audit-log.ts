@@ -136,12 +136,23 @@ export async function logAuthEvent(params: LogAuthEventParams): Promise<void> {
 }
 
 export async function listAuditLogForEvent(eventId: string): Promise<AuditLogEntry[]> {
+  return listAuditLogForEntity("event", eventId);
+}
+
+/**
+ * Generic audit-log reader. Returns every audit_log row for the given
+ * entity/entity_id pair, oldest first. Used by the shared AuditTrailPanel.
+ */
+export async function listAuditLogForEntity(
+  entity: string,
+  entityId: string
+): Promise<AuditLogEntry[]> {
   const supabase = await createSupabaseReadonlyClient();
   const { data, error } = await supabase
     .from("audit_log")
     .select("*")
-    .eq("entity", "event")
-    .eq("entity_id", eventId)
+    .eq("entity", entity)
+    .eq("entity_id", entityId)
     .order("created_at", { ascending: true });
 
   if (error) {

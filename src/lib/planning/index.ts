@@ -637,6 +637,66 @@ export async function listPlanningBoardData(params?: {
   };
 }
 
+/**
+ * Load a single planning item with the same shape as listPlanningBoardData —
+ * full venue list, owner, task array, and task assignees. Used by the
+ * dedicated detail page `/planning/[planningItemId]`.
+ */
+export async function getPlanningItemDetail(itemId: string): Promise<PlanningItem | null> {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("planning_items")
+    .select(
+      `
+      id,
+      series_id,
+      occurrence_on,
+      is_exception,
+      title,
+      description,
+      type_label,
+      venue_id,
+      owner_id,
+      target_date,
+      status,
+      created_by,
+      created_at,
+      updated_at,
+      venue:venues!planning_items_venue_id_fkey(id,name),
+      planning_item_venues(venue_id, is_primary, venue:venues(id,name)),
+      owner:users!planning_items_owner_id_fkey(id,full_name,email),
+      tasks:planning_tasks(
+        id,
+        planning_item_id,
+        title,
+        assignee_id,
+        due_date,
+        status,
+        completed_at,
+        completed_by,
+        sort_order,
+        sop_section,
+        sop_template_task_id,
+        is_blocked,
+        due_date_manually_overridden,
+        notes,
+        assignee:users!planning_tasks_assignee_id_fkey(id,full_name,email),
+        assignees:planning_task_assignees(user:users(id,full_name,email)),
+        dependencies:planning_task_dependencies!planning_task_dependencies_task_id_fkey(depends_on_task_id)
+      )
+    `
+    )
+    .eq("id", itemId)
+    .maybeSingle();
+
+  if (error) {
+    if (isMissingPlanningTableError(error)) return null;
+    throw new Error(`Could not load planning item: ${error.message}`);
+  }
+  if (!data) return null;
+  return toPlanningItem(data as RawPlanningItemRow);
+}
+
 export async function createPlanningItem(payload: CreatePlanningItemInput): Promise<PlanningItemRow> {
   const supabase = await createSupabaseActionClient();
 
