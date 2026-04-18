@@ -1,6 +1,6 @@
 ---
 generated: true
-last_updated: 2026-04-16
+last_updated: 2026-04-18
 source: session-setup
 project: barons-events-mvp
 ---
@@ -11,11 +11,11 @@ project: barons-events-mvp
 
 | Document | Status | Description |
 |----------|--------|-------------|
-| [[overview]] | 2026-04-16 | Tech stack, counts, auth model, integrations summary |
-| [[routes]] | 2026-04-16 | All 27 pages + 15 API routes with auth types |
-| [[server-actions]] | 2026-04-16 | ~70 exported actions across 13 files with tables and auth |
-| [[data-model]] | 2026-04-16 | 39 tables with full schema, all RLS enabled |
-| [[relationships]] | 2026-04-16 | Cross-reference: table-to-actions, page-to-actions, integration-to-files, env vars |
+| [[overview]] | 2026-04-18 | Tech stack, counts, integrations, role model, request lifecycle |
+| [[routes]] | 2026-04-18 | 29 pages + 20 route handlers (public API, cron, webhooks) |
+| [[server-actions]] | 2026-04-18 | 68 actions across 17 files with tables, auth, revalidation |
+| [[data-model]] | 2026-04-18 | 34 tables referenced from code (full schema via DB agent) |
+| [[relationships]] | 2026-04-18 | Cross-reference: tables↔actions, actions↔pages, integrations, auth flow, SMS flow, env vars |
 | [NOTES.md](NOTES.md) | Manual | Manual architecture notes |
 
 For persistent notes that should not be overwritten, edit [NOTES.md](NOTES.md).
@@ -23,8 +23,9 @@ For persistent notes that should not be overwritten, edit [NOTES.md](NOTES.md).
 ## Env Var Gaps
 
 The following env vars are used in code but **not declared in `.env.example`**:
-- `KV_REST_API_URL` / `KV_REST_API_TOKEN` (Upstash Redis for rate limiting)
-- `SHORT_LINK_HOST` (short link domain config)
-- `NEXT_PUBLIC_APP_URL` (app URL fallback)
+- `NEXT_PUBLIC_APP_URL`
+- `KV_REST_API_URL`, `KV_REST_API_TOKEN`
+- `SHORT_LINK_HOST`
+- `SLT_FROM_ALIAS`
 
-See [[relationships#Environment Variables]] for full cross-reference.
+See [[relationships#Environment Variables]] for the full cross-reference.
