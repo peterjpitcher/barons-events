@@ -83,7 +83,7 @@ export async function GET(request: Request) {
       wet_promo,
       food_promo,
       updated_at,
-      venue:venues(
+      venue:venues!events_venue_id_fkey(
         id,
         name,
         address,

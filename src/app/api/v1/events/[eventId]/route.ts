@@ -64,7 +64,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ eve
       wet_promo,
       food_promo,
       updated_at,
-      venue:venues(
+      venue:venues!events_venue_id_fkey(
         id,
         name,
         address,

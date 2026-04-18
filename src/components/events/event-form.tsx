@@ -11,6 +11,7 @@ import {
   submitEventForReviewAction
 } from "@/actions/events";
 import { VenueMultiSelect, type VenueOption } from "@/components/venues/venue-multi-select";
+import { deriveInitialVenueIds } from "@/lib/planning/utils";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { DeleteEventButton } from "@/components/events/delete-event-button";
 import { Button } from "@/components/ui/button";
@@ -318,17 +319,13 @@ export function EventForm({
   const [titleValue, setTitleValue] = useState(defaultValues?.title ?? "");
   const [eventTypeValue, setEventTypeValue] = useState(defaultValues?.event_type ?? "");
   const [selectedVenueId, setSelectedVenueId] = useState(defaultVenueId);
-  // Hydrate from the full venues list so editing a multi-venue event doesn't
-  // silently drop the extras on save (issue-log 2026-04-18 item 03).
-  const initialEventVenueIds = (() => {
-     
-    const venuesList = (defaultValues as any)?.venues as Array<{ id: string }> | undefined;
-    if (Array.isArray(venuesList) && venuesList.length > 0) {
-      return venuesList.map((v) => v.id);
-    }
-    return defaultVenueId ? [defaultVenueId] : [];
-  })();
-  const [selectedVenueIds, setSelectedVenueIds] = useState<string[]>(initialEventVenueIds);
+  // Hydrate via the shared helper — see issue-log 2026-04-18 item 03.
+  const [selectedVenueIds, setSelectedVenueIds] = useState<string[]>(() =>
+    deriveInitialVenueIds({
+      venueId: defaultVenueId || null,
+      venues: (defaultValues as { venues?: Array<{ id: string }> } | undefined)?.venues ?? null
+    })
+  );
   const [venueSpaceValue, setVenueSpaceValue] = useState(defaultValues?.venue_space ?? "");
   const [startValue, setStartValue] = useState(toLocalInputValue(defaultValues?.start_at ?? initialStartAt));
   const [endValue, setEndValue] = useState(toLocalInputValue(defaultValues?.end_at ?? initialEndAt));

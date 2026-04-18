@@ -102,7 +102,7 @@ const WEBSITE_COPY_EVENT_SELECT = `
   public_highlights,
   booking_url,
   notes,
-  venue:venues(name,address),
+  venue:venues!events_venue_id_fkey(name,address),
   artists:event_artists(
     billing_order,
     artist:artists(name,description)

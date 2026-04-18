@@ -15,6 +15,26 @@ export function londonDateString(date: Date = new Date()): string {
   return londonDateFormatter.format(date);
 }
 
+/**
+ * Compute the initial value for a multi-venue picker from a record that has
+ * both a scalar `venueId` (primary venue) and an array `venues` (full
+ * attachment list). Prefers the array when populated so editors hydrate
+ * from the complete list rather than only the primary — fixes the class of
+ * silent-data-loss bug tracked in issue-log 2026-04-18 item 03.
+ *
+ * Falls back to the scalar for records that pre-date the join table, and
+ * returns an empty list when neither is present (global item).
+ */
+export function deriveInitialVenueIds(input: {
+  venueId?: string | null;
+  venues?: Array<{ id: string }> | null;
+}): string[] {
+  if (input.venues && input.venues.length > 0) {
+    return input.venues.map((v) => v.id);
+  }
+  return input.venueId ? [input.venueId] : [];
+}
+
 export function parseDateOnly(value: string): Date {
   const parsed = new Date(`${value}T00:00:00.000Z`);
   if (Number.isNaN(parsed.getTime())) {

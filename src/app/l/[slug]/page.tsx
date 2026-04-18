@@ -57,7 +57,7 @@ async function getEventBySlug(slug: string): Promise<EventRow | null> {
   const { data, error } = await db
     .from("events")
     .select(
-      "id, title, public_title, public_teaser, public_description, public_highlights, event_image_path, start_at, seo_slug, booking_enabled, total_capacity, max_tickets_per_booking, status, venue:venues(id, name)"
+      "id, title, public_title, public_teaser, public_description, public_highlights, event_image_path, start_at, seo_slug, booking_enabled, total_capacity, max_tickets_per_booking, status, venue:venues!events_venue_id_fkey(id, name)"
     )
     .eq("seo_slug", slug)
     .is("deleted_at", null)

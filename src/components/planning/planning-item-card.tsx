@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import type { PlanningEventOverlay, PlanningInspirationItem, PlanningItem, PlanningPerson, PlanningTask, PlanningVenueOption } from "@/lib/planning/types";
+import { deriveInitialVenueIds } from "@/lib/planning/utils";
 import { formatDate } from "@/lib/utils/format";
 
 type PlanningItemCardProps = {
@@ -104,13 +105,10 @@ export function PlanningItemCard({
   const [description, setDescription] = useState(item.description ?? "");
   const [ownerId, setOwnerId] = useState(item.ownerId ?? "");
   const [venueId, setVenueId] = useState(item.venueId ?? "");
-  // Hydrate from the full venue list — `item.venueId` is only the primary venue.
-  // Previously hydrating from the scalar alone silently dropped the extra venues
-  // when the editor opened (see issue-log 2026-04-18 item 03).
-  const initialVenueIds = (item.venues?.length
-    ? item.venues.map((v) => v.id)
-    : (item.venueId ? [item.venueId] : []));
-  const [selectedVenueIds, setSelectedVenueIds] = useState<string[]>(initialVenueIds);
+  // Hydrate from the full venue list via the shared helper — see
+  // issue-log 2026-04-18 item 03 for why `item.venueId` alone would silently
+  // drop the extra venues on save.
+  const [selectedVenueIds, setSelectedVenueIds] = useState<string[]>(() => deriveInitialVenueIds(item));
   const [status, setStatus] = useState<PlanningItem["status"]>(item.status);
   const [targetDate, setTargetDate] = useState(item.targetDate);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -139,9 +137,7 @@ export function PlanningItemCard({
     setDescription(item.description ?? "");
     setOwnerId(item.ownerId ?? "");
     setVenueId(item.venueId ?? "");
-    setSelectedVenueIds(item.venues?.length
-      ? item.venues.map((v) => v.id)
-      : (item.venueId ? [item.venueId] : []));
+    setSelectedVenueIds(deriveInitialVenueIds(item));
     setStatus(item.status);
     setTargetDate(item.targetDate);
     setConfirmDelete(false);
@@ -288,9 +284,7 @@ export function PlanningItemCard({
       setOwnerId(item.ownerId ?? "");
     } else if (field === "venueId") {
       setVenueId(item.venueId ?? "");
-      setSelectedVenueIds(item.venues?.length
-        ? item.venues.map((v) => v.id)
-        : (item.venueId ? [item.venueId] : []));
+      setSelectedVenueIds(deriveInitialVenueIds(item));
     } else if (field === "description") {
       setDescription(item.description ?? "");
     }
