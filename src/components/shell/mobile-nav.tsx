@@ -9,6 +9,7 @@ type MobileNavItem = {
   href: string;
   newUntil?: string;
   children?: MobileNavItem[];
+  labelOnly?: boolean;
 };
 
 type MobileNavSection = {
@@ -83,12 +84,16 @@ export function MobileNav({ sections, todayIso }: MobileNavProps) {
               <div className="flex flex-col gap-1">
                 {section.items.map((item) => (
                   <div key={item.href} className="flex flex-col gap-1">
-                    <NavLink
-                      href={item.href}
-                      label={item.label}
-                      showNew={item.newUntil ? todayIso <= item.newUntil : false}
-                      onClick={close}
-                    />
+                    {item.labelOnly ? (
+                      <p className="px-4 py-2 text-sm font-medium text-[rgba(255,255,255,0.55)]">{item.label}</p>
+                    ) : (
+                      <NavLink
+                        href={item.href}
+                        label={item.label}
+                        showNew={item.newUntil ? todayIso <= item.newUntil : false}
+                        onClick={close}
+                      />
+                    )}
                     {item.children && item.children.length > 0 ? (
                       <div className="ml-4 flex flex-col gap-1 border-l border-white/15 pl-2">
                         {item.children.map((child) => (

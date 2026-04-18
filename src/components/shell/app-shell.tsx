@@ -13,6 +13,9 @@ type NavItem = {
   roles: UserRole[];
   newUntil?: string; // ISO date; show "New" badge until end of this date
   children?: NavItem[]; // Rendered indented under the parent
+  /** Marks a resolved parent as a visual-only label — happens when the
+   * parent's roles don't include the viewer but at least one child does. */
+  labelOnly?: boolean;
 };
 
 type NavSection = {
@@ -101,7 +104,6 @@ export async function AppShell({ user, children }: AppShellProps) {
   const sections = NAV_SECTIONS.map((section) => ({
     ...section,
     items: section.items
-      .filter((item) => item.roles.includes(user.role))
       .map((item) => {
         const filteredChildren = item.children
           ?.filter((child) => child.roles.includes(user.role))
@@ -117,11 +119,22 @@ export async function AppShell({ user, children }: AppShellProps) {
             // renders it without further plumbing.
             label: child.href === "/events/pending" ? `${child.label} (${pendingCount})` : child.label
           }));
+
+        const parentMatches = item.roles.includes(user.role);
+        const anyChildMatches = Boolean(filteredChildren && filteredChildren.length > 0);
+        if (!parentMatches && !anyChildMatches) return null;
+
         return {
           ...item,
+          // When the viewer can't access the parent route but a child is
+          // available, show the parent as a visual group header (not a link)
+          // so the child keeps its nesting context. Office workers hit this
+          // on Events → "Propose an event".
+          labelOnly: !parentMatches,
           children: filteredChildren
         };
       })
+      .filter(<T,>(item: T | null): item is T => item !== null)
   })).filter((section) => section.items.length > 0);
 
   return (
@@ -147,11 +160,15 @@ export async function AppShell({ user, children }: AppShellProps) {
               <div className="flex flex-col gap-1">
                 {section.items.map((item) => (
                   <div key={item.href} className="flex flex-col gap-1">
-                    <NavLink
-                      href={item.href}
-                      label={item.label}
-                      showNew={item.newUntil ? todayIso <= item.newUntil : false}
-                    />
+                    {item.labelOnly ? (
+                      <p className="px-4 py-2 text-sm font-medium text-[rgba(255,255,255,0.55)]">{item.label}</p>
+                    ) : (
+                      <NavLink
+                        href={item.href}
+                        label={item.label}
+                        showNew={item.newUntil ? todayIso <= item.newUntil : false}
+                      />
+                    )}
                     {item.children && item.children.length > 0 ? (
                       <div className="ml-4 flex flex-col gap-1 border-l border-white/15 pl-2">
                         {item.children.map((child) => (
