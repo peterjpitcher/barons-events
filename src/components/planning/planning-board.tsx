@@ -295,10 +295,12 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
   // callers still work.
   const calendarSource = calendarData ?? data;
 
-  // Client-side toggle to show `done`/`cancelled` planning items and
-  // `completed`/`rejected` events. Defaults to hiding them; the calendar
-  // header exposes a toggle to flip it on.
-  const [showDoneCancelled, setShowDoneCancelled] = useState(false);
+  // Client-side toggle to hide `done`/`cancelled` planning items and
+  // `completed`/`rejected` events. Defaults to SHOWING them so the
+  // calendar honours the "every event and planning item" contract when
+  // navigating historic months — the toggle lets the user hide them to
+  // focus on open work.
+  const [showDoneCancelled, setShowDoneCancelled] = useState(true);
 
   const calendarCombinedEntries = useMemo<PlanningViewEntry[]>(() => {
     const sourceOrder: Record<string, number> = { planning: 0, event: 1, inspiration: 2 };
@@ -550,10 +552,10 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
         <div className="space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius)] border border-[var(--color-border)] bg-white p-2 shadow-soft">
             <p className="text-xs text-subtle">
-              Calendar shows every event and planning item.
+              Calendar shows every event and planning item across all time.
               {showDoneCancelled
-                ? " Completed and cancelled items included."
-                : " Completed and cancelled items hidden."}
+                ? " Completed and cancelled items are visible."
+                : " Completed and cancelled items are currently hidden."}
             </p>
             <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-[var(--color-text)]">
               <input
