@@ -488,12 +488,20 @@ export async function listPlanningBoardData(params?: {
     venueId?: string | null;
     statuses?: PlanningItemStatus[];
   };
+  /** Calendar mode: skip the ±365-day date window so historic activity is
+   * visible. Default false so board/list views keep their current scope. */
+  unbounded?: boolean;
+  /** Calendar mode: include `done`/`cancelled` planning items and
+   * `completed`/`rejected` events. Default false keeps the board clean. */
+  includeAllStatuses?: boolean;
 }): Promise<PlanningBoardData> {
   const today = toDateKey(params?.today ?? new Date());
   const planningWindowEnd = addDays(today, 90);
   await ensurePlanningOccurrencesThrough(planningWindowEnd);
 
   const includeLater = params?.includeLater ?? true;
+  const unbounded = params?.unbounded ?? false;
+  const includeAllStatuses = params?.includeAllStatuses ?? false;
   const lowerBound = addDays(today, -365);
   const upperBound = includeLater ? addDays(today, 365) : planningWindowEnd;
 
@@ -541,9 +549,11 @@ export async function listPlanningBoardData(params?: {
       )
     `
     )
-    .gte("target_date", lowerBound)
-    .lte("target_date", upperBound)
     .order("target_date", { ascending: true });
+
+  if (!unbounded) {
+    itemsQuery = itemsQuery.gte("target_date", lowerBound).lte("target_date", upperBound);
+  }
 
   if (params?.filters?.venueId) {
     itemsQuery = itemsQuery.eq("venue_id", params.filters.venueId);
@@ -551,8 +561,9 @@ export async function listPlanningBoardData(params?: {
 
   if (params?.filters?.statuses && params.filters.statuses.length > 0) {
     itemsQuery = itemsQuery.in("status", params.filters.statuses);
-  } else {
-    // By default, hide completed/cancelled planning items from the board
+  } else if (!includeAllStatuses) {
+    // By default, hide completed/cancelled planning items from the board.
+    // Calendar mode (includeAllStatuses) skips this filter.
     itemsQuery = itemsQuery.not("status", "in", '("done","cancelled")');
   }
 
@@ -570,15 +581,21 @@ export async function listPlanningBoardData(params?: {
   const startLowerIso = `${lowerBound}T00:00:00.000Z`;
   const startUpperIso = `${upperBound}T23:59:59.999Z`;
 
-  const { data: eventData, error: eventsError } = await admin
+  let eventsQuery = admin
     .from("events")
     .select(
       "id,title,status,start_at,end_at,venue_space,venue_id,public_title,public_teaser,venue:venues!events_venue_id_fkey(name)"
     )
-    .gte("start_at", startLowerIso)
-    .lte("start_at", startUpperIso)
-    .not("status", "in", '("completed","rejected")')
     .order("start_at", { ascending: true });
+
+  if (!unbounded) {
+    eventsQuery = eventsQuery.gte("start_at", startLowerIso).lte("start_at", startUpperIso);
+  }
+  if (!includeAllStatuses) {
+    eventsQuery = eventsQuery.not("status", "in", '("completed","rejected")');
+  }
+
+  const { data: eventData, error: eventsError } = await eventsQuery;
 
   if (eventsError) {
     throw new Error(`Could not load event overlays: ${eventsError.message}`);

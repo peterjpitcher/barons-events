@@ -31,6 +31,10 @@ import type { UserRole } from "@/lib/types";
 
 type PlanningBoardProps = {
   data: PlanningBoardData;
+  /** Separate, unbounded dataset for the Calendar tab — includes historic
+   * items and completed/cancelled statuses. Falls back to `data` when
+   * omitted so older callers keep working. */
+  calendarData?: PlanningBoardData;
   venues: PlanningVenueOption[];
   canApproveEvents?: boolean;
   userRole?: UserRole;
@@ -99,7 +103,7 @@ function RefreshInspirationButton() {
   );
 }
 
-export function PlanningBoard({ data, venues, canApproveEvents, userRole, currentUserId }: PlanningBoardProps) {
+export function PlanningBoard({ data, calendarData, venues, canApproveEvents, userRole, currentUserId }: PlanningBoardProps) {
   const router = useRouter();
   const [viewMode, setViewMode] = useState<ViewMode>("board");
   const [isCreateModalOpen, setCreateModalOpen] = useState(false);
@@ -288,6 +292,77 @@ export function PlanningBoard({ data, venues, canApproveEvents, userRole, curren
       return left.title.localeCompare(right.title);
     });
   }, [filteredPlanningItems, visibleEvents, data.inspirationItems]);
+
+  // ─── Calendar dataset ─────────────────────────────────────────────────────
+  // The calendar view needs historic activity that's trimmed out of the
+  // default board dataset. We use the separate `calendarData` fetched on the
+  // server when it's available; otherwise fall back to `data` so older
+  // callers still work.
+  const calendarSource = calendarData ?? data;
+
+  // Client-side toggle to show `done`/`cancelled` planning items and
+  // `completed`/`rejected` events. Defaults to hiding them; the calendar
+  // header exposes a toggle to flip it on.
+  const [showDoneCancelled, setShowDoneCancelled] = useState(false);
+
+  const calendarCombinedEntries = useMemo<PlanningViewEntry[]>(() => {
+    const sourceOrder: Record<string, number> = { planning: 0, event: 1, inspiration: 2 };
+    const needle = search.trim().toLowerCase();
+    const hiddenPlanningStatuses = new Set(["done", "cancelled"]);
+    const hiddenEventStatuses = new Set(["completed", "rejected"]);
+
+    const matchesSearch = (haystack: string): boolean =>
+      !needle.length || haystack.toLowerCase().includes(needle);
+
+    const planningEntries: PlanningViewEntry[] = calendarSource.planningItems
+      .filter((item) => {
+        if (venueFilter && item.venueId !== venueFilter) return false;
+        if (!showDoneCancelled && hiddenPlanningStatuses.has(item.status)) return false;
+        const taskValue = item.tasks.map((task) => task.title).join(" ");
+        return matchesSearch(
+          [item.title, item.typeLabel, item.description ?? "", item.ownerName ?? "", taskValue].join(" ")
+        );
+      })
+      .map((item) => ({
+        id: `planning-${item.id}`,
+        source: "planning" as const,
+        targetDate: item.targetDate,
+        title: item.title,
+        status: item.status,
+        venueLabel: item.venueName ?? "Global",
+        planningItem: item
+      }));
+
+    const eventEntries: PlanningViewEntry[] =
+      eventVisibility === "with_events"
+        ? calendarSource.events
+            .filter((event) => {
+              if (venueFilter && event.venueId !== venueFilter) return false;
+              if (!showDoneCancelled && hiddenEventStatuses.has(event.status)) return false;
+              return matchesSearch(
+                [event.title, event.venueName ?? "", event.venueSpace ?? "", event.status].join(" ")
+              );
+            })
+            .map((event) => ({
+              id: `event-${event.eventId}`,
+              source: "event" as const,
+              targetDate: event.targetDate,
+              title: event.title,
+              status: event.status,
+              venueLabel: `${event.venueName ?? "Unknown venue"}${event.venueSpace ? ` · ${event.venueSpace}` : ""}`,
+              eventId: event.eventId,
+              startAt: event.startAt
+            }))
+        : [];
+
+    return [...planningEntries, ...eventEntries].sort((left, right) => {
+      if (left.targetDate !== right.targetDate) return left.targetDate.localeCompare(right.targetDate);
+      const lo = sourceOrder[left.source] ?? 3;
+      const ro = sourceOrder[right.source] ?? 3;
+      if (lo !== ro) return lo - ro;
+      return left.title.localeCompare(right.title);
+    });
+  }, [calendarSource, search, venueFilter, eventVisibility, showDoneCancelled]);
 
   useEffect(() => {
     if (activeItemId && !activeItem) {
@@ -483,16 +558,35 @@ export function PlanningBoard({ data, venues, canApproveEvents, userRole, curren
       ) : null}
 
       {viewMode === "calendar" ? (
-        <PlanningCalendarView
-          today={data.today}
-          entries={combinedEntries}
-          onOpenPlanningItem={userRole && canManageOwnPlanningItems(userRole)
-            ? (item) => setActiveItemId(item.id)
-            : undefined}
-          onMovePlanningItem={userRole && canManageAllPlanning(userRole)
-            ? movePlanningItemInCalendar
-            : undefined}
-        />
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius)] border border-[var(--color-border)] bg-white p-2 shadow-soft">
+            <p className="text-xs text-subtle">
+              Calendar shows every event and planning item.
+              {showDoneCancelled
+                ? " Completed and cancelled items included."
+                : " Completed and cancelled items hidden."}
+            </p>
+            <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-[var(--color-text)]">
+              <input
+                type="checkbox"
+                className="h-4 w-4"
+                checked={showDoneCancelled}
+                onChange={(event) => setShowDoneCancelled(event.target.checked)}
+              />
+              Show completed / cancelled
+            </label>
+          </div>
+          <PlanningCalendarView
+            today={data.today}
+            entries={calendarCombinedEntries}
+            onOpenPlanningItem={userRole && canManageOwnPlanningItems(userRole)
+              ? (item) => setActiveItemId(item.id)
+              : undefined}
+            onMovePlanningItem={userRole && canManageAllPlanning(userRole)
+              ? movePlanningItemInCalendar
+              : undefined}
+          />
+        </div>
       ) : null}
 
       {viewMode === "list" ? (

@@ -20,17 +20,26 @@ export default async function PlanningPage() {
     redirect("/unauthorized");
   }
 
-  const [venues, boardData] = await Promise.all([
+  const [venues, boardData, calendarData] = await Promise.all([
     listVenues(),
     listPlanningBoardData({
       today: new Date(),
       includeLater: true
+    }),
+    // Calendar view needs the full historic picture. Completed / cancelled
+    // items are pulled too; the calendar UI hides them by default and
+    // reveals them via a toggle.
+    listPlanningBoardData({
+      today: new Date(),
+      unbounded: true,
+      includeAllStatuses: true
     })
   ]);
 
   return (
     <PlanningBoard
       data={boardData}
+      calendarData={calendarData}
       venues={venues.map((venue) => ({
         id: venue.id,
         name: venue.name,
