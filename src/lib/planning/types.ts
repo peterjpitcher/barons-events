@@ -21,6 +21,13 @@ export type PlanningVenueOption = {
   category?: "pub" | "cafe";
 };
 
+export type PlanningTaskAttachment = {
+  id: string;
+  filename: string;
+  sizeBytes: number;
+  mimeType: string;
+};
+
 export type PlanningTask = {
   id: string;
   planningItemId: string;
@@ -39,6 +46,9 @@ export type PlanningTask = {
   dueDateManuallyOverridden: boolean;
   dependsOnTaskIds: string[];
   notes: string | null;
+  /** Attachments owned directly by this task. Populated by loaders that
+   * eagerly fetch (getPlanningItemDetail); left empty elsewhere. */
+  attachments: PlanningTaskAttachment[];
 };
 
 export type PlanningItem = {

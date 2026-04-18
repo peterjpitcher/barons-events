@@ -5,7 +5,9 @@ import { canViewPlanning } from "@/lib/roles";
 import { getPlanningItemDetail } from "@/lib/planning";
 import { AuditTrailPanel } from "@/components/audit/audit-trail-panel";
 import { AttachmentsPanel } from "@/components/attachments/attachments-panel";
+import { SopChecklistView } from "@/components/planning/sop-checklist-view";
 import { listPlanningItemAttachmentsRollup } from "@/lib/attachments";
+import { listAssignableUsers } from "@/lib/users";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 export const metadata = {
@@ -23,9 +25,10 @@ export default async function PlanningItemDetailPage({
   if (!canViewPlanning(user.role)) redirect("/unauthorized");
 
   const { planningItemId } = await params;
-  const [item, attachments] = await Promise.all([
+  const [item, attachments, users] = await Promise.all([
     getPlanningItemDetail(planningItemId),
-    listPlanningItemAttachmentsRollup(planningItemId)
+    listPlanningItemAttachmentsRollup(planningItemId),
+    listAssignableUsers()
   ]);
 
   if (!item) notFound();
@@ -79,11 +82,29 @@ export default async function PlanningItemDetailPage({
       </Card>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <AuditTrailPanel
-          entityType="planning"
-          entityId={item.id}
-          description="Everything that's happened on this planning item, oldest first."
-        />
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>SOP checklist</CardTitle>
+              <CardDescription>
+                Tasks under this item. Uploads and notes show up on the row they belong to.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <SopChecklistView
+                tasks={item.tasks}
+                users={users.map((u) => ({ id: u.id, name: u.name, email: u.email ?? "", role: u.role }))}
+                itemId={item.id}
+                currentUserId={user.id}
+              />
+            </CardContent>
+          </Card>
+          <AuditTrailPanel
+            entityType="planning"
+            entityId={item.id}
+            description="Everything that's happened on this planning item, oldest first."
+          />
+        </div>
         <AttachmentsPanel
           parentType="planning_item"
           parentId={item.id}
@@ -95,11 +116,6 @@ export default async function PlanningItemDetailPage({
           description="Files on this planning item and every task under it."
         />
       </div>
-
-      {/* Intentionally not duplicating the venue editor here to avoid two
-          sources of truth. The modal stays for editing (issue 04 decision to
-          replace the modal is staged — this page adds the missing surfaces
-          first; the caller-navigation sweep follows next). */}
     </div>
   );
 }

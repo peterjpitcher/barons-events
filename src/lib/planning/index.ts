@@ -142,6 +142,9 @@ function toPlanningTask(task: RawPlanningTaskRow): PlanningTask {
       : [],
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     notes: (task as any).notes ?? null,
+    // Attachments default to empty; the detail loader populates them in a
+    // second pass so the board query stays lean.
+    attachments: [],
   };
 }
 
@@ -694,7 +697,45 @@ export async function getPlanningItemDetail(itemId: string): Promise<PlanningIte
     throw new Error(`Could not load planning item: ${error.message}`);
   }
   if (!data) return null;
-  return toPlanningItem(data as RawPlanningItemRow);
+  const item = toPlanningItem(data as RawPlanningItemRow);
+
+  // Second pass: eagerly load attachments for every task on this item.
+  // Kept separate from the board loader so board rendering stays cheap.
+  if (item.tasks.length > 0) {
+    const taskIds = item.tasks.map((task) => task.id);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: attachmentRows } = await (admin as any)
+      .from("attachments")
+      .select("id, planning_task_id, original_filename, mime_type, size_bytes")
+      .in("planning_task_id", taskIds)
+      .eq("upload_status", "uploaded")
+      .is("deleted_at", null);
+    type Row = {
+      id: string;
+      planning_task_id: string | null;
+      original_filename: string;
+      mime_type: string;
+      size_bytes: number;
+    };
+    const byTask = new Map<string, Array<Row>>();
+    for (const row of ((attachmentRows ?? []) as Row[])) {
+      if (!row.planning_task_id) continue;
+      const bucket = byTask.get(row.planning_task_id) ?? [];
+      bucket.push(row);
+      byTask.set(row.planning_task_id, bucket);
+    }
+    for (const task of item.tasks) {
+      const rows = byTask.get(task.id) ?? [];
+      task.attachments = rows.map((row) => ({
+        id: row.id,
+        filename: row.original_filename,
+        sizeBytes: row.size_bytes,
+        mimeType: row.mime_type
+      }));
+    }
+  }
+
+  return item;
 }
 
 export async function createPlanningItem(payload: CreatePlanningItemInput): Promise<PlanningItemRow> {

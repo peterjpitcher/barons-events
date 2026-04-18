@@ -203,6 +203,9 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
             ? task.dependencies.map((d: RawDep) => d.depends_on_task_id).filter(Boolean)
             : [],
           notes: task.notes ?? null,
+          // Event page doesn't lazy-load per-task attachments here; the
+          // detail page roll-up covers that surface. See issue-log 04.
+          attachments: [],
         };
       });
     }

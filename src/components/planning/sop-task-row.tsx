@@ -6,7 +6,9 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { reassignPlanningTaskAction, updatePlanningTaskAction } from "@/actions/planning";
+import { getAttachmentUrlAction } from "@/actions/attachments";
 import { AttachmentUploadButton } from "@/components/attachments/attachment-upload-button";
+import { formatBytes } from "@/lib/attachments-types";
 import type { PlanningPerson, PlanningTask, PlanningTaskStatus } from "@/lib/planning/types";
 
 type SopTaskRowProps = {
@@ -283,6 +285,31 @@ export function SopTaskRow({ task, allTasks, users, onStatusChange, onChanged, p
             ) : null}
           </p>
         )}
+
+        {task.attachments.length > 0 ? (
+          <ul className="mt-1 space-y-0.5">
+            {task.attachments.map((attachment) => (
+              <li key={attachment.id} className="flex items-center gap-1 text-[11px] text-subtle">
+                <span aria-hidden="true">📎</span>
+                <button
+                  type="button"
+                  onClick={async (event) => {
+                    event.stopPropagation();
+                    const result = await getAttachmentUrlAction({ attachmentId: attachment.id });
+                    if (result.success) {
+                      window.open(result.url, "_blank", "noopener,noreferrer");
+                    }
+                  }}
+                  className="truncate text-left underline hover:text-[var(--color-primary-700)]"
+                  title={attachment.filename}
+                >
+                  {attachment.filename}
+                </button>
+                <span className="flex-shrink-0">({formatBytes(attachment.sizeBytes)})</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </div>
 
       {/* Notes edit toggle — notes themselves render below the row persistently */}
