@@ -29,9 +29,10 @@ BEGIN
     RAISE EXCEPTION 'Rejection reason is required';
   END IF;
 
-  INSERT INTO public.approvals (event_id, reviewer_id, decision, feedback_text)
-  VALUES (p_event_id, p_admin_id, 'rejected', p_reason);
-
+  -- AB-002 v3.2: validate state + transition BEFORE persisting the audit row.
+  -- Running the UPDATE first guarantees an approvals row is only written for
+  -- an event that was actually in pending_approval; otherwise the INSERT below
+  -- runs and the RAISE rolls everything back inside the same transaction.
   UPDATE public.events
   SET status = 'rejected'
   WHERE id = p_event_id AND status = 'pending_approval';
@@ -39,6 +40,9 @@ BEGIN
   IF v_rows = 0 THEN
     RAISE EXCEPTION 'Event % not in pending_approval', p_event_id;
   END IF;
+
+  INSERT INTO public.approvals (event_id, reviewer_id, decision, feedback_text)
+  VALUES (p_event_id, p_admin_id, 'rejected', p_reason);
 END;
 $$;
 
