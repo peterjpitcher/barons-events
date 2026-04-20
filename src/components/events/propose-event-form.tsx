@@ -12,13 +12,22 @@ import { SubmitButton } from "@/components/ui/submit-button";
 
 type ProposeEventFormProps = {
   venues: VenueOption[];
+  /**
+   * Optional pre-selected venue id. When provided and matching a venue in
+   * `venues`, the form opens with that venue already ticked. Used to give
+   * office workers a sensible default without restricting the picker.
+   */
+  defaultVenueId?: string | null;
 };
 
-export function ProposeEventForm({ venues }: ProposeEventFormProps) {
+export function ProposeEventForm({ venues, defaultVenueId }: ProposeEventFormProps) {
   const [state, formAction] = useActionState(proposeEventAction, undefined);
-  const [selectedVenueIds, setSelectedVenueIds] = useState<string[]>(
-    venues.length === 1 ? [venues[0].id] : []
-  );
+  const [selectedVenueIds, setSelectedVenueIds] = useState<string[]>(() => {
+    if (defaultVenueId && venues.some((v) => v.id === defaultVenueId)) {
+      return [defaultVenueId];
+    }
+    return venues.length === 1 ? [venues[0].id] : [];
+  });
   const router = useRouter();
 
   useEffect(() => {
