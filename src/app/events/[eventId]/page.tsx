@@ -134,7 +134,10 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
     listEventAttachmentsRollup(event.id)
   ]);
 
-  const canUploadAttachments = user.role === "administrator" || isVenueScoped;
+  // SEC-005 follow-up: attachment upload follows the unified event-edit rule,
+  // not the legacy same-venue check. Non-manager OWs at the same venue no
+  // longer see upload controls for events they can't edit.
+  const canUploadAttachments = canEditEventFromRow(user, eventRowForEdit);
 
   // ─── Fetch linked planning item & SOP tasks for this event ────────────────
   let sopTasks: PlanningTask[] = [];
