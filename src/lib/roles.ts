@@ -24,6 +24,11 @@ export function canManageEvents(role: UserRole, venueId?: string | null): boolea
   return false;
 }
 
+/** Can propose or submit an event (any venue; admin triages). */
+export function canProposeEvents(role: UserRole): boolean {
+  return role === "administrator" || role === "office_worker";
+}
+
 /** Can view events (all roles) */
 export function canViewEvents(role: UserRole): boolean {
   return true;
