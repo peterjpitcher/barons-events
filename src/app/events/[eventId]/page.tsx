@@ -640,6 +640,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
           role={user.role}
           userVenueId={user.venueId}
           users={assignableUsers.map((u) => ({ id: u.id, name: u.name }))}
+          canDelete={canDelete}
           sidebar={
             <div className="space-y-6">
               <Card>

@@ -44,6 +44,13 @@ export type EventFormProps = {
   initialVenueId?: string;
   sidebar?: ReactNode;
   users?: Array<{ id: string; name: string }>;
+  /**
+   * Gates the inline Delete button rendered inside the form actions. Caller
+   * is responsible for computing this via canEditEventFromRow so the UI,
+   * server action and RLS policy agree. Defaults to false for safety when
+   * the caller forgets to pass it in edit mode.
+   */
+  canDelete?: boolean;
 };
 
 function toLocalInputValue(date?: string | null) {
@@ -156,7 +163,8 @@ export function EventForm({
   initialEndAt,
   initialVenueId,
   sidebar,
-  users
+  users,
+  canDelete = false
 }: EventFormProps) {
   const [draftState, draftAction, isSavingPending] = useActionState(saveEventDraftAction, undefined);
   const [submitState, submitAction, isSubmittingPending] = useActionState(submitEventForReviewAction, undefined);
@@ -2092,7 +2100,9 @@ export function EventForm({
                   data-intent="submit"
                 />
               ) : null}
-              {mode === "edit" && defaultValues?.id ? <DeleteEventButton eventId={defaultValues.id} /> : null}
+              {mode === "edit" && defaultValues?.id && canDelete ? (
+                <DeleteEventButton eventId={defaultValues.id} />
+              ) : null}
               {isPending ? (
                 <span className="text-xs text-[var(--color-text-muted)] animate-pulse">
                   {isSlow ? "Still saving — please don\u0027t navigate away..." : "Saving..."}
