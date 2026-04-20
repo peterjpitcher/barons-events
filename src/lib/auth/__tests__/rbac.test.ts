@@ -42,6 +42,8 @@ import {
   isAdministrator,
   canManageEvents,
   canProposeEvents,
+  canEditEvent,
+  type EventEditContext,
   canViewEvents,
   canReviewEvents,
   canManageBookings,
@@ -708,6 +710,76 @@ describe("roles.ts — final capability functions", () => {
     it("administrator can propose", () => expect(canProposeEvents("administrator")).toBe(true));
     it("office_worker can propose (no venueId required)", () => expect(canProposeEvents("office_worker")).toBe(true));
     it("executive cannot propose", () => expect(canProposeEvents("executive")).toBe(false));
+  });
+
+  describe("canEditEvent", () => {
+    const base: EventEditContext = {
+      venueId: "venue-A",
+      managerResponsibleId: "user-manager",
+      createdBy: "user-creator",
+      status: "approved",
+      deletedAt: null,
+    };
+
+    it("admin always passes (except no admin override here — admin can edit any non-deleted event)", () => {
+      expect(canEditEvent("administrator", "user-x", null, base)).toBe(true);
+    });
+
+    it("admin can edit soft-deleted event (restore path)", () => {
+      expect(canEditEvent("administrator", "user-x", null, { ...base, deletedAt: "2026-01-01T00:00:00Z" })).toBe(true);
+    });
+
+    it("soft-deleted rejects non-admin (including manager)", () => {
+      expect(canEditEvent("office_worker", "user-manager", "venue-A", { ...base, deletedAt: "2026-01-01T00:00:00Z" })).toBe(false);
+    });
+
+    it("executive cannot edit even as creator on draft (role gate precedes creator clause)", () => {
+      expect(canEditEvent("executive", "user-creator", null, { ...base, status: "draft" })).toBe(false);
+    });
+
+    it("creator can edit own draft", () => {
+      expect(canEditEvent("office_worker", "user-creator", "venue-X", { ...base, status: "draft" })).toBe(true);
+    });
+
+    it("creator can edit own needs_revisions", () => {
+      expect(canEditEvent("office_worker", "user-creator", "venue-X", { ...base, status: "needs_revisions" })).toBe(true);
+    });
+
+    it("creator cannot edit own pending_approval (submitted)", () => {
+      expect(canEditEvent("office_worker", "user-creator", "venue-X", { ...base, status: "pending_approval" })).toBe(false);
+    });
+
+    it("office_worker without venueId cannot edit approved event they didn't create", () => {
+      expect(canEditEvent("office_worker", "user-manager", null, base)).toBe(false);
+    });
+
+    it("office_worker at wrong venue cannot edit", () => {
+      expect(canEditEvent("office_worker", "user-manager", "venue-B", base)).toBe(false);
+    });
+
+    it("office_worker at right venue but not manager_responsible cannot edit", () => {
+      expect(canEditEvent("office_worker", "user-other", "venue-A", base)).toBe(false);
+    });
+
+    it("office_worker manager at right venue can edit approved event", () => {
+      expect(canEditEvent("office_worker", "user-manager", "venue-A", base)).toBe(true);
+    });
+
+    it("office_worker manager can transition approved → cancelled (read-side passes for both)", () => {
+      expect(canEditEvent("office_worker", "user-manager", "venue-A", { ...base, status: "cancelled" })).toBe(true);
+    });
+
+    it("office_worker manager cannot edit completed event", () => {
+      expect(canEditEvent("office_worker", "user-manager", "venue-A", { ...base, status: "completed" })).toBe(false);
+    });
+
+    it("office_worker manager cannot edit rejected event", () => {
+      expect(canEditEvent("office_worker", "user-manager", "venue-A", { ...base, status: "rejected" })).toBe(false);
+    });
+
+    it("office_worker manager cannot edit pending_approval (admin review window)", () => {
+      expect(canEditEvent("office_worker", "user-manager", "venue-A", { ...base, status: "pending_approval" })).toBe(false);
+    });
   });
 
   describe("canViewEvents", () => {

@@ -29,6 +29,43 @@ export function canProposeEvents(role: UserRole): boolean {
   return role === "administrator" || role === "office_worker";
 }
 
+/** Context an edit check needs about the event being edited. */
+export type EventEditContext = {
+  venueId: string | null;
+  managerResponsibleId: string | null;
+  createdBy: string | null;
+  status: string | null;
+  deletedAt: string | null;
+};
+
+/** Can edit a specific event. Defence-in-depth: also enforced at RLS + trigger. */
+export function canEditEvent(
+  role: UserRole,
+  userId: string,
+  userVenueId: string | null,
+  event: EventEditContext,
+): boolean {
+  if (event.deletedAt !== null) {
+    return role === "administrator";
+  }
+
+  if (role === "administrator") return true;
+  if (role !== "office_worker") return false;
+
+  if (
+    event.createdBy === userId &&
+    (event.status === "draft" || event.status === "needs_revisions")
+  ) {
+    return true;
+  }
+
+  if (!userVenueId) return false;
+  if (event.venueId !== userVenueId) return false;
+  if (event.managerResponsibleId !== userId) return false;
+  if (event.status !== "approved" && event.status !== "cancelled") return false;
+  return true;
+}
+
 /** Can view events (all roles) */
 export function canViewEvents(role: UserRole): boolean {
   return true;
