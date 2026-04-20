@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { signInAction } from "@/actions/auth";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,6 +20,14 @@ export function LoginForm({ redirectTo, nonce }: LoginFormProps) {
   const emailError = state?.fieldErrors?.email;
   const passwordError = state?.fieldErrors?.password;
   const formError = state?.fieldErrors ? null : state?.message;
+
+  // Turnstile tokens are single-use — after a failed sign-in, the posted token has
+  // been redeemed by siteverify and cannot be reused. Remount the widget on each
+  // error so the next submit carries a fresh token and avoids timeout-or-duplicate.
+  const [turnstileKey, setTurnstileKey] = useState(0);
+  useEffect(() => {
+    if (state) setTurnstileKey((k) => k + 1);
+  }, [state]);
 
   return (
     <form action={formAction} className="space-y-6" noValidate>
@@ -57,7 +65,7 @@ export function LoginForm({ redirectTo, nonce }: LoginFormProps) {
         <FieldError id="password-error" message={passwordError} />
       </div>
       {formError ? <p className="text-sm text-[var(--color-danger)]">{formError}</p> : null}
-      <TurnstileWidget action="login" nonce={nonce} />
+      <TurnstileWidget key={turnstileKey} action="login" nonce={nonce} />
       <SubmitButton label="Sign in" />
     </form>
   );
