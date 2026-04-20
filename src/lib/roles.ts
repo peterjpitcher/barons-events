@@ -17,13 +17,6 @@ export function isAdministrator(role: UserRole): boolean {
   return role === "administrator";
 }
 
-/** Can create or edit events (admin always; office_worker only with venueId) */
-export function canManageEvents(role: UserRole, venueId?: string | null): boolean {
-  if (role === "administrator") return true;
-  if (role === "office_worker" && venueId) return true;
-  return false;
-}
-
 /** Can propose or submit an event (any venue; admin triages). */
 export function canProposeEvents(role: UserRole): boolean {
   return role === "administrator" || role === "office_worker";

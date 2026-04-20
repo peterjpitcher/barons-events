@@ -40,7 +40,6 @@ import {
 import type { AppUser } from "@/lib/types";
 import {
   isAdministrator,
-  canManageEvents,
   canProposeEvents,
   canEditEvent,
   type EventEditContext,
@@ -695,15 +694,6 @@ describe("roles.ts — final capability functions", () => {
     it("returns true for administrator", () => expect(isAdministrator("administrator")).toBe(true));
     it("returns false for office_worker", () => expect(isAdministrator("office_worker")).toBe(false));
     it("returns false for executive", () => expect(isAdministrator("executive")).toBe(false));
-  });
-
-  describe("canManageEvents (venue_id-dependent)", () => {
-    it("administrator can manage events without venueId", () => expect(canManageEvents("administrator")).toBe(true));
-    it("administrator can manage events with venueId", () => expect(canManageEvents("administrator", "v1")).toBe(true));
-    it("office_worker WITH venueId can manage events", () => expect(canManageEvents("office_worker", "v1")).toBe(true));
-    it("office_worker WITHOUT venueId cannot manage events", () => expect(canManageEvents("office_worker")).toBe(false));
-    it("office_worker with null venueId cannot manage events", () => expect(canManageEvents("office_worker", null)).toBe(false));
-    it("executive cannot manage events", () => expect(canManageEvents("executive")).toBe(false));
   });
 
   describe("canProposeEvents", () => {

@@ -6,7 +6,7 @@ import { z } from "zod";
 import { createSupabaseActionClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth";
-import { canManageEvents, canReviewEvents, canProposeEvents, canEditEvent } from "@/lib/roles";
+import { canReviewEvents, canProposeEvents, canEditEvent } from "@/lib/roles";
 import { loadEventEditContext } from "@/lib/events/edit-context";
 import { appendEventVersion, createEventDraft, createEventPlanningItem, recordApproval, softDeleteEvent, updateEventDraft, updateEventAssignee } from "@/lib/events";
 import { generateUniqueEventSlug } from "@/lib/bookings";
