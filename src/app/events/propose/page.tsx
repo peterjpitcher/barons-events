@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
-import { canManageEvents } from "@/lib/roles";
+import { canProposeEvents } from "@/lib/roles";
 import { listVenues } from "@/lib/venues";
 import { ProposeEventForm } from "@/components/events/propose-event-form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,21 +15,15 @@ export const metadata = {
 export default async function ProposeEventPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!canManageEvents(user.role, user.venueId)) redirect("/unauthorized");
+  if (!canProposeEvents(user.role)) redirect("/unauthorized");
 
   const venueRows = await listVenues();
   const venues: VenueOption[] = venueRows.map((v) => ({
     id: v.id,
     name: v.name,
-     
+
     category: (((v as any).category ?? "pub") === "cafe" ? "cafe" : "pub") as "pub" | "cafe"
   }));
-
-  // Office workers with a specific venue: pre-restrict to that venue only.
-  const restrictedVenues =
-    user.role === "office_worker" && user.venueId
-      ? venues.filter((v) => v.id === user.venueId)
-      : venues;
 
   return (
     <div className="space-y-6">
@@ -42,7 +36,7 @@ export default async function ProposeEventPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <ProposeEventForm venues={restrictedVenues} />
+          <ProposeEventForm venues={venues} defaultVenueId={user.venueId ?? null} />
           <p className="mt-4 text-xs text-subtle">
             Need to submit a fully-detailed event straight away? <Link className="underline" href="/events/new">Use the full event form.</Link>
           </p>

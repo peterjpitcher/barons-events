@@ -5,6 +5,8 @@ import { z } from "zod";
 import { randomUUID } from "crypto";
 import { getCurrentUser } from "@/lib/auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { createSupabaseActionClient } from "@/lib/supabase/server";
+import { canProposeEvents } from "@/lib/roles";
 import { recordAuditLogEntry } from "@/lib/audit-log";
 import type { ActionResult } from "@/lib/types";
 
@@ -56,11 +58,35 @@ export async function proposeEventAction(
     };
   }
 
+  if (!canProposeEvents(user.role)) {
+    return { success: false, message: "You don't have permission to propose events." };
+  }
+
+  // WF-003 v3.1: pre-validate venue IDs with explicit error handling so a DB
+  // outage surfaces as a retryable failure rather than a user-facing "venue
+  // not available" message.
+  const supabase = await createSupabaseActionClient();
+  const { data: validVenues, error: venueErr } = await supabase
+    .from("venues")
+    .select("id")
+    .in("id", parsed.data.venueIds)
+    .is("deleted_at", null);
+  if (venueErr) {
+    console.error("proposeEventAction: venue validation query failed", { error: venueErr });
+    return { success: false, message: "We couldn't verify venues right now. Please try again." };
+  }
+  const validIds = new Set((validVenues ?? []).map((v) => v.id));
+  if (parsed.data.venueIds.some((id) => !validIds.has(id))) {
+    return { success: false, message: "One or more selected venues are not available." };
+  }
+
   const idempotencyKey = (formData.get("idempotencyKey") as string) || randomUUID();
   const db = createSupabaseAdminClient();
-   
+
   const { data, error } = await (db as any).rpc("create_multi_venue_event_proposals", {
     p_payload: {
+      // SEC-001 v3.1: authoritative created_by from the authenticated session;
+      // never trust a client-supplied value, even if the RPC later checks role.
       created_by: user.id,
       venue_ids: parsed.data.venueIds,
       title: parsed.data.title,
@@ -150,25 +176,18 @@ export async function preRejectEventAction(
 
   const db = createSupabaseAdminClient();
 
-  // Insert the approvals row with the decision + reason, then transition status.
-   
-  await (db as any).from("approvals").insert({
-    event_id: parsed.data.eventId,
-    reviewer_id: user.id,
-    decision: "rejected",
-    feedback_text: parsed.data.reason
+  // Atomic: the reject_event_proposal RPC inserts the approvals row and
+  // transitions the event status in a single transaction, validating the
+  // admin role server-side.
+
+  const { error } = await (db as any).rpc("reject_event_proposal", {
+    p_event_id: parsed.data.eventId,
+    p_admin_id: user.id,
+    p_reason: parsed.data.reason
   });
-
-   
-  const { error: statusError } = await (db as any)
-    .from("events")
-    .update({ status: "rejected" })
-    .eq("id", parsed.data.eventId)
-    .eq("status", "pending_approval");
-
-  if (statusError) {
-    console.error("preRejectEventAction status update failed:", statusError);
-    return { success: false, message: "Could not reject the proposal." };
+  if (error) {
+    console.error("preRejectEventAction RPC failed:", error);
+    return { success: false, message: error.message ?? "Could not reject the proposal." };
   }
 
   await recordAuditLogEntry({

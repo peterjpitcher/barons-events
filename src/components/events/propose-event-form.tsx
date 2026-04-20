@@ -12,13 +12,26 @@ import { SubmitButton } from "@/components/ui/submit-button";
 
 type ProposeEventFormProps = {
   venues: VenueOption[];
+  /**
+   * Optional pre-selected venue id. When provided and matching a venue in
+   * `venues`, the form opens with that venue already ticked. Used to give
+   * office workers a sensible default without restricting the picker.
+   */
+  defaultVenueId?: string | null;
 };
 
-export function ProposeEventForm({ venues }: ProposeEventFormProps) {
+export function ProposeEventForm({ venues, defaultVenueId }: ProposeEventFormProps) {
   const [state, formAction] = useActionState(proposeEventAction, undefined);
-  const [selectedVenueIds, setSelectedVenueIds] = useState<string[]>(
-    venues.length === 1 ? [venues[0].id] : []
-  );
+  const [selectedVenueIds, setSelectedVenueIds] = useState<string[]>(() => {
+    if (defaultVenueId && venues.some((v) => v.id === defaultVenueId)) {
+      return [defaultVenueId];
+    }
+    return venues.length === 1 ? [venues[0].id] : [];
+  });
+  // SEC-004 v3.2: stable idempotency key generated once per form mount.
+  // The RPC uses it to deduplicate double-submits (same key -> same result).
+  // A fresh form render gets a fresh key, so legitimate re-proposals work.
+  const [idempotencyKey] = useState(() => crypto.randomUUID());
   const router = useRouter();
 
   useEffect(() => {
@@ -34,6 +47,7 @@ export function ProposeEventForm({ venues }: ProposeEventFormProps) {
 
   return (
     <form action={formAction} className="space-y-5">
+      <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
       <div className="space-y-2">
         <Label htmlFor="propose-title">Event title</Label>
         <Input id="propose-title" name="title" required maxLength={200} placeholder="e.g. Easter Weekend Quiz" />

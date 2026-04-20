@@ -25,6 +25,7 @@ import { parseVenueSpaces } from "@/lib/venue-spaces";
 import { formatCurrency, formatPercent } from "@/lib/utils/format";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { canViewPlanning } from "@/lib/roles";
+import { canEditEventFromRow } from "@/lib/events/edit-context";
 import { SopChecklistView } from "@/components/planning/sop-checklist-view";
 import { AttachmentsPanel } from "@/components/attachments/attachments-panel";
 import { ProposalDecisionCard } from "@/components/events/proposal-decision-card";
@@ -90,17 +91,25 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
     user.venueId != null &&
     event.venue_id === user.venueId;
 
-  // Pre-event proposal creators (any role) can continue editing their own
-  // proposal once an admin approves it, so they can fill in the remaining
-  // details. The saveEventDraftAction auto-transitions
-  // approved_pending_details → draft once required fields are provided.
-  const isCreator = event.created_by === user.id;
+  // Shared row projection for edit-context gating. All six fields come from
+  // getEventDetail (SELECT *) so no widening is required.
+  const eventRowForEdit = {
+    id: event.id,
+    venue_id: event.venue_id,
+    manager_responsible_id: event.manager_responsible_id,
+    created_by: event.created_by,
+    status: event.status,
+    deleted_at: event.deleted_at
+  };
 
-  const canEdit =
-    (user.role === "administrator" &&
-      ["draft", "submitted", "needs_revisions", "approved", "approved_pending_details"].includes(event.status)) ||
-    (isVenueScoped && ["draft", "needs_revisions", "approved_pending_details"].includes(event.status)) ||
-    (isCreator && event.status === "approved_pending_details");
+  // Edit / delete / booking-settings gate — defence-in-depth against the same
+  // rules enforced by RLS and the status-transition trigger. The matching
+  // server actions all use canEditEvent (see plan Task 9/10/16); keeping the
+  // UI aligned avoids dead controls that would server-reject.
+  const canEdit = canEditEventFromRow(user, eventRowForEdit);
+  const canDelete = canEditEventFromRow(user, eventRowForEdit);
+  const canManageBooking = canEditEventFromRow(user, eventRowForEdit);
+
   const canReview =
     (user.role === "administrator" && ["submitted", "needs_revisions"].includes(event.status));
   const canPreReview =
@@ -109,9 +118,6 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
     (isVenueScoped && ["approved", "completed"].includes(event.status)) ||
     (user.role === "administrator" && ["approved", "completed"].includes(event.status));
   const canUpdateAssignee = user.role === "administrator";
-  const canDelete =
-    user.role === "administrator" ||
-    (isVenueScoped && ["draft", "needs_revisions"].includes(event.status));
   const canRevertToDraft = event.status === "approved" && user.role === "administrator";
 
   const reassignAssignee = async (formData: FormData) => {
@@ -614,8 +620,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
                 </span>
               ) : null}
             </div>
-            {(user.role === "administrator" ||
-              (user.role === "office_worker" && event.venue_id === user.venueId)) ? (
+            {canManageBooking ? (
               <Button asChild variant="secondary" size="sm">
                 <Link href={`/events/${event.id}/bookings`}>Bookings</Link>
               </Button>
@@ -635,6 +640,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
           role={user.role}
           userVenueId={user.venueId}
           users={assignableUsers.map((u) => ({ id: u.id, name: u.name }))}
+          canDelete={canDelete}
           sidebar={
             <div className="space-y-6">
               <Card>
