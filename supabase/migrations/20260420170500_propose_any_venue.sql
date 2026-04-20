@@ -33,9 +33,11 @@ BEGIN
     FROM public.event_creation_batches
     WHERE idempotency_key = p_idempotency_key;
     IF v_existing IS NOT NULL THEN RETURN v_existing; END IF;
-    -- WF-001 v3.1: re-entrant. Previous call claimed the batch but crashed
-    -- before storing result. Fall through and re-run; the UPDATE at the end
-    -- stamps the result so the next retry is a no-op success.
+    -- AB-003 v3.2: non-reentrant. If we claimed but crashed before storing
+    -- result, clients must retry with a fresh idempotency key. Re-running
+    -- here would create duplicate events because there's no batch->event
+    -- lookup to reconcile the earlier attempt.
+    RAISE EXCEPTION 'Batch % already claimed but result not yet stored; retry with a new key', p_idempotency_key;
   END IF;
 
   v_created_by := (p_payload->>'created_by')::uuid;
