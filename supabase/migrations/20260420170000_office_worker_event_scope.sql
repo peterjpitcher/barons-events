@@ -23,16 +23,21 @@ CREATE POLICY "managers update editable events"
   USING (
     public.current_user_role() = 'administrator'
     OR (
-      public.current_user_role() = 'office_worker'
-      AND auth.uid() = created_by
-      AND status IN ('draft', 'needs_revisions')
-    )
-    OR (
-      public.current_user_role() = 'office_worker'
-      AND (SELECT venue_id FROM public.users WHERE id = auth.uid()) IS NOT NULL
-      AND venue_id = (SELECT venue_id FROM public.users WHERE id = auth.uid())
-      AND manager_responsible_id = auth.uid()
-      AND status IN ('approved', 'cancelled')
+      deleted_at IS NULL
+      AND (
+        (
+          public.current_user_role() = 'office_worker'
+          AND auth.uid() = created_by
+          AND status IN ('draft', 'needs_revisions')
+        )
+        OR (
+          public.current_user_role() = 'office_worker'
+          AND (SELECT venue_id FROM public.users WHERE id = auth.uid()) IS NOT NULL
+          AND venue_id = (SELECT venue_id FROM public.users WHERE id = auth.uid())
+          AND manager_responsible_id = auth.uid()
+          AND status IN ('approved', 'cancelled')
+        )
+      )
     )
   )
   WITH CHECK (
@@ -64,6 +69,13 @@ BEGIN
   v_role := public.current_user_role();
   IF v_role = 'administrator' THEN
     RETURN NEW;
+  END IF;
+
+  -- SEC-001 v3.2: non-admin cannot restore (clear) a soft-delete marker.
+  -- Soft-delete (null -> now) stays allowed; the UPDATE RLS USING clause and
+  -- canEditEvent already gate who may perform it.
+  IF OLD.deleted_at IS NOT NULL AND NEW.deleted_at IS NULL THEN
+    RAISE EXCEPTION 'Non-admin users cannot restore soft-deleted events';
   END IF;
 
   IF NEW.venue_id IS DISTINCT FROM OLD.venue_id THEN
