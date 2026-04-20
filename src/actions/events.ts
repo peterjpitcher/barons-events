@@ -1635,8 +1635,9 @@ export async function generateWebsiteCopyFromFormAction(
     redirect("/login");
   }
 
-  if (!canManageEvents(user.role, user.venueId)) {
-    return { success: false, message: "Only administrators or venue managers can generate website copy." };
+  // LLM utility with no event context — capability alone gates it.
+  if (!canProposeEvents(user.role)) {
+    return { success: false, message: "You don't have permission to generate website copy." };
   }
 
   try {
@@ -1731,8 +1732,27 @@ export async function generateTermsAndConditionsAction(
     redirect("/login");
   }
 
-  if (!canManageEvents(user.role, user.venueId)) {
-    return { success: false, message: "Only administrators or venue managers can generate terms." };
+  // If called from within an existing event (metadata update), require
+  // full edit rights on that event. If called for an unsaved draft,
+  // capability alone is sufficient.
+  const termsEventIdRaw = formData.get("eventId");
+  const termsEventIdStr = typeof termsEventIdRaw === "string" ? termsEventIdRaw.trim() : "";
+  if (termsEventIdStr) {
+    const parsedId = z.string().uuid().safeParse(termsEventIdStr);
+    if (!parsedId.success) {
+      return { success: false, message: "Invalid event reference." };
+    }
+    const ctx = await loadEventEditContext(parsedId.data);
+    if (!ctx) {
+      return { success: false, message: "Event not found." };
+    }
+    if (!canEditEvent(user.role, user.id, user.venueId, ctx)) {
+      return { success: false, message: "You don't have permission to edit this event." };
+    }
+  } else {
+    if (!canProposeEvents(user.role)) {
+      return { success: false, message: "You don't have permission to generate terms." };
+    }
   }
 
   const bookingType = normaliseOptionalBookingTypeField(formData.get("bookingType"));
@@ -1856,15 +1876,20 @@ export async function deleteEventAction(_: ActionResult | undefined, formData: F
   if (!user) {
     redirect("/login");
   }
-  if (!canManageEvents(user.role, user.venueId)) {
-    return { success: false, message: "You don't have permission to delete events." };
-  }
 
   const eventId = formData.get("eventId");
   const parsedEvent = z.string().uuid().safeParse(eventId);
 
   if (!parsedEvent.success) {
     return { success: false, message: "Invalid event reference." };
+  }
+
+  const ctx = await loadEventEditContext(parsedEvent.data);
+  if (!ctx) {
+    return { success: false, message: "Event not found." };
+  }
+  if (!canEditEvent(user.role, user.id, user.venueId, ctx)) {
+    return { success: false, message: "You don't have permission to delete this event." };
   }
 
   const supabase = await createSupabaseActionClient();
@@ -1879,15 +1904,6 @@ export async function deleteEventAction(_: ActionResult | undefined, formData: F
 
     if (fetchError || !event) {
       return { success: false, message: "Event not found." };
-    }
-
-    const canDelete =
-      user.role === "administrator" ||
-      ((user.role === "office_worker" && event.created_by === user.id) &&
-        ["draft", "needs_revisions"].includes(event.status));
-
-    if (!canDelete) {
-      return { success: false, message: "You don't have permission to delete this event." };
     }
 
     // Record audit entry before deletion so the event ID is captured
@@ -2022,10 +2038,6 @@ export async function updateBookingSettingsAction(
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  if (!canManageEvents(user.role, user.venueId)) {
-    return { success: false, message: "You don't have permission to update booking settings." };
-  }
-
   const parsed = bookingSettingsSchema.safeParse(input);
   if (!parsed.success) {
     return { success: false, message: "Invalid booking settings." };
@@ -2033,9 +2045,20 @@ export async function updateBookingSettingsAction(
 
   const { eventId, bookingEnabled, totalCapacity, maxTicketsPerBooking, smsPromoEnabled } = parsed.data;
 
+  // This action uses the admin client below, so the server-side guard is
+  // the sole enforcement point. Validate permission via the true row.
+  const ctx = await loadEventEditContext(eventId);
+  if (!ctx) {
+    return { success: false, message: "Event not found." };
+  }
+  if (!canEditEvent(user.role, user.id, user.venueId, ctx)) {
+    return { success: false, message: "You don't have permission to update booking settings for this event." };
+  }
+
   const supabase = createSupabaseAdminClient();
 
-  // Fetch the current event to check permissions and existing slug
+  // Fetch the current event for slug/title/start_at. Permission already
+  // verified above via loadEventEditContext.
   const { data: event, error: fetchError } = await supabase
     .from("events")
     .select("id, title, start_at, venue_id, seo_slug")
@@ -2044,11 +2067,6 @@ export async function updateBookingSettingsAction(
 
   if (fetchError || !event) {
     return { success: false, message: "Event not found." };
-  }
-
-  // Venue managers can only modify events at their own venue
-  if (user.role === "office_worker" && event.venue_id !== user.venueId) {
-    return { success: false, message: "You can only manage booking settings for your own venue's events." };
   }
 
   // Auto-generate slug when enabling bookings for the first time
