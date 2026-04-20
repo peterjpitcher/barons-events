@@ -1009,27 +1009,33 @@ export async function updatePlanningTask(taskId: string, updates: UpdatePlanning
 
   const updatePayload: Record<string, unknown> = {};
 
-  if (Object.prototype.hasOwnProperty.call(updates, "title")) {
+  // Use `!== undefined` rather than `hasOwnProperty`: callers build the
+  // updates object via an object literal that always includes every key, so
+  // `hasOwnProperty` is true even for fields the caller isn't trying to
+  // change. Treating any undefined value as "skip" matches the optional
+  // semantics of UpdatePlanningTaskInput and stops a notes-only save from
+  // silently clearing assignee_id / completed_at.
+  if (updates.title !== undefined) {
     updatePayload["title"] = updates.title;
   }
-  if (Object.prototype.hasOwnProperty.call(updates, "assigneeId")) {
-    updatePayload["assignee_id"] = updates.assigneeId ?? null;
+  if (updates.assigneeId !== undefined) {
+    updatePayload["assignee_id"] = updates.assigneeId;
   }
-  if (Object.prototype.hasOwnProperty.call(updates, "dueDate")) {
+  if (updates.dueDate !== undefined) {
     updatePayload["due_date"] = updates.dueDate;
   }
-  if (Object.prototype.hasOwnProperty.call(updates, "sortOrder")) {
+  if (updates.sortOrder !== undefined) {
     updatePayload["sort_order"] = updates.sortOrder;
   }
-  if (Object.prototype.hasOwnProperty.call(updates, "status")) {
+  if (updates.status !== undefined) {
     updatePayload["status"] = updates.status;
     updatePayload["completed_at"] =
       updates.status === "done" || updates.status === "not_required"
         ? new Date().toISOString()
         : null;
   }
-  if (Object.prototype.hasOwnProperty.call(updates, "notes")) {
-    updatePayload["notes"] = updates.notes ?? null;
+  if (updates.notes !== undefined) {
+    updatePayload["notes"] = updates.notes;
   }
 
   const { data, error } = await supabase
