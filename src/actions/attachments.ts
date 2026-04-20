@@ -6,6 +6,8 @@ import { fileTypeFromBuffer } from "file-type";
 import { getCurrentUser } from "@/lib/auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { recordAuditLogEntry } from "@/lib/audit-log";
+import { canEditEvent } from "@/lib/roles";
+import { loadEventEditContext } from "@/lib/events/edit-context";
 import type { ActionResult } from "@/lib/types";
 
 // file-type detects the raw container format. Some declared types collapse
@@ -121,6 +123,17 @@ export async function requestAttachmentUploadAction(
   }
   if (!ALLOWED_MIME_TYPES.has(parsed.data.mimeType)) {
     return { success: false, message: "That file type is not supported." };
+  }
+
+  // SEC-005: event-parented attachments follow the canonical event-edit rule.
+  // Planning-item/task parents keep their existing (pre-SEC-005) authz path —
+  // out of scope for this fix.
+  if (parsed.data.parentType === "event") {
+    const ctx = await loadEventEditContext(parsed.data.parentId);
+    if (!ctx) return { success: false, message: "Event not found." };
+    if (!canEditEvent(user.role, user.id, user.venueId, ctx)) {
+      return { success: false, message: "You don't have permission to upload attachments to this event." };
+    }
   }
 
   const db = createSupabaseAdminClient();
@@ -285,16 +298,27 @@ export async function deleteAttachmentAction(
 
   const db = createSupabaseAdminClient();
 
-   
+
   const { data: row } = await (db as any)
     .from("attachments")
-    .select("uploaded_by")
+    .select("uploaded_by, event_id, planning_item_id, planning_task_id")
     .eq("id", parsed.data.attachmentId)
     .maybeSingle();
 
   if (!row) return { success: false, message: "Attachment not found." };
-  if (user.role !== "administrator" && row.uploaded_by !== user.id) {
-    return { success: false, message: "You cannot delete this attachment." };
+
+  // SEC-005: event-parented attachments require event-edit capability.
+  // Admin short-circuits. Planning-parented attachments keep the legacy
+  // uploader-or-admin rule (out of scope for SEC-005).
+  if (user.role !== "administrator") {
+    if (row.event_id) {
+      const ctx = await loadEventEditContext(row.event_id);
+      if (!ctx || !canEditEvent(user.role, user.id, user.venueId, ctx)) {
+        return { success: false, message: "You don't have permission to delete this attachment." };
+      }
+    } else if (row.uploaded_by !== user.id) {
+      return { success: false, message: "You cannot delete this attachment." };
+    }
   }
 
    
