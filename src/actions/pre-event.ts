@@ -176,25 +176,18 @@ export async function preRejectEventAction(
 
   const db = createSupabaseAdminClient();
 
-  // Insert the approvals row with the decision + reason, then transition status.
-   
-  await (db as any).from("approvals").insert({
-    event_id: parsed.data.eventId,
-    reviewer_id: user.id,
-    decision: "rejected",
-    feedback_text: parsed.data.reason
+  // Atomic: the reject_event_proposal RPC inserts the approvals row and
+  // transitions the event status in a single transaction, validating the
+  // admin role server-side.
+
+  const { error } = await (db as any).rpc("reject_event_proposal", {
+    p_event_id: parsed.data.eventId,
+    p_admin_id: user.id,
+    p_reason: parsed.data.reason
   });
-
-   
-  const { error: statusError } = await (db as any)
-    .from("events")
-    .update({ status: "rejected" })
-    .eq("id", parsed.data.eventId)
-    .eq("status", "pending_approval");
-
-  if (statusError) {
-    console.error("preRejectEventAction status update failed:", statusError);
-    return { success: false, message: "Could not reject the proposal." };
+  if (error) {
+    console.error("preRejectEventAction RPC failed:", error);
+    return { success: false, message: error.message ?? "Could not reject the proposal." };
   }
 
   await recordAuditLogEntry({
