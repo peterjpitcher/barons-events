@@ -47,7 +47,7 @@ export async function listAllBookingsForUser(
       id, first_name, last_name, mobile, ticket_count, status, created_at,
       events!inner (
         id, title, start_at, venue_id,
-        venues ( id, name )
+        venues!events_venue_id_fkey ( id, name )
       )
     `)
     .order("created_at", { ascending: false });
