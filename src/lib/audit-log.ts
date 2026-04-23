@@ -21,7 +21,8 @@ type RecordAuditParams = {
     | "user"
     | "slt_member"
     | "business_settings"
-    | "attachment";
+    | "attachment"
+    | "digest";
   entityId: string;
   action: string;
   meta?: Record<string, unknown>;
