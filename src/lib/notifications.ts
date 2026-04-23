@@ -3,6 +3,7 @@ import { createSupabaseReadonlyClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/types";
 import { formatSpacesLabel } from "@/lib/venue-spaces";
+import { getTodayLondonIsoDate, formatInLondon } from "@/lib/datetime";
 
 const RESEND_FROM_ADDRESS = process.env.RESEND_FROM_EMAIL ?? "BaronsHub <noreply@auth.orangejelly.co.uk>";
 const APP_BASE_URL =
@@ -869,98 +870,241 @@ export async function sendDebriefSubmittedToSltEmail(eventId: string): Promise<v
   }
 }
 
-export async function sendWeeklyPipelineSummaryEmail() {
+/**
+ * Sends a twice-weekly digest email to all active users who have open planning tasks.
+ *
+ * Content:
+ * 1. Open tasks grouped by planning item (with event title as context if linked)
+ * 2. Upcoming events in the next 4 days (venue-scoped for users with venue_id)
+ *
+ * Idempotent per calendar day (London timezone) — duplicate runs on the same day are skipped.
+ */
+export async function sendWeeklyDigestEmail(): Promise<{ sent: number; failed: number; skippedAssignees: number }> {
   if (!areNotificationsEnabled()) {
-    logNotificationSkipped("sendWeeklyPipelineSummaryEmail");
-    return;
+    logNotificationSkipped("sendWeeklyDigestEmail");
+    return { sent: 0, failed: 0, skippedAssignees: 0 };
   }
   const resend = getResendClient();
-  if (!resend) return;
+  if (!resend) return { sent: 0, failed: 0, skippedAssignees: 0 };
 
-  try {
-    const planners = await listUsersByRole("administrator");
-    if (!planners.length) return;
+  const todayLondon = getTodayLondonIsoDate();
+  const db = createSupabaseAdminClient();
 
-    const supabase = await createSupabaseReadonlyClient();
-    const statuses = ["submitted", "needs_revisions", "approved"];
+  // Idempotency: skip if we already sent a digest for this date
+  const { data: existing, error: idempotencyError } = await db
+    .from("audit_log")
+    .select("id")
+    .eq("entity", "digest")
+    .eq("entity_id", todayLondon)
+    .eq("action", "digest.batch_sent")
+    .limit(1);
 
-    const summary: Record<string, number> = {};
-    const countResults = await Promise.allSettled(
-      statuses.map(async (status) => {
-        const { count, error } = await supabase
-          .from("events")
-          .select("id", { count: "exact", head: true })
-          .eq("status", status);
-        if (error) throw new Error(`Count query failed for status "${status}": ${error.message}`);
-        return { status, count: count ?? 0 };
-      })
-    );
-    countResults.forEach((result) => {
-      if (result.status === "fulfilled") {
-        summary[result.value.status] = result.value.count;
-      } else {
-        console.warn("Weekly pipeline summary: status count query failed", result.reason);
-      }
-    });
-
-    const { data: eventsWithDebriefs, error: missingError } = await supabase
-      .from("events")
-      .select("id, debrief:debriefs(id)")
-      .in("status", ["approved", "completed"]);
-
-    if (missingError) {
-      throw new Error(`Could not fetch debrief status: ${missingError.message}`);
-    }
-
-    const missingDebriefs = (eventsWithDebriefs ?? []).filter((record) => !record.debrief);
-
-    const { data: upcomingEvents, error: upcomingError } = await supabase
-      .from("events")
-      .select("id,title,start_at,end_at,venue_space, venue:venues!events_venue_id_fkey(name)")
-      .gte("start_at", new Date().toISOString())
-      .order("start_at", { ascending: true })
-      .limit(5);
-
-    if (upcomingError) {
-      throw new Error(`Could not fetch upcoming events: ${upcomingError.message}`);
-    }
-
-    const body: string[] = [
-      `Submitted waiting review: ${summary.submitted ?? 0}`,
-      `Needs revisions: ${summary.needs_revisions ?? 0}`,
-      `Approved (pending comms): ${summary.approved ?? 0}`,
-      `Events missing debrief: ${missingDebriefs?.length ?? 0}`
-    ];
-
-    if (upcomingEvents?.length) {
-      body.push(
-        "",
-        "Next confirmed events:",
-        ...upcomingEvents.map((event) => {
-          const when = formatEventWindow(event as unknown as EventRow);
-          const venue = (event as any).venue?.name ?? "Unknown venue";
-          return `• ${event.title} (${venue}, ${when})`;
-        })
-      );
-    }
-
-    const { html, text } = renderEmailTemplate({
-      headline: "Weekly pipeline roundup",
-      intro: "Here’s the latest snapshot of the events pipeline so you’re ready for the week ahead.",
-      body,
-      button: { label: "Open planning board", url: plannerDashboardLink() },
-      meta: [`Generated: ${new Date().toLocaleString("en-GB")}`],
-      footerNote: "You’re receiving this because you’re an administrator in BaronsHub."
-    });
-
-    await resend.emails.send({
-      from: RESEND_FROM_ADDRESS,
-      to: planners.map((user) => user.email),
-      subject: "Weekly BaronsHub pipeline roundup",
-      html,
-      text
-    });
-  } catch (error) {
-    console.warn("Failed to send weekly pipeline summary email", error);
+  if (idempotencyError) {
+    console.error("sendWeeklyDigestEmail: idempotency check failed", idempotencyError);
   }
+  if (existing && existing.length > 0) {
+    return { sent: 0, failed: 0, skippedAssignees: 0 };
+  }
+
+  // Parallel data fetch
+  const nowIso = new Date().toISOString();
+  const fourDaysFromNow = new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString();
+
+  const [tasksResult, eventsResult, usersResult] = await Promise.all([
+    db
+      .from("planning_tasks")
+      .select("id, title, due_date, assignee_id, planning_item:planning_items!inner(id, title, event:events(id, title, venue_id))")
+      .eq("status", "open")
+      .lte("due_date", todayLondon)
+      .not("assignee_id", "is", null),
+    db
+      .from("events")
+      .select("id, title, start_at, end_at, venue_id, venue:venues!events_venue_id_fkey(name)")
+      .gte("start_at", nowIso)
+      .lt("start_at", fourDaysFromNow)
+      .in("status", ["approved", "submitted"])
+      .is("deleted_at", null)
+      .order("start_at", { ascending: true }),
+    db
+      .from("users")
+      .select("id, email, full_name, venue_id")
+      .is("deactivated_at", null)
+  ]);
+
+  if (tasksResult.error) throw new Error(`Failed to fetch planning tasks: ${tasksResult.error.message}`);
+  if (eventsResult.error) throw new Error(`Failed to fetch upcoming events: ${eventsResult.error.message}`);
+  if (usersResult.error) throw new Error(`Failed to fetch users: ${usersResult.error.message}`);
+
+  const tasks = tasksResult.data ?? [];
+  const upcomingEvents = eventsResult.data ?? [];
+  const users = usersResult.data ?? [];
+
+  // Build user lookup
+  type DigestUser = { email: string; fullName: string | null; venueId: string | null };
+  const userMap = new Map<string, DigestUser>();
+  for (const u of users) {
+    userMap.set(u.id, { email: u.email, fullName: u.full_name, venueId: u.venue_id });
+  }
+
+  // Group tasks by assignee
+  type TaskWithContext = typeof tasks[number];
+  const tasksByAssignee = new Map<string, TaskWithContext[]>();
+  let skippedAssignees = 0;
+
+  for (const task of tasks) {
+    const assigneeId = task.assignee_id as string;
+    if (!userMap.has(assigneeId)) {
+      skippedAssignees++;
+      continue;
+    }
+    const existing = tasksByAssignee.get(assigneeId);
+    if (existing) {
+      existing.push(task);
+    } else {
+      tasksByAssignee.set(assigneeId, [task]);
+    }
+  }
+
+  let sent = 0;
+  let failed = 0;
+
+  for (const [assigneeId, assigneeTasks] of tasksByAssignee) {
+    try {
+      const user = userMap.get(assigneeId)!;
+
+      // Group tasks by planning item
+      type PlanningGroup = {
+        planningItemId: string;
+        heading: string;
+        tasks: { title: string; dueDate: string; overdue: boolean }[];
+        earliestDue: string;
+      };
+      const groupMap = new Map<string, PlanningGroup>();
+
+      for (const task of assigneeTasks) {
+        const pi = task.planning_item as unknown as {
+          id: string;
+          title: string;
+          event: { id: string; title: string; venue_id: string | null } | null;
+        };
+        const piId = pi.id;
+
+        if (!groupMap.has(piId)) {
+          let heading = escapeHtml(pi.title);
+          if (pi.event) {
+            heading += ` \u2014 for ${escapeHtml(pi.event.title)}`;
+          }
+          groupMap.set(piId, {
+            planningItemId: piId,
+            heading,
+            tasks: [],
+            earliestDue: task.due_date as string
+          });
+        }
+
+        const group = groupMap.get(piId)!;
+        const isOverdue = (task.due_date as string) < todayLondon;
+        group.tasks.push({
+          title: task.title,
+          dueDate: task.due_date as string,
+          overdue: isOverdue
+        });
+        if ((task.due_date as string) < group.earliestDue) {
+          group.earliestDue = task.due_date as string;
+        }
+      }
+
+      // Sort groups by earliest due date
+      const sortedGroups = Array.from(groupMap.values()).sort(
+        (a, b) => a.earliestDue.localeCompare(b.earliestDue)
+      );
+
+      // Sort tasks within each group: overdue first, then by due date
+      for (const group of sortedGroups) {
+        group.tasks.sort((a, b) => {
+          if (a.overdue !== b.overdue) return a.overdue ? -1 : 1;
+          return a.dueDate.localeCompare(b.dueDate);
+        });
+      }
+
+      // Build email body lines with 50-task cap
+      const body: string[] = [];
+      let taskCount = 0;
+      let totalTasks = 0;
+      for (const group of sortedGroups) {
+        totalTasks += group.tasks.length;
+      }
+
+      let capped = false;
+      for (const group of sortedGroups) {
+        if (capped) break;
+        body.push(`\ud83d\udccb ${group.heading}`);
+        for (const task of group.tasks) {
+          if (taskCount >= 50) {
+            capped = true;
+            break;
+          }
+          const { date: formattedDate } = formatInLondon(task.dueDate + "T00:00:00Z");
+          const marker = task.overdue ? "\u26a0\ufe0f " : "";
+          body.push(`  \u2022 ${escapeHtml(task.title)} \u2014 due ${formattedDate}${marker ? ` ${marker}overdue` : ""}`);
+          taskCount++;
+        }
+      }
+
+      if (capped && totalTasks > 50) {
+        body.push(`\u2026and ${totalTasks - 50} more \u2014 view in BaronsHub`);
+      }
+
+      // Filter upcoming events by venue scope
+      const recipientEvents = upcomingEvents.filter((evt) => {
+        if (!user.venueId) return true;
+        return (evt as unknown as { venue_id: string | null }).venue_id === user.venueId;
+      });
+
+      if (recipientEvents.length > 0) {
+        body.push("", "Coming up in the next 4 days:");
+        for (const evt of recipientEvents) {
+          const when = formatEventWindow(evt as unknown as EventRow);
+          const venueName = (evt as unknown as { venue: { name: string } | null }).venue?.name ?? "Unknown venue";
+          body.push(`  \u2022 ${escapeHtml(evt.title)} \u2014 ${escapeHtml(venueName)}, ${when}`);
+        }
+      }
+
+      const { html, text } = renderEmailTemplate({
+        headline: "Your weekly digest",
+        intro: "Here\u2019s what needs your attention this week.",
+        body,
+        button: { label: "Open BaronsHub", url: plannerDashboardLink() },
+        footerNote: "You\u2019re receiving this because you have open tasks in BaronsHub."
+      });
+
+      await resend.emails.send({
+        from: RESEND_FROM_ADDRESS,
+        to: [user.email],
+        subject: `Your BaronsHub digest \u2014 ${totalTasks} open task${totalTasks === 1 ? "" : "s"}`,
+        html,
+        text
+      });
+
+      sent++;
+    } catch (error) {
+      console.error(`sendWeeklyDigestEmail: failed for assignee ${assigneeId}`, error);
+      failed++;
+    }
+  }
+
+  // Record idempotency audit entry
+  try {
+    await db.from("audit_log").insert({
+      entity: "digest",
+      entity_id: todayLondon,
+      action: "digest.batch_sent",
+      actor_id: null,
+      meta: { sent, failed, skipped_assignees: skippedAssignees } as unknown as Database["public"]["Tables"]["audit_log"]["Row"]["meta"]
+    });
+  } catch (auditError) {
+    console.error("sendWeeklyDigestEmail: failed to record audit entry", auditError);
+  }
+
+  return { sent, failed, skippedAssignees };
 }

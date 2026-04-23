@@ -193,6 +193,20 @@ export function formatInLondon(isoString: string): { date: string; time: string 
   };
 }
 
+/**
+ * Returns today's date as YYYY-MM-DD in the Europe/London timezone.
+ * Useful for idempotency keys and date-scoped queries.
+ */
+export function getTodayLondonIsoDate(): string {
+  const now = new Date();
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: LONDON_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(now);
+}
+
 export function formatRelativeTime(date: Date | null): string {
   if (!date) return "Never signed in";
 
