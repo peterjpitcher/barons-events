@@ -146,22 +146,22 @@ export async function AppShell({ user, children }: AppShellProps) {
       >
         Skip to main content
       </a>
-      <aside className="hidden w-72 border-r border-white/10 bg-[var(--color-primary-700)] px-5 py-8 shadow-soft md:flex md:flex-col md:gap-6">
-        <div>
-          <h1 className="font-brand-serif text-4xl font-bold text-[var(--color-accent-warm)]">BaronsHub</h1>
-          <p className="mt-1 text-[0.65rem] uppercase tracking-[0.35em] text-[rgba(255,255,255,0.65)]">
+      <aside className="hidden w-72 border-r border-white/10 bg-[var(--color-primary-700)] px-4 py-4 shadow-soft md:flex md:h-screen md:flex-col md:gap-3">
+        <div className="shrink-0">
+          <h1 className="font-brand-serif text-3xl font-bold text-[var(--color-accent-warm)]">BaronsHub</h1>
+          <p className="mt-0.5 text-[0.6rem] uppercase tracking-[0.35em] text-[rgba(255,255,255,0.65)]">
             Accelerating Barons Success Everyday
           </p>
         </div>
-        <nav className="flex flex-col gap-4">
+        <nav className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
           {sections.map((section) => (
-            <div key={section.label} className="space-y-1">
-              <p className="px-3 text-[0.65rem] uppercase tracking-[0.2em] text-[rgba(255,255,255,0.55)]">{section.label}</p>
-              <div className="flex flex-col gap-1">
+            <div key={section.label} className="space-y-0.5">
+              <p className="px-3 text-[0.6rem] uppercase tracking-[0.2em] text-[rgba(255,255,255,0.55)]">{section.label}</p>
+              <div className="flex flex-col">
                 {section.items.map((item) => (
-                  <div key={item.href} className="flex flex-col gap-1">
+                  <div key={item.href} className="flex flex-col">
                     {item.labelOnly ? (
-                      <p className="px-4 py-2 text-sm font-medium text-[rgba(255,255,255,0.55)]">{item.label}</p>
+                      <p className="px-3 py-1 text-sm font-medium text-[rgba(255,255,255,0.55)]">{item.label}</p>
                     ) : (
                       <NavLink
                         href={item.href}
@@ -170,7 +170,7 @@ export async function AppShell({ user, children }: AppShellProps) {
                       />
                     )}
                     {item.children && item.children.length > 0 ? (
-                      <div className="ml-4 flex flex-col gap-1 border-l border-white/15 pl-2">
+                      <div className="ml-4 flex flex-col border-l border-white/15 pl-2">
                         {item.children.map((child) => (
                           <NavLink
                             key={child.href}
@@ -187,14 +187,14 @@ export async function AppShell({ user, children }: AppShellProps) {
             </div>
           ))}
         </nav>
-        <div className="mt-auto space-y-4">
-          <div className="rounded-[var(--radius)] border border-white/10 bg-white/5 p-4 text-sm leading-relaxed text-white/80">
+        <div className="mt-auto shrink-0 space-y-2">
+          <div className="rounded-[var(--radius)] border border-white/10 bg-white/5 p-2.5 text-sm leading-snug text-white/80">
             <p className="font-medium text-white">{user.fullName ?? user.email}</p>
             <p className="capitalize text-white/70">{roleDisplayNames[user.role] ?? user.role.replace(/_/g, " ")}</p>
           </div>
           <div className="flex items-center justify-center">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.png" alt="Barons" className="h-12 w-auto" />
+            <img src="/logo.png" alt="Barons" className="h-8 w-auto" />
           </div>
         </div>
       </aside>
