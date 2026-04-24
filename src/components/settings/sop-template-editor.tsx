@@ -15,6 +15,11 @@ import {
   loadSopAssignableUsersAction,
 } from "@/actions/sop";
 import type { SopSectionWithTasks, SopTaskTemplate } from "@/lib/planning/sop-types";
+import {
+  ROLE_MANAGER_RESPONSIBLE,
+  ROLE_EVENT_CREATOR,
+  DYNAMIC_ROLE_LABELS,
+} from "@/lib/planning/constants";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -865,6 +870,12 @@ function MultiSelect({
 }): React.ReactElement {
   const [open, setOpen] = useState(false);
 
+  // Dynamic role options shown above the user list
+  const dynamicRoles: AssignableUser[] = [
+    { id: ROLE_MANAGER_RESPONSIBLE, name: DYNAMIC_ROLE_LABELS[ROLE_MANAGER_RESPONSIBLE] },
+    { id: ROLE_EVENT_CREATOR, name: DYNAMIC_ROLE_LABELS[ROLE_EVENT_CREATOR] },
+  ];
+
   function toggle(id: string): void {
     if (selectedIds.includes(id)) {
       onChange(selectedIds.filter((sid) => sid !== id));
@@ -873,8 +884,9 @@ function MultiSelect({
     }
   }
 
+  // Resolve display names — use dynamic role labels for sentinels, user names for real IDs
   const selectedNames = selectedIds
-    .map((id) => options.find((o) => o.id === id)?.name)
+    .map((id) => DYNAMIC_ROLE_LABELS[id] ?? options.find((o) => o.id === id)?.name)
     .filter(Boolean);
 
   return (
@@ -892,6 +904,24 @@ function MultiSelect({
       </button>
       {open && (
         <div className="absolute z-20 mt-1 max-h-48 w-full overflow-auto rounded-[var(--radius)] border border-[var(--color-border)] bg-white shadow-soft">
+          {/* Dynamic roles */}
+          {dynamicRoles.map((role) => (
+            <label
+              key={role.id}
+              className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm font-medium text-[var(--color-primary-700)] hover:bg-[rgba(39,54,64,0.05)]"
+            >
+              <input
+                type="checkbox"
+                checked={selectedIds.includes(role.id)}
+                onChange={() => toggle(role.id)}
+                className="rounded border-[var(--color-border)]"
+              />
+              {role.name}
+            </label>
+          ))}
+          {/* Divider */}
+          <div className="border-t border-[var(--color-border)] my-1" />
+          {/* Real users */}
           {options.length === 0 ? (
             <p className="p-3 text-sm text-subtle">No users available.</p>
           ) : (
