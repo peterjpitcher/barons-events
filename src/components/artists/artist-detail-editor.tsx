@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 
 type ArtistDetailEditorProps = {
   artist: ArtistDetail;
+  canEdit?: boolean;
 };
 
 const scoreTone = (value: number): "success" | "info" | "warning" | "danger" => {
@@ -37,7 +38,7 @@ function formatSentiment(value: number | null | undefined): string {
   return `${((value + 1) * 50).toFixed(0)}/100`;
 }
 
-export function ArtistDetailEditor({ artist }: ArtistDetailEditorProps) {
+export function ArtistDetailEditor({ artist, canEdit = false }: ArtistDetailEditorProps) {
   const [state, formAction] = useActionState(updateArtistAction, undefined);
   const [archiveState, archiveFormAction] = useActionState(archiveArtistAction, undefined);
   const router = useRouter();
@@ -114,6 +115,7 @@ export function ArtistDetailEditor({ artist }: ArtistDetailEditorProps) {
                   id="artist-name"
                   name="name"
                   defaultValue={artist.name}
+                  disabled={!canEdit}
                   aria-invalid={Boolean(nameError)}
                   aria-describedby={nameError ? "artist-name-error" : undefined}
                 />
@@ -121,7 +123,7 @@ export function ArtistDetailEditor({ artist }: ArtistDetailEditorProps) {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="artist-type">Type</Label>
-                <Select id="artist-type" name="artistType" defaultValue={artist.artistType}>
+                <Select id="artist-type" name="artistType" defaultValue={artist.artistType} disabled={!canEdit}>
                   <option value="artist">Artist</option>
                   <option value="band">Band</option>
                   <option value="host">Host</option>
@@ -134,11 +136,11 @@ export function ArtistDetailEditor({ artist }: ArtistDetailEditorProps) {
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="artist-email">Email</Label>
-                <Input id="artist-email" name="email" type="email" defaultValue={artist.email ?? ""} />
+                <Input id="artist-email" name="email" type="email" defaultValue={artist.email ?? ""} disabled={!canEdit} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="artist-phone">Phone</Label>
-                <Input id="artist-phone" name="phone" defaultValue={artist.phone ?? ""} />
+                <Input id="artist-phone" name="phone" defaultValue={artist.phone ?? ""} disabled={!canEdit} />
               </div>
             </div>
             <div className="space-y-2">
@@ -148,18 +150,21 @@ export function ArtistDetailEditor({ artist }: ArtistDetailEditorProps) {
                 name="description"
                 rows={4}
                 defaultValue={artist.description ?? ""}
+                disabled={!canEdit}
                 placeholder="Genre, crowd fit, known strengths, and operational notes."
               />
             </div>
-            <div className="flex flex-wrap justify-end gap-2">
-              <SubmitButton
-                label="Archive artist"
-                pendingLabel="Archiving..."
-                variant="destructive"
-                formAction={archiveFormAction}
-              />
-              <SubmitButton label="Save artist" pendingLabel="Saving..." variant="secondary" />
-            </div>
+            {canEdit ? (
+              <div className="flex flex-wrap justify-end gap-2">
+                <SubmitButton
+                  label="Archive artist"
+                  pendingLabel="Archiving..."
+                  variant="destructive"
+                  formAction={archiveFormAction}
+                />
+                <SubmitButton label="Save artist" pendingLabel="Saving..." variant="secondary" />
+              </div>
+            ) : null}
           </form>
         </CardContent>
       </Card>

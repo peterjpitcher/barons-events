@@ -153,7 +153,8 @@ export async function listReviewQueue(user: AppUser): Promise<EventSummary[]> {
     .in("status", ["submitted", "needs_revisions"])
     .order("start_at", { ascending: true });
 
-  if (user.role !== "administrator") {
+  // Admins and office workers see all submissions; other roles see only their assigned events
+  if (user.role !== "administrator" && user.role !== "office_worker") {
     query = query.eq("assignee_id", user.id);
   }
 

@@ -131,9 +131,9 @@ describe("listAllBookingsForUser", () => {
   });
 
   // -------------------------------------------------------------------------
-  // 2. office_worker scoping — eq called with venue filter
+  // 2. office_worker global read — no venue filter applied
   // -------------------------------------------------------------------------
-  it("applies venue_id scoping for office_worker", async () => {
+  it("does not apply venue_id scoping for office_worker (global read)", async () => {
     const { proxy, calls } = buildQueryMock({ data: [], error: null });
     (createSupabaseAdminClient as ReturnType<typeof vi.fn>).mockReturnValue({
       from: () => ({ select: () => ({ order: () => proxy }) }),
@@ -144,8 +144,7 @@ describe("listAllBookingsForUser", () => {
     const eqCall = calls.find(
       (c) => c.method === "eq" && c.args[0] === "events.venue_id",
     );
-    expect(eqCall).toBeDefined();
-    expect(eqCall?.args[1]).toBe("venue-42");
+    expect(eqCall).toBeUndefined();
   });
 
   // -------------------------------------------------------------------------

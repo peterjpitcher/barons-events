@@ -26,9 +26,10 @@ export default async function DebriefPage({ params }: { params: Promise<{ eventI
 
   const isManager = event.manager_responsible_id === user.id;
   const isCreatorFallback = !event.manager_responsible_id && event.created_by === user.id;
-  const allowed = user.role === "administrator" || isManager || isCreatorFallback;
+  const canEdit = user.role === "administrator" || isManager || isCreatorFallback;
+  const canView = canEdit || user.role === "office_worker";
 
-  if (!allowed) {
+  if (!canView) {
     redirect("/unauthorized");
   }
 
@@ -69,6 +70,7 @@ export default async function DebriefPage({ params }: { params: Promise<{ eventI
             eventId={event.id}
             defaults={event.debrief as DebriefForm_Defaults}
             labourRateGbp={labourRateGbp}
+            readOnly={!canEdit}
           />
         </CardContent>
       </Card>

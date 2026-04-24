@@ -22,11 +22,9 @@ export interface ListCustomersOptions {
 }
 
 /**
- * List customers scoped by user role.
- * administrator: all customers
- * office_worker: customers with at least one booking at their venue (users.venue_id)
- * Returns CustomerWithStats (booking count, ticket count, first seen).
- * Calls the list_customers_with_stats RPC (defined in the migration).
+ * List all customers with booking stats.
+ * All authenticated users see all customers; write operations are gated
+ * by canManageCustomers in server actions.
  */
 export async function listCustomersForUser(
   user: AppUser,
@@ -35,7 +33,7 @@ export async function listCustomersForUser(
   const db = createSupabaseAdminClient();
 
   const { data, error } = await db.rpc("list_customers_with_stats", {
-    p_venue_id:    user.role === "office_worker" ? (user.venueId ?? null) : null,
+    p_venue_id:    null,
     p_search:      options.searchTerm ?? null,
     p_opt_in_only: options.optInOnly ?? false,
   });
@@ -65,7 +63,7 @@ export interface CustomerBooking {
 /**
  * Get a single customer with their bookings.
  * Returns null if not found.
- * For office_worker: returns null if customer has no bookings at their venue.
+ * All authenticated users see all customer bookings (global read access).
  */
 export async function getCustomerById(
   customerId: string,
@@ -113,11 +111,8 @@ export async function getCustomerById(
     };
   });
 
-  // Scope for office_worker: only show bookings at their venue
-  if (user.role === "office_worker" && user.venueId) {
-    bookings = bookings.filter((b) => b.venueId === user.venueId);
-    if (bookings.length === 0) return null;
-  }
+  // All office workers see all customer bookings (global read access);
+  // write operations remain gated by canManageCustomers in server actions.
 
   return { ...rowToCustomer(customerRow as Record<string, unknown>), bookings };
 }

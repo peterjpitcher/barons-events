@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { DecisionForm } from "@/components/reviews/decision-form";
 import { getCurrentUser } from "@/lib/auth";
 import { listReviewQueue } from "@/lib/events";
+import { canViewReviews, canReviewEvents } from "@/lib/roles";
 import { parseVenueSpaces } from "@/lib/venue-spaces";
 
 const statusTone: Record<string, "info" | "warning" | "success" | "neutral"> = {
@@ -27,7 +28,7 @@ export default async function ReviewsPage() {
     redirect("/login");
   }
 
-  if (user.role === "office_worker" || user.role === "executive") {
+  if (!canViewReviews(user.role)) {
     redirect("/unauthorized");
   }
 
@@ -37,7 +38,7 @@ export default async function ReviewsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="font-brand-serif text-3xl text-[var(--color-primary-700)]">
-          {user.role === "administrator" ? "Review pipeline" : "My review queue"}
+          Review pipeline
         </h1>
         <p className="mt-1 text-subtle">Work through the newest submissions first and leave clear feedback.</p>
       </div>
@@ -74,11 +75,11 @@ export default async function ReviewsPage() {
                   </p>
                 </div>
                 <div className="flex flex-col gap-3">
-                  {user.role === "administrator" ? (
+                  {canReviewEvents(user.role) ? (
                     <DecisionForm eventId={event.id} />
                   ) : (
                     <Button variant="secondary" asChild>
-                      <Link href={`/events/${event.id}`}>Open event</Link>
+                      <Link href={`/events/${event.id}`}>View event</Link>
                     </Button>
                   )}
                 </div>

@@ -33,11 +33,6 @@ export default async function DebriefsPage() {
     `)
     .order("submitted_at", { ascending: false });
 
-  // Venue-scoped filtering: office_worker with venueId only sees their venue's debriefs
-  if (user.role === "office_worker" && user.venueId) {
-    query = query.eq("events.venue_id", user.venueId);
-  }
-
   const { data: debriefs, error } = await query;
 
   if (error) {

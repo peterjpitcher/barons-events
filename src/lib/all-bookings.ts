@@ -29,10 +29,9 @@ export interface ListAllBookingsOptions {
 }
 
 /**
- * Fetch all bookings grouped by event, scoped by user role.
- * administrator: all venues
- * office_worker: own venue only (user.venueId), scoped server-side before returning.
- * Client never receives rows outside their scope.
+ * Fetch all bookings grouped by event.
+ * All authenticated users see all bookings; write operations are gated
+ * by canManageBookings in server actions.
  */
 export async function listAllBookingsForUser(
   user: AppUser,
@@ -52,10 +51,8 @@ export async function listAllBookingsForUser(
     `)
     .order("created_at", { ascending: false });
 
-  // Role scoping — server-side, never leaks rows to other venues
-  if (user.role === "office_worker" && user.venueId) {
-    query = (query as typeof query).eq("events.venue_id", user.venueId);
-  }
+  // All authenticated users see all bookings; write operations are gated
+  // by canManageBookings in server actions.
 
   // Status filter
   if (options.statusFilter && options.statusFilter !== "all") {

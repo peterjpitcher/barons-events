@@ -2,14 +2,14 @@ import { notFound, redirect } from "next/navigation";
 import { ArtistDetailEditor } from "@/components/artists/artist-detail-editor";
 import { getCurrentUser } from "@/lib/auth";
 import { getArtistDetail } from "@/lib/artists";
-import { canManageArtists } from "@/lib/roles";
+import { canViewArtists, canManageArtists } from "@/lib/roles";
 
 export default async function ArtistDetailPage({ params }: { params: Promise<{ artistId: string }> }) {
   const user = await getCurrentUser();
   if (!user) {
     redirect("/login");
   }
-  if (!canManageArtists(user.role, user.venueId)) {
+  if (!canViewArtists(user.role)) {
     redirect("/unauthorized");
   }
 
@@ -19,5 +19,7 @@ export default async function ArtistDetailPage({ params }: { params: Promise<{ a
     notFound();
   }
 
-  return <ArtistDetailEditor artist={artist} />;
+  const canEdit = canManageArtists(user.role, user.venueId);
+
+  return <ArtistDetailEditor artist={artist} canEdit={canEdit} />;
 }

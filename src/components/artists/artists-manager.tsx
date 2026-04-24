@@ -17,6 +17,7 @@ import { Plus, ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 
 type ArtistsManagerProps = {
   artists: ArtistPerformanceSummary[];
+  canEdit?: boolean;
 };
 
 type ArtistSortKey = "name" | "artistType" | "eventCount" | "averageSalesUpliftPercent" | "averageSentimentScore" | "effectivenessScore";
@@ -41,7 +42,7 @@ function compareNullableNumber(left: number | null, right: number | null): numbe
   return left - right;
 }
 
-export function ArtistsManager({ artists }: ArtistsManagerProps) {
+export function ArtistsManager({ artists, canEdit = false }: ArtistsManagerProps) {
   const [state, formAction] = useActionState(createArtistAction, undefined);
   const [archiveState, archiveFormAction] = useActionState(archiveArtistAction, undefined);
   const [sortBy, setSortBy] = useState<{ key: ArtistSortKey; direction: SortDirection }>({
@@ -129,69 +130,71 @@ export function ArtistsManager({ artists }: ArtistsManagerProps) {
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Add an artist / band / host</CardTitle>
-          <CardDescription>Create reusable artist records and link them to future events.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form
-            ref={formRef}
-            action={formAction}
-            className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,2fr)_minmax(0,2fr)_auto]"
-            noValidate
-          >
-            <div className="space-y-2">
-              <Label htmlFor="artist-name">Name</Label>
-              <Input
-                id="artist-name"
-                name="name"
-                required
-                placeholder="e.g. Randy and The Rockets"
-                aria-invalid={Boolean(nameError)}
-                aria-describedby={nameError ? "artist-name-error" : undefined}
-                className={nameError ? errorInputClass : undefined}
-              />
-              <FieldError id="artist-name-error" message={nameError} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="artist-type">Type</Label>
-              <Select id="artist-type" name="artistType" defaultValue="artist">
-                <option value="artist">Artist</option>
-                <option value="band">Band</option>
-                <option value="host">Host</option>
-                <option value="dj">DJ</option>
-                <option value="comedian">Comedian</option>
-                <option value="other">Other</option>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="artist-email">Email</Label>
-              <Input id="artist-email" name="email" type="email" placeholder="Optional contact email" />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="artist-phone">Phone</Label>
-              <Input id="artist-phone" name="phone" placeholder="Optional contact phone" />
-            </div>
-            <div className="flex items-end justify-end">
-              <SubmitButton
-                label="Add artist"
-                pendingLabel="Saving..."
-                icon={<Plus className="h-4 w-4" aria-hidden="true" />}
-                hideLabel
-              />
-            </div>
-            <div className="md:col-span-5 space-y-2">
-              <Label htmlFor="artist-description">Description</Label>
-              <Input
-                id="artist-description"
-                name="description"
-                placeholder="Optional summary of style, genre, audience fit, or USP."
-              />
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+      {canEdit ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Add an artist / band / host</CardTitle>
+            <CardDescription>Create reusable artist records and link them to future events.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form
+              ref={formRef}
+              action={formAction}
+              className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,2fr)_minmax(0,2fr)_auto]"
+              noValidate
+            >
+              <div className="space-y-2">
+                <Label htmlFor="artist-name">Name</Label>
+                <Input
+                  id="artist-name"
+                  name="name"
+                  required
+                  placeholder="e.g. Randy and The Rockets"
+                  aria-invalid={Boolean(nameError)}
+                  aria-describedby={nameError ? "artist-name-error" : undefined}
+                  className={nameError ? errorInputClass : undefined}
+                />
+                <FieldError id="artist-name-error" message={nameError} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="artist-type">Type</Label>
+                <Select id="artist-type" name="artistType" defaultValue="artist">
+                  <option value="artist">Artist</option>
+                  <option value="band">Band</option>
+                  <option value="host">Host</option>
+                  <option value="dj">DJ</option>
+                  <option value="comedian">Comedian</option>
+                  <option value="other">Other</option>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="artist-email">Email</Label>
+                <Input id="artist-email" name="email" type="email" placeholder="Optional contact email" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="artist-phone">Phone</Label>
+                <Input id="artist-phone" name="phone" placeholder="Optional contact phone" />
+              </div>
+              <div className="flex items-end justify-end">
+                <SubmitButton
+                  label="Add artist"
+                  pendingLabel="Saving..."
+                  icon={<Plus className="h-4 w-4" aria-hidden="true" />}
+                  hideLabel
+                />
+              </div>
+              <div className="md:col-span-5 space-y-2">
+                <Label htmlFor="artist-description">Description</Label>
+                <Input
+                  id="artist-description"
+                  name="description"
+                  placeholder="Optional summary of style, genre, audience fit, or USP."
+                />
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="overflow-x-auto rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-white shadow-soft">
         <table className="min-w-full border-collapse">
@@ -251,14 +254,14 @@ export function ArtistsManager({ artists }: ArtistsManagerProps) {
                   Effectiveness {sortIcon("effectivenessScore")}
                 </button>
               </th>
-              <th className="px-4 py-3 text-right">Actions</th>
+              <th className="px-4 py-3 text-right">{canEdit ? "Actions" : ""}</th>
             </tr>
           </thead>
           <tbody>
             {artists.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-4 py-8 text-center text-sm text-subtle">
-                  No artists yet. Add your first artist above.
+                  No artists yet.{canEdit ? " Add your first artist above." : ""}
                 </td>
               </tr>
             ) : (
@@ -285,12 +288,14 @@ export function ArtistsManager({ artists }: ArtistsManagerProps) {
                   <td className="px-4 py-3 align-top text-right">
                     <div className="flex flex-wrap justify-end gap-2">
                       <Button asChild variant="ghost" size="sm">
-                        <Link href={`/artists/${artist.id}`}>Edit</Link>
+                        <Link href={`/artists/${artist.id}`}>{canEdit ? "Edit" : "View"}</Link>
                       </Button>
-                      <form action={archiveFormAction}>
-                        <input type="hidden" name="artistId" value={artist.id} />
-                        <SubmitButton label="Archive" pendingLabel="Archiving..." variant="destructive" size="sm" />
-                      </form>
+                      {canEdit ? (
+                        <form action={archiveFormAction}>
+                          <input type="hidden" name="artistId" value={artist.id} />
+                          <SubmitButton label="Archive" pendingLabel="Archiving..." variant="destructive" size="sm" />
+                        </form>
+                      ) : null}
                     </div>
                   </td>
                 </tr>

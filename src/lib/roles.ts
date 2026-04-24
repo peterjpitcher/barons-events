@@ -109,6 +109,26 @@ export function canViewDebriefs(role: UserRole): boolean {
   return true;
 }
 
+/** Can view bookings list (admin + office_worker; not executive) */
+export function canViewBookings(role: UserRole): boolean {
+  return role === "administrator" || role === "office_worker";
+}
+
+/** Can view customers list (admin + office_worker; not executive) */
+export function canViewCustomers(role: UserRole): boolean {
+  return role === "administrator" || role === "office_worker";
+}
+
+/** Can view artists directory (admin + office_worker; not executive) */
+export function canViewArtists(role: UserRole): boolean {
+  return role === "administrator" || role === "office_worker";
+}
+
+/** Can view the review pipeline read-only (admin + office_worker; not executive) */
+export function canViewReviews(role: UserRole): boolean {
+  return role === "administrator" || role === "office_worker";
+}
+
 /** Can create new planning items */
 export function canCreatePlanningItems(role: UserRole): boolean {
   return role === "administrator" || role === "office_worker";

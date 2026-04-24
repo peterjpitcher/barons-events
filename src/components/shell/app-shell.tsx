@@ -36,17 +36,17 @@ const NAV_SECTIONS: NavSection[] = [
       {
         label: "Events",
         href: "/events",
-        roles: ["administrator"],
+        roles: ["administrator", "office_worker"],
         children: [
           { label: "Propose an event", href: "/events/propose", roles: ["administrator", "office_worker"] },
           { label: "Pending proposals", href: "/events/pending", roles: ["administrator"] }
         ]
       },
-      { label: "Bookings", href: "/bookings", roles: ["administrator"] },
-      { label: "Customers", href: "/customers", roles: ["administrator"] },
-      { label: "Artists", href: "/artists", roles: ["administrator"] },
-      { label: "Reviews", href: "/reviews", roles: ["administrator"] },
-      { label: "Debriefs", href: "/debriefs", roles: ["administrator"] }
+      { label: "Bookings", href: "/bookings", roles: ["administrator", "office_worker"] },
+      { label: "Customers", href: "/customers", roles: ["administrator", "office_worker"] },
+      { label: "Artists", href: "/artists", roles: ["administrator", "office_worker"] },
+      { label: "Reviews", href: "/reviews", roles: ["administrator", "office_worker"] },
+      { label: "Debriefs", href: "/debriefs", roles: ["administrator", "office_worker"] }
     ]
   },
   {

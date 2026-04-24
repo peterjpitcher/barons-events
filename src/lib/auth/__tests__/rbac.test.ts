@@ -61,6 +61,10 @@ import {
   canManageLinks,
   canViewSopTemplate,
   canEditSopTemplate,
+  canViewBookings,
+  canViewCustomers,
+  canViewArtists,
+  canViewReviews,
 } from "@/lib/roles";
 
 // ─── Typed mock helpers ───────────────────────────────────────────────────────
@@ -829,6 +833,46 @@ describe("roles.ts — final capability functions", () => {
       expect(canViewDebriefs("administrator")).toBe(true);
       expect(canViewDebriefs("office_worker")).toBe(true);
       expect(canViewDebriefs("executive")).toBe(true);
+    });
+  });
+
+  describe("canViewBookings", () => {
+    it("admin and office_worker can view bookings", () => {
+      expect(canViewBookings("administrator")).toBe(true);
+      expect(canViewBookings("office_worker")).toBe(true);
+    });
+    it("executive cannot view bookings", () => {
+      expect(canViewBookings("executive")).toBe(false);
+    });
+  });
+
+  describe("canViewCustomers", () => {
+    it("admin and office_worker can view customers", () => {
+      expect(canViewCustomers("administrator")).toBe(true);
+      expect(canViewCustomers("office_worker")).toBe(true);
+    });
+    it("executive cannot view customers", () => {
+      expect(canViewCustomers("executive")).toBe(false);
+    });
+  });
+
+  describe("canViewArtists", () => {
+    it("admin and office_worker can view artists", () => {
+      expect(canViewArtists("administrator")).toBe(true);
+      expect(canViewArtists("office_worker")).toBe(true);
+    });
+    it("executive cannot view artists", () => {
+      expect(canViewArtists("executive")).toBe(false);
+    });
+  });
+
+  describe("canViewReviews", () => {
+    it("admin and office_worker can view reviews", () => {
+      expect(canViewReviews("administrator")).toBe(true);
+      expect(canViewReviews("office_worker")).toBe(true);
+    });
+    it("executive cannot view reviews", () => {
+      expect(canViewReviews("executive")).toBe(false);
     });
   });
 

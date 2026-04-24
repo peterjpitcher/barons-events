@@ -57,14 +57,14 @@ describe("listCustomersForUser", () => {
     });
   });
 
-  it("passes venueId to RPC for office_worker", async () => {
+  it("passes null venue_id for office_worker (global read)", async () => {
     const rpcMock = vi.fn().mockResolvedValue({ data: [], error: null });
     mockAdminClient.mockReturnValue({ rpc: rpcMock });
 
     await listCustomersForUser(officeWorker);
 
     expect(rpcMock).toHaveBeenCalledWith("list_customers_with_stats", {
-      p_venue_id: "venue-abc",
+      p_venue_id: null,
       p_search: null,
       p_opt_in_only: false,
     });
@@ -203,7 +203,7 @@ describe("getCustomerById", () => {
     expect(callCount).toBe(1);
   });
 
-  it("office_worker: returns null when customer has no bookings at their venue", async () => {
+  it("office_worker: returns customer with all bookings regardless of venue (global read)", async () => {
     mockAdminClient.mockReturnValue({
       from: (table: string) => {
         if (table === "customers") {
@@ -227,7 +227,7 @@ describe("getCustomerById", () => {
                   id: "event-1",
                   title: "Other Event",
                   start_at: "2025-03-01T19:00:00Z",
-                  venue_id: "venue-different",   // not the manager's venue
+                  venue_id: "venue-different",
                   venues: { id: "venue-different", name: "Other Venue" },
                 },
               },
@@ -239,10 +239,11 @@ describe("getCustomerById", () => {
     });
 
     const result = await getCustomerById("cust-1", officeWorker);
-    expect(result).toBeNull();
+    expect(result).not.toBeNull();
+    expect(result!.bookings).toHaveLength(1);
   });
 
-  it("office_worker: filters bookings to own venue only", async () => {
+  it("office_worker: returns all bookings across all venues (global read)", async () => {
     mockAdminClient.mockReturnValue({
       from: (table: string) => {
         if (table === "customers") {
@@ -293,8 +294,8 @@ describe("getCustomerById", () => {
     const result = await getCustomerById("cust-1", officeWorker);
 
     expect(result).not.toBeNull();
-    expect(result!.bookings).toHaveLength(1);
+    expect(result!.bookings).toHaveLength(2);
     expect(result!.bookings[0].id).toBe("booking-1");
-    expect(result!.bookings[0].venueName).toBe("Manager's Venue");
+    expect(result!.bookings[1].id).toBe("booking-2");
   });
 });

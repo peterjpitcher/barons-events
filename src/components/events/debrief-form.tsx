@@ -14,6 +14,8 @@ type DebriefFormProps = {
   eventId: string;
   /** Current labour rate from business_settings. Form uses it for live cost preview. */
   labourRateGbp?: number;
+  /** When true, all inputs are disabled and the submit button is hidden. */
+  readOnly?: boolean;
   defaults?: {
     attendance: number | null;
     baseline_attendance: number | null;
@@ -39,7 +41,7 @@ function asNumber(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-export function DebriefForm({ eventId, defaults, labourRateGbp = 12.71 }: DebriefFormProps) {
+export function DebriefForm({ eventId, defaults, labourRateGbp = 12.71, readOnly = false }: DebriefFormProps) {
   const [state, formAction] = useActionState(submitDebriefAction, undefined);
   const [eventWetTakings, setEventWetTakings] = useState(defaults?.wet_takings != null ? String(defaults.wet_takings) : "");
   const [eventFoodTakings, setEventFoodTakings] = useState(defaults?.food_takings != null ? String(defaults.food_takings) : "");
@@ -105,7 +107,7 @@ export function DebriefForm({ eventId, defaults, labourRateGbp = 12.71 }: Debrie
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="attendance">How many people attended?</Label>
-          <Input id="attendance" name="attendance" type="number" min={0} defaultValue={defaults?.attendance ?? ""} placeholder="e.g. 108" />
+          <Input id="attendance" name="attendance" type="number" min={0} defaultValue={defaults?.attendance ?? ""} placeholder="e.g. 108" disabled={readOnly} />
         </div>
         <div className="space-y-2">
           <Label htmlFor="baselineAttendance">What would attendance normally be for this day?</Label>
@@ -116,6 +118,7 @@ export function DebriefForm({ eventId, defaults, labourRateGbp = 12.71 }: Debrie
             min={0}
             defaultValue={defaults?.baseline_attendance ?? ""}
             placeholder="e.g. 72"
+            disabled={readOnly}
           />
         </div>
       </div>
@@ -132,6 +135,7 @@ export function DebriefForm({ eventId, defaults, labourRateGbp = 12.71 }: Debrie
             value={eventWetTakings}
             onChange={(event) => setEventWetTakings(event.target.value)}
             placeholder="e.g. 2450"
+            disabled={readOnly}
           />
         </div>
         <div className="space-y-2">
@@ -145,6 +149,7 @@ export function DebriefForm({ eventId, defaults, labourRateGbp = 12.71 }: Debrie
             value={eventFoodTakings}
             onChange={(event) => setEventFoodTakings(event.target.value)}
             placeholder="e.g. 780"
+            disabled={readOnly}
           />
         </div>
       </div>
@@ -161,6 +166,7 @@ export function DebriefForm({ eventId, defaults, labourRateGbp = 12.71 }: Debrie
             value={baselineWetTakings}
             onChange={(event) => setBaselineWetTakings(event.target.value)}
             placeholder="e.g. 1900"
+            disabled={readOnly}
           />
         </div>
         <div className="space-y-2">
@@ -174,6 +180,7 @@ export function DebriefForm({ eventId, defaults, labourRateGbp = 12.71 }: Debrie
             value={baselineFoodTakings}
             onChange={(event) => setBaselineFoodTakings(event.target.value)}
             placeholder="e.g. 620"
+            disabled={readOnly}
           />
         </div>
       </div>
@@ -209,6 +216,7 @@ export function DebriefForm({ eventId, defaults, labourRateGbp = 12.71 }: Debrie
             value={labourHours}
             onChange={(event) => setLabourHours(event.target.value)}
             placeholder="e.g. 42"
+            disabled={readOnly}
           />
           <p className="text-xs text-subtle">
             {labourCost !== null ? (
@@ -233,6 +241,7 @@ export function DebriefForm({ eventId, defaults, labourRateGbp = 12.71 }: Debrie
             max={5}
             defaultValue={defaults?.promo_effectiveness ?? ""}
             placeholder="e.g. 4"
+            disabled={readOnly}
           />
         </div>
         <div className="space-y-2">
@@ -243,6 +252,7 @@ export function DebriefForm({ eventId, defaults, labourRateGbp = 12.71 }: Debrie
             defaultValue={
               defaults?.would_book_again == null ? "" : defaults.would_book_again ? "yes" : "no"
             }
+            disabled={readOnly}
           >
             <option value="">Not answered</option>
             <option value="yes">Yes</option>
@@ -259,6 +269,7 @@ export function DebriefForm({ eventId, defaults, labourRateGbp = 12.71 }: Debrie
           rows={3}
           defaultValue={defaults?.highlights ?? ""}
           placeholder="What drove strong guest response, sales, or operational wins?"
+          disabled={readOnly}
         />
       </div>
 
@@ -270,6 +281,7 @@ export function DebriefForm({ eventId, defaults, labourRateGbp = 12.71 }: Debrie
           rows={3}
           defaultValue={defaults?.issues ?? ""}
           placeholder="Operational gaps, timing issues, audience mismatch, etc."
+          disabled={readOnly}
         />
       </div>
 
@@ -281,6 +293,7 @@ export function DebriefForm({ eventId, defaults, labourRateGbp = 12.71 }: Debrie
           rows={3}
           defaultValue={defaults?.guest_sentiment_notes ?? ""}
           placeholder="What did guests say in person, online, or through team feedback?"
+          disabled={readOnly}
         />
       </div>
 
@@ -292,6 +305,7 @@ export function DebriefForm({ eventId, defaults, labourRateGbp = 12.71 }: Debrie
           rows={3}
           defaultValue={defaults?.operational_notes ?? ""}
           placeholder="Staffing, stock, service pace, door/check-in flow, or setup notes."
+          disabled={readOnly}
         />
       </div>
 
@@ -303,10 +317,13 @@ export function DebriefForm({ eventId, defaults, labourRateGbp = 12.71 }: Debrie
           rows={3}
           defaultValue={defaults?.next_time_actions ?? ""}
           placeholder="Specific actions to repeat, stop, or test next time."
+          disabled={readOnly}
         />
       </div>
 
-      <SubmitButton label="Save debrief" pendingLabel="Saving..." variant="primary" />
+      {!readOnly && (
+        <SubmitButton label="Save debrief" pendingLabel="Saving..." variant="primary" />
+      )}
     </form>
   );
 }

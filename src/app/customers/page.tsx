@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { listCustomersForUser } from "@/lib/customers";
-import { canManageCustomers } from "@/lib/roles";
+import { canViewCustomers } from "@/lib/roles";
 import { CustomersView } from "./CustomersView";
 
 export const metadata = { title: "Customers — BaronsHub" };
@@ -9,7 +9,7 @@ export const metadata = { title: "Customers — BaronsHub" };
 export default async function CustomersPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!canManageCustomers(user.role, user.venueId)) {
+  if (!canViewCustomers(user.role)) {
     redirect("/unauthorized");
   }
 
