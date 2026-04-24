@@ -302,6 +302,8 @@ export function planningItemsToTodoItems(
   for (const item of items) {
     for (const task of item.tasks) {
       if (task.status !== "open") continue;
+      // Only show tasks that are due today or earlier — not future-dated items
+      if (task.dueDate && task.dueDate > today) continue;
 
       const isSop = Boolean(task.sopSection || task.sopTemplateTaskId);
       const source: TodoSource = isSop ? "sop" : "planning";
