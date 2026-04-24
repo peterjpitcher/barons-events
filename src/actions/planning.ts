@@ -731,17 +731,19 @@ export async function reassignPlanningTaskAction(input: unknown): Promise<Planni
         .insert(rows);
       if (insError) throw insError;
 
-      // Update the primary assignee_id to the first assignee
-      await db
+      // Update the primary assignee_id to the first assignee and mark as manually assigned
+      const { error: updateError } = await db
         .from("planning_tasks")
-        .update({ assignee_id: parsed.data.assigneeIds[0] })
+        .update({ assignee_id: parsed.data.assigneeIds[0], manually_assigned: true })
         .eq("id", parsed.data.taskId);
+      if (updateError) throw updateError;
     } else {
-      // Clear primary assignee
-      await db
+      // Clear primary assignee and mark as manually assigned
+      const { error: updateError } = await db
         .from("planning_tasks")
-        .update({ assignee_id: null })
+        .update({ assignee_id: null, manually_assigned: true })
         .eq("id", parsed.data.taskId);
+      if (updateError) throw updateError;
     }
 
     recordAuditLogEntry({

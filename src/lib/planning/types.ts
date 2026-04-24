@@ -44,6 +44,7 @@ export type PlanningTask = {
   sopTemplateTaskId: string | null;
   isBlocked: boolean;
   dueDateManuallyOverridden: boolean;
+  manuallyAssigned: boolean;
   dependsOnTaskIds: string[];
   notes: string | null;
   /** Attachments owned directly by this task. Populated by loaders that

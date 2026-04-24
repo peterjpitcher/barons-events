@@ -137,6 +137,7 @@ function toPlanningTask(task: RawPlanningTaskRow): PlanningTask {
     sopTemplateTaskId: task.sop_template_task_id ?? null,
     isBlocked: task.is_blocked ?? false,
     dueDateManuallyOverridden: task.due_date_manually_overridden ?? false,
+    manuallyAssigned: (task as any).manually_assigned ?? false,
     dependsOnTaskIds: Array.isArray(task?.dependencies)
       ? task.dependencies.map((d: RawDependencyRelation) => d.depends_on_task_id).filter(Boolean)
       : [],

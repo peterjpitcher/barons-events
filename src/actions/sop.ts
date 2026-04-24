@@ -67,6 +67,16 @@ const sopDependencySchema = z.object({
   dependsOnTemplateId: z.string().min(1),
 });
 
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+/** Compare two assignee ID arrays for equality (order-insensitive). */
+function assigneeArraysEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const sortedA = [...a].sort();
+  const sortedB = [...b].sort();
+  return sortedA.every((v, i) => v === sortedB[i]);
+}
+
 // ─── User list for assignee selection ────────────────────────────────────────
 
 export async function loadSopAssignableUsersAction(): Promise<
@@ -147,6 +157,18 @@ export async function updateSopSectionAction(
     }
 
     const db = createSupabaseAdminClient();
+
+    // Fetch old assignees BEFORE the update so we can detect changes
+    let oldAssigneeIds: string[] = [];
+    if (parsed.data.defaultAssigneeIds !== undefined) {
+      const { data: oldSection } = await db
+        .from("sop_sections")
+        .select("default_assignee_ids")
+        .eq("id", parsed.data.id)
+        .single();
+      oldAssigneeIds = (oldSection?.default_assignee_ids as string[] | null) ?? [];
+    }
+
     const updates: Record<string, unknown> = {};
     if (parsed.data.label !== undefined) updates.label = parsed.data.label;
     if (parsed.data.sortOrder !== undefined) updates.sort_order = parsed.data.sortOrder;
@@ -160,6 +182,50 @@ export async function updateSopSectionAction(
     if (error) {
       console.error("updateSopSectionAction: update failed", error);
       return { success: false, message: "Could not update section." };
+    }
+
+    // --- Propagation: if default_assignee_ids changed, update inherited open tasks ---
+    if (
+      parsed.data.defaultAssigneeIds !== undefined &&
+      !assigneeArraysEqual(oldAssigneeIds, parsed.data.defaultAssigneeIds)
+    ) {
+      // Find templates in this section that inherit from the section (empty assignee array)
+      const { data: inheritedTemplates } = await (db as any)
+        .from("sop_task_templates")
+        .select("id")
+        .eq("section_id", parsed.data.id)
+        .eq("default_assignee_ids", "{}");
+
+      let totalTasksUpdated = 0;
+      const templates = (inheritedTemplates ?? []) as Array<{ id: string }>;
+      for (const tmpl of templates) {
+        const { data: count } = await (db as any).rpc(
+          "propagate_sop_template_assignees",
+          {
+            p_template_id: tmpl.id,
+            p_new_assignee_ids: parsed.data.defaultAssigneeIds,
+          }
+        );
+        totalTasksUpdated += (count as number) ?? 0;
+      }
+
+      try {
+        await recordAuditLogEntry({
+          entity: "sop_template",
+          entityId: "global",
+          action: "sop_section.assignees_propagated",
+          actorId: user.id,
+          meta: {
+            section_id: parsed.data.id,
+            old_assignee_ids: oldAssigneeIds,
+            new_assignee_ids: parsed.data.defaultAssigneeIds,
+            inherited_template_count: templates.length,
+            tasks_updated: totalTasksUpdated,
+          },
+        });
+      } catch (auditErr) {
+        console.error("sop: section propagation audit log failed", auditErr);
+      }
     }
 
     await recordAuditLogEntry({
@@ -289,7 +355,18 @@ export async function updateSopTaskTemplateAction(
       parsed.data.expansionStrategy === "per_venue"
         ? (parsed.data.venueFilter ?? "pub")
         : null;
-     
+
+    // Fetch old assignees BEFORE the update so we can detect changes
+    let oldAssigneeIds: string[] = [];
+    if (parsed.data.defaultAssigneeIds !== undefined) {
+      const { data: oldTemplate } = await (db as any)
+        .from("sop_task_templates")
+        .select("default_assignee_ids")
+        .eq("id", parsed.data.id)
+        .single();
+      oldAssigneeIds = (oldTemplate?.default_assignee_ids as string[] | null) ?? [];
+    }
+
     const { error } = await (db as any)
       .from("sop_task_templates")
       .update({
@@ -306,6 +383,37 @@ export async function updateSopTaskTemplateAction(
     if (error) {
       console.error("updateSopTaskTemplateAction: update failed", error);
       return { success: false, message: "Could not update task template." };
+    }
+
+    // --- Propagation: if default_assignee_ids changed, update matching open tasks ---
+    if (
+      parsed.data.defaultAssigneeIds !== undefined &&
+      !assigneeArraysEqual(oldAssigneeIds, parsed.data.defaultAssigneeIds)
+    ) {
+      const { data: tasksUpdated } = await (db as any).rpc(
+        "propagate_sop_template_assignees",
+        {
+          p_template_id: parsed.data.id,
+          p_new_assignee_ids: parsed.data.defaultAssigneeIds,
+        }
+      );
+
+      try {
+        await recordAuditLogEntry({
+          entity: "sop_template",
+          entityId: "global",
+          action: "sop_task_template.assignees_propagated",
+          actorId: user.id,
+          meta: {
+            template_id: parsed.data.id,
+            old_assignee_ids: oldAssigneeIds,
+            new_assignee_ids: parsed.data.defaultAssigneeIds,
+            tasks_updated: tasksUpdated ?? 0,
+          },
+        });
+      } catch (auditErr) {
+        console.error("sop: propagation audit log failed", auditErr);
+      }
     }
 
     await recordAuditLogEntry({

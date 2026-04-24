@@ -208,6 +208,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
           sopTemplateTaskId: task.sop_template_task_id ?? null,
           isBlocked: task.is_blocked ?? false,
           dueDateManuallyOverridden: task.due_date_manually_overridden ?? false,
+          manuallyAssigned: (task as any).manually_assigned ?? false,
           dependsOnTaskIds: Array.isArray(task?.dependencies)
             ? task.dependencies.map((d: RawDep) => d.depends_on_task_id).filter(Boolean)
             : [],
