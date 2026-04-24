@@ -25,6 +25,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { EventFormContext } from "@/components/events/event-form-context";
 import { EVENT_GOALS } from "@/lib/event-goals";
 import { cn } from "@/lib/utils";
+import { formatCurrency, formatPercent } from "@/lib/utils/format";
 import { toLondonDateTimeInputValue } from "@/lib/datetime";
 import type { EventSummary } from "@/lib/events";
 import type { UserRole } from "@/lib/types";
@@ -51,6 +52,30 @@ export type EventFormProps = {
    * the caller forgets to pass it in edit mode.
    */
   canDelete?: boolean;
+  /** Submitted debrief data — when present, a "Debrief" tab is shown. */
+  debrief?: {
+    attendance: number | null;
+    baseline_attendance: number | null;
+    wet_takings: number | null;
+    food_takings: number | null;
+    baseline_wet_takings: number | null;
+    baseline_food_takings: number | null;
+    actual_total_takings: number | null;
+    baseline_total_takings: number | null;
+    sales_uplift_value: number | null;
+    sales_uplift_percent: number | null;
+    promo_effectiveness: number | null;
+    would_book_again: boolean | null;
+    highlights: string | null;
+    issues: string | null;
+    guest_sentiment_notes: string | null;
+    operational_notes: string | null;
+    next_time_actions: string | null;
+    labour_hours?: number | null;
+    labour_rate_gbp_at_submit?: number | null;
+    submitted_at: string;
+    [key: string]: unknown;
+  } | null;
 };
 
 function toLocalInputValue(date?: string | null) {
@@ -164,7 +189,8 @@ export function EventForm({
   initialVenueId,
   sidebar,
   users,
-  canDelete = false
+  canDelete = false,
+  debrief = null
 }: EventFormProps) {
   const [draftState, draftAction, isSavingPending] = useActionState(saveEventDraftAction, undefined);
   const [submitState, submitAction, isSubmittingPending] = useActionState(submitEventForReviewAction, undefined);
@@ -1840,6 +1866,11 @@ export function EventForm({
                       >
                         Website Listings
                       </TabsTrigger>
+                      {debrief ? (
+                        <TabsTrigger value="debrief">
+                          Debrief
+                        </TabsTrigger>
+                      ) : null}
                     </TabsList>
                   </div>
 
@@ -1892,6 +1923,92 @@ export function EventForm({
                         />
                       </div>
                     </TabsContent>
+
+                    {/* Tab 4: Debrief (only when submitted) */}
+                    {debrief ? (
+                      <TabsContent value="debrief" className="space-y-6">
+                        <div className="grid gap-4 text-sm md:grid-cols-2">
+                          <div className="space-y-3">
+                            <h3 className="font-semibold text-[var(--color-text)]">Attendance</h3>
+                            <p>Event: {debrief.attendance ?? "—"}</p>
+                            {debrief.baseline_attendance != null && (
+                              <p>Baseline: {debrief.baseline_attendance}</p>
+                            )}
+                          </div>
+
+                          <div className="space-y-3">
+                            <h3 className="font-semibold text-[var(--color-text)]">Takings</h3>
+                            <p>Wet: {formatCurrency(debrief.wet_takings)}</p>
+                            <p>Food: {formatCurrency(debrief.food_takings)}</p>
+                            <p>Total: {formatCurrency(debrief.actual_total_takings)}</p>
+                            {debrief.baseline_total_takings != null && (
+                              <p>Baseline: {formatCurrency(debrief.baseline_total_takings)}</p>
+                            )}
+                          </div>
+
+                          <div className="space-y-3">
+                            <h3 className="font-semibold text-[var(--color-text)]">Uplift</h3>
+                            <p>Value: {formatCurrency(debrief.sales_uplift_value)}</p>
+                            <p>Percent: {formatPercent(debrief.sales_uplift_percent)}</p>
+                          </div>
+
+                          <div className="space-y-3">
+                            <h3 className="font-semibold text-[var(--color-text)]">Assessment</h3>
+                            <p>Promo effectiveness: {debrief.promo_effectiveness ?? "—"} / 5</p>
+                            <p>Would book again: {debrief.would_book_again == null ? "Not answered" : debrief.would_book_again ? "Yes" : "No"}</p>
+                          </div>
+
+                          {debrief.labour_hours != null && (
+                            <div className="space-y-3">
+                              <h3 className="font-semibold text-[var(--color-text)]">Labour</h3>
+                              <p>Hours: {debrief.labour_hours}</p>
+                              {debrief.labour_rate_gbp_at_submit != null && (
+                                <p>Cost: {formatCurrency(debrief.labour_hours * debrief.labour_rate_gbp_at_submit)}</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {(debrief.highlights || debrief.issues || debrief.guest_sentiment_notes || debrief.operational_notes || debrief.next_time_actions) && (
+                          <div className="space-y-4 border-t border-[var(--color-border)] pt-4 text-sm">
+                            {debrief.highlights && (
+                              <div>
+                                <h3 className="font-semibold text-[var(--color-text)]">Highlights</h3>
+                                <p className="mt-1 text-muted">{debrief.highlights}</p>
+                              </div>
+                            )}
+                            {debrief.issues && (
+                              <div>
+                                <h3 className="font-semibold text-[var(--color-text)]">Issues</h3>
+                                <p className="mt-1 text-muted">{debrief.issues}</p>
+                              </div>
+                            )}
+                            {debrief.guest_sentiment_notes && (
+                              <div>
+                                <h3 className="font-semibold text-[var(--color-text)]">Guest sentiment</h3>
+                                <p className="mt-1 text-muted">{debrief.guest_sentiment_notes}</p>
+                              </div>
+                            )}
+                            {debrief.operational_notes && (
+                              <div>
+                                <h3 className="font-semibold text-[var(--color-text)]">Operational notes</h3>
+                                <p className="mt-1 text-muted">{debrief.operational_notes}</p>
+                              </div>
+                            )}
+                            {debrief.next_time_actions && (
+                              <div>
+                                <h3 className="font-semibold text-[var(--color-text)]">Next time actions</h3>
+                                <p className="mt-1 text-muted">{debrief.next_time_actions}</p>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        <p className="text-xs text-subtle">
+                          Submitted {new Date(debrief.submitted_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                        </p>
+                      </TabsContent>
+                    ) : null}
                   </CardContent>
                 </Tabs>
               </Card>
