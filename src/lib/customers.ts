@@ -86,7 +86,7 @@ export async function getCustomerById(
       id, ticket_count, status, created_at,
       events!inner (
         id, title, start_at, venue_id,
-        venues ( id, name )
+        venues!events_venue_id_fkey ( id, name )
       )
     `)
     .eq("customer_id", customerId)
