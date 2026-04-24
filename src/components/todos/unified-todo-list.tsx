@@ -315,7 +315,6 @@ function PlanningMode({
     return grouped.filter((group) => group.key === currentUserId);
   }, [grouped, effectiveShowEveryone, currentUserId]);
 
-  const totalOpen = visibleGroups.reduce((sum, group) => sum + group.items.length, 0);
   const allTotalOpen = grouped.reduce((sum, group) => sum + group.items.length, 0);
 
   function getFilterDescription(): string {
@@ -410,7 +409,20 @@ function PlanningMode({
           {currentUserId && !alertFilter && (
             <button
               type="button"
-              onClick={() => setShowEveryone((v) => !v)}
+              onClick={() => {
+                setShowEveryone((v) => {
+                  if (!v) {
+                    // Switching to "show everyone" — collapse all groups except the current user
+                    const allKeys = new Set(grouped.map((g) => g.key));
+                    if (currentUserId) allKeys.delete(currentUserId);
+                    setCollapsedSections(allKeys);
+                  } else {
+                    // Switching back to "my tasks" — expand all
+                    setCollapsedSections(new Set());
+                  }
+                  return !v;
+                });
+              }}
               className="flex items-center gap-1.5 rounded-full border border-[var(--color-border)] px-3 py-1 text-xs font-semibold transition-colors hover:bg-[var(--color-muted-surface)]"
             >
               {showEveryone ? (
@@ -421,14 +433,11 @@ function PlanningMode({
               ) : (
                 <>
                   <Users className="h-3.5 w-3.5" aria-hidden="true" />
-                  Show everyone ({allTotalOpen})
+                  Show everyone
                 </>
               )}
             </button>
           )}
-          <p className="text-sm font-semibold text-[var(--color-text)]">
-            {totalOpen} open task{totalOpen === 1 ? "" : "s"}
-          </p>
         </div>
       </header>
 

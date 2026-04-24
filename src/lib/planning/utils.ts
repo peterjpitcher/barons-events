@@ -317,27 +317,32 @@ export function planningItemsToTodoItems(
         task.assigneeId === currentUserId ||
         isAssignedViaJunction;
 
-      result.push({
-        id: task.id,
-        source,
-        title: task.title,
-        subtitle: `${isSop ? "SOP Task" : "Planning Task"} \u00B7 ${item.venueName ?? "No venue"} \u00B7 Due ${task.dueDate ?? "TBD"}`,
-        dueDate: task.dueDate ?? null,
-        urgency: classifyUrgency(task.dueDate ?? null, today),
-        canToggle,
-        linkHref: "/planning",
-        parentTitle: item.title,
-        venueName: item.venueName ?? undefined,
-        planningTaskId: task.id,
-        planningItemId: item.id,
-        assigneeId: task.assigneeId ?? undefined,
-        assigneeName: task.assigneeName ?? undefined,
-        // Carry the full task + siblings so the rich SopTaskRow can render
-        // notes, attachments, dependency labels, and the status dropdown
-        // without re-fetching anything.
-        task,
-        siblings: item.tasks,
-      });
+      // Emit one todo item per assignee so multi-assignee tasks appear
+      // under every person's group, not just the primary assignee.
+      const assignees = task.assignees.length > 0
+        ? task.assignees
+        : [{ id: task.assigneeId ?? "", name: task.assigneeName ?? "", email: "" }];
+
+      for (const assignee of assignees) {
+        result.push({
+          id: `${task.id}__${assignee.id}`,
+          source,
+          title: task.title,
+          subtitle: `${isSop ? "SOP Task" : "Planning Task"} \u00B7 ${item.venueName ?? "No venue"} \u00B7 Due ${task.dueDate ?? "TBD"}`,
+          dueDate: task.dueDate ?? null,
+          urgency: classifyUrgency(task.dueDate ?? null, today),
+          canToggle,
+          linkHref: "/planning",
+          parentTitle: item.title,
+          venueName: item.venueName ?? undefined,
+          planningTaskId: task.id,
+          planningItemId: item.id,
+          assigneeId: assignee.id || undefined,
+          assigneeName: assignee.name || undefined,
+          task,
+          siblings: item.tasks,
+        });
+      }
     }
   }
 
