@@ -52,6 +52,8 @@ export type EventFormProps = {
    * the caller forgets to pass it in edit mode.
    */
   canDelete?: boolean;
+  /** When true, all form fields are disabled and save/submit actions hidden. */
+  readOnly?: boolean;
   /** Submitted debrief data — when present, a "Debrief" tab is shown. */
   debrief?: {
     attendance: number | null;
@@ -190,6 +192,7 @@ export function EventForm({
   sidebar,
   users,
   canDelete = false,
+  readOnly = false,
   debrief = null
 }: EventFormProps) {
   const [draftState, draftAction, isSavingPending] = useActionState(saveEventDraftAction, undefined);
@@ -1843,7 +1846,7 @@ export function EventForm({
                 className="sr-only"
               />
 
-              <fieldset disabled={isPending} className="disabled:opacity-60">
+              <fieldset disabled={isPending || readOnly} className="disabled:opacity-60">
               <Card>
                 <Tabs defaultTab="event-details" value={activeTab} onValueChange={setActiveTab}>
                   <div className="border-b border-[var(--color-border)] px-2">

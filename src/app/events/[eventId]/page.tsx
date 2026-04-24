@@ -633,21 +633,22 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
         </CardHeader>
       </Card>
 
-      {/* Edit mode — EventForm owns the two-column grid */}
-      {canEdit ? (
-        <EventForm
-          mode="edit"
-          defaultValues={event}
-          venues={venues}
-          artists={artists}
-          eventTypes={eventTypes.map((type) => type.label)}
-          role={user.role}
-          userVenueId={user.venueId}
-          users={assignableUsers.map((u) => ({ id: u.id, name: u.name }))}
-          canDelete={canDelete}
-          debrief={event.debrief}
-          sidebar={
-            <div className="space-y-6">
+      {/* EventForm for all users — editors get full sidebar, readers get read-only form */}
+      <EventForm
+        mode="edit"
+        defaultValues={event}
+        venues={venues}
+        artists={artists}
+        eventTypes={eventTypes.map((type) => type.label)}
+        role={user.role}
+        userVenueId={user.venueId}
+        users={assignableUsers.map((u) => ({ id: u.id, name: u.name }))}
+        canDelete={canDelete}
+        readOnly={!canEdit}
+        debrief={event.debrief}
+        sidebar={
+          <div className="space-y-6">
+            {canEdit ? (
               <Card>
                 <CardHeader>
                   <CardTitle>Save & submit</CardTitle>
@@ -662,9 +663,11 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
                   ) : null}
                 </CardContent>
               </Card>
+            ) : null}
 
-              <EventDetailSummary event={event} />
+            <EventDetailSummary event={event} />
 
+            {canEdit ? (
               <BookingSettingsCard
                 eventId={event.id}
                 bookingEnabled={Boolean(event.booking_enabled)}
@@ -674,37 +677,8 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
                 smsPromoEnabled={Boolean(event.sms_promo_enabled)}
                 userRole={user.role}
               />
-
-              {sopChecklistCard}
-              <AttachmentsPanel
-                parentType="event"
-                parentId={event.id}
-                attachments={attachments}
-                canUpload={canUploadAttachments}
-                viewerId={user.id}
-                isAdmin={user.role === "administrator"}
-                description="Files attached to this event or any of its planning tasks."
-              />
-              {reviewDecisionCard}
-              {assignmentCard}
-              {reviewerTimelineCard}
-              {auditTrailCard}
-              {debriefSubmitCard}
-              {debriefSnapshotCard}
-            </div>
-          }
-        />
-      ) : (
-        /* Read-only / non-editable layout */
-        <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start">
-          <div className="space-y-6">
-            {canPreReview ? (
-              <ProposalDecisionCard eventId={event.id} eventTitle={event.title} />
             ) : null}
-            <EventDetailSummary event={event} />
 
-            {debriefSubmitCard}
-            {debriefSnapshotCard}
             {sopChecklistCard}
             <AttachmentsPanel
               parentType="event"
@@ -715,40 +689,18 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
               isAdmin={user.role === "administrator"}
               description="Files attached to this event or any of its planning tasks."
             />
-
-            {canRevertToDraft ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Revert to draft</CardTitle>
-                  <CardDescription>Pull this event back to draft for further changes.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <RevertToDraftButton eventId={event.id} />
-                </CardContent>
-              </Card>
+            {canPreReview ? (
+              <ProposalDecisionCard eventId={event.id} eventTitle={event.title} />
             ) : null}
-
-            {!canEdit && canDelete ? (
-              <Card className="border-red-100 bg-red-50/50">
-                <CardHeader>
-                  <CardTitle className="text-red-700">Danger zone</CardTitle>
-                  <CardDescription>Irreversible actions for this event.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <DeleteEventButton eventId={event.id} />
-                </CardContent>
-              </Card>
-            ) : null}
-          </div>
-
-          <div className="space-y-6">
             {reviewDecisionCard}
             {assignmentCard}
             {reviewerTimelineCard}
             {auditTrailCard}
+            {debriefSubmitCard}
+            {debriefSnapshotCard}
           </div>
-        </div>
-      )}
+        }
+      />
     </div>
   );
 }
