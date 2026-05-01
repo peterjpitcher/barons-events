@@ -4,7 +4,7 @@ import { useCallback, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { upsertMultiVenueOpeningHoursAction } from "@/actions/opening-hours";
-import type { ServiceTypeRow, OpeningHoursRow, VenueServiceRow, UpsertHoursInput } from "@/lib/opening-hours";
+import type { ServiceTypeRow, OpeningHoursRow, UpsertHoursInput } from "@/lib/opening-hours";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
@@ -32,11 +32,18 @@ function normaliseTimeForInput(value: string | null): string {
 
 function buildInitialState(
   serviceTypes: ServiceTypeRow[],
-  venueServices: VenueServiceRow[],
   openingHours: OpeningHoursRow[]
 ): GridState {
   const state: GridState = {};
-  const offeredServiceIds = new Set(venueServices.map((row) => row.service_type_id));
+  const offeredServiceIds = new Set(
+    openingHours
+      .filter((row) => {
+        const openTime = normaliseTimeForInput(row.open_time);
+        const closeTime = normaliseTimeForInput(row.close_time);
+        return !row.is_closed && openTime && closeTime;
+      })
+      .map((row) => row.service_type_id)
+  );
 
   serviceTypes.forEach((st) => {
     state[st.id] = {
@@ -68,7 +75,6 @@ type VenueOption = { id: string; name: string };
 type WeeklyHoursGridProps = {
   venues: VenueOption[];
   serviceTypes: ServiceTypeRow[];
-  venueServices: VenueServiceRow[];
   openingHours: OpeningHoursRow[];
   canEdit: boolean;
 };
@@ -76,13 +82,12 @@ type WeeklyHoursGridProps = {
 export function WeeklyHoursGrid({
   venues,
   serviceTypes,
-  venueServices,
   openingHours,
   canEdit
 }: WeeklyHoursGridProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [grid, setGrid] = useState<GridState>(() => buildInitialState(serviceTypes, venueServices, openingHours));
+  const [grid, setGrid] = useState<GridState>(() => buildInitialState(serviceTypes, openingHours));
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const venueIds = venues.map((v) => v.id);

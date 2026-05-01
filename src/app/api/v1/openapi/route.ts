@@ -377,7 +377,7 @@ const spec = {
                                     properties: {
                                       serviceTypeId: { type: "string", format: "uuid" },
                                       serviceType: { type: "string", example: "Bar" },
-                                      hasService: { type: "boolean", description: "False when this venue does not offer this service." },
+                                      hasService: { type: "boolean", description: "Always true for daily service entries. Services not offered by the venue are omitted here and reported in the venue-level services list." },
                                       isOpen: { type: "boolean" },
                                       openTime: { type: "string", nullable: true, example: "11:00" },
                                       closeTime: { type: "string", nullable: true, example: "23:00" },

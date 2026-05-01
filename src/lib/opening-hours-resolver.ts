@@ -76,8 +76,9 @@ function serviceKey(venueId: string, serviceTypeId: string): string {
 /**
  * Pure function — no DB access. Accepts pre-fetched data and returns the
  * effective opening hours for each venue × day, with overrides applied.
- * Every configured service type is returned. `hasService` distinguishes a
- * service that venue does not offer from an offered service that is closed.
+ * Venue-level `services` reports availability for every global service type.
+ * Day-level `services` only includes services that venue actually has; blank
+ * configured days for those services resolve as closed.
  */
 export function resolveOpeningTimes(params: {
   serviceTypes: ServiceTypeRow[];
@@ -104,22 +105,36 @@ export function resolveOpeningTimes(params: {
     }
   }
 
+  const hasExplicitVenueServices = venueServices !== undefined;
   const venueServiceSet = new Set<string>();
   if (venueServices) {
     for (const row of venueServices) {
       venueServiceSet.add(serviceKey(row.venue_id, row.service_type_id));
     }
-  } else {
-    // Legacy fallback for callers that have not been updated yet.
-    for (const row of weeklyHours) {
-      if (row.is_closed || row.open_time || row.close_time) {
-        venueServiceSet.add(serviceKey(row.venue_id, row.service_type_id));
-      }
+  }
+
+  const servicesWithOpeningTimes = new Set<string>();
+  for (const row of weeklyHours) {
+    const openTime = normaliseTime(row.open_time);
+    const closeTime = normaliseTime(row.close_time);
+    if (!row.is_closed && openTime && closeTime) {
+      servicesWithOpeningTimes.add(serviceKey(row.venue_id, row.service_type_id));
     }
-    for (const override of overrides) {
+  }
+  for (const override of overrides) {
+    const openTime = normaliseTime(override.open_time);
+    const closeTime = normaliseTime(override.close_time);
+    if (!override.is_closed && openTime && closeTime) {
       for (const venueId of override.venue_ids) {
         venueServiceSet.add(serviceKey(venueId, override.service_type_id));
+        servicesWithOpeningTimes.add(serviceKey(venueId, override.service_type_id));
       }
+    }
+  }
+
+  if (!hasExplicitVenueServices) {
+    for (const key of servicesWithOpeningTimes) {
+      venueServiceSet.add(key);
     }
   }
 
@@ -130,7 +145,7 @@ export function resolveOpeningTimes(params: {
     const venueServiceAvailability = serviceTypes.map((st) => ({
       serviceTypeId: st.id,
       serviceType: st.name,
-      hasService: venueServiceSet.has(serviceKey(venue.id, st.id)),
+      hasService: venueServiceSet.has(serviceKey(venue.id, st.id)) && servicesWithOpeningTimes.has(serviceKey(venue.id, st.id)),
     }));
 
     const resolvedDays: ResolvedDay[] = dates.map((date) => {
@@ -141,22 +156,13 @@ export function resolveOpeningTimes(params: {
 
       // serviceTypes is already ordered by display_order (from DB query)
       for (const st of serviceTypes) {
-        const hasService = venueServiceSet.has(serviceKey(venue.id, st.id));
+        const hasService = venueServiceSet.has(serviceKey(venue.id, st.id)) && servicesWithOpeningTimes.has(serviceKey(venue.id, st.id));
+        if (!hasService) continue;
+
         const override = overrideMap.get(`${date}|${st.id}|${venue.id}`);
         const weekly = weeklyMap.get(`${venue.id}|${st.id}|${dbDay}`);
 
-        if (!hasService) {
-          services.push({
-            serviceTypeId: st.id,
-            serviceType: st.name,
-            hasService: false,
-            isOpen: false,
-            openTime: null,
-            closeTime: null,
-            isOverride: false,
-            note: null,
-          });
-        } else if (override) {
+        if (override) {
           const openTime = normaliseTime(override.open_time);
           const closeTime = normaliseTime(override.close_time);
           const isOpen = !override.is_closed && Boolean(openTime && closeTime);

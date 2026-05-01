@@ -103,16 +103,6 @@ GET /api/v1/opening-times?days=30&venueId=3b4e6f82-1a2b-4c3d-8e9f-0a1b2c3d4e5f
               "closeTime": "21:00",
               "isOverride": false,
               "note": null
-            },
-            {
-              "serviceTypeId": "c3d4e5f6-a7b8-9012-cdef-123456789012",
-              "serviceType": "Coffee Trailer",
-              "hasService": false,
-              "isOpen": false,
-              "openTime": null,
-              "closeTime": null,
-              "isOverride": false,
-              "note": null
             }
           ]
         },
@@ -171,7 +161,7 @@ GET /api/v1/opening-times?days=30&venueId=3b4e6f82-1a2b-4c3d-8e9f-0a1b2c3d4e5f
 |-------|------|-------------|
 | `date` | string (date) | The date in `YYYY-MM-DD` format |
 | `dayOfWeek` | string | Day name: `"Monday"` – `"Sunday"` |
-| `services` | array | Resolved opening times per service type for this day |
+| `services` | array | Resolved opening times for service types this venue actually offers |
 
 #### `venues[].days[].services[]`
 
@@ -179,7 +169,7 @@ GET /api/v1/opening-times?days=30&venueId=3b4e6f82-1a2b-4c3d-8e9f-0a1b2c3d4e5f
 |-------|------|-------------|
 | `serviceTypeId` | string (UUID) | Service type identifier |
 | `serviceType` | string | Human-readable name, e.g. `"Bar"`, `"Kitchen"`, `"Cafe Hours"`, `"Coffee Trailer"`, `"Pizza Shack"` |
-| `hasService` | boolean | `true` if this venue offers the service, `false` if it does not |
+| `hasService` | boolean | Always `true` for daily service entries; venue-level `services` carries the `false` values |
 | `isOpen` | boolean | `true` if open on this day, `false` if closed |
 | `openTime` | string \| null | Opening time in `HH:MM` (24-hour), or `null` if closed |
 | `closeTime` | string \| null | Closing time in `HH:MM` (24-hour), or `null` if closed |
@@ -190,11 +180,15 @@ GET /api/v1/opening-times?days=30&venueId=3b4e6f82-1a2b-4c3d-8e9f-0a1b2c3d4e5f
 
 **Exceptions are already applied.** If a venue has special hours or a closure on a specific date, those are returned directly — you do not need to check for exceptions separately. The `isOverride` flag tells you when hours differ from the normal weekly pattern, so you can optionally display a visual indicator (e.g. "Special hours today").
 
-**Service availability is explicit.** Every configured service type is returned with `hasService`. If `hasService` is `false`, the venue does not offer that service and you should usually hide it on the public website. For example, a venue without a Coffee Trailer returns a `"Coffee Trailer"` entry with `hasService: false`.
+**Service availability is explicit at venue level.** Every configured service type is returned in `venues[].services` with `hasService`. If `hasService` is `false`, the venue does not offer that service and you should usually hide it on the public website. For example, a venue without a Coffee Trailer returns a venue-level `"Coffee Trailer"` entry with `hasService: false`.
 
-**Service types are ordered consistently.** The `services` array is always in the same display order (Bar, Kitchen, Sunday Lunch, Carvery, Cafe Hours, Coffee Trailer, Pizza Shack) — you can render them as-is.
+**Daily services only include services that exist at that venue.** `venues[].days[].services` omits service types where `hasService` is `false`; it does not return a daily `"Coffee Trailer"` row for a venue without a Coffee Trailer.
 
-**Closed days are included explicitly.** A service that the venue offers but is closed on a given day appears with `"hasService": true`, `"isOpen": false`, and `null` times. Missing times for an offered service are treated as closed.
+**Service types are ordered consistently.** Both service arrays are in the same display order (Bar, Kitchen, Sunday Lunch, Carvery, Cafe Hours, Coffee Trailer, Pizza Shack) — you can render them as-is.
+
+**Closed days are included explicitly.** A service that the venue offers but is closed on a given day appears with `"hasService": true`, `"isOpen": false`, and `null` times. If the venue has at least one opening/closing time for a service but some days are blank, those blank days are returned as closed.
+
+**All-blank services are treated as not offered.** If a venue has no opening/closing time for a service at all, that service is returned with `hasService: false` at venue level and omitted from daily services.
 
 ---
 
@@ -313,7 +307,7 @@ function VenueOpeningTimes({ venue }) {
             <p>No opening times available.</p>
           ) : (
             <ul>
-              {day.services.filter((service) => service.hasService).map((service) => (
+              {day.services.map((service) => (
                 <li key={service.serviceTypeId}>
                   <strong>{service.serviceType}</strong>
                   {service.isOpen

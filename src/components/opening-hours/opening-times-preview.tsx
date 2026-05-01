@@ -172,7 +172,10 @@ function ResultsTable({
   result: ResolvedVenueHours;
   serviceTypes: ServiceTypeRow[];
 }) {
-  const columns = serviceTypes;
+  const availableServiceTypeIds = new Set(
+    result.services.filter((service) => service.hasService).map((service) => service.serviceTypeId)
+  );
+  const columns = serviceTypes.filter((st) => availableServiceTypeIds.has(st.id));
 
   return (
     <div className="overflow-x-auto">

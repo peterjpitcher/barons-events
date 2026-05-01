@@ -195,11 +195,20 @@ export async function upsertVenueOpeningHours(
   const supabase = await createSupabaseActionClient();
 
   const offeredServiceIds = Array.from(
-    new Set(rows.filter((row) => row.has_service).map((row) => row.service_type_id))
+    new Set(
+      rows
+        .filter((row) => {
+          const openTime = normaliseTimeForStorage(row.open_time);
+          const closeTime = normaliseTimeForStorage(row.close_time);
+          return row.has_service && !row.is_closed && openTime && closeTime;
+        })
+        .map((row) => row.service_type_id)
+    )
   );
+  const offeredServiceSet = new Set(offeredServiceIds);
 
   const records = rows
-    .filter((row) => row.has_service)
+    .filter((row) => offeredServiceSet.has(row.service_type_id))
     .map((row) => {
       const openTime = normaliseTimeForStorage(row.open_time);
       const closeTime = normaliseTimeForStorage(row.close_time);

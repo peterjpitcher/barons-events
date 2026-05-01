@@ -181,7 +181,6 @@ export function OpeningHoursPageShell({
                   key={resolvedActiveVenueId}
                   venues={selectedVenues}
                   serviceTypes={serviceTypes}
-                  venueServices={venueServices.filter((row) => row.venue_id === resolvedActiveVenueId)}
                   openingHours={activeVenueHours}
                   canEdit
                 />

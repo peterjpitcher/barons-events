@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { ServiceTypeRow, OpeningHoursRow, OpeningOverrideRow, VenueServiceRow } from "@/lib/opening-hours";
+import type { ServiceTypeRow, OpeningHoursRow, OpeningOverrideRow } from "@/lib/opening-hours";
 import { WeeklyHoursGrid } from "@/components/opening-hours/weekly-hours-grid";
 import { OverridesCalendar } from "@/components/opening-hours/overrides-calendar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,7 +13,6 @@ type OpeningHoursManagerProps = {
   venueName: string;
   venues: VenueOption[];
   serviceTypes: ServiceTypeRow[];
-  venueServices: VenueServiceRow[];
   openingHours: OpeningHoursRow[];
   overrides: OpeningOverrideRow[];
   canEdit: boolean;
@@ -24,7 +23,6 @@ export function OpeningHoursManager({
   venueName,
   venues,
   serviceTypes,
-  venueServices,
   openingHours,
   overrides,
   canEdit
@@ -53,7 +51,6 @@ export function OpeningHoursManager({
             <WeeklyHoursGrid
               venues={[{ id: venueId, name: venueName }]}
               serviceTypes={serviceTypes}
-              venueServices={venueServices}
               openingHours={openingHours}
               canEdit={canEdit}
             />
