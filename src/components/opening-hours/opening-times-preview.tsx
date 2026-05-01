@@ -4,7 +4,7 @@ import { useState } from "react";
 import { resolveOpeningTimes } from "@/lib/opening-hours-resolver";
 import type { ResolvedVenueHours } from "@/lib/opening-hours-resolver";
 // Input types are imported as type-only — erased at compile time, safe in client components.
-import type { ServiceTypeRow, OpeningHoursRow, OpeningOverrideRow } from "@/lib/opening-hours";
+import type { ServiceTypeRow, OpeningHoursRow, OpeningOverrideRow, VenueServiceRow } from "@/lib/opening-hours";
 import {
   Card,
   CardContent,
@@ -20,6 +20,7 @@ type VenueOption = { id: string; name: string };
 type OpeningTimesPreviewProps = {
   venues: VenueOption[];
   serviceTypes: ServiceTypeRow[];
+  venueServices: VenueServiceRow[];
   allHours: OpeningHoursRow[];
   overrides: OpeningOverrideRow[];
 };
@@ -50,6 +51,7 @@ const DAY_OPTIONS: { value: 7 | 30 | 90; label: string }[] = [
 export function OpeningTimesPreview({
   venues,
   serviceTypes,
+  venueServices,
   allHours,
   overrides,
 }: OpeningTimesPreviewProps) {
@@ -66,6 +68,7 @@ export function OpeningTimesPreview({
     const from = getTodayLondon();
     const resolved = resolveOpeningTimes({
       serviceTypes,
+      venueServices,
       weeklyHours: allHours,
       overrides,
       venues: venues.filter((v) => v.id === selectedVenueId),
@@ -169,18 +172,7 @@ function ResultsTable({
   result: ResolvedVenueHours;
   serviceTypes: ServiceTypeRow[];
 }) {
-  // Only show columns for service types that have at least one open entry with
-  // actual times set for this venue. Services with no hours configured at all
-  // are omitted from the resolved output by resolveOpeningTimes, so they will
-  // not appear here. serviceTypes is already ordered by display_order then name.
-  const configuredServiceTypeIds = new Set(
-    result.days.flatMap((d) =>
-      d.services
-        .filter((s) => s.isOpen && (s.openTime !== null || s.closeTime !== null))
-        .map((s) => s.serviceTypeId)
-    )
-  );
-  const columns = serviceTypes.filter((st) => configuredServiceTypeIds.has(st.id));
+  const columns = serviceTypes;
 
   return (
     <div className="overflow-x-auto">
@@ -230,6 +222,7 @@ function ServiceCell({
   service,
 }: {
   service: {
+    hasService: boolean;
     isOpen: boolean;
     openTime: string | null;
     closeTime: string | null;
@@ -238,6 +231,10 @@ function ServiceCell({
 }) {
   if (!service) {
     return <span className="text-xs text-subtle">—</span>;
+  }
+
+  if (!service.hasService) {
+    return <span className="text-xs text-subtle">Not offered</span>;
   }
 
   if (!service.isOpen) {

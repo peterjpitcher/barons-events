@@ -4,7 +4,7 @@ import { useCallback, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { upsertMultiVenueOpeningHoursAction } from "@/actions/opening-hours";
-import type { ServiceTypeRow, OpeningHoursRow, UpsertHoursInput } from "@/lib/opening-hours";
+import type { ServiceTypeRow, OpeningHoursRow, VenueServiceRow, UpsertHoursInput } from "@/lib/opening-hours";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
@@ -17,27 +17,45 @@ type CellState = {
   is_closed: boolean;
 };
 
-type GridState = Record<string, Record<number, CellState>>;
+type ServiceState = {
+  has_service: boolean;
+  days: Record<number, CellState>;
+};
+
+type GridState = Record<string, ServiceState>;
+
+function normaliseTimeForInput(value: string | null): string {
+  if (!value) return "";
+  const match = value.match(/^(\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?$/);
+  return match ? match[1] : value;
+}
 
 function buildInitialState(
   serviceTypes: ServiceTypeRow[],
+  venueServices: VenueServiceRow[],
   openingHours: OpeningHoursRow[]
 ): GridState {
   const state: GridState = {};
+  const offeredServiceIds = new Set(venueServices.map((row) => row.service_type_id));
 
   serviceTypes.forEach((st) => {
-    state[st.id] = {};
+    state[st.id] = {
+      has_service: offeredServiceIds.has(st.id),
+      days: {}
+    };
     for (let day = 0; day < 7; day++) {
-      state[st.id][day] = { open_time: "", close_time: "", is_closed: false };
+      state[st.id].days[day] = { open_time: "", close_time: "", is_closed: true };
     }
   });
 
   openingHours.forEach((row) => {
     if (state[row.service_type_id] && row.day_of_week >= 0 && row.day_of_week < 7) {
-      state[row.service_type_id][row.day_of_week] = {
-        open_time: row.open_time ?? "",
-        close_time: row.close_time ?? "",
-        is_closed: row.is_closed
+      const openTime = normaliseTimeForInput(row.open_time);
+      const closeTime = normaliseTimeForInput(row.close_time);
+      state[row.service_type_id].days[row.day_of_week] = {
+        open_time: openTime,
+        close_time: closeTime,
+        is_closed: row.is_closed || !openTime || !closeTime
       };
     }
   });
@@ -50,6 +68,7 @@ type VenueOption = { id: string; name: string };
 type WeeklyHoursGridProps = {
   venues: VenueOption[];
   serviceTypes: ServiceTypeRow[];
+  venueServices: VenueServiceRow[];
   openingHours: OpeningHoursRow[];
   canEdit: boolean;
 };
@@ -57,12 +76,13 @@ type WeeklyHoursGridProps = {
 export function WeeklyHoursGrid({
   venues,
   serviceTypes,
+  venueServices,
   openingHours,
   canEdit
 }: WeeklyHoursGridProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [grid, setGrid] = useState<GridState>(() => buildInitialState(serviceTypes, openingHours));
+  const [grid, setGrid] = useState<GridState>(() => buildInitialState(serviceTypes, venueServices, openingHours));
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const venueIds = venues.map((v) => v.id);
@@ -73,12 +93,25 @@ export function WeeklyHoursGrid({
         ...prev,
         [serviceTypeId]: {
           ...prev[serviceTypeId],
-          [day]: { ...prev[serviceTypeId][day], ...updates }
+          days: {
+            ...prev[serviceTypeId].days,
+            [day]: { ...prev[serviceTypeId].days[day], ...updates }
+          }
         }
       }));
     },
     []
   );
+
+  const updateServiceAvailability = useCallback((serviceTypeId: string, hasService: boolean) => {
+    setGrid((prev) => ({
+      ...prev,
+      [serviceTypeId]: {
+        ...prev[serviceTypeId],
+        has_service: hasService
+      }
+    }));
+  }, []);
 
   function handleSaveClick() {
     setConfirmOpen(true);
@@ -88,14 +121,16 @@ export function WeeklyHoursGrid({
     setConfirmOpen(false);
 
     const rows: UpsertHoursInput[] = [];
-    Object.entries(grid).forEach(([serviceTypeId, days]) => {
-      Object.entries(days).forEach(([dayStr, cell]) => {
+    Object.entries(grid).forEach(([serviceTypeId, service]) => {
+      Object.entries(service.days).forEach(([dayStr, cell]) => {
+        const isClosed = !service.has_service || cell.is_closed || !cell.open_time || !cell.close_time;
         rows.push({
           service_type_id: serviceTypeId,
           day_of_week: parseInt(dayStr, 10),
-          open_time: cell.is_closed ? null : (cell.open_time || null),
-          close_time: cell.is_closed ? null : (cell.close_time || null),
-          is_closed: cell.is_closed
+          open_time: isClosed ? null : cell.open_time,
+          close_time: isClosed ? null : cell.close_time,
+          is_closed: isClosed,
+          has_service: service.has_service
         });
       });
     });
@@ -136,18 +171,32 @@ export function WeeklyHoursGrid({
             {serviceTypes.map((st) => (
               <tr key={st.id} className="border-b border-[var(--color-border)] last:border-0">
                 <td className="py-3 pr-3 text-sm font-semibold text-[var(--color-text)]">
-                  {st.name}
+                  <div className="space-y-1">
+                    <div>{st.name}</div>
+                    <label className="flex items-center gap-1.5 text-xs font-normal text-subtle">
+                      <input
+                        type="checkbox"
+                        checked={grid[st.id]?.has_service ?? false}
+                        disabled={!canEdit}
+                        onChange={(e) => updateServiceAvailability(st.id, e.target.checked)}
+                        className="h-3.5 w-3.5"
+                      />
+                      Has service
+                    </label>
+                  </div>
                 </td>
                 {DAYS.map((_, dayIndex) => {
-                  const cell = grid[st.id]?.[dayIndex] ?? {
+                  const service = grid[st.id];
+                  const cell = service?.days[dayIndex] ?? {
                     open_time: "",
                     close_time: "",
-                    is_closed: false
+                    is_closed: true
                   };
                   return (
                     <td key={dayIndex} className="px-2 py-3">
                       <HoursCell
                         cell={cell}
+                        hasService={service?.has_service ?? false}
                         canEdit={canEdit}
                         onChange={(updates) => updateCell(st.id, dayIndex, updates)}
                       />
@@ -208,13 +257,23 @@ function buildConfirmDescription(venues: VenueOption[]): string {
 
 function HoursCell({
   cell,
+  hasService,
   canEdit,
   onChange
 }: {
   cell: CellState;
+  hasService: boolean;
   canEdit: boolean;
   onChange: (updates: Partial<CellState>) => void;
 }) {
+  if (!hasService) {
+    return (
+      <span className="inline-flex items-center rounded-full bg-[var(--color-muted-surface)] px-2 py-1 text-xs text-subtle">
+        Not offered
+      </span>
+    );
+  }
+
   if (!canEdit) {
     if (cell.is_closed) {
       return (

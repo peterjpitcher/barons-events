@@ -122,6 +122,7 @@ if (Array.isArray(d?.venues) && d.venues.length > 0) {
       const svc = day.services[0];
       ok('Service has serviceTypeId', typeof svc.serviceTypeId === 'string');
       ok('Service has serviceType',   typeof svc.serviceType === 'string' && svc.serviceType.length > 0);
+      ok('Service has hasService (bool)', typeof svc.hasService === 'boolean');
       ok('Service has isOpen (bool)', typeof svc.isOpen === 'boolean');
       ok('Service has isOverride (bool)', typeof svc.isOverride === 'boolean');
 

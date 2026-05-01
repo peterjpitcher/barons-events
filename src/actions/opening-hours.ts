@@ -133,9 +133,10 @@ export async function deleteServiceTypeAction(
 const openingHoursRowSchema = z.object({
   service_type_id: z.string().uuid("Invalid service type reference."),
   day_of_week: z.number().int().min(0).max(6),
-  open_time: z.string().regex(/^\d{2}:\d{2}$/, "Invalid time format.").nullable(),
-  close_time: z.string().regex(/^\d{2}:\d{2}$/, "Invalid time format.").nullable(),
+  open_time: z.string().regex(/^\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/, "Invalid time format.").nullable(),
+  close_time: z.string().regex(/^\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/, "Invalid time format.").nullable(),
   is_closed: z.boolean(),
+  has_service: z.boolean().default(true),
 });
 
 const openingHoursInputSchema = z.array(openingHoursRowSchema);
@@ -243,8 +244,8 @@ export async function upsertMultiVenueOpeningHoursAction(
 const overrideSchema = z.object({
   override_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date format"),
   service_type_id: z.string().uuid("Invalid service type"),
-  open_time: z.string().nullable().optional(),
-  close_time: z.string().nullable().optional(),
+  open_time: z.string().regex(/^\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/, "Invalid time format.").nullable().optional(),
+  close_time: z.string().regex(/^\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/, "Invalid time format.").nullable().optional(),
   is_closed: z.boolean(),
   note: z.string().max(500).nullable().optional(),
   venue_ids: z.array(z.string().uuid()).min(1, "Select at least one venue")

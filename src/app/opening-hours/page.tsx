@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { listVenues } from "@/lib/venues";
-import { listServiceTypes, listAllVenueOpeningHours, listOpeningOverrides } from "@/lib/opening-hours";
+import { listServiceTypes, listAllVenueOpeningHours, listAllVenueServices, listOpeningOverrides } from "@/lib/opening-hours";
 import { OpeningHoursPageShell } from "@/components/opening-hours/opening-hours-page-shell";
 
 export const metadata = {
@@ -14,9 +14,10 @@ export default async function OpeningHoursPage() {
   if (!user) redirect("/login");
   if (user.role !== "administrator") redirect("/unauthorized");
 
-  const [venues, serviceTypes, allHours, overrides] = await Promise.all([
+  const [venues, serviceTypes, venueServices, allHours, overrides] = await Promise.all([
     listVenues(),
     listServiceTypes(),
+    listAllVenueServices(),
     listAllVenueOpeningHours(),
     listOpeningOverrides()
   ]);
@@ -25,6 +26,7 @@ export default async function OpeningHoursPage() {
     <OpeningHoursPageShell
       venues={venues.map((v) => ({ id: v.id, name: v.name }))}
       serviceTypes={serviceTypes}
+      venueServices={venueServices}
       allHours={allHours}
       overrides={overrides}
     />

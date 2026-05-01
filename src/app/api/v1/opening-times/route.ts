@@ -8,7 +8,7 @@ import {
 } from "@/lib/public-api/auth";
 import { createSupabaseReadonlyClient } from "@/lib/supabase/server";
 import { resolveOpeningTimes } from "@/lib/opening-hours";
-import type { ServiceTypeRow, OpeningHoursRow, OpeningOverrideRow } from "@/lib/opening-hours";
+import type { ServiceTypeRow, OpeningHoursRow, OpeningOverrideRow, VenueServiceRow } from "@/lib/opening-hours";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -76,7 +76,7 @@ export async function GET(request: Request) {
     .select("id, name")
     .order("name", { ascending: true });
 
-  const [venuesResult, serviceTypesResult, weeklyHoursResult, overridesResult] =
+  const [venuesResult, serviceTypesResult, venueServicesResult, weeklyHoursResult, overridesResult] =
     await Promise.all([
       venueIdParam ? venuesQuery.eq("id", venueIdParam) : venuesQuery,
       supabase
@@ -84,6 +84,12 @@ export async function GET(request: Request) {
         .select("id, name, display_order, created_at")
         .order("display_order")
         .order("name"),
+      venueIdParam
+        ? supabase
+            .from("venue_services")
+            .select("*")
+            .eq("venue_id", venueIdParam)
+        : supabase.from("venue_services").select("*"),
       venueIdParam
         ? supabase
             .from("venue_opening_hours")
@@ -108,6 +114,10 @@ export async function GET(request: Request) {
   if (serviceTypesResult.error) {
     console.error("Public API /opening-times: service types query failed", serviceTypesResult.error);
     return jsonError(500, "internal_error", "Unable to load service types");
+  }
+  if (venueServicesResult.error) {
+    console.error("Public API /opening-times: venue services query failed", venueServicesResult.error);
+    return jsonError(500, "internal_error", "Unable to load venue services");
   }
   if (weeklyHoursResult.error) {
     console.error("Public API /opening-times: opening hours query failed", weeklyHoursResult.error);
@@ -153,6 +163,7 @@ export async function GET(request: Request) {
 
   const result = resolveOpeningTimes({
     serviceTypes: serviceTypesResult.data as ServiceTypeRow[],
+    venueServices: venueServicesResult.data as VenueServiceRow[],
     weeklyHours: weeklyHoursResult.data as OpeningHoursRow[],
     overrides: filteredOverrides,
     venues: venuesResult.data,

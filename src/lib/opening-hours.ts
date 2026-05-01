@@ -35,12 +35,20 @@ export type OpeningOverrideRow = {
   venue_ids: string[];
 };
 
+export type VenueServiceRow = {
+  venue_id: string;
+  service_type_id: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export type UpsertHoursInput = {
   service_type_id: string;
   day_of_week: number;
   open_time: string | null;
   close_time: string | null;
   is_closed: boolean;
+  has_service: boolean;
 };
 
 export type CreateOverrideInput = {
@@ -142,24 +150,110 @@ export async function listVenueOpeningHours(venueId: string): Promise<OpeningHou
   return data ?? [];
 }
 
+// ─── Venue Services ───────────────────────────────────────────────────────────
+
+export async function listAllVenueServices(): Promise<VenueServiceRow[]> {
+  const supabase = await createSupabaseReadonlyClient();
+  const { data, error } = await supabase
+    .from("venue_services")
+    .select("*")
+    .order("venue_id")
+    .order("service_type_id");
+
+  if (error) {
+    throw new Error(`Could not load venue services: ${error.message}`);
+  }
+
+  return data ?? [];
+}
+
+export async function listVenueServices(venueId: string): Promise<VenueServiceRow[]> {
+  const supabase = await createSupabaseReadonlyClient();
+  const { data, error } = await supabase
+    .from("venue_services")
+    .select("*")
+    .eq("venue_id", venueId)
+    .order("service_type_id");
+
+  if (error) {
+    throw new Error(`Could not load venue services: ${error.message}`);
+  }
+
+  return data ?? [];
+}
+
+function normaliseTimeForStorage(value: string | null): string | null {
+  if (!value) return null;
+  const match = value.match(/^(\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?$/);
+  return match ? match[1] : value;
+}
+
 export async function upsertVenueOpeningHours(
   venueId: string,
   rows: UpsertHoursInput[]
 ): Promise<void> {
   const supabase = await createSupabaseActionClient();
-  const records = rows.map((row) => ({
-    venue_id: venueId,
-    service_type_id: row.service_type_id,
-    day_of_week: row.day_of_week,
-    open_time: row.is_closed ? null : (row.open_time || null),
-    close_time: row.is_closed ? null : (row.close_time || null),
-    is_closed: row.is_closed,
-    updated_at: new Date().toISOString()
-  }));
+
+  const offeredServiceIds = Array.from(
+    new Set(rows.filter((row) => row.has_service).map((row) => row.service_type_id))
+  );
+
+  const records = rows
+    .filter((row) => row.has_service)
+    .map((row) => {
+      const openTime = normaliseTimeForStorage(row.open_time);
+      const closeTime = normaliseTimeForStorage(row.close_time);
+      const isClosed = row.is_closed || !openTime || !closeTime;
+
+      return {
+        venue_id: venueId,
+        service_type_id: row.service_type_id,
+        day_of_week: row.day_of_week,
+        open_time: isClosed ? null : openTime,
+        close_time: isClosed ? null : closeTime,
+        is_closed: isClosed,
+        updated_at: new Date().toISOString()
+      };
+    });
+
+  const { error: deleteHoursError } = await supabase
+    .from("venue_opening_hours")
+    .delete()
+    .eq("venue_id", venueId);
+
+  if (deleteHoursError) {
+    throw new Error(`Could not replace opening hours: ${deleteHoursError.message}`);
+  }
+
+  const { error: deleteServicesError } = await supabase
+    .from("venue_services")
+    .delete()
+    .eq("venue_id", venueId);
+
+  if (deleteServicesError) {
+    throw new Error(`Could not replace venue services: ${deleteServicesError.message}`);
+  }
+
+  if (offeredServiceIds.length > 0) {
+    const { error: insertServicesError } = await supabase
+      .from("venue_services")
+      .insert(offeredServiceIds.map((serviceTypeId) => ({
+        venue_id: venueId,
+        service_type_id: serviceTypeId
+      })));
+
+    if (insertServicesError) {
+      throw new Error(`Could not save venue services: ${insertServicesError.message}`);
+    }
+  }
+
+  if (records.length === 0) {
+    return;
+  }
 
   const { error } = await supabase
     .from("venue_opening_hours")
-    .upsert(records, { onConflict: "venue_id,service_type_id,day_of_week" });
+    .insert(records);
 
   if (error) {
     throw new Error(`Could not save opening hours: ${error.message}`);
@@ -215,15 +309,18 @@ export async function listOpeningOverrides(options?: {
 
 export async function createOpeningOverride(input: CreateOverrideInput): Promise<string> {
   const supabase = await createSupabaseActionClient();
+  const openTime = normaliseTimeForStorage(input.open_time);
+  const closeTime = normaliseTimeForStorage(input.close_time);
+  const isClosed = input.is_closed || !openTime || !closeTime;
 
   const { data, error } = await supabase
     .from("venue_opening_overrides")
     .insert({
       override_date: input.override_date,
       service_type_id: input.service_type_id,
-      open_time: input.is_closed ? null : (input.open_time || null),
-      close_time: input.is_closed ? null : (input.close_time || null),
-      is_closed: input.is_closed,
+      open_time: isClosed ? null : openTime,
+      close_time: isClosed ? null : closeTime,
+      is_closed: isClosed,
       note: input.note || null,
       created_by: input.created_by
     })
@@ -249,15 +346,18 @@ export async function createOpeningOverride(input: CreateOverrideInput): Promise
 
 export async function updateOpeningOverride(id: string, input: UpdateOverrideInput): Promise<void> {
   const supabase = await createSupabaseActionClient();
+  const openTime = normaliseTimeForStorage(input.open_time);
+  const closeTime = normaliseTimeForStorage(input.close_time);
+  const isClosed = input.is_closed || !openTime || !closeTime;
 
   const { error } = await supabase
     .from("venue_opening_overrides")
     .update({
       override_date: input.override_date,
       service_type_id: input.service_type_id,
-      open_time: input.is_closed ? null : (input.open_time || null),
-      close_time: input.is_closed ? null : (input.close_time || null),
-      is_closed: input.is_closed,
+      open_time: isClosed ? null : openTime,
+      close_time: isClosed ? null : closeTime,
+      is_closed: isClosed,
       note: input.note || null,
       updated_at: new Date().toISOString()
     })
@@ -306,6 +406,7 @@ export async function deleteOpeningOverride(id: string): Promise<void> {
 export {
   resolveOpeningTimes,
   type ResolvedServiceHours,
+  type ResolvedVenueService,
   type ResolvedDay,
   type ResolvedVenueHours,
   type ResolvedOpeningTimes,

@@ -1,17 +1,24 @@
 // Pure resolver — no server imports, safe for use in client components.
 // Input types are imported as type-only (erased at compile time).
-import type { ServiceTypeRow, OpeningHoursRow, OpeningOverrideRow } from "@/lib/opening-hours";
+import type { ServiceTypeRow, OpeningHoursRow, OpeningOverrideRow, VenueServiceRow } from "@/lib/opening-hours";
 
 // ─── Output types ─────────────────────────────────────────────────────────────
 
 export type ResolvedServiceHours = {
   serviceTypeId: string;
   serviceType: string;
+  hasService: boolean;
   isOpen: boolean;
   openTime: string | null;
   closeTime: string | null;
   isOverride: boolean;
   note: string | null;
+};
+
+export type ResolvedVenueService = {
+  serviceTypeId: string;
+  serviceType: string;
+  hasService: boolean;
 };
 
 export type ResolvedDay = {
@@ -23,6 +30,7 @@ export type ResolvedDay = {
 export type ResolvedVenueHours = {
   venueId: string;
   venueName: string;
+  services: ResolvedVenueService[];
   days: ResolvedDay[];
 };
 
@@ -53,22 +61,34 @@ function buildDateRange(from: string, days: number): string[] {
   return dates;
 }
 
+function normaliseTime(value: string | null): string | null {
+  if (!value) return null;
+  const match = value.match(/^(\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?$/);
+  return match ? match[1] : value;
+}
+
+function serviceKey(venueId: string, serviceTypeId: string): string {
+  return `${venueId}|${serviceTypeId}`;
+}
+
 // ─── Public resolver ──────────────────────────────────────────────────────────
 
 /**
  * Pure function — no DB access. Accepts pre-fetched data and returns the
  * effective opening hours for each venue × day, with overrides applied.
- * Service types with no template and no override for a given venue are omitted.
+ * Every configured service type is returned. `hasService` distinguishes a
+ * service that venue does not offer from an offered service that is closed.
  */
 export function resolveOpeningTimes(params: {
   serviceTypes: ServiceTypeRow[];
+  venueServices?: VenueServiceRow[];
   weeklyHours: OpeningHoursRow[];
   overrides: OpeningOverrideRow[];
   venues: { id: string; name: string }[];
   from: string;
   days: number;
 }): ResolvedOpeningTimes {
-  const { serviceTypes, weeklyHours, overrides, venues, from, days } = params;
+  const { serviceTypes, venueServices, weeklyHours, overrides, venues, from, days } = params;
 
   // Index weekly hours: "venueId|serviceTypeId|dayOfWeek" → row
   const weeklyMap = new Map<string, OpeningHoursRow>();
@@ -84,10 +104,35 @@ export function resolveOpeningTimes(params: {
     }
   }
 
+  const venueServiceSet = new Set<string>();
+  if (venueServices) {
+    for (const row of venueServices) {
+      venueServiceSet.add(serviceKey(row.venue_id, row.service_type_id));
+    }
+  } else {
+    // Legacy fallback for callers that have not been updated yet.
+    for (const row of weeklyHours) {
+      if (row.is_closed || row.open_time || row.close_time) {
+        venueServiceSet.add(serviceKey(row.venue_id, row.service_type_id));
+      }
+    }
+    for (const override of overrides) {
+      for (const venueId of override.venue_ids) {
+        venueServiceSet.add(serviceKey(venueId, override.service_type_id));
+      }
+    }
+  }
+
   const dates = buildDateRange(from, days);
   const to = dates[dates.length - 1] ?? from;
 
   const resolvedVenues: ResolvedVenueHours[] = venues.map((venue) => {
+    const venueServiceAvailability = serviceTypes.map((st) => ({
+      serviceTypeId: st.id,
+      serviceType: st.name,
+      hasService: venueServiceSet.has(serviceKey(venue.id, st.id)),
+    }));
+
     const resolvedDays: ResolvedDay[] = dates.map((date) => {
       const jsUtcDay = new Date(date + "T00:00:00Z").getUTCDay();
       const dbDay = jsDayToDbDay(jsUtcDay);
@@ -96,37 +141,72 @@ export function resolveOpeningTimes(params: {
 
       // serviceTypes is already ordered by display_order (from DB query)
       for (const st of serviceTypes) {
+        const hasService = venueServiceSet.has(serviceKey(venue.id, st.id));
         const override = overrideMap.get(`${date}|${st.id}|${venue.id}`);
         const weekly = weeklyMap.get(`${venue.id}|${st.id}|${dbDay}`);
 
-        if (override) {
+        if (!hasService) {
           services.push({
             serviceTypeId: st.id,
             serviceType: st.name,
-            isOpen: !override.is_closed,
-            openTime: override.open_time ?? null,
-            closeTime: override.close_time ?? null,
+            hasService: false,
+            isOpen: false,
+            openTime: null,
+            closeTime: null,
+            isOverride: false,
+            note: null,
+          });
+        } else if (override) {
+          const openTime = normaliseTime(override.open_time);
+          const closeTime = normaliseTime(override.close_time);
+          const isOpen = !override.is_closed && Boolean(openTime && closeTime);
+          services.push({
+            serviceTypeId: st.id,
+            serviceType: st.name,
+            hasService: true,
+            isOpen,
+            openTime: isOpen ? openTime : null,
+            closeTime: isOpen ? closeTime : null,
             isOverride: true,
             note: override.note ?? null,
           });
         } else if (weekly) {
+          const openTime = normaliseTime(weekly.open_time);
+          const closeTime = normaliseTime(weekly.close_time);
+          const isOpen = !weekly.is_closed && Boolean(openTime && closeTime);
           services.push({
             serviceTypeId: st.id,
             serviceType: st.name,
-            isOpen: !weekly.is_closed,
-            openTime: weekly.open_time ?? null,
-            closeTime: weekly.close_time ?? null,
+            hasService: true,
+            isOpen,
+            openTime: isOpen ? openTime : null,
+            closeTime: isOpen ? closeTime : null,
+            isOverride: false,
+            note: null,
+          });
+        } else {
+          services.push({
+            serviceTypeId: st.id,
+            serviceType: st.name,
+            hasService: true,
+            isOpen: false,
+            openTime: null,
+            closeTime: null,
             isOverride: false,
             note: null,
           });
         }
-        // Neither template nor override → omit
       }
 
       return { date, dayOfWeek: DB_DAY_NAMES[dbDay], services };
     });
 
-    return { venueId: venue.id, venueName: venue.name, days: resolvedDays };
+    return {
+      venueId: venue.id,
+      venueName: venue.name,
+      services: venueServiceAvailability,
+      days: resolvedDays
+    };
   });
 
   return { from, to, venues: resolvedVenues };

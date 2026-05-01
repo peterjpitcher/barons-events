@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { ServiceTypeRow, OpeningHoursRow, OpeningOverrideRow } from "@/lib/opening-hours";
+import type { ServiceTypeRow, OpeningHoursRow, OpeningOverrideRow, VenueServiceRow } from "@/lib/opening-hours";
 import { WeeklyHoursGrid } from "@/components/opening-hours/weekly-hours-grid";
 import { OverridesCalendar } from "@/components/opening-hours/overrides-calendar";
 import { OpeningTimesPreview } from "@/components/opening-hours/opening-times-preview";
@@ -12,6 +12,7 @@ type VenueOption = { id: string; name: string };
 type OpeningHoursPageShellProps = {
   venues: VenueOption[];
   serviceTypes: ServiceTypeRow[];
+  venueServices: VenueServiceRow[];
   allHours: OpeningHoursRow[];
   overrides: OpeningOverrideRow[];
 };
@@ -19,6 +20,7 @@ type OpeningHoursPageShellProps = {
 export function OpeningHoursPageShell({
   venues,
   serviceTypes,
+  venueServices,
   allHours,
   overrides
 }: OpeningHoursPageShellProps) {
@@ -179,6 +181,7 @@ export function OpeningHoursPageShell({
                   key={resolvedActiveVenueId}
                   venues={selectedVenues}
                   serviceTypes={serviceTypes}
+                  venueServices={venueServices.filter((row) => row.venue_id === resolvedActiveVenueId)}
                   openingHours={activeVenueHours}
                   canEdit
                 />
@@ -214,6 +217,7 @@ export function OpeningHoursPageShell({
       <OpeningTimesPreview
         venues={venues}
         serviceTypes={serviceTypes}
+        venueServices={venueServices}
         allHours={allHours}
         overrides={localOverrides}
       />

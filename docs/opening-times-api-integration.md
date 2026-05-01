@@ -62,6 +62,23 @@ GET /api/v1/opening-times?days=30&venueId=3b4e6f82-1a2b-4c3d-8e9f-0a1b2c3d4e5f
     {
       "venueId": "3b4e6f82-1a2b-4c3d-8e9f-0a1b2c3d4e5f",
       "venueName": "The Fox",
+      "services": [
+        {
+          "serviceTypeId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+          "serviceType": "Bar",
+          "hasService": true
+        },
+        {
+          "serviceTypeId": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+          "serviceType": "Kitchen",
+          "hasService": true
+        },
+        {
+          "serviceTypeId": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+          "serviceType": "Coffee Trailer",
+          "hasService": false
+        }
+      ],
       "days": [
         {
           "date": "2026-03-10",
@@ -70,6 +87,7 @@ GET /api/v1/opening-times?days=30&venueId=3b4e6f82-1a2b-4c3d-8e9f-0a1b2c3d4e5f
             {
               "serviceTypeId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
               "serviceType": "Bar",
+              "hasService": true,
               "isOpen": true,
               "openTime": "11:00",
               "closeTime": "23:00",
@@ -79,9 +97,20 @@ GET /api/v1/opening-times?days=30&venueId=3b4e6f82-1a2b-4c3d-8e9f-0a1b2c3d4e5f
             {
               "serviceTypeId": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
               "serviceType": "Kitchen",
+              "hasService": true,
               "isOpen": true,
               "openTime": "12:00",
               "closeTime": "21:00",
+              "isOverride": false,
+              "note": null
+            },
+            {
+              "serviceTypeId": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+              "serviceType": "Coffee Trailer",
+              "hasService": false,
+              "isOpen": false,
+              "openTime": null,
+              "closeTime": null,
               "isOverride": false,
               "note": null
             }
@@ -94,6 +123,7 @@ GET /api/v1/opening-times?days=30&venueId=3b4e6f82-1a2b-4c3d-8e9f-0a1b2c3d4e5f
             {
               "serviceTypeId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
               "serviceType": "Bar",
+              "hasService": true,
               "isOpen": false,
               "openTime": null,
               "closeTime": null,
@@ -124,7 +154,16 @@ GET /api/v1/opening-times?days=30&venueId=3b4e6f82-1a2b-4c3d-8e9f-0a1b2c3d4e5f
 |-------|------|-------------|
 | `venueId` | string (UUID) | Venue identifier |
 | `venueName` | string | Display name of the venue |
+| `services` | array | Venue-level service availability. Use this to see which global service types this venue actually offers |
 | `days` | array | One entry per day in the requested range |
+
+#### `venues[].services[]`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `serviceTypeId` | string (UUID) | Service type identifier |
+| `serviceType` | string | Human-readable name, e.g. `"Bar"`, `"Kitchen"`, `"Cafe Hours"`, `"Coffee Trailer"`, `"Pizza Shack"` |
+| `hasService` | boolean | `true` if this venue offers the service, `false` if it does not |
 
 #### `venues[].days[]`
 
@@ -139,7 +178,8 @@ GET /api/v1/opening-times?days=30&venueId=3b4e6f82-1a2b-4c3d-8e9f-0a1b2c3d4e5f
 | Field | Type | Description |
 |-------|------|-------------|
 | `serviceTypeId` | string (UUID) | Service type identifier |
-| `serviceType` | string | Human-readable name, e.g. `"Bar"`, `"Kitchen"`, `"Cafe Hours"`, `"Coffee Trailer"` |
+| `serviceType` | string | Human-readable name, e.g. `"Bar"`, `"Kitchen"`, `"Cafe Hours"`, `"Coffee Trailer"`, `"Pizza Shack"` |
+| `hasService` | boolean | `true` if this venue offers the service, `false` if it does not |
 | `isOpen` | boolean | `true` if open on this day, `false` if closed |
 | `openTime` | string \| null | Opening time in `HH:MM` (24-hour), or `null` if closed |
 | `closeTime` | string \| null | Closing time in `HH:MM` (24-hour), or `null` if closed |
@@ -150,11 +190,11 @@ GET /api/v1/opening-times?days=30&venueId=3b4e6f82-1a2b-4c3d-8e9f-0a1b2c3d4e5f
 
 **Exceptions are already applied.** If a venue has special hours or a closure on a specific date, those are returned directly — you do not need to check for exceptions separately. The `isOverride` flag tells you when hours differ from the normal weekly pattern, so you can optionally display a visual indicator (e.g. "Special hours today").
 
-**Missing service types mean not applicable.** If a service type does not appear in a venue's `services` array for a given day, that service has no hours configured at that venue and should not be shown. For example, a venue without a Coffee Trailer will never return a `"Coffee Trailer"` entry.
+**Service availability is explicit.** Every configured service type is returned with `hasService`. If `hasService` is `false`, the venue does not offer that service and you should usually hide it on the public website. For example, a venue without a Coffee Trailer returns a `"Coffee Trailer"` entry with `hasService: false`.
 
-**Service types are ordered consistently.** The `services` array is always in the same display order (Bar, Kitchen, Sunday Lunch, Carvery, Cafe Hours, Coffee Trailer) — you can render them as-is.
+**Service types are ordered consistently.** The `services` array is always in the same display order (Bar, Kitchen, Sunday Lunch, Carvery, Cafe Hours, Coffee Trailer, Pizza Shack) — you can render them as-is.
 
-**Closed days are included explicitly.** A service that is configured but closed on a given day appears with `"isOpen": false` and `null` times. This is distinct from a service that simply has no hours configured (which is omitted entirely).
+**Closed days are included explicitly.** A service that the venue offers but is closed on a given day appears with `"hasService": true`, `"isOpen": false`, and `null` times. Missing times for an offered service are treated as closed.
 
 ---
 
@@ -170,6 +210,7 @@ These are the current service types configured in BaronsHub:
 | Carvery | Carvery service hours |
 | Cafe Hours | Café trading hours |
 | Coffee Trailer | Outdoor coffee trailer hours |
+| Pizza Shack | Pizza Shack trading hours |
 
 Service types are configured centrally in BaronsHub and may be added to in future. Your integration should render whatever service types are returned rather than hardcoding this list.
 
@@ -272,7 +313,7 @@ function VenueOpeningTimes({ venue }) {
             <p>No opening times available.</p>
           ) : (
             <ul>
-              {day.services.map((service) => (
+              {day.services.filter((service) => service.hasService).map((service) => (
                 <li key={service.serviceTypeId}>
                   <strong>{service.serviceType}</strong>
                   {service.isOpen

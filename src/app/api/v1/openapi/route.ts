@@ -348,6 +348,18 @@ const spec = {
                         properties: {
                           venueId: { type: "string", format: "uuid" },
                           venueName: { type: "string" },
+                          services: {
+                            type: "array",
+                            description: "Configured service availability for this venue. A service can be not offered even though it exists globally.",
+                            items: {
+                              type: "object",
+                              properties: {
+                                serviceTypeId: { type: "string", format: "uuid" },
+                                serviceType: { type: "string", example: "Bar" },
+                                hasService: { type: "boolean", description: "False when this venue does not offer this service." }
+                              }
+                            }
+                          },
                           days: {
                             type: "array",
                             items: {
@@ -365,6 +377,7 @@ const spec = {
                                     properties: {
                                       serviceTypeId: { type: "string", format: "uuid" },
                                       serviceType: { type: "string", example: "Bar" },
+                                      hasService: { type: "boolean", description: "False when this venue does not offer this service." },
                                       isOpen: { type: "boolean" },
                                       openTime: { type: "string", nullable: true, example: "11:00" },
                                       closeTime: { type: "string", nullable: true, example: "23:00" },

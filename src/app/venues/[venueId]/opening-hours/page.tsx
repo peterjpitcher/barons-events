@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { listVenues } from "@/lib/venues";
-import { listServiceTypes, listVenueOpeningHours, listOpeningOverrides } from "@/lib/opening-hours";
+import { listServiceTypes, listVenueOpeningHours, listVenueServices, listOpeningOverrides } from "@/lib/opening-hours";
 import { OpeningHoursManager } from "@/components/opening-hours/opening-hours-manager";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -32,8 +32,9 @@ export default async function VenueOpeningHoursPage({
 
   const canEdit = user.role === "administrator";
 
-  const [serviceTypes, openingHours, overrides] = await Promise.all([
+  const [serviceTypes, venueServices, openingHours, overrides] = await Promise.all([
     listServiceTypes(),
+    listVenueServices(venueId),
     listVenueOpeningHours(venueId),
     listOpeningOverrides()
   ]);
@@ -73,6 +74,7 @@ export default async function VenueOpeningHoursPage({
         venueName={venue.name}
         venues={venues.map((v) => ({ id: v.id, name: v.name }))}
         serviceTypes={serviceTypes}
+        venueServices={venueServices}
         openingHours={openingHours}
         overrides={overrides}
         canEdit={canEdit}

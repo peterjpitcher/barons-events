@@ -129,7 +129,7 @@ describe("resolveOpeningTimes", () => {
     expect(v2Service.openTime).toBe("11:00");
   });
 
-  it("service type is omitted when neither template nor override exists for a venue", () => {
+  it("marks a service as not offered when the venue does not have that service", () => {
     const result = resolveOpeningTimes({
       serviceTypes: [ST_BAR, ST_KITCHEN],
       // Only Bar has hours; Kitchen has none
@@ -141,8 +141,14 @@ describe("resolveOpeningTimes", () => {
     });
 
     const services = result.venues[0].days[0].services;
-    expect(services).toHaveLength(1);
+    expect(services).toHaveLength(2);
     expect(services[0].serviceType).toBe("Bar");
+    expect(services[0].hasService).toBe(true);
+    expect(services[1].serviceType).toBe("Kitchen");
+    expect(services[1].hasService).toBe(false);
+    expect(services[1].isOpen).toBe(false);
+    expect(services[1].openTime).toBeNull();
+    expect(services[1].closeTime).toBeNull();
   });
 
   it("is_closed on template produces isOpen: false, isOverride: false", () => {
@@ -161,6 +167,71 @@ describe("resolveOpeningTimes", () => {
     expect(service.closeTime).toBeNull();
     expect(service.isOverride).toBe(false);
     expect(service.note).toBeNull();
+  });
+
+  it("offered service without a weekly row is returned as closed", () => {
+    const result = resolveOpeningTimes({
+      serviceTypes: [ST_BAR],
+      venueServices: [
+        {
+          venue_id: "v1",
+          service_type_id: "st-bar",
+          created_at: "2026-01-01T00:00:00Z",
+          updated_at: "2026-01-01T00:00:00Z",
+        },
+      ],
+      weeklyHours: [],
+      overrides: [],
+      venues: [VENUE_1],
+      from: FROM,
+      days: 1,
+    });
+
+    const service = result.venues[0].days[0].services[0];
+    expect(service.hasService).toBe(true);
+    expect(service.isOpen).toBe(false);
+    expect(service.openTime).toBeNull();
+    expect(service.closeTime).toBeNull();
+  });
+
+  it("offered service with missing times is returned as closed", () => {
+    const result = resolveOpeningTimes({
+      serviceTypes: [ST_BAR],
+      venueServices: [
+        {
+          venue_id: "v1",
+          service_type_id: "st-bar",
+          created_at: "2026-01-01T00:00:00Z",
+          updated_at: "2026-01-01T00:00:00Z",
+        },
+      ],
+      weeklyHours: [makeWeeklyRow("v1", "st-bar", 0, null, null, false)],
+      overrides: [],
+      venues: [VENUE_1],
+      from: FROM,
+      days: 1,
+    });
+
+    const service = result.venues[0].days[0].services[0];
+    expect(service.hasService).toBe(true);
+    expect(service.isOpen).toBe(false);
+    expect(service.openTime).toBeNull();
+    expect(service.closeTime).toBeNull();
+  });
+
+  it("normalises database time values to HH:MM", () => {
+    const result = resolveOpeningTimes({
+      serviceTypes: [ST_BAR],
+      weeklyHours: [makeWeeklyRow("v1", "st-bar", 0, "11:00:00", "23:00:00")],
+      overrides: [],
+      venues: [VENUE_1],
+      from: FROM,
+      days: 1,
+    });
+
+    const service = result.venues[0].days[0].services[0];
+    expect(service.openTime).toBe("11:00");
+    expect(service.closeTime).toBe("23:00");
   });
 
   it("is_closed on override produces isOpen: false, isOverride: true, with note", () => {
