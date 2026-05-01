@@ -190,13 +190,7 @@ export async function listEventsForUser(user: AppUser): Promise<EventSummary[]> 
     const twoYearsForward = new Date();
     twoYearsForward.setFullYear(twoYearsForward.getFullYear() + 2);
     query = query.gte("start_at", oneYearAgo.toISOString()).lte("start_at", twoYearsForward.toISOString());
-  } else if (user.role === "office_worker") {
-    if (user.venueId) {
-      // Venue-scoped office worker: see all events for their venue
-      query = query.eq("venue_id", user.venueId);
-    }
-    // Office worker without venueId: holistic worker, show all events (no filter)
-  } else {
+  } else if (user.role !== "office_worker") {
     // executive or unknown — limited read-only view
     query = query.limit(10);
   }
