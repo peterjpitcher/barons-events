@@ -54,14 +54,12 @@ export default async function NewEventPage({ searchParams }: PageProps) {
     parseDateParam(resolvedSearchParams.endAt) ??
     (initialStartAt ? new Date(new Date(initialStartAt).getTime() + 3 * 60 * 60 * 1000).toISOString() : undefined);
   const requestedVenueId = parseStringParam(resolvedSearchParams.venueId);
-  // Pre-select: respect ?venueId= when valid, otherwise fall back to the
-  // user's home venue for office workers. Either way the full venue list
-  // is available to pick from.
+  // Pre-select only when the caller explicitly supplies a valid venue. A direct
+  // "New event" must start blank so events are not accidentally filed to the
+  // wrong site.
   const initialVenueId = requestedVenueId && venues.some((venue) => venue.id === requestedVenueId)
     ? requestedVenueId
-    : user.venueId && venues.some((venue) => venue.id === user.venueId)
-      ? user.venueId
-      : undefined;
+    : undefined;
 
   return (
     <div className="space-y-6">

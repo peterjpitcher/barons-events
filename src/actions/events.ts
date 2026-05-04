@@ -1056,6 +1056,8 @@ export async function submitEventForReviewAction(
   const requestedArtistNames = normaliseArtistNameList(formData.get("artistNames"));
 
   let targetEventId: string | null = null;
+  let redirectUrl: string | null = null;
+  let finalResult: ActionResult | null = null;
 
   try {
     if (rawEventId) {
@@ -1175,8 +1177,21 @@ export async function submitEventForReviewAction(
         seoDescription: values.seoDescription ?? null,
         seoSlug: values.seoSlug ?? null
       });
+      targetEventId = created.id;
 
       await syncEventVenueAttachments(created.id, venueIds);
+
+      try {
+        await createEventPlanningItem(
+          created.id,
+          created.title,
+          created.start_at,
+          created.venue_id,
+          user.id
+        );
+      } catch (sopError) {
+        console.error("SOP checklist generation failed:", sopError);
+      }
 
       const artistSync = await syncEventArtists({
         eventId: created.id,
@@ -1216,8 +1231,6 @@ export async function submitEventForReviewAction(
           console.warn("Event image upload failed before submit", uploadResult.error);
         }
       }
-
-      targetEventId = created.id;
     }
 
     if (!targetEventId) {
@@ -1315,98 +1328,114 @@ export async function submitEventForReviewAction(
       const warningText = approvalResult.warnings.length
         ? ` Note: ${approvalResult.warnings.join("; ")}.`
         : "";
-      return { success: true, message: `Event approved instantly.${warningText}` };
-    }
+      finalResult = { success: true, message: `Event approved instantly.${warningText}` };
+      if (!rawEventId) {
+        redirectUrl = `/events/${targetEventId}`;
+      }
+    } else {
 
-    if (existingEvent?.created_by !== user.id) {
-      return { success: false, message: "You can only submit events you created." };
-    }
-
-    async function resolveAssignee(): Promise<string | null> {
-      const parsedAssignee = reviewerFallback.parse(assigneeOverride) ?? null;
-      if (parsedAssignee) return parsedAssignee;
-
-      const venueId = existingEvent?.venue_id ?? null;
-      if (venueId) {
-        const { data: venueRow, error: venueError } = await supabase
-          .from("venues")
-          .select("default_approver_id")
-          .eq("id", venueId)
-          .maybeSingle();
-
-        if (venueError) {
-          console.error("Could not load venue default approver", venueError);
-        } else if (venueRow?.default_approver_id) {
-          return venueRow.default_approver_id;
-        }
+      if (existingEvent?.created_by !== user.id) {
+        return { success: false, message: "You can only submit events you created." };
       }
 
-      const { data } = await supabase
-        .from("users")
-        .select("id")
-        .eq("role", "administrator")
-        .order("full_name", { ascending: true })
-        .limit(1)
-        .maybeSingle();
-      return data?.id ?? null;
-    }
+      async function resolveAssignee(): Promise<string | null> {
+        const parsedAssignee = reviewerFallback.parse(assigneeOverride) ?? null;
+        if (parsedAssignee) return parsedAssignee;
 
-    const assigneeId = await resolveAssignee();
-    const { error } = await supabase
-      .from("events")
-      .update({
-        status: "submitted",
-        submitted_at: new Date().toISOString(),
-        assignee_id: assigneeId
-      })
-      .eq("id", targetEventId);
+        const venueId = existingEvent?.venue_id ?? null;
+        if (venueId) {
+          const { data: venueRow, error: venueError } = await supabase
+            .from("venues")
+            .select("default_approver_id")
+            .eq("id", venueId)
+            .maybeSingle();
 
-    if (error) {
-      throw error;
-    }
-
-    const statusBefore = existingEvent?.status ?? null;
-    const assigneeBefore = existingEvent?.assignee_id ?? null;
-    const changes: string[] = [];
-    if (statusBefore !== "submitted") {
-      changes.push("Status");
-    }
-    if ((assigneeBefore ?? null) !== assigneeId) {
-      changes.push("Assignee");
-    }
-
-    if (changes.length) {
-      await recordAuditLogEntry({
-        entity: "event",
-        entityId: targetEventId,
-        action: "event.submitted",
-        actorId: user.id,
-        meta: {
-          status: "submitted",
-          previousStatus: statusBefore,
-          assigneeId: assigneeId ?? null,
-          previousAssigneeId: assigneeBefore ?? null,
-          changes
+          if (venueError) {
+            console.error("Could not load venue default approver", venueError);
+          } else if (venueRow?.default_approver_id) {
+            return venueRow.default_approver_id;
+          }
         }
+
+        const { data } = await supabase
+          .from("users")
+          .select("id")
+          .eq("role", "administrator")
+          .order("full_name", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        return data?.id ?? null;
+      }
+
+      const assigneeId = await resolveAssignee();
+      const { error } = await supabase
+        .from("events")
+        .update({
+          status: "submitted",
+          submitted_at: new Date().toISOString(),
+          assignee_id: assigneeId
+        })
+        .eq("id", targetEventId);
+
+      if (error) {
+        throw error;
+      }
+
+      const statusBefore = existingEvent?.status ?? null;
+      const assigneeBefore = existingEvent?.assignee_id ?? null;
+      const changes: string[] = [];
+      if (statusBefore !== "submitted") {
+        changes.push("Status");
+      }
+      if ((assigneeBefore ?? null) !== assigneeId) {
+        changes.push("Assignee");
+      }
+
+      if (changes.length) {
+        await recordAuditLogEntry({
+          entity: "event",
+          entityId: targetEventId,
+          action: "event.submitted",
+          actorId: user.id,
+          meta: {
+            status: "submitted",
+            previousStatus: statusBefore,
+            assigneeId: assigneeId ?? null,
+            previousAssigneeId: assigneeBefore ?? null,
+            changes
+          }
+        });
+      }
+
+      await appendEventVersion(targetEventId, user.id, {
+        status: "submitted",
+        submitted_at: new Date().toISOString()
       });
+
+      await sendEventSubmittedEmail(targetEventId);
+
+      revalidatePath(`/events/${targetEventId}`);
+      revalidatePath("/events");
+      revalidatePath("/reviews");
+      finalResult = { success: true, message: "Sent to review." };
+      if (!rawEventId) {
+        redirectUrl = `/events/${targetEventId}`;
+      }
     }
-
-    await appendEventVersion(targetEventId, user.id, {
-      status: "submitted",
-      submitted_at: new Date().toISOString()
-    });
-
-    await sendEventSubmittedEmail(targetEventId);
-
-    revalidatePath(`/events/${targetEventId}`);
-    revalidatePath("/events");
-    revalidatePath("/reviews");
-    return { success: true, message: "Sent to review." };
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Unknown error";
     console.error("[events] Submit for review failed:", detail, error);
+    if (!rawEventId && targetEventId) {
+      revalidatePath(`/events/${targetEventId}`);
+      revalidatePath("/events");
+      redirect(`/events/${targetEventId}`);
+    }
     return { success: false, message: "Could not submit right now. Please try again." };
   }
+  if (redirectUrl) {
+    redirect(redirectUrl);
+  }
+  return finalResult ?? { success: true, message: "Sent to review." };
 }
 
 export async function reviewerDecisionAction(

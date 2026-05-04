@@ -256,10 +256,42 @@ describeFn("migration: office_worker_event_scope", () => {
 
     const ow = jwtClient(OW_JWT);
     const { error } = await ow.from("events").update({ status: "approved" }).eq("id", event!.id);
-    expect(error?.message).toMatch(/transition event status/);
+    if (error) {
+      expect(error.message).toMatch(/transition event status|row-level security|approve or reject/i);
+    }
+
+    const { data: after } = await admin.from("events").select("status").eq("id", event!.id).single();
+    expect(after?.status).toBe("pending_approval");
+  });
+
+  it("non-admin cannot reject a pending proposal directly", async () => {
+    const { data: event, error: insErr } = await admin
+      .from("events")
+      .insert({
+        title: "status-reject",
+        venue_id: fx.venueA,
+        created_by: fx.owId,
+        status: "pending_approval",
+        start_at: new Date(Date.now() + 86_400_000).toISOString(),
+      })
+      .select("id")
+      .single();
+    expect(insErr).toBeNull();
+    fx.createdEventIds.push(event!.id as string);
+
+    const ow = jwtClient(OW_JWT);
+    const { error } = await ow.from("events").update({ status: "rejected" }).eq("id", event!.id);
+    if (error) {
+      expect(error.message).toMatch(/transition event status|row-level security|approve or reject/i);
+    }
+
+    const { data: after } = await admin.from("events").select("status").eq("id", event!.id).single();
+    expect(after?.status).toBe("pending_approval");
   });
 
   it("non-admin cannot set needs_revisions from any state", async () => {
+    const startAt = new Date(Date.now() + 86_400_000).toISOString();
+    const endAt = new Date(Date.now() + 90_000_000).toISOString();
     const { data: event, error: insErr } = await admin
       .from("events")
       .insert({
@@ -267,7 +299,10 @@ describeFn("migration: office_worker_event_scope", () => {
         venue_id: fx.venueA,
         created_by: fx.owId,
         status: "draft",
-        start_at: new Date(Date.now() + 86_400_000).toISOString(),
+        event_type: "Live Music",
+        venue_space: "Main Bar",
+        start_at: startAt,
+        end_at: endAt,
       })
       .select("id")
       .single();
@@ -277,6 +312,37 @@ describeFn("migration: office_worker_event_scope", () => {
     const ow = jwtClient(OW_JWT);
     const { error } = await ow.from("events").update({ status: "needs_revisions" }).eq("id", event!.id);
     expect(error?.message).toMatch(/transition event status/);
+  });
+
+  it("creator office_worker can transition own full-form draft to submitted", async () => {
+    const startAt = new Date(Date.now() + 86_400_000).toISOString();
+    const endAt = new Date(Date.now() + 90_000_000).toISOString();
+    const { data: event, error: insErr } = await admin
+      .from("events")
+      .insert({
+        title: "full-form-submit",
+        venue_id: fx.venueB,
+        created_by: fx.owId,
+        status: "draft",
+        event_type: "Live Music",
+        venue_space: "Main Bar",
+        start_at: startAt,
+        end_at: endAt,
+      })
+      .select("id")
+      .single();
+    expect(insErr).toBeNull();
+    fx.createdEventIds.push(event!.id as string);
+
+    const ow = jwtClient(OW_JWT);
+    const { error } = await ow
+      .from("events")
+      .update({ status: "submitted", submitted_at: new Date().toISOString() })
+      .eq("id", event!.id);
+    expect(error).toBeNull();
+
+    const { data: after } = await admin.from("events").select("status").eq("id", event!.id).single();
+    expect(after?.status).toBe("submitted");
   });
 
   // ─────────────────────────────────────────────────────────────────────

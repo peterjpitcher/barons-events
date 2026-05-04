@@ -56,6 +56,12 @@ import {
   updateBookingSettingsAction,
 } from "../events";
 import { loadEventEditContext } from "@/lib/events/edit-context";
+import { redirect } from "next/navigation";
+import { createSupabaseActionClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { createEventDraft, createEventPlanningItem } from "@/lib/events";
+import { syncEventArtists } from "@/lib/artists";
+import { generateWebsiteCopy } from "@/lib/ai";
 
 const { getUserMock, loadCtxMock } = mocks;
 
@@ -73,6 +79,136 @@ function formData(fields: Record<string, string | string[]>): FormData {
     else f.set(k, v);
   }
   return f;
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.mocked(createSupabaseActionClient).mockReset();
+  vi.mocked(createSupabaseAdminClient).mockReset();
+  vi.mocked(createEventDraft).mockReset();
+  vi.mocked(createEventPlanningItem).mockReset();
+  vi.mocked(syncEventArtists).mockReset();
+  vi.mocked(generateWebsiteCopy).mockReset();
+});
+
+function validFullEventForm(overrides: Record<string, string | string[]> = {}): FormData {
+  return formData({
+    venueIds: VENUE_A,
+    title: "Victoria BeeBee at Meade Hall",
+    eventType: "Live Music",
+    startAt: "2026-07-19T19:00:00",
+    endAt: "2026-07-19T22:00:00",
+    venueSpace: "Meade Hall",
+    bookingType: "free_entry",
+    agePolicy: "All ages welcome",
+    notes: "A live music evening for guests at Meade Hall.",
+    ...overrides
+  });
+}
+
+function setupSuccessfulCreateSubmitMocks() {
+  const createdEvent = {
+    id: EVENT_ID,
+    title: "Victoria BeeBee at Meade Hall",
+    start_at: "2026-07-19T18:00:00.000Z",
+    end_at: "2026-07-19T21:00:00.000Z",
+    venue_id: VENUE_A,
+    event_image_path: null
+  };
+  const existingEvent = {
+    status: "draft",
+    assignee_id: USER_A,
+    venue_id: VENUE_A,
+    created_by: USER_A,
+    event_image_path: null
+  };
+  const websiteCopyRecord = {
+    ...createdEvent,
+    created_by: USER_A,
+    event_type: "Live Music",
+    venue_space: "Meade Hall",
+    expected_headcount: null,
+    wet_promo: null,
+    food_promo: null,
+    cost_total: null,
+    cost_details: null,
+    booking_type: "free_entry",
+    ticket_price: null,
+    check_in_cutoff_minutes: null,
+    age_policy: "All ages welcome",
+    accessibility_notes: null,
+    cancellation_window_hours: null,
+    terms_and_conditions: null,
+    goal_focus: null,
+    notes: "A live music evening for guests at Meade Hall.",
+    public_title: null,
+    public_teaser: null,
+    public_description: null,
+    public_highlights: null,
+    booking_url: null,
+    seo_title: null,
+    seo_description: null,
+    seo_slug: null,
+    venue: { name: "The Crown & Cushion", address: null },
+    artists: []
+  };
+
+  vi.mocked(createEventDraft).mockResolvedValue(createdEvent as any);
+  vi.mocked(createEventPlanningItem).mockResolvedValue(undefined);
+  vi.mocked(syncEventArtists).mockResolvedValue({ previousNames: [], nextNames: [] } as any);
+  vi.mocked(generateWebsiteCopy).mockResolvedValue(null);
+
+  vi.mocked(createSupabaseAdminClient).mockReturnValue({
+    rpc: vi.fn().mockResolvedValue({ error: null }),
+    from: vi.fn(() => ({
+      update: vi.fn(() => ({
+        eq: vi.fn().mockResolvedValue({ error: null })
+      }))
+    }))
+  } as any);
+
+  vi.mocked(createSupabaseActionClient).mockResolvedValue({
+    from: vi.fn((table: string) => {
+      if (table === "events") {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              single: vi.fn().mockResolvedValue({ data: existingEvent, error: null }),
+              maybeSingle: vi.fn().mockResolvedValue({ data: websiteCopyRecord, error: null })
+            }))
+          })),
+          update: vi.fn(() => ({
+            eq: vi.fn().mockResolvedValue({ error: null })
+          }))
+        };
+      }
+      if (table === "venues") {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null })
+            }))
+          }))
+        };
+      }
+      if (table === "users") {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              order: vi.fn(() => ({
+                limit: vi.fn(() => ({
+                  maybeSingle: vi.fn().mockResolvedValue({ data: { id: USER_B }, error: null })
+                }))
+              }))
+            }))
+          }))
+        };
+      }
+      return {};
+    })
+  } as any);
+
+  return createdEvent;
 }
 
 // ─── saveEventDraftAction / submitEventForReviewAction — create path (any venue) ─────────
@@ -121,6 +257,48 @@ describe("submitEventForReviewAction — create path (any venue)", () => {
     }));
     expect(result.success).toBe(false);
     expect(result.message).toMatch(/don't have permission/i);
+  });
+
+  it("administrator create-and-publish redirects to the created event", async () => {
+    const createdEvent = setupSuccessfulCreateSubmitMocks();
+    getUserMock.mockResolvedValue({ id: USER_A, role: "administrator", venueId: null });
+
+    await expect(submitEventForReviewAction(undefined, validFullEventForm())).rejects.toThrow("NEXT_REDIRECT");
+
+    expect(createEventPlanningItem).toHaveBeenCalledWith(
+      createdEvent.id,
+      createdEvent.title,
+      createdEvent.start_at,
+      createdEvent.venue_id,
+      USER_A
+    );
+    expect(redirect).toHaveBeenCalledWith(`/events/${createdEvent.id}`);
+  });
+
+  it("office_worker full-form submit redirects to the created event", async () => {
+    const createdEvent = setupSuccessfulCreateSubmitMocks();
+    getUserMock.mockResolvedValue({ id: USER_A, role: "office_worker", venueId: null });
+
+    await expect(submitEventForReviewAction(undefined, validFullEventForm())).rejects.toThrow("NEXT_REDIRECT");
+
+    expect(createEventPlanningItem).toHaveBeenCalledWith(
+      createdEvent.id,
+      createdEvent.title,
+      createdEvent.start_at,
+      createdEvent.venue_id,
+      USER_A
+    );
+    expect(redirect).toHaveBeenCalledWith(`/events/${createdEvent.id}`);
+  });
+
+  it("redirects to the created event if a post-create side effect fails", async () => {
+    const createdEvent = setupSuccessfulCreateSubmitMocks();
+    vi.mocked(syncEventArtists).mockRejectedValueOnce(new Error("artist sync failed"));
+    getUserMock.mockResolvedValue({ id: USER_A, role: "office_worker", venueId: null });
+
+    await expect(submitEventForReviewAction(undefined, validFullEventForm())).rejects.toThrow("NEXT_REDIRECT");
+
+    expect(redirect).toHaveBeenCalledWith(`/events/${createdEvent.id}`);
   });
 });
 
