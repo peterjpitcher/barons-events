@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
-import { requireAuth } from "@/lib/auth";
+import { getCurrentUser, requireAuth } from "@/lib/auth";
 import { getEventDetail } from "@/lib/events";
 import { getBookingsForEvent, getConfirmedTicketCount } from "@/lib/bookings";
 import { getCampaignStatsForEvent } from "@/lib/sms-campaign";
@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { SmsCampaignStats } from "@/components/events/sms-campaign-stats";
 import { Badge } from "@/components/ui/badge";
 import { CancelBookingButton } from "@/components/bookings/cancel-booking-button";
+import { canManageBookings } from "@/lib/roles";
 
 const dateFormatter = new Intl.DateTimeFormat("en-GB", {
   day: "2-digit",
@@ -21,7 +22,8 @@ const dateFormatter = new Intl.DateTimeFormat("en-GB", {
 
 export async function generateMetadata({ params }: { params: Promise<{ eventId: string }> }) {
   const { eventId } = await params;
-  const event = await getEventDetail(eventId);
+  const user = await getCurrentUser();
+  const event = user ? await getEventDetail(eventId, user) : null;
   return {
     title: event ? `Bookings · ${event.title}` : "Bookings · BaronsHub",
   };
@@ -35,22 +37,16 @@ export default async function BookingsPage({
   const { eventId } = await params;
   const user = await requireAuth();
 
-  const event = await getEventDetail(eventId);
+  const event = await getEventDetail(eventId, user);
   if (!event) {
     notFound();
-  }
-
-  // Office workers can only view bookings for events at their own venue
-  if (user.role === "office_worker") {
-    if (!user.venueId || event.venue_id !== user.venueId) {
-      redirect("/events");
-    }
   }
 
   // Only administrator and office_worker can manage bookings
   if (user.role !== "administrator" && user.role !== "office_worker") {
     redirect("/events");
   }
+  const canCancelBookings = canManageBookings(user.role, user.venueId);
 
   const [bookings, totalTickets, campaignStats] = await Promise.all([
     getBookingsForEvent(eventId),
@@ -152,7 +148,7 @@ export default async function BookingsPage({
                     </Badge>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    {booking.status === "confirmed" ? (
+                    {booking.status === "confirmed" && canCancelBookings ? (
                       <CancelBookingButton
                         bookingId={booking.id}
                         eventId={eventId}

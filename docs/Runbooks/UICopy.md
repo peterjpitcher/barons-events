@@ -23,7 +23,7 @@ Barons Events aims to feel like a calm operations assistant—confident, human, 
 - Acronyms without context. If one is unavoidable, define it (“response deadline (sometimes called an SLA)”).
 
 ## Quick Self-Check
-- Would a venue manager understand this without asking an engineer?
+- Would an office worker understand this without asking an engineer?
 - Does every button, badge, or alert point to an action or reassurance?
 - Are we reinforcing the Barons brand friendliness by keeping sentences clear and calm?
 

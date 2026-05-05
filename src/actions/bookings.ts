@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import { createHmac, timingSafeEqual } from "crypto";
 import { parsePhoneNumber, isValidPhoneNumber } from "libphonenumber-js";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
@@ -8,11 +9,76 @@ import { checkBookingRateLimit } from "@/lib/public-api/rate-limit";
 import { createBookingAtomic, cancelBooking } from "@/lib/bookings";
 import { getCurrentUser } from "@/lib/auth";
 import { recordAuditLogEntry } from "@/lib/audit-log";
+import { canManageBookings } from "@/lib/roles";
 import { sendBookingConfirmationSms } from "@/lib/sms";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { upsertCustomerForBooking, linkBookingToCustomer } from "@/lib/customers";
 import { verifyTurnstile } from "@/lib/turnstile";
+import { isLinkedToVenue } from "@/lib/visibility";
 
+const BOOKING_UPDATE_TOKEN_TTL_MS = 10 * 60 * 1000;
+
+type BookingUpdateTokenPayload = {
+  v: 1;
+  bookingId: string;
+  eventId: string;
+  ticketCount: number;
+  exp: number;
+};
+
+async function checkPublicBookingAttemptLimit(): Promise<boolean> {
+  const headerList = await headers();
+  const ip =
+    headerList.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    headerList.get("x-real-ip") ??
+    "unknown";
+
+  const rl = await checkBookingRateLimit(ip);
+  return rl.allowed;
+}
+
+function bookingUpdateTokenSecret(): string {
+  const secret = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.BARONSHUB_WEBSITE_API_KEY;
+  if (!secret) {
+    throw new Error("Booking update token secret is not configured");
+  }
+  return secret;
+}
+
+function signBookingUpdateToken(payload: BookingUpdateTokenPayload): string {
+  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const signature = createHmac("sha256", bookingUpdateTokenSecret()).update(body).digest("base64url");
+  return `${body}.${signature}`;
+}
+
+function verifyBookingUpdateToken(token: string): BookingUpdateTokenPayload | null {
+  const [body, signature, extra] = token.split(".");
+  if (!body || !signature || extra !== undefined) return null;
+
+  const expected = createHmac("sha256", bookingUpdateTokenSecret()).update(body).digest("base64url");
+  const actualBuffer = Buffer.from(signature);
+  const expectedBuffer = Buffer.from(expected);
+  if (actualBuffer.length !== expectedBuffer.length || !timingSafeEqual(actualBuffer, expectedBuffer)) {
+    return null;
+  }
+
+  try {
+    const payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as Partial<BookingUpdateTokenPayload>;
+    if (
+      payload.v !== 1 ||
+      typeof payload.bookingId !== "string" ||
+      typeof payload.eventId !== "string" ||
+      typeof payload.ticketCount !== "number" ||
+      typeof payload.exp !== "number" ||
+      payload.exp < Date.now()
+    ) {
+      return null;
+    }
+    return payload as BookingUpdateTokenPayload;
+  } catch {
+    return null;
+  }
+}
 
 const createBookingSchema = z.object({
   eventId:       z.string().uuid(),
@@ -38,21 +104,15 @@ export type CreateBookingResult =
       existingTicketCount: number;
       /** The ticket count the user asked for this time. */
       requestedTicketCount: number;
+      /** Short-lived signed proof required to update the existing booking. */
+      updateToken: string;
     }
   | { success: false; error: string };
 
 export async function createBookingAction(
   input: CreateBookingInput,
 ): Promise<CreateBookingResult> {
-  // Rate limit by IP
-  const headerList = await headers();
-  const ip =
-    headerList.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-    headerList.get("x-real-ip") ??
-    "unknown";
-
-  const rl = await checkBookingRateLimit(ip);
-  if (!rl.allowed) {
+  if (!(await checkPublicBookingAttemptLimit())) {
     return { success: false, error: "rate_limited" };
   }
 
@@ -105,12 +165,20 @@ export async function createBookingAction(
         .maybeSingle();
 
       if (existingBooking?.id) {
+        const updateToken = signBookingUpdateToken({
+          v: 1,
+          bookingId: existingBooking.id,
+          eventId: data.eventId,
+          ticketCount: data.ticketCount,
+          exp: Date.now() + BOOKING_UPDATE_TOKEN_TTL_MS
+        });
         return {
           success: false,
           error: "existing_booking",
           existingBookingId: existingBooking.id,
           existingTicketCount: existingBooking.ticket_count,
-          requestedTicketCount: data.ticketCount
+          requestedTicketCount: data.ticketCount,
+          updateToken
         };
       }
     }
@@ -189,7 +257,8 @@ export async function createBookingAction(
 
 const updateExistingBookingSchema = z.object({
   bookingId: z.string().uuid(),
-  ticketCount: z.number().int().min(1).max(50)
+  ticketCount: z.number().int().min(1).max(50),
+  updateToken: z.string().min(1)
 });
 
 export type UpdateExistingBookingResult =
@@ -210,9 +279,22 @@ export type UpdateExistingBookingResult =
 export async function updateExistingBookingAction(
   input: z.infer<typeof updateExistingBookingSchema>
 ): Promise<UpdateExistingBookingResult> {
+  if (!(await checkPublicBookingAttemptLimit())) {
+    return { success: false, error: "rate_limited" };
+  }
+
   const parsed = updateExistingBookingSchema.safeParse(input);
   if (!parsed.success) {
     return { success: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  }
+
+  const tokenPayload = verifyBookingUpdateToken(parsed.data.updateToken);
+  if (
+    !tokenPayload ||
+    tokenPayload.bookingId !== parsed.data.bookingId ||
+    tokenPayload.ticketCount !== parsed.data.ticketCount
+  ) {
+    return { success: false, error: "Update link expired. Please submit the booking form again." };
   }
 
   const db = createSupabaseAdminClient();
@@ -229,6 +311,9 @@ export async function updateExistingBookingAction(
   }
   if (booking.status !== "confirmed") {
     return { success: false, error: "Cannot update a cancelled booking." };
+  }
+  if (booking.event_id !== tokenPayload.eventId) {
+    return { success: false, error: "Update link expired. Please submit the booking form again." };
   }
 
   const delta = parsed.data.ticketCount - (booking.ticket_count as number);
@@ -305,8 +390,7 @@ export async function cancelBookingAction(
     return { success: false, error: "Unauthorized" };
   }
 
-  // Only administrator and office_worker can cancel bookings
-  if (user.role !== "administrator" && user.role !== "office_worker") {
+  if (!canManageBookings(user.role, user.venueId)) {
     return { success: false, error: "You do not have permission to cancel bookings." };
   }
 
@@ -324,13 +408,23 @@ export async function cancelBookingAction(
   const actualEventId = booking.event_id;
 
   if (user.role !== "administrator") {
-    // Office worker — verify event belongs to their venue
+    // Office worker — verify event is linked to their venue.
     const { data: event, error: eventError } = await db
       .from("events")
-      .select("venue_id")
+      .select("venue_id, event_venues(venue_id)")
       .eq("id", actualEventId)
       .single();
-    if (eventError || !event || event.venue_id !== user.venueId) {
+    if (
+      eventError ||
+      !event ||
+      !isLinkedToVenue(
+        {
+          venue_id: event.venue_id,
+          event_venues: (event as { event_venues?: Array<{ venue_id: string | null }> | null }).event_venues ?? []
+        },
+        user.venueId
+      )
+    ) {
       return { success: false, error: "You can only cancel bookings for events at your venue." };
     }
   }

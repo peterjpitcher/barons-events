@@ -878,7 +878,8 @@ describe("roles.ts — final capability functions", () => {
 
   describe("canCreatePlanningItems", () => {
     it("administrator can create", () => expect(canCreatePlanningItems("administrator")).toBe(true));
-    it("office_worker can create", () => expect(canCreatePlanningItems("office_worker")).toBe(true));
+    it("office_worker with venue can create", () => expect(canCreatePlanningItems("office_worker", "venue-1")).toBe(true));
+    it("office_worker without venue cannot create", () => expect(canCreatePlanningItems("office_worker")).toBe(false));
     it("executive cannot create", () => expect(canCreatePlanningItems("executive")).toBe(false));
   });
 

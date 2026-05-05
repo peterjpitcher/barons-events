@@ -24,7 +24,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createSupabaseAdminClient: () => adminC
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/audit-log", () => ({ recordAuditLogEntry: vi.fn().mockResolvedValue(undefined) }));
 
-import { requestAttachmentUploadAction, deleteAttachmentAction } from "../attachments";
+import { requestAttachmentUploadAction, deleteAttachmentAction, getAttachmentUrlAction } from "../attachments";
 
 const VENUE_A = "11111111-1111-4111-8111-111111111111";
 const VENUE_B = "22222222-2222-4222-8222-222222222222";
@@ -59,6 +59,10 @@ describe("requestAttachmentUploadAction — event parent authz", () => {
     adminClient.storage.from.mockReturnValue({
       createSignedUploadUrl: vi.fn().mockResolvedValue({
         data: { signedUrl: "https://signed.example/upload", token: "tok" },
+        error: null,
+      }),
+      createSignedUrl: vi.fn().mockResolvedValue({
+        data: { signedUrl: "https://signed.example/download" },
         error: null,
       }),
     });
@@ -109,15 +113,144 @@ describe("requestAttachmentUploadAction — event parent authz", () => {
     if (!result.success) expect(result.message).toMatch(/not found|permission/i);
   });
 
-  it("planning_item parent is not gated by canEditEvent", async () => {
+  it("planning_item parent follows venue-scoped planning authz", async () => {
     getCurrentUserMock.mockResolvedValue({ id: OTHER_OW_ID, role: "office_worker", venueId: VENUE_A });
+    adminClient.from.mockImplementation((table: string) => {
+      if (table === "planning_items") {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              maybeSingle: vi.fn().mockResolvedValue({
+                data: { id: EVENT_1, venue_id: VENUE_A, planning_item_venues: [] },
+                error: null
+              })
+            })
+          })
+        };
+      }
+      return { insert: vi.fn().mockResolvedValue({ error: null }) };
+    });
     const result = await requestAttachmentUploadAction({
       ...validUploadInput(),
       parentType: "planning_item",
     });
-    // Planning-item authz is out of scope for SEC-005; existing behaviour preserved (success).
     expect(result.success).toBe(true);
     expect(loadEventEditContextMock).not.toHaveBeenCalled();
+  });
+
+  it("planning_item parent rejects office workers from another venue", async () => {
+    getCurrentUserMock.mockResolvedValue({ id: OTHER_OW_ID, role: "office_worker", venueId: VENUE_B });
+    adminClient.from.mockImplementation((table: string) => {
+      if (table === "planning_items") {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              maybeSingle: vi.fn().mockResolvedValue({
+                data: { id: EVENT_1, venue_id: VENUE_A, planning_item_venues: [] },
+                error: null
+              })
+            })
+          })
+        };
+      }
+      return { insert: vi.fn().mockResolvedValue({ error: null }) };
+    });
+
+    const result = await requestAttachmentUploadAction({
+      ...validUploadInput(),
+      parentType: "planning_item",
+    });
+
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("getAttachmentUrlAction — parent visibility authz", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    adminClient.storage.from.mockReturnValue({
+      createSignedUrl: vi.fn().mockResolvedValue({
+        data: { signedUrl: "https://signed.example/download" },
+        error: null,
+      }),
+    });
+  });
+
+  function setupDownload(row: {
+    event_id: string | null;
+    planning_item_id?: string | null;
+    planning_task_id?: string | null;
+    venueId: string;
+  }) {
+    adminClient.from.mockImplementation((table: string) => {
+      if (table === "attachments") {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              maybeSingle: vi.fn().mockResolvedValue({
+                data: {
+                  storage_path: "file.pdf",
+                  size_bytes: 1234,
+                  upload_status: "uploaded",
+                  deleted_at: null,
+                  uploaded_by: OTHER_OW_ID,
+                  event_id: row.event_id,
+                  planning_item_id: row.planning_item_id ?? null,
+                  planning_task_id: row.planning_task_id ?? null
+                },
+                error: null
+              })
+            })
+          })
+        };
+      }
+      if (table === "events") {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              is: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: { id: row.event_id, venue_id: row.venueId, event_venues: [] },
+                  error: null
+                })
+              })
+            })
+          })
+        };
+      }
+      if (table === "planning_items") {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              maybeSingle: vi.fn().mockResolvedValue({
+                data: { id: row.planning_item_id ?? "pi-1", venue_id: row.venueId, planning_item_venues: [] },
+                error: null
+              })
+            })
+          })
+        };
+      }
+      return {};
+    });
+  }
+
+  it("allows a same-venue office worker to download an event attachment", async () => {
+    getCurrentUserMock.mockResolvedValue({ id: OTHER_OW_ID, role: "office_worker", venueId: VENUE_A });
+    setupDownload({ event_id: EVENT_1, venueId: VENUE_A });
+
+    const result = await getAttachmentUrlAction({ attachmentId: ATTACHMENT_1 });
+
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects an office worker from another venue before issuing a signed URL", async () => {
+    getCurrentUserMock.mockResolvedValue({ id: OTHER_OW_ID, role: "office_worker", venueId: VENUE_B });
+    setupDownload({ event_id: EVENT_1, venueId: VENUE_A });
+
+    const result = await getAttachmentUrlAction({ attachmentId: ATTACHMENT_1 });
+
+    expect(result.success).toBe(false);
+    expect(adminClient.storage.from).not.toHaveBeenCalled();
   });
 });
 
@@ -131,6 +264,7 @@ describe("deleteAttachmentAction — event parent authz", () => {
     planning_item_id?: string | null;
     planning_task_id?: string | null;
     uploaded_by: string;
+    planningVenueId?: string | null;
   }) {
     const maybeSingle = vi.fn().mockResolvedValue({ data: row, error: null });
     const eqAttach = vi.fn(() => ({ maybeSingle }));
@@ -139,6 +273,22 @@ describe("deleteAttachmentAction — event parent authz", () => {
     adminClient.from.mockImplementation((table: string) => {
       if (table === "attachments") {
         return { select: selectAttach, update };
+      }
+      if (table === "planning_items") {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              maybeSingle: vi.fn().mockResolvedValue({
+                data: {
+                  id: row.planning_item_id ?? "pi-1",
+                  venue_id: row.planningVenueId ?? VENUE_A,
+                  planning_item_venues: []
+                },
+                error: null
+              })
+            })
+          })
+        };
       }
       return { select: vi.fn(), update: vi.fn() };
     });
@@ -174,11 +324,18 @@ describe("deleteAttachmentAction — event parent authz", () => {
     expect(result.success).toBe(true);
   });
 
-  it("planning-item-parented attachment keeps legacy uploader rule", async () => {
+  it("planning-item-parented attachment follows venue-scoped planning authz", async () => {
     getCurrentUserMock.mockResolvedValue({ id: OTHER_OW_ID, role: "office_worker", venueId: VENUE_A });
     setupAttachmentRow({ event_id: null, planning_item_id: "pi-1", uploaded_by: OTHER_OW_ID });
     const result = await deleteAttachmentAction(undefined, fd(ATTACHMENT_1));
     expect(result.success).toBe(true);
     expect(loadEventEditContextMock).not.toHaveBeenCalled();
+  });
+
+  it("planning-item-parented attachment rejects office workers from another venue", async () => {
+    getCurrentUserMock.mockResolvedValue({ id: OTHER_OW_ID, role: "office_worker", venueId: VENUE_B });
+    setupAttachmentRow({ event_id: null, planning_item_id: "pi-1", uploaded_by: OTHER_OW_ID, planningVenueId: VENUE_A });
+    const result = await deleteAttachmentAction(undefined, fd(ATTACHMENT_1));
+    expect(result.success).toBe(false);
   });
 });

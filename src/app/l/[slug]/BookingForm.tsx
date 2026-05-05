@@ -10,6 +10,7 @@ type ExistingBookingPrompt = {
   bookingId: string;
   existingTicketCount: number;
   requestedTicketCount: number;
+  updateToken: string;
 };
 
 interface BookingFormProps {
@@ -84,7 +85,8 @@ export function BookingForm({ eventId, maxTickets, isSoldOut, nonce }: BookingFo
         setExistingPrompt({
           bookingId: result.existingBookingId,
           existingTicketCount: result.existingTicketCount,
-          requestedTicketCount: result.requestedTicketCount
+          requestedTicketCount: result.requestedTicketCount,
+          updateToken: result.updateToken
         });
         return;
       }
@@ -112,7 +114,8 @@ export function BookingForm({ eventId, maxTickets, isSoldOut, nonce }: BookingFo
     setError(null);
     const result = await updateExistingBookingAction({
       bookingId: existingPrompt.bookingId,
-      ticketCount: existingPrompt.requestedTicketCount
+      ticketCount: existingPrompt.requestedTicketCount,
+      updateToken: existingPrompt.updateToken
     });
     setLoading(false);
     if (!result.success) {

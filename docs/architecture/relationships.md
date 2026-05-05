@@ -35,7 +35,7 @@ Cron triggers:
   /api/cron/sms-booking-driver → Twilio SMS confirmation (src/lib/twilio.ts)
   /api/cron/sms-reminders → Twilio SMS reminder
   /api/cron/sms-post-event → Twilio SMS follow-up (10:00 UTC daily)
-updateExistingBookingAction → event_bookings
+updateExistingBookingAction → event_bookings (requires short-lived update token from existing-booking prompt)
 cancelBookingAction → event_bookings
 ```
 
@@ -62,11 +62,12 @@ dismissInspirationItemAction → planning_inspiration_dismissals
 ```
 External website (BARONSHUB_WEBSITE_API_KEY)
   → GET /api/v1/events → requireWebsiteApiKey + checkApiRateLimit (Upstash Redis)
-  → Supabase anon client → events + venues (RLS: anon SELECT on published events)
+  → Supabase service-role client with application filters
+  → events + venues where status is approved/completed and deleted_at is null
   → Returns paginated JSON with cursor
 
 Other v1 endpoints: event-types, venues, opening-times, events/by-slug/[slug]
-All protected by same API key + rate limit pattern.
+All protected by bearer API key + rate limit pattern. Valid keys are limited by hashed key identity; missing/invalid probes are limited by IP. Public event descriptions come from public_description only.
 Health + OpenAPI spec endpoints also protected.
 ```
 
@@ -100,7 +101,7 @@ Browser → middleware.ts
 ```
 /users → inviteUserAction → Supabase Auth admin invite + users table + Resend email
 /users → deactivateUserAction → users.deactivated_at + app_sessions.delete
-/users → deleteUserAction → users.delete + audit_log entry
+/users → deleteUserAction → users.delete + audit_log entry after reassignment confirmation
 getUserImpactSummary checks 18+ tables for ownership references
 ```
 

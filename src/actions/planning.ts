@@ -18,12 +18,13 @@ import {
 } from "@/lib/planning";
 import type { PlanningItemStatus, PlanningTaskStatus, RecurrenceFrequency } from "@/lib/planning/types";
 import { canCreatePlanningItems, canManageAllPlanning, canViewPlanning } from "@/lib/roles";
-import type { UserRole } from "@/lib/types";
+import type { AppUser, UserRole } from "@/lib/types";
 import { createSupabaseActionClient, createSupabaseReadonlyClient } from "@/lib/supabase/server";
 import { generateInspirationItems } from "@/lib/planning/inspiration";
 import { generateSopChecklist, recalculateSopDates, updateBlockedStatus } from "@/lib/planning/sop";
 import { recordAuditLogEntry } from "@/lib/audit-log";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { canCreatePlanningForVenueSelection, canEditVenueLinkedPlanning } from "@/lib/visibility";
 
 export type PlanningActionResult = {
   success: boolean;
@@ -54,7 +55,7 @@ async function ensureUser() {
   if (!user) {
     throw new Error("You must be signed in.");
   }
-  if (!canCreatePlanningItems(user.role)) {
+  if (!canCreatePlanningItems(user.role, user.venueId)) {
     throw new Error("You do not have permission to perform planning actions.");
   }
   return user;
@@ -89,6 +90,38 @@ async function syncPlanningItemVenueAttachments(itemId: string, venueIds: string
   }
 }
 
+async function loadPlanningItemAccess(itemId: string) {
+  const db = createSupabaseAdminClient();
+  const { data } = await (db as any)
+    .from("planning_items")
+    .select("id, venue_id, planning_item_venues(venue_id)")
+    .eq("id", itemId)
+    .maybeSingle();
+  return data as { id: string; venue_id: string | null; planning_item_venues?: Array<{ venue_id: string | null }> | null } | null;
+}
+
+async function loadPlanningSeriesAccess(seriesId: string) {
+  const db = createSupabaseAdminClient();
+  const { data } = await (db as any)
+    .from("planning_series")
+    .select("id, venue_id")
+    .eq("id", seriesId)
+    .maybeSingle();
+  return data as { id: string; venue_id: string | null } | null;
+}
+
+async function ensureCanManagePlanningItem(
+  user: AppUser,
+  planningItemId: string
+): Promise<PlanningActionResult | null> {
+  const item = await loadPlanningItemAccess(planningItemId);
+  if (!item) return { success: false, message: "Planning item not found." };
+  if (!canEditVenueLinkedPlanning(user, { venue_id: item.venue_id, planning_item_venues: item.planning_item_venues ?? [] })) {
+    return { success: false, message: "You can only manage planning items for your assigned venue." };
+  }
+  return null;
+}
+
 export async function createPlanningItemAction(input: unknown): Promise<PlanningActionResult> {
   try {
     const user = await ensureUser();
@@ -108,6 +141,13 @@ export async function createPlanningItemAction(input: unknown): Promise<Planning
       : parsed.data.venueId
         ? [parsed.data.venueId]
         : [];
+    if (!canCreatePlanningForVenueSelection(user, venueIds)) {
+      return {
+        success: false,
+        message: "You can only create planning items for your assigned venue.",
+        fieldErrors: { venueIds: "Choose your assigned venue" }
+      };
+    }
     const primaryVenueId = venueIds[0] ?? null;
 
     const item = await createPlanningItem({
@@ -193,6 +233,15 @@ export async function updatePlanningItemAction(input: unknown): Promise<Planning
     const primaryVenueId = effectiveVenueIds && effectiveVenueIds.length > 0
       ? effectiveVenueIds[0]
       : null;
+    const manageError = await ensureCanManagePlanningItem(user, parsed.data.itemId);
+    if (manageError) return manageError;
+    if (effectiveVenueIds !== null && !canCreatePlanningForVenueSelection(user, effectiveVenueIds)) {
+      return {
+        success: false,
+        message: "You can only assign planning items to your assigned venue.",
+        fieldErrors: { venueIds: "Choose your assigned venue" }
+      };
+    }
 
     await updatePlanningItem(parsed.data.itemId, {
       title: parsed.data.title,
@@ -236,7 +285,7 @@ const moveItemSchema = z.object({
 
 export async function movePlanningItemDateAction(input: unknown): Promise<PlanningActionResult> {
   try {
-    await ensureUser();
+    const user = await ensureUser();
     const parsed = moveItemSchema.safeParse(input);
     if (!parsed.success) {
       return {
@@ -246,13 +295,16 @@ export async function movePlanningItemDateAction(input: unknown): Promise<Planni
       };
     }
 
+    const manageError = await ensureCanManagePlanningItem(user, parsed.data.itemId);
+    if (manageError) return manageError;
+
     await movePlanningItemDate(parsed.data.itemId, parsed.data.targetDate);
 
     recordAuditLogEntry({
       entity: "planning",
       entityId: parsed.data.itemId,
       action: "planning.item_updated",
-      actorId: null,
+      actorId: user.id,
       meta: { changed_fields: ["target_date"], target_date: parsed.data.targetDate }
     }).catch(() => {});
 
@@ -276,7 +328,7 @@ const deleteItemSchema = z.object({
 
 export async function deletePlanningItemAction(input: unknown): Promise<PlanningActionResult> {
   try {
-    await ensureUser();
+    const user = await ensureUser();
     const parsed = deleteItemSchema.safeParse(input);
     if (!parsed.success) {
       return {
@@ -286,13 +338,16 @@ export async function deletePlanningItemAction(input: unknown): Promise<Planning
       };
     }
 
+    const manageError = await ensureCanManagePlanningItem(user, parsed.data.itemId);
+    if (manageError) return manageError;
+
     await deletePlanningItem(parsed.data.itemId);
 
     recordAuditLogEntry({
       entity: "planning",
       entityId: parsed.data.itemId,
       action: "planning.item_deleted",
-      actorId: null,
+      actorId: user.id,
       meta: {}
     }).catch(() => {});
     revalidatePath("/planning");
@@ -365,6 +420,14 @@ export async function createPlanningSeriesAction(input: unknown): Promise<Planni
         fieldErrors: zodFieldErrors(parsed.error)
       };
     }
+    const venueIds = parsed.data.venueId ? [parsed.data.venueId] : [];
+    if (!canCreatePlanningForVenueSelection(user, venueIds)) {
+      return {
+        success: false,
+        message: "You can only create planning series for your assigned venue.",
+        fieldErrors: { venueId: "Choose your assigned venue" }
+      };
+    }
 
     await createPlanningSeries({
       title: parsed.data.title,
@@ -408,13 +471,28 @@ const updateSeriesSchema = createSeriesSchema.partial().extend({
 
 export async function updatePlanningSeriesAction(input: unknown): Promise<PlanningActionResult> {
   try {
-    await ensureUser();
+    const user = await ensureUser();
     const parsed = updateSeriesSchema.safeParse(input);
     if (!parsed.success) {
       return {
         success: false,
         message: "Check the highlighted fields.",
         fieldErrors: zodFieldErrors(parsed.error)
+      };
+    }
+    const currentSeries = await loadPlanningSeriesAccess(parsed.data.seriesId);
+    if (!currentSeries) return { success: false, message: "Planning series not found." };
+    if (!canEditVenueLinkedPlanning(user, { venue_id: currentSeries.venue_id })) {
+      return { success: false, message: "You can only manage planning series for your assigned venue." };
+    }
+    if (
+      parsed.data.venueId !== undefined &&
+      !canCreatePlanningForVenueSelection(user, parsed.data.venueId ? [parsed.data.venueId] : [])
+    ) {
+      return {
+        success: false,
+        message: "You can only assign planning series to your assigned venue.",
+        fieldErrors: { venueId: "Choose your assigned venue" }
       };
     }
 
@@ -442,7 +520,7 @@ export async function updatePlanningSeriesAction(input: unknown): Promise<Planni
       entity: "planning",
       entityId: parsed.data.seriesId,
       action: "planning.series_updated",
-      actorId: null,
+      actorId: user.id,
       meta: { title: parsed.data.title }
     }).catch(() => {});
     revalidatePath("/planning");
@@ -457,7 +535,7 @@ const pauseSeriesSchema = z.object({ seriesId: uuidSchema });
 
 export async function pausePlanningSeriesAction(input: unknown): Promise<PlanningActionResult> {
   try {
-    await ensureUser();
+    const user = await ensureUser();
     const parsed = pauseSeriesSchema.safeParse(input);
     if (!parsed.success) {
       return {
@@ -466,6 +544,11 @@ export async function pausePlanningSeriesAction(input: unknown): Promise<Plannin
         fieldErrors: zodFieldErrors(parsed.error)
       };
     }
+    const currentSeries = await loadPlanningSeriesAccess(parsed.data.seriesId);
+    if (!currentSeries) return { success: false, message: "Planning series not found." };
+    if (!canEditVenueLinkedPlanning(user, { venue_id: currentSeries.venue_id })) {
+      return { success: false, message: "You can only manage planning series for your assigned venue." };
+    }
 
     await pausePlanningSeries(parsed.data.seriesId);
 
@@ -473,7 +556,7 @@ export async function pausePlanningSeriesAction(input: unknown): Promise<Plannin
       entity: "planning",
       entityId: parsed.data.seriesId,
       action: "planning.series_paused",
-      actorId: null,
+      actorId: user.id,
       meta: {}
     }).catch(() => {});
     revalidatePath("/planning");
@@ -484,35 +567,26 @@ export async function pausePlanningSeriesAction(input: unknown): Promise<Plannin
   }
 }
 
-/**
- * Verify the current user owns the parent planning item.
- * Returns an error result if the user is not admin and does not own the item.
- */
 async function ensureOwnsParentItem(
   userId: string,
   userRole: UserRole,
+  userVenueId: string | null,
   planningItemId: string
 ): Promise<PlanningActionResult | null> {
   if (canManageAllPlanning(userRole)) return null;
-  const supabase = await createSupabaseReadonlyClient();
-  const { data: parentItem } = await supabase
-    .from("planning_items")
-    .select("owner_id")
-    .eq("id", planningItemId)
-    .single();
-  if (parentItem?.owner_id !== userId) {
-    return { success: false, message: "You can only manage tasks on your own planning items." };
+  const item = await loadPlanningItemAccess(planningItemId);
+  if (!item) return { success: false, message: "Planning item not found." };
+  const user: AppUser = { id: userId, role: userRole, venueId: userVenueId, email: "", fullName: null, deactivatedAt: null };
+  if (!canEditVenueLinkedPlanning(user, { venue_id: item.venue_id, planning_item_venues: item.planning_item_venues ?? [] })) {
+    return { success: false, message: "You can only manage tasks for planning items at your assigned venue." };
   }
   return null;
 }
 
-/**
- * Verify the current user owns the parent planning item of a given task.
- * Returns an error result if the user is not admin and does not own the parent item.
- */
 async function ensureOwnsParentItemOfTask(
   userId: string,
   userRole: UserRole,
+  userVenueId: string | null,
   taskId: string
 ): Promise<PlanningActionResult | null> {
   if (canManageAllPlanning(userRole)) return null;
@@ -526,23 +600,7 @@ async function ensureOwnsParentItemOfTask(
     return { success: false, message: "Task not found." };
   }
 
-  // Check 1: Parent planning item owner
-  const ownershipError = await ensureOwnsParentItem(userId, userRole, task.planning_item_id);
-  if (!ownershipError) return null;
-
-  // Check 2: Assigned via junction table (multi-assignee)
-  const { data: assigneeRow } = await supabase
-    .from("planning_task_assignees")
-    .select("id")
-    .eq("task_id", taskId)
-    .eq("user_id", userId)
-    .maybeSingle();
-  if (assigneeRow) return null;
-
-  // Check 3: Legacy single assignee
-  if (task.assignee_id === userId) return null;
-
-  return { success: false, message: "You can only manage tasks on your own planning items." };
+  return ensureOwnsParentItem(userId, userRole, userVenueId, task.planning_item_id);
 }
 
 const createTaskSchema = z.object({
@@ -566,7 +624,7 @@ export async function createPlanningTaskAction(input: unknown): Promise<Planning
     }
 
     // Ownership check: non-admins can only add tasks to their own planning items
-    const ownershipError = await ensureOwnsParentItem(user.id, user.role, parsed.data.planningItemId);
+    const ownershipError = await ensureOwnsParentItem(user.id, user.role, user.venueId, parsed.data.planningItemId);
     if (ownershipError) return ownershipError;
 
     await createPlanningTask({
@@ -616,7 +674,7 @@ export async function updatePlanningTaskAction(input: unknown): Promise<Planning
     }
 
     // Ownership check: non-admins can only update tasks on their own planning items
-    const ownershipError = await ensureOwnsParentItemOfTask(user.id, user.role, parsed.data.taskId);
+    const ownershipError = await ensureOwnsParentItemOfTask(user.id, user.role, user.venueId, parsed.data.taskId);
     if (ownershipError) return ownershipError;
 
     await updatePlanningTask(parsed.data.taskId, {
@@ -669,7 +727,7 @@ export async function togglePlanningTaskStatusAction(input: unknown): Promise<Pl
   if (!parsed.success) return { success: false, fieldErrors: zodFieldErrors(parsed.error) };
   try {
     // Ownership check: non-admins can only toggle tasks on their own planning items
-    const ownershipError = await ensureOwnsParentItemOfTask(user.id, user.role, parsed.data.taskId);
+    const ownershipError = await ensureOwnsParentItemOfTask(user.id, user.role, user.venueId, parsed.data.taskId);
     if (ownershipError) return ownershipError;
 
     await togglePlanningTaskStatus(parsed.data.taskId, parsed.data.status, user.id);
@@ -707,7 +765,7 @@ export async function reassignPlanningTaskAction(input: unknown): Promise<Planni
     }
 
     // Ownership check: non-admins can only reassign tasks on their own planning items
-    const ownershipError = await ensureOwnsParentItemOfTask(user.id, user.role, parsed.data.taskId);
+    const ownershipError = await ensureOwnsParentItemOfTask(user.id, user.role, user.venueId, parsed.data.taskId);
     if (ownershipError) return ownershipError;
 
     const { createSupabaseAdminClient } = await import("@/lib/supabase/admin");
@@ -776,7 +834,7 @@ export async function deletePlanningTaskAction(input: unknown): Promise<Planning
     }
 
     // Ownership check: non-admins can only delete tasks on their own planning items
-    const ownershipError = await ensureOwnsParentItemOfTask(user.id, user.role, parsed.data.taskId);
+    const ownershipError = await ensureOwnsParentItemOfTask(user.id, user.role, user.venueId, parsed.data.taskId);
     if (ownershipError) return ownershipError;
 
     await deletePlanningTask(parsed.data.taskId);
@@ -785,7 +843,7 @@ export async function deletePlanningTaskAction(input: unknown): Promise<Planning
       entity: "planning",
       entityId: parsed.data.taskId,
       action: "planning.task_deleted",
-      actorId: null,
+      actorId: user.id,
       meta: {}
     }).catch(() => {});
     revalidatePath("/planning");
@@ -804,7 +862,7 @@ export async function convertInspirationItemAction(
   try {
     const user = await getCurrentUser();
     if (!user) return { success: false, message: "You must be signed in." };
-    if (!canCreatePlanningItems(user.role)) {
+    if (!canCreatePlanningItems(user.role, user.venueId)) {
       return { success: false, message: "You do not have permission to perform this action." };
     }
 
@@ -830,6 +888,7 @@ export async function convertInspirationItemAction(
         type_label: "Occasion",
         status: "planned",
         created_by: user.id,
+        venue_id: user.venueId,
       })
       .select("id, target_date")
       .single();
@@ -878,7 +937,7 @@ export async function dismissInspirationItemAction(
   try {
     const user = await getCurrentUser();
     if (!user) return { success: false, message: "You must be signed in." };
-    if (!canCreatePlanningItems(user.role)) {
+    if (!canCreatePlanningItems(user.role, user.venueId)) {
       return { success: false, message: "You do not have permission to perform this action." };
     }
 

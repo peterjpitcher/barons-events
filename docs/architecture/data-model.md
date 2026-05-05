@@ -725,17 +725,17 @@
 
 | Enum | Values |
 |------|--------|
-| `event_status` | draft, submitted, needs_revisions, approved, rejected, published, completed |
-| `user_role` | venue_manager, reviewer, central_planner, executive |
+| `event_status` | draft, submitted, needs_revisions, approved, rejected, completed |
+| `user_role` | administrator, office_worker, executive |
 
-> Note: `user_role` enum exists in the DB but the application uses text column `users.role` with values `administrator`, `office_worker`, `executive` instead. The enum appears to be a legacy artifact.
+> Note: `users.role` is the active role source. Some legacy enum values may exist in older migrations, but application code fail-closes on roles outside `administrator`, `office_worker`, and `executive`.
 
 ---
 
 ## Key Relationships Summary
 
-- **events** is the central entity, linked to venues, users (creator/assignee/manager), artists (via event_artists), bookings, versions, approvals, debriefs, and attachments.
-- **planning_series** -> **planning_items** -> **planning_tasks** forms the planning hierarchy, with optional link to events via `planning_items.event_id`.
+- **events** is the central entity, linked to venues through `event_venues` with `events.venue_id` as a legacy primary-venue fallback, users (creator/assignee/manager), artists, bookings, versions, approvals, debriefs, and attachments.
+- **planning_series** -> **planning_items** -> **planning_tasks** forms the planning hierarchy, with venue links through `planning_item_venues` and optional link to events via `planning_items.event_id`.
 - **SOP** (sop_sections -> sop_task_templates -> sop_task_dependencies) provides task templates that generate planning_tasks.
 - **customers** are linked to event_bookings and consent_events, with SMS campaign tracking via sms_campaign_sends.
-- **venues** have opening hours (venue_opening_hours), overrides, service types, and default reviewers/managers.
+- **venues** have opening hours (venue_opening_hours), overrides, service types, and default managers.

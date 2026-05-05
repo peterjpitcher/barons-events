@@ -23,6 +23,7 @@ export default async function PlanningPage() {
   const [venues, boardData, calendarData] = await Promise.all([
     listVenues(),
     listPlanningBoardData({
+      user,
       today: new Date(),
       includeLater: true
     }),
@@ -30,17 +31,22 @@ export default async function PlanningPage() {
     // items are pulled too; the calendar UI hides them by default and
     // reveals them via a toggle.
     listPlanningBoardData({
+      user,
       today: new Date(),
       unbounded: true,
       includeAllStatuses: true
     })
   ]);
+  const visibleVenues =
+    user.role === "office_worker" && user.venueId
+      ? venues.filter((venue) => venue.id === user.venueId)
+      : venues;
 
   return (
     <PlanningBoard
       data={boardData}
       calendarData={calendarData}
-      venues={venues.map((venue) => ({
+      venues={visibleVenues.map((venue) => ({
         id: venue.id,
         name: venue.name,
          
@@ -49,6 +55,7 @@ export default async function PlanningPage() {
       canApproveEvents={canReviewEvents(user.role)}
       userRole={user.role}
       currentUserId={user.id}
+      currentUserVenueId={user.venueId}
     />
   );
 }

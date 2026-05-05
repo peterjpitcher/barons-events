@@ -211,9 +211,9 @@ function setupSuccessfulCreateSubmitMocks() {
   return createdEvent;
 }
 
-// ─── saveEventDraftAction / submitEventForReviewAction — create path (any venue) ─────────
+// ─── saveEventDraftAction / submitEventForReviewAction — create path venue rules ─────────
 
-describe("submitEventForReviewAction — create path (any venue)", () => {
+describe("submitEventForReviewAction — create path venue rules", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("office_worker with no venueId is permitted by capability (no pinning)", async () => {
@@ -234,18 +234,12 @@ describe("submitEventForReviewAction — create path (any venue)", () => {
     expect(result.message ?? "").not.toMatch(/don't have permission/i);
   });
 
-  it("office_worker can create for a venue different from their linked venueId", async () => {
+  it("venue-assigned office_worker cannot create for a different venue", async () => {
     getUserMock.mockResolvedValue({ id: USER_A, role: "office_worker", venueId: VENUE_A });
-    const result = await submitEventForReviewAction(undefined, formData({
-      venueIds: VENUE_B,
-      title: "T",
-      startAt: "2026-05-01T10:00:00Z",
-    }));
-    // Cross-venue is now allowed — the legacy "Venue mismatch"/"can only
-    // submit events for their linked venue" must NOT fire.
-    expect(result.message ?? "").not.toMatch(/can only submit/i);
-    expect(result.message ?? "").not.toMatch(/venue mismatch/i);
-    expect(result.message ?? "").not.toMatch(/don't have permission/i);
+    const result = await submitEventForReviewAction(undefined, validFullEventForm({ venueIds: VENUE_B }));
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/assigned venue/i);
+    expect(createEventDraft).not.toHaveBeenCalled();
   });
 
   it("executive is rejected for create", async () => {
@@ -291,6 +285,22 @@ describe("submitEventForReviewAction — create path (any venue)", () => {
     expect(redirect).toHaveBeenCalledWith(`/events/${createdEvent.id}`);
   });
 
+  it("venue-assigned office_worker can submit for their assigned venue", async () => {
+    const createdEvent = setupSuccessfulCreateSubmitMocks();
+    getUserMock.mockResolvedValue({ id: USER_A, role: "office_worker", venueId: VENUE_A });
+
+    await expect(submitEventForReviewAction(undefined, validFullEventForm())).rejects.toThrow("NEXT_REDIRECT");
+
+    expect(createEventPlanningItem).toHaveBeenCalledWith(
+      createdEvent.id,
+      createdEvent.title,
+      createdEvent.start_at,
+      createdEvent.venue_id,
+      USER_A
+    );
+    expect(redirect).toHaveBeenCalledWith(`/events/${createdEvent.id}`);
+  });
+
   it("redirects to the created event if a post-create side effect fails", async () => {
     const createdEvent = setupSuccessfulCreateSubmitMocks();
     vi.mocked(syncEventArtists).mockRejectedValueOnce(new Error("artist sync failed"));
@@ -302,7 +312,7 @@ describe("submitEventForReviewAction — create path (any venue)", () => {
   });
 });
 
-describe("saveEventDraftAction — create path (any venue)", () => {
+describe("saveEventDraftAction — create path venue rules", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("office_worker with no venueId is permitted by capability (no pinning)", async () => {
@@ -317,16 +327,12 @@ describe("saveEventDraftAction — create path (any venue)", () => {
     expect(result.message ?? "").not.toMatch(/don't have permission/i);
   });
 
-  it("office_worker can save draft for a venue different from their linked venueId", async () => {
+  it("venue-assigned office_worker cannot save draft for a different venue", async () => {
     getUserMock.mockResolvedValue({ id: USER_A, role: "office_worker", venueId: VENUE_A });
-    const result = await saveEventDraftAction(undefined, formData({
-      venueIds: VENUE_B,
-      title: "T",
-      startAt: "2026-05-01T10:00:00Z",
-    }));
-    expect(result.message ?? "").not.toMatch(/can only save/i);
-    expect(result.message ?? "").not.toMatch(/venue mismatch/i);
-    expect(result.message ?? "").not.toMatch(/don't have permission/i);
+    const result = await saveEventDraftAction(undefined, validFullEventForm({ venueIds: VENUE_B }));
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/assigned venue/i);
+    expect(createEventDraft).not.toHaveBeenCalled();
   });
 
   it("executive is rejected for create", async () => {

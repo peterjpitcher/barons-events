@@ -49,6 +49,10 @@ export default async function NewEventPage({ searchParams }: PageProps) {
     listArtists(),
     listAssignableUsers()
   ]);
+  const eventVenues =
+    user.role === "office_worker" && user.venueId
+      ? venues.filter((venue) => venue.id === user.venueId)
+      : venues;
   const initialStartAt = parseDateParam(resolvedSearchParams.startAt);
   const initialEndAt =
     parseDateParam(resolvedSearchParams.endAt) ??
@@ -57,9 +61,12 @@ export default async function NewEventPage({ searchParams }: PageProps) {
   // Pre-select only when the caller explicitly supplies a valid venue. A direct
   // "New event" must start blank so events are not accidentally filed to the
   // wrong site.
-  const initialVenueId = requestedVenueId && venues.some((venue) => venue.id === requestedVenueId)
-    ? requestedVenueId
-    : undefined;
+  const initialVenueId =
+    user.role === "office_worker" && user.venueId
+      ? user.venueId
+      : requestedVenueId && eventVenues.some((venue) => venue.id === requestedVenueId)
+        ? requestedVenueId
+        : undefined;
 
   return (
     <div className="space-y-6">
@@ -73,7 +80,7 @@ export default async function NewEventPage({ searchParams }: PageProps) {
       </Card>
       <EventForm
         mode="create"
-        venues={venues}
+        venues={eventVenues}
         artists={artists}
         eventTypes={eventTypes.map((type) => type.label)}
         role={user.role}

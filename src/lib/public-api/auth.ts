@@ -1,6 +1,6 @@
 import "server-only";
 
-import { timingSafeEqual } from "crypto";
+import { createHash, timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
 import { checkRateLimit, getClientIp } from "./rate-limit";
 
@@ -56,8 +56,13 @@ export function methodNotAllowed(allowed: string[] = ["GET"]): Response {
  * Should be called before requireWebsiteApiKey so unauthenticated probing is also rate-limited.
  */
 export async function checkApiRateLimit(request: Request): Promise<Response | null> {
-  const ip = getClientIp(request);
-  const result = await checkRateLimit(ip);
+  const expected = process.env[API_KEY_ENV];
+  const provided = readBearerToken(request);
+  const identifier =
+    expected && provided && constantTimeEquals(provided, expected)
+      ? `apiKey:${createHash("sha256").update(provided).digest("hex").slice(0, 16)}`
+      : `ip:${getClientIp(request)}`;
+  const result = await checkRateLimit(identifier);
 
   if (!result.allowed) {
     return NextResponse.json(
@@ -124,4 +129,3 @@ export function requireWebsiteApiKey(request: Request): Response | null {
 
   return null;
 }
-

@@ -10,7 +10,7 @@ This document explains how the brand website should pull event data from BaronsH
 ## Overview
 - **Intended usage**: server-to-server (do not call from the browser).
 - **Visibility rule**: only events with status `approved` or `completed` are returned.
-- **Data safety**: this API intentionally excludes internal planning/review/debrief/cost fields.
+- **Data safety**: this API intentionally excludes internal planning/review/debrief/cost fields. It does not select or expose `events.notes`.
 - **Ordering**: event lists are ordered by `startAt` ascending, then `id` ascending.
 
 ## Authentication
@@ -155,7 +155,7 @@ type PublicEvent = {
   startAt: string; // ISO date-time (UTC)
   endAt: string; // ISO date-time (UTC)
   venueSpaces: string[]; // parsed from the internal comma-separated venue_space field
-  description: string | null; // guest-facing description (prefers `events.public_description`, falls back to `events.notes`); treat as plain text
+  description: string | null; // guest-facing description from `events.public_description`; treat as plain text
   bookingType: "ticketed" | "table_booking" | "free_entry" | "mixed" | null;
   ticketPrice: number | null;
   checkInCutoffMinutes: number | null;
@@ -220,14 +220,14 @@ type PublicEvent = {
 
 ### Formatting notes
 - `startAt` / `endAt` are UTC; the website should format into local time for display.
-- `description` is plain text (may include line breaks); the website can render as paragraphs if desired.
+- `description` is plain text from `events.public_description` (may include line breaks); the website can render as paragraphs if desired.
 
 ### Field sourcing (BaronsHub database)
 BaronsHub stores events in `public.events`. The API maps fields like this:
 - `PublicEvent.id` → `events.id`
 - `PublicEvent.title` → `events.public_title` (fallback `events.title`)
 - `PublicEvent.teaser` → `events.public_teaser`
-- `PublicEvent.description` → `events.public_description` (fallback `events.notes`)
+- `PublicEvent.description` → `events.public_description` only. Internal `events.notes` is intentionally excluded from API selects and serializers.
 - `PublicEvent.bookingUrl` → `events.booking_url`
 - `PublicEvent.seoTitle` → `events.seo_title`
 - `PublicEvent.seoDescription` → `events.seo_description`
@@ -292,8 +292,16 @@ Errors are JSON in this shape:
 Common statuses:
 - `401` `unauthorized` — missing/invalid API key
 - `400` `invalid_request` / `invalid_cursor` / `invalid_slug`
+- `405` `method_not_allowed` — non-GET method
+- `429` `rate_limited` — request limit exceeded
 - `503` `not_configured` — BaronsHub missing server config (API key env var or Supabase service-role key)
 - `500` `internal_error`
+
+## Rate limiting
+
+- Valid bearer-token requests are counted by API key identity using a SHA-256 hash prefix.
+- Missing or invalid key probes are counted by client IP.
+- Do not send the API key as a query parameter; only the `Authorization: Bearer ...` header is supported.
 
 ## Quick Postman setup
 1) Create a new request.

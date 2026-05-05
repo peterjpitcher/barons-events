@@ -23,6 +23,8 @@ import type {
   UpdatePlanningSeriesInput,
   UpdatePlanningTaskInput
 } from "@/lib/planning/types";
+import type { AppUser } from "@/lib/types";
+import { canViewVenueLinkedResource } from "@/lib/visibility";
 import {
   addDays,
   daysBetween,
@@ -216,6 +218,7 @@ type RawEventOverlayRow = EventOverlayRow & {
   venue?: { name: string | null } | Array<{ name: string | null }> | null;
   public_title?: string | null;
   public_teaser?: string | null;
+  event_venues?: Array<{ venue_id: string | null }> | null;
 };
 
 function toPlanningEventOverlay(row: RawEventOverlayRow): PlanningEventOverlay {
@@ -486,6 +489,7 @@ async function fetchInspirationItems(
 }
 
 export async function listPlanningBoardData(params?: {
+  user?: AppUser;
   today?: Date | string;
   includeLater?: boolean;
   filters?: {
@@ -579,7 +583,13 @@ export async function listPlanningBoardData(params?: {
       throw new Error(`Could not load planning items: ${itemsError.message}`);
     }
   } else {
-    planningItems = ((itemData ?? []) as RawPlanningItemRow[]).map((row) => toPlanningItem(row));
+    planningItems = ((itemData ?? []) as RawPlanningItemRow[])
+      .map((row) => toPlanningItem(row))
+      .filter((item) =>
+        params?.user
+          ? canViewVenueLinkedResource(params.user, { venueId: item.venueId, venues: item.venues })
+          : true
+      );
   }
 
   const startLowerIso = `${lowerBound}T00:00:00.000Z`;
@@ -588,7 +598,7 @@ export async function listPlanningBoardData(params?: {
   let eventsQuery = admin
     .from("events")
     .select(
-      "id,title,status,start_at,end_at,venue_space,venue_id,public_title,public_teaser,venue:venues!events_venue_id_fkey(name)"
+      "id,title,status,start_at,end_at,venue_space,venue_id,public_title,public_teaser,venue:venues!events_venue_id_fkey(name),event_venues(venue_id)"
     )
     .order("start_at", { ascending: true });
 
@@ -605,9 +615,13 @@ export async function listPlanningBoardData(params?: {
     throw new Error(`Could not load event overlays: ${eventsError.message}`);
   }
 
-  const events = ((eventData ?? []) as Array<EventOverlayRow & { venue: { name: string | null } | Array<{ name: string | null }> | null }>).map((row) =>
-    toPlanningEventOverlay(row)
-  );
+  const events = ((eventData ?? []) as RawEventOverlayRow[])
+    .filter((row) =>
+      params?.user
+        ? canViewVenueLinkedResource(params.user, { venue_id: row.venue_id, event_venues: row.event_venues ?? [] })
+        : true
+    )
+    .map((row) => toPlanningEventOverlay(row));
 
   const users = await listPlanningUsers();
 
@@ -646,7 +660,7 @@ export async function listPlanningBoardData(params?: {
  * full venue list, owner, task array, and task assignees. Used by the
  * dedicated detail page `/planning/[planningItemId]`.
  */
-export async function getPlanningItemDetail(itemId: string): Promise<PlanningItem | null> {
+export async function getPlanningItemDetail(itemId: string, user?: AppUser): Promise<PlanningItem | null> {
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
     .from("planning_items")
@@ -699,6 +713,9 @@ export async function getPlanningItemDetail(itemId: string): Promise<PlanningIte
   }
   if (!data) return null;
   const item = toPlanningItem(data as RawPlanningItemRow);
+  if (user && !canViewVenueLinkedResource(user, { venueId: item.venueId, venues: item.venues })) {
+    return null;
+  }
 
   // Second pass: eagerly load attachments for every task on this item.
   // Kept separate from the board loader so board rendering stays cheap.

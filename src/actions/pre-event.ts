@@ -9,6 +9,7 @@ import { createSupabaseActionClient } from "@/lib/supabase/server";
 import { canProposeEvents } from "@/lib/roles";
 import { recordAuditLogEntry } from "@/lib/audit-log";
 import type { ActionResult } from "@/lib/types";
+import { canOfficeWorkerUseVenueSelection } from "@/lib/visibility";
 
 /**
  * Wave 3 — pre-event approval server actions.
@@ -60,6 +61,9 @@ export async function proposeEventAction(
 
   if (!canProposeEvents(user.role)) {
     return { success: false, message: "You don't have permission to propose events." };
+  }
+  if (!canOfficeWorkerUseVenueSelection(user, parsed.data.venueIds)) {
+    return { success: false, message: "You can only propose events for your assigned venue." };
   }
 
   // WF-003 v3.1: pre-validate venue IDs with explicit error handling so a DB

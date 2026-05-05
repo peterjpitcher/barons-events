@@ -8,6 +8,7 @@ import { AttachmentsPanel } from "@/components/attachments/attachments-panel";
 import { listPlanningItemAttachmentsRollup } from "@/lib/attachments";
 import { listAssignableUsers } from "@/lib/users";
 import { listVenues } from "@/lib/venues";
+import { canEditVenueLinkedPlanning } from "@/lib/visibility";
 import { PlanningItemEditorShell } from "./planning-item-editor-shell";
 
 export const metadata = {
@@ -25,18 +26,16 @@ export default async function PlanningItemDetailPage({
   if (!canViewPlanning(user.role)) redirect("/unauthorized");
 
   const { planningItemId } = await params;
-  const [item, attachments, users, venueRows] = await Promise.all([
-    getPlanningItemDetail(planningItemId),
+  const item = await getPlanningItemDetail(planningItemId, user);
+  if (!item) notFound();
+
+  const [attachments, users, venueRows] = await Promise.all([
     listPlanningItemAttachmentsRollup(planningItemId),
     listAssignableUsers(),
     listVenues()
   ]);
 
-  if (!item) notFound();
-
-  const canUploadAttachments =
-    user.role === "administrator" ||
-    (user.role === "office_worker" && (!user.venueId || user.venueId === item.venueId));
+  const canUploadAttachments = canEditVenueLinkedPlanning(user, { venueId: item.venueId, venues: item.venues });
 
   const planningUsers = users.map((u) => ({
     id: u.id,
@@ -45,7 +44,12 @@ export default async function PlanningItemDetailPage({
     role: u.role
   }));
 
-  const planningVenues = venueRows.map((venue) => {
+  const visibleVenueRows =
+    user.role === "office_worker" && user.venueId
+      ? venueRows.filter((venue) => venue.id === user.venueId)
+      : venueRows;
+
+  const planningVenues = visibleVenueRows.map((venue) => {
      
     const category: "pub" | "cafe" = (venue as any).category === "cafe" ? "cafe" : "pub";
     return { id: venue.id, name: venue.name, category };

@@ -38,6 +38,18 @@ function emptyTwiml(): NextResponse {
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://baronspubs.com";
 
+async function updateInboundResult(
+  db: ReturnType<typeof createSupabaseAdminClient>,
+  messageSid: string,
+  result: string,
+  extras?: Record<string, unknown>
+) {
+  await db
+    .from("sms_inbound_messages")
+    .update({ result, ...(extras ?? {}) })
+    .eq("twilio_message_sid", messageSid);
+}
+
 export async function POST(request: Request): Promise<NextResponse> {
   // Parse form data
   const formData = await request.formData();
@@ -90,20 +102,14 @@ export async function POST(request: Request): Promise<NextResponse> {
         .is("converted_at", null)
         .eq("status", "sent");
     }
-    await db
-      .from("sms_inbound_messages")
-      .update({ result: "opted_out" })
-      .eq("twilio_message_sid", messageSid);
+    await updateInboundResult(db, messageSid, "opted_out");
     return twiml("You've been unsubscribed from promotional messages. You'll still receive booking confirmations.");
   }
 
   // Look up customer
   const customer = await findCustomerByMobile(from);
   if (!customer) {
-    await db
-      .from("sms_inbound_messages")
-      .update({ result: "error" })
-      .eq("twilio_message_sid", messageSid);
+    await updateInboundResult(db, messageSid, "error");
     return twiml(`Sorry, we couldn't find your details. Please book online at ${APP_URL}`);
   }
 
@@ -120,10 +126,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   } else if (numberMatch) {
     ticketCount = parseInt(numberMatch[0], 10);
   } else {
-    await db
-      .from("sms_inbound_messages")
-      .update({ result: "error" })
-      .eq("twilio_message_sid", messageSid);
+    await updateInboundResult(db, messageSid, "error");
     return twiml("Please reply with your code and number of seats (e.g., 'ABC 2'). Or reply STOP to opt out.");
   }
 
@@ -143,10 +146,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   const { data: campaigns } = await campaignQuery.limit(5);
 
   if (!campaigns || campaigns.length === 0) {
-    await db
-      .from("sms_inbound_messages")
-      .update({ result: "error" })
-      .eq("twilio_message_sid", messageSid);
+    await updateInboundResult(db, messageSid, "error");
     return twiml(`We're not sure which event you're replying about. Book online at ${APP_URL}`);
   }
 
@@ -156,6 +156,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       const evt = c.events as unknown as Record<string, unknown>;
       return `- Reply '${c.reply_code ?? "???"} ${ticketCount}' for ${evt.public_title}`;
     });
+    await updateInboundResult(db, messageSid, "needs_disambiguation");
     return twiml(`Which event?\n${lines.join("\n")}`);
   }
 
@@ -169,10 +170,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   if (rpcError) {
     console.error("create_booking_from_campaign failed:", rpcError);
-    await db
-      .from("sms_inbound_messages")
-      .update({ result: "error" })
-      .eq("twilio_message_sid", messageSid);
+    await updateInboundResult(db, messageSid, "error");
     return twiml("Sorry, something went wrong. Please try again or book online.");
   }
 
@@ -181,34 +179,27 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (!rpcResult.ok) {
     const reason = rpcResult.reason;
     if (reason === "already_converted") {
-      await db
-        .from("sms_inbound_messages")
-        .update({ result: "duplicate" })
-        .eq("twilio_message_sid", messageSid);
+      await updateInboundResult(db, messageSid, "duplicate");
       const evt = campaignSend.events as unknown as Record<string, unknown>;
       return twiml(`You're already booked for ${evt.public_title}! See you there.`);
     }
     if (reason === "sold_out") {
-      await db
-        .from("sms_inbound_messages")
-        .update({ result: "error" })
-        .eq("twilio_message_sid", messageSid);
+      await updateInboundResult(db, messageSid, "error");
       const evt = campaignSend.events as unknown as Record<string, unknown>;
       return twiml(`Sorry, ${evt.public_title} is fully booked. We'll let you know if spots open up!`);
     }
     if (reason === "too_many_tickets") {
+      await updateInboundResult(db, messageSid, "too_many_tickets");
       return twiml(`Sorry, the maximum tickets per booking is ${rpcResult.max ?? 10}. Please try a smaller number.`);
     }
+    await updateInboundResult(db, messageSid, "booking_failed");
     return twiml("Sorry, something went wrong. Please try again.");
   }
 
   // Success
   const evt = campaignSend.events as unknown as Record<string, unknown>;
   const venue = (evt.venues as unknown as Record<string, unknown>) ?? {};
-  await db
-    .from("sms_inbound_messages")
-    .update({ result: "booked", booking_id: rpcResult.booking_id })
-    .eq("twilio_message_sid", messageSid);
+  await updateInboundResult(db, messageSid, "booked", { booking_id: rpcResult.booking_id });
 
   return twiml(`Booked! ${ticketCount} seat(s) for ${evt.public_title} at ${venue.name}. See you there!`);
 }

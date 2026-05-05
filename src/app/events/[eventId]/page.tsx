@@ -30,6 +30,7 @@ import { SopChecklistView } from "@/components/planning/sop-checklist-view";
 import { AttachmentsPanel } from "@/components/attachments/attachments-panel";
 import { ProposalDecisionCard } from "@/components/events/proposal-decision-card";
 import { listEventAttachmentsRollup } from "@/lib/attachments";
+import { isLinkedToVenue } from "@/lib/visibility";
 import type { PlanningTask, PlanningPerson, PlanningTaskStatus } from "@/lib/planning/types";
 
 const statusCopy: Record<string, { label: string; tone: "neutral" | "info" | "success" | "warning" | "danger" }> = {
@@ -78,7 +79,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
     redirect("/login");
   }
 
-  const event = await getEventDetail(eventId);
+  const event = await getEventDetail(eventId, user);
   if (!event) {
     notFound();
   }
@@ -89,7 +90,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
   const isVenueScoped =
     user.role === "office_worker" &&
     user.venueId != null &&
-    event.venue_id === user.venueId;
+    isLinkedToVenue({ venue_id: event.venue_id, venues: event.venues }, user.venueId);
 
   // Shared row projection for edit-context gating. All six fields come from
   // getEventDetail (SELECT *) so no widening is required.

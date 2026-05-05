@@ -6,6 +6,7 @@ import type { AppUser, EventStatus } from "@/lib/types";
 import { recordAuditLogEntry } from "@/lib/audit-log";
 import { parseVenueSpaces } from "@/lib/venue-spaces";
 import { generateSopChecklist } from "@/lib/planning/sop";
+import { canViewVenueLinkedResource } from "@/lib/visibility";
 
 type EventRow = Database["public"]["Tables"]["events"]["Row"];
 type VenueRow = Database["public"]["Tables"]["venues"]["Row"];
@@ -148,13 +149,15 @@ export async function listReviewQueue(user: AppUser): Promise<EventSummary[]> {
 
   let query = supabase
     .from("events")
-    .select("*, venue:venues!events_venue_id_fkey(id,name)")
+    .select("*, venue:venues!events_venue_id_fkey(id,name), event_venues(venue_id)")
     .is("deleted_at", null)
     .in("status", ["submitted", "needs_revisions"])
     .order("start_at", { ascending: true });
 
-  // Admins and office workers see all submissions; other roles see only their assigned events
-  if (user.role !== "administrator" && user.role !== "office_worker") {
+  // Known read roles load the queue, then venue-linked visibility is applied
+  // below for venue-assigned office workers.
+  const reviewRole = user.role as string;
+  if (reviewRole !== "administrator" && reviewRole !== "office_worker" && reviewRole !== "executive") {
     query = query.eq("assignee_id", user.id);
   }
 
@@ -164,12 +167,24 @@ export async function listReviewQueue(user: AppUser): Promise<EventSummary[]> {
     throw new Error(`Unable to load review queue: ${error.message}`);
   }
 
-  const rows = (data ?? []) as Array<EventRow & { venue: EventSummary["venue"] | EventSummary["venue"][] }>;
+  const rows = (data ?? []) as Array<
+    EventRow & {
+      venue: EventSummary["venue"] | EventSummary["venue"][];
+      event_venues?: Array<{ venue_id: string | null }> | null;
+    }
+  >;
 
-  return rows.map((item) => ({
-    ...item,
-    venue: Array.isArray(item.venue) ? item.venue[0] : (item.venue as EventSummary["venue"])
-  }));
+  return rows
+    .filter((item) =>
+      canViewVenueLinkedResource(user, {
+        venue_id: item.venue_id,
+        event_venues: item.event_venues ?? []
+      })
+    )
+    .map((item) => ({
+      ...item,
+      venue: Array.isArray(item.venue) ? item.venue[0] : (item.venue as EventSummary["venue"])
+    }));
 }
 
 export async function listEventsForUser(user: AppUser): Promise<EventSummary[]> {
@@ -183,15 +198,8 @@ export async function listEventsForUser(user: AppUser): Promise<EventSummary[]> 
     .is("deleted_at", null)
     .order("start_at", { ascending: true });
 
-  if (user.role === "administrator") {
-    // Default date range: 1 year back to 2 years forward
-    const oneYearAgo = new Date();
-    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-    const twoYearsForward = new Date();
-    twoYearsForward.setFullYear(twoYearsForward.getFullYear() + 2);
-    query = query.gte("start_at", oneYearAgo.toISOString()).lte("start_at", twoYearsForward.toISOString());
-  } else if (user.role !== "office_worker") {
-    // executive or unknown — limited read-only view
+  const role = user.role as string;
+  if (role !== "administrator" && role !== "office_worker" && role !== "executive") {
     query = query.limit(10);
   }
 
@@ -217,32 +225,39 @@ export async function listEventsForUser(user: AppUser): Promise<EventSummary[]> 
 
   const rows = (data ?? []) as RawEventRow[];
 
-  return rows.map((item) => ({
-    ...item,
-    venue: Array.isArray(item.venue) ? item.venue[0] : (item.venue as EventSummary["venue"]),
-    venues: normaliseVenueAttachments(item.event_venues ?? []),
-    artists: Array.isArray(item.artists)
-      ? item.artists
-          .map((entry: RawArtistEntry) => {
-            const artistValue = Array.isArray(entry?.artist) ? entry.artist[0] : entry?.artist;
-            return {
-              ...(entry as Pick<EventArtistRow, "id" | "artist_id" | "billing_order">),
-              artist:
-                artistValue && typeof artistValue === "object"
-                  ? ({ id: artistValue.id, name: artistValue.name } as Pick<ArtistRow, "id" | "name">)
-                  : null
-            };
-          })
-          .sort((left, right) => {
-            const leftOrder = typeof left.billing_order === "number" ? left.billing_order : 9999;
-            const rightOrder = typeof right.billing_order === "number" ? right.billing_order : 9999;
-            if (leftOrder !== rightOrder) return leftOrder - rightOrder;
-            const leftName = left.artist?.name ?? "";
-            const rightName = right.artist?.name ?? "";
-            return leftName.localeCompare(rightName);
-          })
-      : []
-  }));
+  return rows
+    .filter((item) =>
+      canViewVenueLinkedResource(user, {
+        venue_id: item.venue_id,
+        event_venues: item.event_venues ?? []
+      })
+    )
+    .map((item) => ({
+      ...item,
+      venue: Array.isArray(item.venue) ? item.venue[0] : (item.venue as EventSummary["venue"]),
+      venues: normaliseVenueAttachments(item.event_venues ?? []),
+      artists: Array.isArray(item.artists)
+        ? item.artists
+            .map((entry: RawArtistEntry) => {
+              const artistValue = Array.isArray(entry?.artist) ? entry.artist[0] : entry?.artist;
+              return {
+                ...(entry as Pick<EventArtistRow, "id" | "artist_id" | "billing_order">),
+                artist:
+                  artistValue && typeof artistValue === "object"
+                    ? ({ id: artistValue.id, name: artistValue.name } as Pick<ArtistRow, "id" | "name">)
+                    : null
+              };
+            })
+            .sort((left, right) => {
+              const leftOrder = typeof left.billing_order === "number" ? left.billing_order : 9999;
+              const rightOrder = typeof right.billing_order === "number" ? right.billing_order : 9999;
+              if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+              const leftName = left.artist?.name ?? "";
+              const rightName = right.artist?.name ?? "";
+              return leftName.localeCompare(rightName);
+            })
+        : []
+    }));
 }
 
 /**
@@ -272,7 +287,7 @@ function normaliseVenueAttachments(
     });
 }
 
-export async function getEventDetail(eventId: string): Promise<EventDetail | null> {
+export async function getEventDetail(eventId: string, user?: AppUser): Promise<EventDetail | null> {
   const supabase = await createSupabaseReadonlyClient();
 
   const { data, error } = await supabase
@@ -312,6 +327,15 @@ export async function getEventDetail(eventId: string): Promise<EventDetail | nul
   };
 
   const record = data as RawDetailRecord;
+  if (
+    user &&
+    !canViewVenueLinkedResource(user, {
+      venue_id: record.venue_id,
+      event_venues: record.event_venues ?? []
+    })
+  ) {
+    return null;
+  }
 
   const versions: VersionRow[] = Array.isArray(record.versions) ? record.versions : [];
 

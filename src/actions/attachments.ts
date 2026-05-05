@@ -6,8 +6,7 @@ import { fileTypeFromBuffer } from "file-type";
 import { getCurrentUser } from "@/lib/auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { recordAuditLogEntry } from "@/lib/audit-log";
-import { canEditEvent } from "@/lib/roles";
-import { loadEventEditContext } from "@/lib/events/edit-context";
+import { canEditAttachment, canUploadToAttachmentParent, canViewAttachment } from "@/lib/attachment-access";
 import type { ActionResult } from "@/lib/types";
 
 // file-type detects the raw container format. Some declared types collapse
@@ -125,15 +124,8 @@ export async function requestAttachmentUploadAction(
     return { success: false, message: "That file type is not supported." };
   }
 
-  // SEC-005: event-parented attachments follow the canonical event-edit rule.
-  // Planning-item/task parents keep their existing (pre-SEC-005) authz path —
-  // out of scope for this fix.
-  if (parsed.data.parentType === "event") {
-    const ctx = await loadEventEditContext(parsed.data.parentId);
-    if (!ctx) return { success: false, message: "Event not found." };
-    if (!canEditEvent(user.role, user.id, user.venueId, ctx)) {
-      return { success: false, message: "You don't have permission to upload attachments to this event." };
-    }
+  if (!(await canUploadToAttachmentParent(user, parsed.data.parentType, parsed.data.parentId))) {
+    return { success: false, message: "You don't have permission to upload attachments here." };
   }
 
   const db = createSupabaseAdminClient();
@@ -198,7 +190,7 @@ export async function confirmAttachmentUploadAction(
    
   const { data: row, error: readErr } = await (db as any)
     .from("attachments")
-    .select("id, uploaded_by, storage_path, mime_type, upload_status")
+    .select("id, uploaded_by, event_id, planning_item_id, planning_task_id, storage_path, mime_type, upload_status")
     .eq("id", parsed.data.attachmentId)
     .maybeSingle();
 
@@ -207,6 +199,9 @@ export async function confirmAttachmentUploadAction(
   }
   if (row.uploaded_by !== user.id && user.role !== "administrator") {
     return { success: false, message: "You cannot confirm this upload." };
+  }
+  if (!(await canEditAttachment(user, row))) {
+    return { success: false, message: "You don't have permission to confirm this upload." };
   }
   if (row.upload_status === "uploaded") {
     return { success: true, message: "Already confirmed." };
@@ -307,18 +302,8 @@ export async function deleteAttachmentAction(
 
   if (!row) return { success: false, message: "Attachment not found." };
 
-  // SEC-005: event-parented attachments require event-edit capability.
-  // Admin short-circuits. Planning-parented attachments keep the legacy
-  // uploader-or-admin rule (out of scope for SEC-005).
-  if (user.role !== "administrator") {
-    if (row.event_id) {
-      const ctx = await loadEventEditContext(row.event_id);
-      if (!ctx || !canEditEvent(user.role, user.id, user.venueId, ctx)) {
-        return { success: false, message: "You don't have permission to delete this attachment." };
-      }
-    } else if (row.uploaded_by !== user.id) {
-      return { success: false, message: "You cannot delete this attachment." };
-    }
+  if (!(await canEditAttachment(user, row))) {
+    return { success: false, message: "You don't have permission to delete this attachment." };
   }
 
    
@@ -360,13 +345,16 @@ export async function getAttachmentUrlAction(
    
   const { data: row, error } = await (db as any)
     .from("attachments")
-    .select("storage_path, size_bytes, upload_status, deleted_at")
+    .select("storage_path, size_bytes, upload_status, deleted_at, uploaded_by, event_id, planning_item_id, planning_task_id")
     .eq("id", parsed.data.attachmentId)
     .maybeSingle();
 
   if (error || !row) return { success: false, message: "Attachment not found." };
   if (row.deleted_at) return { success: false, message: "Attachment no longer available." };
   if (row.upload_status !== "uploaded") return { success: false, message: "Upload still in progress." };
+  if (!(await canViewAttachment(user, row))) {
+    return { success: false, message: "You don't have permission to download this attachment." };
+  }
 
   const ttl = row.size_bytes <= 20_000_000 ? 300 : 1800;
    

@@ -123,4 +123,81 @@ describe("POST /api/webhooks/twilio-inbound", () => {
     expect(escapeXml('"hello"')).toBe("&quot;hello&quot;");
     expect(escapeXml("it's")).toBe("it&apos;s");
   });
+
+  it("marks ambiguous campaign replies as needs_disambiguation", async () => {
+    (validateTwilioRequest as ReturnType<typeof vi.fn>).mockReturnValue(true);
+    (findCustomerByMobile as ReturnType<typeof vi.fn>).mockResolvedValue({ id: "customer-1" });
+    const db = mockDb();
+    db._chainable.maybeSingle.mockResolvedValue({ data: null, error: null });
+    db._chainable.limit.mockResolvedValue({
+      data: [
+        { id: "send-1", reply_code: "ABC", events: { public_title: "Quiz" } },
+        { id: "send-2", reply_code: "DEF", events: { public_title: "Jazz" } }
+      ],
+      error: null
+    });
+    (createSupabaseAdminClient as ReturnType<typeof vi.fn>).mockReturnValue(db);
+
+    const { POST } = await import("@/app/api/webhooks/twilio-inbound/route");
+    const body = new URLSearchParams({ From: "+447777777777", Body: "2", MessageSid: "SM_AMBIG" });
+    const req = new Request("http://localhost/api/webhooks/twilio-inbound", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", "X-Twilio-Signature": "valid" },
+      body: body.toString(),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    expect(db._chainable.update).toHaveBeenCalledWith({ result: "needs_disambiguation" });
+  });
+
+  it("marks too_many_tickets as a terminal result", async () => {
+    (validateTwilioRequest as ReturnType<typeof vi.fn>).mockReturnValue(true);
+    (findCustomerByMobile as ReturnType<typeof vi.fn>).mockResolvedValue({ id: "customer-1" });
+    const db = mockDb();
+    db._chainable.maybeSingle.mockResolvedValue({ data: null, error: null });
+    db._chainable.limit.mockResolvedValue({
+      data: [{ id: "send-1", reply_code: "ABC", events: { public_title: "Quiz" } }],
+      error: null
+    });
+    db.rpc.mockResolvedValue({ data: { ok: false, reason: "too_many_tickets", max: 3 }, error: null });
+    (createSupabaseAdminClient as ReturnType<typeof vi.fn>).mockReturnValue(db);
+
+    const { POST } = await import("@/app/api/webhooks/twilio-inbound/route");
+    const body = new URLSearchParams({ From: "+447777777777", Body: "ABC 4", MessageSid: "SM_TOO_MANY" });
+    const req = new Request("http://localhost/api/webhooks/twilio-inbound", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", "X-Twilio-Signature": "valid" },
+      body: body.toString(),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    expect(db._chainable.update).toHaveBeenCalledWith({ result: "too_many_tickets" });
+  });
+
+  it("marks unknown RPC failures as booking_failed", async () => {
+    (validateTwilioRequest as ReturnType<typeof vi.fn>).mockReturnValue(true);
+    (findCustomerByMobile as ReturnType<typeof vi.fn>).mockResolvedValue({ id: "customer-1" });
+    const db = mockDb();
+    db._chainable.maybeSingle.mockResolvedValue({ data: null, error: null });
+    db._chainable.limit.mockResolvedValue({
+      data: [{ id: "send-1", reply_code: "ABC", events: { public_title: "Quiz" } }],
+      error: null
+    });
+    db.rpc.mockResolvedValue({ data: { ok: false, reason: "unknown" }, error: null });
+    (createSupabaseAdminClient as ReturnType<typeof vi.fn>).mockReturnValue(db);
+
+    const { POST } = await import("@/app/api/webhooks/twilio-inbound/route");
+    const body = new URLSearchParams({ From: "+447777777777", Body: "ABC 2", MessageSid: "SM_FAIL" });
+    const req = new Request("http://localhost/api/webhooks/twilio-inbound", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", "X-Twilio-Signature": "valid" },
+      body: body.toString(),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    expect(db._chainable.update).toHaveBeenCalledWith({ result: "booking_failed" });
+  });
 });

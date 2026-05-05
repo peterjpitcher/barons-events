@@ -23,6 +23,7 @@ import {
   normaliseOptionalNumber as normaliseOptionalNumberField,
   normaliseOptionalInteger as normaliseOptionalIntegerField,
 } from "@/lib/normalise";
+import { canOfficeWorkerUseVenueSelection } from "@/lib/visibility";
 
 const reviewerFallback = z.string().uuid().optional();
 
@@ -647,9 +648,14 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
   const requestedVenueIds =
     rawVenueIds.length > 0 ? rawVenueIds : fallbackVenueId ? [fallbackVenueId] : [];
 
-  // Office workers are no longer venue-pinned — capability is enforced via
-  // canProposeEvents (create) / canEditEvent (update) above.
   const venueIds = requestedVenueIds;
+  if (!canOfficeWorkerUseVenueSelection(user, venueIds)) {
+    return {
+      success: false,
+      message: "You can only create or edit events for your assigned venue.",
+      fieldErrors: { venueId: "Choose your assigned venue" }
+    };
+  }
   const venueId = venueIds[0] ?? "";
   const titleValue = formData.get("title");
   const title = typeof titleValue === "string" ? titleValue : "";
@@ -1074,9 +1080,14 @@ export async function submitEventForReviewAction(
       const fallbackVenueId = typeof fallbackVenueIdValue === "string" ? fallbackVenueIdValue : "";
       const requestedVenueIds =
         rawVenueIds.length > 0 ? rawVenueIds : fallbackVenueId ? [fallbackVenueId] : [];
-      // Office workers are no longer venue-pinned — capability was enforced
-      // by canProposeEvents at the top of the action.
       const venueIds = requestedVenueIds;
+      if (!canOfficeWorkerUseVenueSelection(user, venueIds)) {
+        return {
+          success: false,
+          message: "You can only submit events for your assigned venue.",
+          fieldErrors: { venueId: "Choose your assigned venue" }
+        };
+      }
       const venueId = venueIds[0] ?? "";
       const requestedVenueId = venueId;
 

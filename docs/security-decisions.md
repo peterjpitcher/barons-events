@@ -71,20 +71,20 @@ Conscious security trade-offs documented during the auth system audit and harden
 
 ---
 
-## 5. Reviewer Access to All Events
+## 5. Office Worker Event and Planning Visibility
 
-**Decision:** Users with the `reviewer` role have RLS SELECT access to all events, not just events explicitly assigned to them.
+**Decision:** The active role model is `administrator`, `office_worker`, and `executive`. Venue-assigned office workers can see and write events/planning items only when the record is linked to their venue through `event_venues` / `planning_item_venues`, falling back to the legacy `venue_id` column. Office workers without `venue_id` can read events/planning globally and propose events for any venue, but do not receive planning write rights.
 
-**Rationale:** Reviewers perform cross-venue moderation -- they need to see events across all venues to catch issues, ensure consistency, and approve content. Restricting to assigned events would require a reviewer-event assignment table and break the current moderation workflow.
+**Rationale:** The product needs a single office-worker role that supports venue operators and central office workers. `users.venue_id` is the capability switch: set means venue-scoped operations, null means global read/proposal access.
 
-**Accepted Risk:** A compromised reviewer account can read all event data. Event data is not highly sensitive (public event titles, dates, venues), and reviewers cannot modify events they are not assigned to review.
+**Accepted Risk:** Office workers can read booking/customer PII globally by product decision. Event/planning visibility is more restrictive because draft events, planning notes, attachments, and SOP state are operationally sensitive.
 
 **Revisit Conditions:**
-- If the number of reviewers grows beyond a trusted internal team
-- If events contain sensitive data (e.g., financial details, customer PII)
-- If assignment-based access is needed, narrow the RLS SELECT policy for reviewers and add a `reviewer_assignments` table
+- If booking/customer PII needs venue scoping or stricter data-minimisation rules
+- If office-worker venue assignment becomes many-to-many instead of one primary `venue_id`
+- If event/planning records stop maintaining join-table venue links
 
-**Files:** `supabase/migrations/20250218000000_initial_mvp.sql` (RLS policies), `src/lib/roles.ts`
+**Files:** `src/lib/roles.ts`, `src/lib/visibility.ts`, `supabase/migrations/20260504203000_scope_office_worker_visibility.sql`
 
 ---
 
@@ -114,7 +114,7 @@ Conscious security trade-offs documented during the auth system audit and harden
 
 **Revisit Conditions:**
 - If the landing page query is modified to include additional tables or columns
-- If a public-read RLS policy is created for published events (preferred long-term approach)
+- If a public-read RLS policy is created for approved/completed events (preferred long-term approach)
 - If venue data becomes sensitive (e.g., internal venue codes, financial data)
 
 **Files:** `src/app/l/[slug]/page.tsx` (lines 55-98, `getEventBySlug` function)
@@ -168,3 +168,37 @@ Conscious security trade-offs documented during the auth system audit and harden
 - If regulatory requirements mandate password history enforcement
 
 **Files:** `src/lib/auth/password-policy.ts` (if present), Supabase Auth documentation
+
+---
+
+## 11. Public Booking Update Tokens
+
+**Decision:** Existing public booking updates require a short-lived HMAC token issued only after the Turnstile-protected create-booking attempt identifies an existing booking.
+
+**Rationale:** The update path must use the service-role client to edit public booking data, but it should not allow arbitrary callers to enumerate or update a booking by UUID alone. The token binds `bookingId`, `eventId`, requested `ticketCount`, and expiry before any service-role read/write.
+
+**Accepted Risk:** A user who controls the original browser prompt can update that booking count during the token lifetime. IP rate limiting remains active on update attempts.
+
+**Revisit Conditions:**
+- If update flows allow changing customer identity, event, or mobile number
+- If tokens need revocation before expiry
+- If booking update links are sent through SMS/email instead of held in browser state
+
+**Files:** `src/actions/bookings.ts`, `src/app/l/[slug]/BookingForm.tsx`
+
+---
+
+## 12. Attachment Signed URL Authorization
+
+**Decision:** Signed upload/download/delete operations resolve the attachment parent and apply event/planning visibility or edit checks before issuing Supabase Storage signed URLs.
+
+**Rationale:** Storage object paths and attachment UUIDs are sensitive because signed URLs bypass RLS once issued. Authorization has to happen before signed URL creation, using the parent event/planning item/task rather than trusting the attachment id alone.
+
+**Accepted Risk:** The service-role client still creates signed URLs after authorization. A leaked signed URL remains usable until its short expiry.
+
+**Revisit Conditions:**
+- If attachments get public buckets
+- If attachment parents expand beyond event/planning records
+- If signed URL expiry is lengthened
+
+**Files:** `src/lib/attachment-access.ts`, `src/actions/attachments.ts`
