@@ -19,7 +19,7 @@ export default async function DebriefPage({ params }: { params: Promise<{ eventI
     redirect("/login");
   }
 
-  const event = await getEventDetail(eventId);
+  const event = await getEventDetail(eventId, user);
   if (!event) {
     notFound();
   }

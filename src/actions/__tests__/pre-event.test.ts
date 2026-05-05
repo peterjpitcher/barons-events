@@ -85,6 +85,65 @@ describe("proposeEventAction", () => {
     );
   });
 
+  it("allows an unassigned office_worker to propose for any active venue", async () => {
+    getUserMock.mockResolvedValue({ id: "ow-1", role: "office_worker", venueId: null });
+    selectInMock.mockResolvedValue({
+      data: [{ id: VENUE_B }],
+      error: null,
+    });
+    rpcMock.mockResolvedValue({ data: { event_id: "e1" }, error: null });
+
+    const result = await proposeEventAction(undefined, fd({
+      title: "Test",
+      startAt: "2026-05-01T10:00:00Z",
+      notes: "Test",
+      venueIds: VENUE_B,
+    }));
+
+    expect(result.success).toBe(true);
+    expect(rpcMock).toHaveBeenCalledWith(
+      "create_multi_venue_event_proposals",
+      expect.objectContaining({
+        p_payload: expect.objectContaining({ venue_ids: [VENUE_B] }),
+      }),
+    );
+  });
+
+  it("rejects a venue-assigned office_worker proposing off-venue", async () => {
+    getUserMock.mockResolvedValue({ id: "ow-1", role: "office_worker", venueId: VENUE_A });
+
+    const result = await proposeEventAction(undefined, fd({
+      title: "Test",
+      startAt: "2026-05-01T10:00:00Z",
+      notes: "Test",
+      venueIds: VENUE_B,
+    }));
+
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/assigned venue/i);
+    expect(selectInMock).not.toHaveBeenCalled();
+    expect(rpcMock).not.toHaveBeenCalled();
+  });
+
+  it("allows a venue-assigned office_worker to propose for their assigned venue", async () => {
+    getUserMock.mockResolvedValue({ id: "ow-1", role: "office_worker", venueId: VENUE_A });
+    selectInMock.mockResolvedValue({
+      data: [{ id: VENUE_A }],
+      error: null,
+    });
+    rpcMock.mockResolvedValue({ data: { event_id: "e1" }, error: null });
+
+    const result = await proposeEventAction(undefined, fd({
+      title: "Test",
+      startAt: "2026-05-01T10:00:00Z",
+      notes: "Test",
+      venueIds: VENUE_A,
+    }));
+
+    expect(result.success).toBe(true);
+    expect(rpcMock).toHaveBeenCalled();
+  });
+
   it("returns retryable error when venue query fails", async () => {
     getUserMock.mockResolvedValue({ id: "ow-1", role: "office_worker", venueId: null });
     selectInMock.mockResolvedValue({ data: null, error: { message: "DB down" } });

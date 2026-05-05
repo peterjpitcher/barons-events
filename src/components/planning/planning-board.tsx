@@ -26,8 +26,9 @@ import type {
   TodoAlertFilter
 } from "@/lib/planning/types";
 import { bucketForDayOffset, daysBetween, planningItemsToTodoItems } from "@/lib/planning/utils";
-import { canCreatePlanningItems, canManageOwnPlanningItems, canManageAllPlanning } from "@/lib/roles";
+import { canCreatePlanningItems, canManageAllPlanning } from "@/lib/roles";
 import type { UserRole } from "@/lib/types";
+import { canEditVenueLinkedPlanning } from "@/lib/visibility";
 
 type PlanningBoardProps = {
   data: PlanningBoardData;
@@ -39,6 +40,7 @@ type PlanningBoardProps = {
   canApproveEvents?: boolean;
   userRole?: UserRole;
   currentUserId?: string;
+  currentUserVenueId?: string | null;
 };
 
 type BucketConfig = {
@@ -103,7 +105,7 @@ function RefreshInspirationButton() {
   );
 }
 
-export function PlanningBoard({ data, calendarData, venues, canApproveEvents, userRole, currentUserId }: PlanningBoardProps) {
+export function PlanningBoard({ data, calendarData, venues, canApproveEvents, userRole, currentUserId, currentUserVenueId }: PlanningBoardProps) {
   const router = useRouter();
   const [viewMode, setViewMode] = useState<ViewMode>("board");
   const [isCreateModalOpen, setCreateModalOpen] = useState(false);
@@ -401,7 +403,7 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
             {userRole === 'administrator' && <RefreshInspirationButton />}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {userRole && canCreatePlanningItems(userRole) && (
+            {userRole && canCreatePlanningItems(userRole, currentUserVenueId) && (
               <Button type="button" onClick={() => setCreateModalOpen(true)}>
                 <Plus className="h-4 w-4" aria-hidden="true" /> Add planning item
               </Button>
@@ -516,8 +518,18 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
                 <div className="space-y-2">
                   {rows.map((row) => {
                     if (row.type === "planning") {
-                      const canEditItem = userRole
-                        ? canManageAllPlanning(userRole) || (canManageOwnPlanningItems(userRole) && row.item.ownerId === currentUserId)
+                      const canEditItem = userRole && currentUserId
+                        ? canEditVenueLinkedPlanning(
+                            {
+                              id: currentUserId,
+                              role: userRole,
+                              venueId: currentUserVenueId ?? null,
+                              email: "",
+                              fullName: null,
+                              deactivatedAt: null
+                            },
+                            { venueId: row.item.venueId, venues: row.item.venues }
+                          )
                         : false;
                       return (
                         <PlanningItemCard
@@ -570,10 +582,10 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
           <PlanningCalendarView
             today={data.today}
             entries={calendarCombinedEntries}
-            onOpenPlanningItem={userRole && canManageOwnPlanningItems(userRole)
+            onOpenPlanningItem={userRole && canCreatePlanningItems(userRole, currentUserVenueId)
               ? (item) => router.push(`/planning/${item.id}`)
               : undefined}
-            onMovePlanningItem={userRole && canManageAllPlanning(userRole)
+            onMovePlanningItem={userRole && canCreatePlanningItems(userRole, currentUserVenueId)
               ? movePlanningItemInCalendar
               : undefined}
           />
@@ -584,7 +596,7 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
         <PlanningListView
           today={data.today}
           entries={combinedEntries}
-          onOpenPlanningItem={userRole && canManageOwnPlanningItems(userRole)
+          onOpenPlanningItem={userRole && canCreatePlanningItems(userRole, currentUserVenueId)
             ? (item) => router.push(`/planning/${item.id}`)
             : undefined}
         />

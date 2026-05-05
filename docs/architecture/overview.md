@@ -17,7 +17,7 @@ project: barons-events-mvp
 
 | Layer | Technology |
 |---|---|
-| Framework | Next.js 16.1, App Router, React 19.1 |
+| Framework | Next.js 16.3 canary, App Router, React 19.1 |
 | Language | TypeScript (strict) |
 | Styling | Tailwind CSS v4 |
 | Database | Supabase PostgreSQL + RLS |
@@ -45,11 +45,11 @@ project: barons-events-mvp
 
 | Role | Tier | Capabilities |
 |---|---|---|
-| `administrator` | Admin | Full platform access, user management |
-| `office_worker` | Editor | Venue-scoped write (venue_id set) or global read-only |
+| `administrator` | Admin | Full platform access, user management, all event/planning operations |
+| `office_worker` | Editor | Venue-scoped event/planning reads and writes when `venue_id` is set; global event/planning read and any-venue event proposal when unset; global booking/customer read |
 | `executive` | Viewer | Read-only — events, planning, reporting |
 
-Role stored in `public.users.role`. Capability helpers in `src/lib/roles.ts` (16 capability functions).
+Role stored in `public.users.role`. `users.venue_id` is the office-worker capability switch. Capability helpers live in `src/lib/roles.ts`; venue-linked visibility helpers live in `src/lib/visibility.ts`.
 
 ## Key Sections
 

@@ -79,7 +79,6 @@ export async function GET(request: Request) {
       start_at,
       end_at,
       venue_space,
-      notes,
       wet_promo,
       food_promo,
       updated_at,

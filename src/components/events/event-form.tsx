@@ -11,7 +11,7 @@ import {
   submitEventForReviewAction
 } from "@/actions/events";
 import { VenueMultiSelect, type VenueOption } from "@/components/venues/venue-multi-select";
-import { deriveInitialVenueIds } from "@/lib/planning/utils";
+import { deriveEventFormVenueDefaults } from "@/lib/events/form-defaults";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { DeleteEventButton } from "@/components/events/delete-event-button";
 import { Button } from "@/components/ui/button";
@@ -185,7 +185,6 @@ export function EventForm({
   artists,
   eventTypes,
   role,
-  userVenueId,
   initialStartAt,
   initialEndAt,
   initialVenueId,
@@ -341,9 +340,15 @@ export function EventForm({
     }
   }, [artistCreateState]);
 
-  const canChooseVenue = role === "administrator";
-  const preferredVenueId = initialVenueId ?? defaultValues?.venue_id ?? userVenueId ?? venues[0]?.id ?? "";
-  const defaultVenueId = venues.some((venue) => venue.id === preferredVenueId) ? preferredVenueId : venues[0]?.id ?? "";
+  const canChooseVenue = role === "administrator" || (mode === "create" && role === "office_worker");
+  const initialVenueDefaults = deriveEventFormVenueDefaults({
+    mode,
+    initialVenueId,
+    eventVenueId: defaultValues?.venue_id ?? null,
+    eventVenues: (defaultValues as { venues?: Array<{ id: string }> } | undefined)?.venues ?? null,
+    availableVenueIds: venues.map((venue) => venue.id)
+  });
+  const defaultVenueId = initialVenueDefaults.primaryVenueId;
   const defaultGoalValues = new Set(
     (defaultValues?.goal_focus ?? "")
       .split(",")
@@ -356,13 +361,7 @@ export function EventForm({
   const [titleValue, setTitleValue] = useState(defaultValues?.title ?? "");
   const [eventTypeValue, setEventTypeValue] = useState(defaultValues?.event_type ?? "");
   const [selectedVenueId, setSelectedVenueId] = useState(defaultVenueId);
-  // Hydrate via the shared helper — see issue-log 2026-04-18 item 03.
-  const [selectedVenueIds, setSelectedVenueIds] = useState<string[]>(() =>
-    deriveInitialVenueIds({
-      venueId: defaultVenueId || null,
-      venues: (defaultValues as { venues?: Array<{ id: string }> } | undefined)?.venues ?? null
-    })
-  );
+  const [selectedVenueIds, setSelectedVenueIds] = useState<string[]>(initialVenueDefaults.selectedVenueIds);
   const [venueSpaceValue, setVenueSpaceValue] = useState(defaultValues?.venue_space ?? "");
   const [startValue, setStartValue] = useState(toLocalInputValue(defaultValues?.start_at ?? initialStartAt));
   const [endValue, setEndValue] = useState(toLocalInputValue(defaultValues?.end_at ?? initialEndAt));
@@ -395,11 +394,25 @@ export function EventForm({
   const [seoSlug, setSeoSlug] = useState(defaultValues?.seo_slug ?? "");
 
   useEffect(() => {
+    if (mode !== "edit" || !defaultValues?.id) return;
     setTitleValue(defaultValues?.title ?? "");
-    setEventTypeValue(defaultValues?.event_type ?? eventTypes[0] ?? "");
+    setEventTypeValue(defaultValues?.event_type ?? "");
+    const nextVenueDefaults = deriveEventFormVenueDefaults({
+      mode,
+      initialVenueId,
+      eventVenueId: defaultValues?.venue_id ?? null,
+      eventVenues: (defaultValues as { venues?: Array<{ id: string }> } | undefined)?.venues ?? null,
+      availableVenueIds: venues.map((venue) => venue.id)
+    });
+    setSelectedVenueId(nextVenueDefaults.primaryVenueId);
+    setSelectedVenueIds(nextVenueDefaults.selectedVenueIds);
     setVenueSpaceValue(defaultValues?.venue_space ?? "");
+    setStartValue(toLocalInputValue(defaultValues?.start_at ?? initialStartAt));
+    setEndValue(toLocalInputValue(defaultValues?.end_at ?? initialEndAt));
+    setEndDirty(Boolean(defaultValues?.end_at ?? initialEndAt));
     setEventNotes(defaultValues?.notes ?? "");
     setManagerResponsibleId((defaultValues as any)?.manager_responsible_id ?? "");
+    setManagerDirty(Boolean((defaultValues as any)?.manager_responsible_id));
     setTicketPrice(defaultValues?.ticket_price != null ? String(defaultValues.ticket_price) : "");
     setSelectedArtistIds(getLinkedArtistSelection(defaultValues).ids);
     setSelectedGoals(
@@ -428,7 +441,9 @@ export function EventForm({
     setSeoTitle(defaultValues?.seo_title ?? "");
     setSeoDescription(defaultValues?.seo_description ?? "");
     setSeoSlug(defaultValues?.seo_slug ?? "");
-  }, [defaultValues?.id, eventTypes]);
+    // Intentionally keyed only by event id: same-event revalidation must not
+    // overwrite in-progress edits or server-action validation state.
+  }, [mode, defaultValues?.id]);
 
   useEffect(() => {
     if (!websiteCopyState?.success || !websiteCopyState.values) return;
@@ -453,7 +468,7 @@ export function EventForm({
   }, [websiteCopyFormState]);
 
   const selectedVenue = useMemo(
-    () => venues.find((venue) => venue.id === selectedVenueId) ?? venues.find((venue) => venue.id === defaultVenueId) ?? venues[0],
+    () => venues.find((venue) => venue.id === selectedVenueId) ?? venues.find((venue) => venue.id === defaultVenueId),
     [selectedVenueId, venues, defaultVenueId]
   );
   const artistById = useMemo(() => new Map(availableArtists.map((artist) => [artist.id, artist])), [availableArtists]);

@@ -74,7 +74,6 @@ type RawEventRow = {
   start_at: string;
   end_at: string;
   venue_space: string;
-  notes: string | null;
   wet_promo: string | null;
   food_promo: string | null;
   updated_at: string;

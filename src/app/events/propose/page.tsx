@@ -18,7 +18,11 @@ export default async function ProposeEventPage() {
   if (!canProposeEvents(user.role)) redirect("/unauthorized");
 
   const venueRows = await listVenues();
-  const venues: VenueOption[] = venueRows.map((v) => ({
+  const proposalVenueRows =
+    user.role === "office_worker" && user.venueId
+      ? venueRows.filter((venue) => venue.id === user.venueId)
+      : venueRows;
+  const venues: VenueOption[] = proposalVenueRows.map((v) => ({
     id: v.id,
     name: v.name,
 

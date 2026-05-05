@@ -18,4 +18,8 @@ describe("event datetime normalisation", () => {
     expect(summer).toBe("2026-04-13T19:00");
     expect(winter).toBe("2026-01-13T19:00");
   });
+
+  it("rejects invalid London local times during the spring-forward DST gap", () => {
+    expect(() => normaliseEventDateTimeForStorage("2026-03-29T01:30")).toThrow(/does not exist in London timezone/i);
+  });
 });

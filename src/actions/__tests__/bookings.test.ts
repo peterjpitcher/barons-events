@@ -35,17 +35,19 @@ vi.mock("@/lib/turnstile", () => ({
   verifyTurnstile: vi.fn().mockResolvedValue(true),
 }));
 
-import { createBookingAction, cancelBookingAction } from "../bookings";
+import { createBookingAction, updateExistingBookingAction, cancelBookingAction } from "../bookings";
 import { createBookingAtomic, cancelBooking } from "@/lib/bookings";
 import { getCurrentUser } from "@/lib/auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { verifyTurnstile } from "@/lib/turnstile";
+import { checkBookingRateLimit } from "@/lib/public-api/rate-limit";
 
 const mockCreateBookingAtomic = vi.mocked(createBookingAtomic);
 const mockCancelBooking = vi.mocked(cancelBooking);
 const mockGetCurrentUser = vi.mocked(getCurrentUser);
 const mockCreateSupabaseAdminClient = vi.mocked(createSupabaseAdminClient);
 const mockVerifyTurnstile = vi.mocked(verifyTurnstile);
+const mockCheckBookingRateLimit = vi.mocked(checkBookingRateLimit);
 
 const VALID_INPUT = {
   eventId: "550e8400-e29b-41d4-a716-446655440000",
@@ -61,7 +63,9 @@ const VALID_INPUT = {
 describe("createBookingAction", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "test-booking-update-secret";
     mockVerifyTurnstile.mockResolvedValue(true);
+    mockCheckBookingRateLimit.mockResolvedValue({ allowed: true, remaining: 9, resetAt: Date.now() + 60000 });
 
     // Default admin client mock — returns "no existing customer / booking" so
     // the dedup short-circuit doesn't trigger. Tests that exercise the dedup
@@ -181,6 +185,193 @@ describe("createBookingAction", () => {
     expect(result.success).toBe(false);
     if (!result.success) expect(result.error).toBe("too_many_tickets");
   });
+
+  it("should return a short-lived update token for an existing booking", async () => {
+    const customerMaybeSingle = vi.fn().mockResolvedValue({ data: { id: "11111111-1111-4111-8111-111111111111" }, error: null });
+    const bookingMaybeSingle = vi.fn().mockResolvedValue({
+      data: {
+        id: "22222222-2222-4222-8222-222222222222",
+        ticket_count: 2,
+        status: "confirmed"
+      },
+      error: null
+    });
+    const from = vi.fn((table: string) => {
+      if (table === "customers") {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({ maybeSingle: customerMaybeSingle })
+          })
+        };
+      }
+      if (table === "event_bookings") {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                eq: vi.fn().mockReturnValue({ maybeSingle: bookingMaybeSingle })
+              })
+            })
+          })
+        };
+      }
+      return {};
+    });
+    mockCreateSupabaseAdminClient.mockReturnValue({ from } as never);
+
+    const result = await createBookingAction({ ...VALID_INPUT, ticketCount: 4 });
+
+    expect(result.success).toBe(false);
+    if (!result.success && "updateToken" in result) {
+      expect(result.updateToken).toMatch(/^[^.]+\.[^.]+$/);
+      expect(result.requestedTicketCount).toBe(4);
+    } else {
+      throw new Error("Expected existing booking result");
+    }
+  });
+});
+
+describe("updateExistingBookingAction", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "test-booking-update-secret";
+    mockCheckBookingRateLimit.mockResolvedValue({ allowed: true, remaining: 9, resetAt: Date.now() + 60000 });
+  });
+
+  async function issueUpdateToken(ticketCount = 3) {
+    const customerMaybeSingle = vi.fn().mockResolvedValue({ data: { id: "11111111-1111-4111-8111-111111111111" }, error: null });
+    const bookingMaybeSingle = vi.fn().mockResolvedValue({
+      data: {
+        id: "22222222-2222-4222-8222-222222222222",
+        ticket_count: 1,
+        status: "confirmed"
+      },
+      error: null
+    });
+    mockCreateSupabaseAdminClient.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "customers") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({ maybeSingle: customerMaybeSingle })
+            })
+          };
+        }
+        if (table === "event_bookings") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                eq: vi.fn().mockReturnValue({
+                  eq: vi.fn().mockReturnValue({ maybeSingle: bookingMaybeSingle })
+                })
+              })
+            })
+          };
+        }
+        return {};
+      })
+    } as never);
+
+    const result = await createBookingAction({ ...VALID_INPUT, ticketCount });
+    if (result.success || !("updateToken" in result)) throw new Error("Expected token");
+    return result.updateToken;
+  }
+
+  it("rejects missing or tampered update tokens before reading the booking", async () => {
+    const from = vi.fn();
+    mockCreateSupabaseAdminClient.mockReturnValue({ from } as never);
+
+    const result = await updateExistingBookingAction({
+      bookingId: "22222222-2222-4222-8222-222222222222",
+      ticketCount: 3,
+      updateToken: "tampered.token"
+    });
+
+    expect(result.success).toBe(false);
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it("rejects a valid token when the requested ticket count is changed", async () => {
+    const token = await issueUpdateToken(3);
+    const from = vi.fn();
+    mockCreateSupabaseAdminClient.mockReturnValue({ from } as never);
+
+    const result = await updateExistingBookingAction({
+      bookingId: "22222222-2222-4222-8222-222222222222",
+      ticketCount: 4,
+      updateToken: token
+    });
+
+    expect(result.success).toBe(false);
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it("updates the booking when the signed token matches", async () => {
+    const token = await issueUpdateToken(3);
+    const updateEq = vi.fn().mockResolvedValue({ error: null });
+    const from = vi.fn((table: string) => {
+      if (table === "event_bookings") {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn((field: string) => {
+              if (field === "id") {
+                return {
+                  maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                      id: "22222222-2222-4222-8222-222222222222",
+                      event_id: VALID_INPUT.eventId,
+                      customer_id: "11111111-1111-4111-8111-111111111111",
+                      ticket_count: 1,
+                      status: "confirmed"
+                    },
+                    error: null
+                  })
+                };
+              }
+              return {
+                eq: vi.fn().mockResolvedValue({
+                  data: [{ ticket_count: 1 }],
+                  error: null
+                })
+              };
+            })
+          }),
+          update: vi.fn().mockReturnValue({ eq: updateEq })
+        };
+      }
+      if (table === "events") {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              maybeSingle: vi.fn().mockResolvedValue({ data: { total_capacity: 10 }, error: null })
+            })
+          })
+        };
+      }
+      return {};
+    });
+    mockCreateSupabaseAdminClient.mockReturnValue({ from } as never);
+
+    const result = await updateExistingBookingAction({
+      bookingId: "22222222-2222-4222-8222-222222222222",
+      ticketCount: 3,
+      updateToken: token
+    });
+
+    expect(result.success).toBe(true);
+    expect(updateEq).toHaveBeenCalledWith("id", "22222222-2222-4222-8222-222222222222");
+  });
+
+  it("rate-limits update attempts", async () => {
+    mockCheckBookingRateLimit.mockResolvedValue({ allowed: false, remaining: 0, resetAt: Date.now() + 60000 });
+    const result = await updateExistingBookingAction({
+      bookingId: "22222222-2222-4222-8222-222222222222",
+      ticketCount: 3,
+      updateToken: "anything"
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error).toBe("rate_limited");
+  });
 });
 
 describe("customer upsert", () => {
@@ -249,6 +440,8 @@ describe("customer upsert", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "test-booking-update-secret";
+    mockCheckBookingRateLimit.mockResolvedValue({ allowed: true, remaining: 9, resetAt: Date.now() + 60000 });
     mockVerifyTurnstile.mockResolvedValue(true);
     mockCreateBookingAtomic.mockResolvedValue({ ok: true, bookingId: "booking-uuid" });
   });
@@ -321,8 +514,38 @@ describe("cancelBookingAction", () => {
     vi.mocked(createSupabaseAdminClient).mockReturnValue({ from: mockFrom } as never);
   }
 
+  function mockAdminBookingAndEventLookup(
+    eventId: string,
+    event: { venue_id: string | null; event_venues?: Array<{ venue_id: string | null }> | null }
+  ) {
+    const mockFrom = vi.fn((table: string) => {
+      if (table === "event_bookings") {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              single: vi.fn().mockResolvedValue({ data: { event_id: eventId }, error: null })
+            }))
+          }))
+        };
+      }
+      if (table === "events") {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              single: vi.fn().mockResolvedValue({ data: event, error: null })
+            }))
+          }))
+        };
+      }
+      return {};
+    });
+    vi.mocked(createSupabaseAdminClient).mockReturnValue({ from: mockFrom } as never);
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "test-booking-update-secret";
+    mockCheckBookingRateLimit.mockResolvedValue({ allowed: true, remaining: 9, resetAt: Date.now() + 60000 });
   });
 
   it("should return unauthorized if no user is logged in", async () => {
@@ -347,6 +570,48 @@ describe("cancelBookingAction", () => {
     const result = await cancelBookingAction("booking-id", "event-id");
     expect(result.success).toBe(true);
     expect(mockCancelBooking).toHaveBeenCalledWith("booking-id");
+  });
+
+  it("allows a venue worker to cancel a booking for an event linked to their venue", async () => {
+    mockGetCurrentUser.mockResolvedValue({
+      id: "user-123",
+      email: "staff@example.com",
+      fullName: "Staff User",
+      role: "office_worker",
+      venueId: "venue-a",
+      deactivatedAt: null,
+    });
+    mockAdminBookingAndEventLookup("event-id", {
+      venue_id: "venue-b",
+      event_venues: [{ venue_id: "venue-b" }, { venue_id: "venue-a" }]
+    });
+    mockCancelBooking.mockResolvedValue(undefined);
+
+    const result = await cancelBookingAction("booking-id", "event-id");
+
+    expect(result.success).toBe(true);
+    expect(mockCancelBooking).toHaveBeenCalledWith("booking-id");
+  });
+
+  it("rejects a venue worker when the event is not linked to their venue", async () => {
+    mockGetCurrentUser.mockResolvedValue({
+      id: "user-123",
+      email: "staff@example.com",
+      fullName: "Staff User",
+      role: "office_worker",
+      venueId: "venue-a",
+      deactivatedAt: null,
+    });
+    mockAdminBookingAndEventLookup("event-id", {
+      venue_id: "venue-b",
+      event_venues: [{ venue_id: "venue-b" }]
+    });
+
+    const result = await cancelBookingAction("booking-id", "event-id");
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/your venue/i);
+    expect(mockCancelBooking).not.toHaveBeenCalled();
   });
 
   it("should return error if cancelBooking throws", async () => {

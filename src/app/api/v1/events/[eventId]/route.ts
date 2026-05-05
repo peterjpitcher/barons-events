@@ -60,7 +60,6 @@ export async function GET(request: NextRequest, context: { params: Promise<{ eve
       start_at,
       end_at,
       venue_space,
-      notes,
       wet_promo,
       food_promo,
       updated_at,

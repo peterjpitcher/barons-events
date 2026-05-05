@@ -1,7 +1,7 @@
 # Debrief Form QA Checklist
 
 ## Purpose
-Validate the post-event debrief workflow after releases touching reminders, settings, or Supabase policies. Ensures venue managers can submit grouped performance data, reminder banners show the correct state, and planning runbooks stay in sync.
+Validate the post-event debrief workflow after releases touching reminders, settings, or Supabase policies. Ensures venue-assigned office workers can submit grouped performance data, reminder banners show the correct state, and planning runbooks stay in sync.
 
 ## Pre-flight
 - Confirm the target environment has recent events with `status = 'approved'` and no existing `debriefs` row.
@@ -12,7 +12,7 @@ Validate the post-event debrief workflow after releases touching reminders, sett
 ## Test Cases
 1. **Page header & context**
    - Navigate to `/events/<eventId>/debrief`.
-   - Check the header shows breadcrumbs, event window, venue, and reviewer contact.
+   - Check the header shows breadcrumbs, event window, venue, and responsible staff contact where present.
    - Follow the "Debrief QA runbook" and "Cron monitoring checklist" links to confirm they open in a new tab.
 2. **Reminder banner states**
    - For an event ending within the last 24 hours, banner should read “Debrief opens soon”.

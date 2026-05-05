@@ -4,12 +4,12 @@ import type { UserRole } from "./types";
  * Role capability model — FINAL (3-role)
  *
  * administrator — full platform access
- * office_worker — venue-scoped write (if venueId set) or global read-only (if no venueId)
+ * office_worker — venue-scoped write (if venueId set) or global read/proposal access (if no venueId)
  * executive     — read-only observer
  *
  * Functions accepting venueId use it as a capability switch:
  * office_worker + venueId = venue-scoped write access
- * office_worker + no venueId = read-only access
+ * office_worker + no venueId = global read access; event proposals allowed, planning writes blocked
  */
 
 /** Convenience: check if user is an administrator */
@@ -130,8 +130,8 @@ export function canViewReviews(role: UserRole): boolean {
 }
 
 /** Can create new planning items */
-export function canCreatePlanningItems(role: UserRole): boolean {
-  return role === "administrator" || role === "office_worker";
+export function canCreatePlanningItems(role: UserRole, venueId?: string | null): boolean {
+  return role === "administrator" || (role === "office_worker" && Boolean(venueId));
 }
 
 /** Can edit/delete own planning items (admin can manage any) */
