@@ -24,7 +24,7 @@ import { updateAssigneeAction } from "@/actions/events";
 import { parseVenueSpaces } from "@/lib/venue-spaces";
 import { formatCurrency, formatPercent } from "@/lib/utils/format";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { canViewPlanning } from "@/lib/roles";
+import { canViewBookings, canViewPlanning } from "@/lib/roles";
 import { canEditEventFromRow } from "@/lib/events/edit-context";
 import { SopChecklistView } from "@/components/planning/sop-checklist-view";
 import { AttachmentsPanel } from "@/components/attachments/attachments-panel";
@@ -109,7 +109,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
   // UI aligned avoids dead controls that would server-reject.
   const canEdit = canEditEventFromRow(user, eventRowForEdit);
   const canDelete = canEditEventFromRow(user, eventRowForEdit);
-  const canManageBooking = canEditEventFromRow(user, eventRowForEdit);
+  const canViewEventBookings = canViewBookings(user.role);
 
   const canReview =
     (user.role === "administrator" && ["submitted", "needs_revisions"].includes(event.status));
@@ -625,7 +625,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
                 </span>
               ) : null}
             </div>
-            {canManageBooking ? (
+            {canViewEventBookings ? (
               <Button asChild variant="secondary" size="sm">
                 <Link href={`/events/${event.id}/bookings`}>Bookings</Link>
               </Button>
