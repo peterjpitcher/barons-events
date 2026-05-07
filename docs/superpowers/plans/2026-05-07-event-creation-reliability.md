@@ -35,13 +35,13 @@ User preference confirmed mid-session (2026-05-07): execute in lean mode rather 
 | 1 | Form Surgeon (A1, A2, A3, A4, A5, A7) | ✅ done | `cb16668`, `e75616f`, `22e569c`, `00c47cc`, `5451a91`, `1f41aa9` |
 | 1 | RLS Migrator (A6) | ✅ done | `411b6bf` |
 | 2 | RPC Plumber (B0, B1, B2 + types) | ✅ done | `24deb69`, `b214345`, `b011aa8` |
-| 3 | Action Rewirer (B3, B5, B6) | 🟡 partial — commit 1 of 3 landed; commits 2 + 3 outstanding; events.ts has uncommitted changes | `58eaadb` (so far) |
+| 3 | Action Rewirer (B3, B5, B6) | ✅ done — final RPC wiring, audit handling, typed RPC cleanup, and observability completed | `58eaadb` + Codex final integration |
 | 3 | Cron Engineer (B4 cron) | ✅ done | `2248d2e` |
-| 4 | Propose Surgeon (B″1, B″2) | ⏳ pending | — |
-| 4 | Verification Engineer (C1–C6) | ⏳ pending | — |
-| Final | Codex adversarial review | ⏳ pending | — |
+| 4 | Propose Surgeon (B″1, B″2) | ✅ done — proposal RPC path, idempotency/operation keys, and form pending guard completed | Codex final integration |
+| 4 | Verification Engineer (C1–C6) | ✅ done — local validation plus linked Supabase migration/lint checks completed | Codex final integration |
+| Final | Codex adversarial review | ✅ done — schema-reality fixes applied for venue validation, RPC timestamps, and legacy assign reviewer | Codex final integration |
 
-**11 commits landed; ~8 commits remaining (Action Rewirer follow-up + Wave 4).**
+**Status:** complete in the final Codex integration commit; linked Supabase project is up to date through `20260507133000`.
 
 ---
 

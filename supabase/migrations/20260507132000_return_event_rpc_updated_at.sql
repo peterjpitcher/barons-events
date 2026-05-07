@@ -1,25 +1,8 @@
 -- =============================================================================
--- Phase B′ B1: atomic event-draft save with idempotency + optimistic concurrency
+-- Return fresh optimistic-concurrency tokens from event RPCs
 -- =============================================================================
--- Replaces the multi-statement client-orchestrated draft save with a single
--- SECURITY DEFINER RPC that:
---   - Derives identity from auth.uid() (no caller-supplied user_id)
---   - Replays prior responses keyed by (idempotency_key, user_id) so a retry
---     of the same logical operation never double-writes
---   - Enforces optimistic concurrency via p_expected_updated_at
---   - Wraps event_artists + set_event_venues writes in nested BEGIN/EXCEPTION
---     blocks for diagnostics; if any per-row write fails, the whole core
---     transaction is rolled back (zero rows committed)
---   - Returns jsonb { success, event_id, failed[], warnings[], operation_id }
---   - Restricted EXECUTE grant: REVOKE FROM public, GRANT TO authenticated
---   - Pinned search_path = public, pg_temp
---
--- Schema-reality adjustments vs the plan draft:
---   - audit_log.entity_id is text → cast v_event_id::text
---   - events.created_by is nullable; we set it to v_user_id on create
---   - On UPDATE, we re-validate edit authz inline (mirrors canEditEvent in
---     src/lib/roles.ts: administrator, event creator, or office_worker whose
---     venue_id is null OR matches the event's venue_id)
+-- The edit form posts expected_updated_at on RPC-backed saves/submits. Returning
+-- the new timestamp keeps the client token fresh after successful writes.
 -- =============================================================================
 
 create or replace function public.save_event_draft(
@@ -56,7 +39,6 @@ begin
     );
   end if;
 
-  -- Resolve caller role + venue (gate deactivated users out).
   select u.role, u.venue_id
     into v_user_role, v_user_venue
   from public.users u
@@ -70,8 +52,6 @@ begin
     );
   end if;
 
-  -- Idempotency replay: same (key, user) pair returns the stored response and
-  -- performs zero writes.
   select response into v_existing_response
   from public.event_save_idempotency
   where idempotency_key = p_idempotency_key and user_id = v_user_id;
@@ -80,9 +60,6 @@ begin
     return v_existing_response;
   end if;
 
-  -- Allowlist payload fields (mirrors eventDraftBaseSchema in src/lib/validation.ts).
-  -- snake_case keys match the events table column names; the action layer is
-  -- responsible for translating from camelCase form values to snake_case.
   v_payload := jsonb_build_object(
     'event_id', p_payload->>'event_id',
     'venue_id', p_payload->>'venue_id',
@@ -127,7 +104,6 @@ begin
     array[]::uuid[]
   );
 
-  -- Authz.
   if v_is_create then
     if v_user_role not in ('administrator', 'office_worker') then
       return jsonb_build_object(
@@ -137,8 +113,6 @@ begin
       );
     end if;
   else
-    -- Edit: caller must be admin, the event creator, or an office_worker
-    -- whose venue_id is null (global) or matches the event's venue.
     if not exists (
       select 1 from public.events e
       where e.id = v_event_id
@@ -157,8 +131,6 @@ begin
     end if;
   end if;
 
-  -- Core writes. Any error inside this block raises and rolls back the whole
-  -- transaction (RPC call boundary == implicit transaction).
   begin
     if v_is_create then
       v_event_id := gen_random_uuid();
@@ -210,7 +182,6 @@ begin
         v_now
       );
     else
-      -- Update with optimistic concurrency.
       update public.events e set
         venue_id = (v_payload->>'venue_id')::uuid,
         title = v_payload->>'title',
@@ -253,9 +224,6 @@ begin
       end if;
     end if;
 
-    -- Sync artists. Per-row try/except logs failures into v_failed; if any
-    -- row failed, we re-raise after the loop so the parent transaction
-    -- rolls back.
     delete from public.event_artists
      where event_id = v_event_id
        and artist_id <> all(coalesce(v_artist_ids, array[]::uuid[]));
@@ -276,10 +244,6 @@ begin
       end loop;
     end if;
 
-    -- Sync venues with the existing helper. The helper handles the empty-
-    -- array case (clears all attachments and sets venue_id = NULL on the
-    -- parent), but we only call it when there's at least one venue to avoid
-    -- accidentally orphaning a single-venue event during partial saves.
     if v_venue_ids is not null and array_length(v_venue_ids, 1) >= 1 then
       begin
         perform public.set_event_venues(v_event_id, v_venue_ids);
@@ -292,12 +256,10 @@ begin
       end;
     end if;
 
-    -- If any per-row failures occurred, RAISE so the whole event txn rolls back.
     if jsonb_array_length(v_failed) > 0 then
       raise exception 'CORE_LINKED_WRITE_FAILED' using errcode = 'P0001', detail = v_failed::text;
     end if;
 
-    -- Append event_versions snapshot.
     insert into public.event_versions (
       event_id, version, payload, submitted_at, submitted_by, created_at
     )
@@ -313,7 +275,6 @@ begin
       v_now
     );
 
-    -- Audit log row. entity_id is text in the audit_log table.
     insert into public.audit_log (entity, entity_id, action, meta, actor_id, created_at)
     values (
       'event',
@@ -328,7 +289,6 @@ begin
     );
   end;
 
-  -- Persist idempotency response so retries replay it.
   insert into public.event_save_idempotency (
     idempotency_key, user_id, event_id, response, created_at
   )
@@ -357,8 +317,6 @@ begin
   );
 
 exception when others then
-  -- Translate the structured raises into structured failure responses so the
-  -- action layer can branch without parsing SQLERRM strings.
   if SQLSTATE = 'P0001' and SQLERRM like 'CORE_LINKED_WRITE_FAILED%' then
     return jsonb_build_object(
       'success', false,
@@ -385,8 +343,199 @@ end;
 $$;
 
 alter function public.save_event_draft(jsonb, uuid, uuid, timestamptz) owner to postgres;
-
 revoke all on function public.save_event_draft(jsonb, uuid, uuid, timestamptz) from public;
 grant execute on function public.save_event_draft(jsonb, uuid, uuid, timestamptz) to authenticated;
+
+create or replace function public.submit_event_for_review(
+  p_event_id uuid,
+  p_idempotency_key uuid,
+  p_operation_id uuid,
+  p_expected_updated_at timestamptz default null,
+  p_assignee_id uuid default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_user_role text;
+  v_user_venue uuid;
+  v_now timestamptz := timezone('utc', now());
+  v_existing_response jsonb;
+  v_event_row public.events%rowtype;
+  v_missing text[] := array[]::text[];
+  v_next_version int;
+begin
+  if v_user_id is null then
+    return jsonb_build_object(
+      'success', false,
+      'message', 'Not authenticated',
+      'operation_id', p_operation_id
+    );
+  end if;
+
+  select response into v_existing_response
+  from public.event_save_idempotency
+  where idempotency_key = p_idempotency_key and user_id = v_user_id;
+
+  if v_existing_response is not null then
+    return v_existing_response;
+  end if;
+
+  select u.role, u.venue_id
+    into v_user_role, v_user_venue
+  from public.users u
+  where u.id = v_user_id and u.deactivated_at is null;
+
+  if v_user_role is null then
+    return jsonb_build_object(
+      'success', false,
+      'message', 'User not found or deactivated',
+      'operation_id', p_operation_id
+    );
+  end if;
+
+  if v_user_role not in ('administrator', 'office_worker') then
+    return jsonb_build_object(
+      'success', false,
+      'message', 'Permission denied',
+      'operation_id', p_operation_id
+    );
+  end if;
+
+  select * into v_event_row
+  from public.events
+  where id = p_event_id and deleted_at is null;
+
+  if not found then
+    return jsonb_build_object(
+      'success', false,
+      'message', 'Event not found',
+      'operation_id', p_operation_id
+    );
+  end if;
+
+  if not (
+    v_user_role = 'administrator'
+    or v_event_row.created_by = v_user_id
+    or (v_user_role = 'office_worker' and (v_user_venue is null or v_user_venue = v_event_row.venue_id))
+  ) then
+    return jsonb_build_object(
+      'success', false,
+      'message', 'Permission denied',
+      'operation_id', p_operation_id
+    );
+  end if;
+
+  if v_event_row.event_type is null then
+    v_missing := array_append(v_missing, 'event_type');
+  end if;
+  if v_event_row.venue_space is null then
+    v_missing := array_append(v_missing, 'venue_space');
+  end if;
+  if v_event_row.end_at is null then
+    v_missing := array_append(v_missing, 'end_at');
+  end if;
+
+  if array_length(v_missing, 1) > 0 then
+    return jsonb_build_object(
+      'success', false,
+      'message', 'Missing required fields for submission',
+      'missing_fields', to_jsonb(v_missing),
+      'operation_id', p_operation_id
+    );
+  end if;
+
+  begin
+    update public.events
+       set status = 'submitted',
+           submitted_at = v_now,
+           updated_at = v_now,
+           assignee_id = coalesce(p_assignee_id, assignee_id)
+     where id = p_event_id
+       and deleted_at is null
+       and (p_expected_updated_at is null or updated_at = p_expected_updated_at);
+
+    if not found then
+      raise exception 'CONFLICT: event was modified by another session' using errcode = 'P0001';
+    end if;
+
+    select coalesce(max(version) + 1, 1)
+      into v_next_version
+    from public.event_versions
+    where event_id = p_event_id;
+
+    insert into public.event_versions (
+      event_id, version, payload, submitted_at, submitted_by, created_at
+    )
+    select
+      p_event_id,
+      v_next_version,
+      to_jsonb(e.*),
+      v_now,
+      v_user_id,
+      v_now
+    from public.events e
+    where e.id = p_event_id;
+
+    insert into public.audit_log (entity, entity_id, action, meta, actor_id, created_at)
+    values (
+      'event',
+      p_event_id::text,
+      'event.submitted',
+      jsonb_build_object(
+        'operation_id', p_operation_id,
+        'idempotency_key', p_idempotency_key
+      ),
+      v_user_id,
+      v_now
+    );
+  end;
+
+  insert into public.event_save_idempotency (
+    idempotency_key, user_id, event_id, response, created_at
+  )
+  values (
+    p_idempotency_key,
+    v_user_id,
+    p_event_id,
+    jsonb_build_object(
+      'success', true,
+      'event_id', p_event_id,
+      'updated_at', v_now,
+      'operation_id', p_operation_id
+    ),
+    v_now
+  );
+
+  return jsonb_build_object(
+    'success', true,
+    'event_id', p_event_id,
+    'updated_at', v_now,
+    'operation_id', p_operation_id
+  );
+
+exception when others then
+  if SQLSTATE = 'P0001' and SQLERRM like 'CONFLICT%' then
+    return jsonb_build_object(
+      'success', false,
+      'conflict', true,
+      'message', 'This event was changed by another session. Reload and try again.',
+      'operation_id', p_operation_id
+    );
+  end if;
+  return jsonb_build_object(
+    'success', false,
+    'message', SQLERRM,
+    'operation_id', p_operation_id
+  );
+end;
+$$;
+
+alter function public.submit_event_for_review(uuid, uuid, uuid, timestamptz, uuid) owner to postgres;
+revoke all on function public.submit_event_for_review(uuid, uuid, uuid, timestamptz, uuid) from public;
+grant execute on function public.submit_event_for_review(uuid, uuid, uuid, timestamptz, uuid) to authenticated;
 
 notify pgrst, 'reload schema';

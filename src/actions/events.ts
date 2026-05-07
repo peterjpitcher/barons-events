@@ -31,6 +31,7 @@ import {
   normaliseOptionalInteger as normaliseOptionalIntegerField,
 } from "@/lib/normalise";
 import { canOfficeWorkerUseVenueSelection } from "@/lib/visibility";
+import { logEventAction } from "@/lib/observability/event-action-log";
 
 const reviewerFallback = z.string().uuid().optional();
 
@@ -183,7 +184,7 @@ async function syncEventVenueAttachments(eventId: string, venueIds: string[]): P
   if (!eventId) return;
   const db = createSupabaseAdminClient();
    
-  const { error } = await (db as any).rpc("set_event_venues", {
+  const { error } = await db.rpc("set_event_venues", {
     p_event_id: eventId,
     p_venue_ids: venueIds
   });
@@ -756,6 +757,7 @@ async function autoApproveEvent(params: {
 }
 
 export async function saveEventDraftAction(_: ActionResult | undefined, formData: FormData): Promise<ActionResult> {
+  const startedAt = Date.now();
   const operationId = readOperationId(formData);
   const user = await getCurrentUser();
   if (!user) {
@@ -942,6 +944,28 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
     if (result.success) {
       revalidatePath("/events");
       if (result.eventId) revalidatePath(`/events/${result.eventId}`);
+      logEventAction({
+        operation_id: result.operationId ?? operationId,
+        user_id: user.id,
+        action: "save_event_draft",
+        duration_ms: Date.now() - startedAt,
+        outcome: "success",
+        warning_count: result.warnings?.length ?? 0,
+        failed_count: Array.isArray(result.failed) ? result.failed.length : 0
+      });
+      if (!values.eventId && result.eventId) {
+        redirect(`/events/${result.eventId}`);
+      }
+    } else {
+      logEventAction({
+        operation_id: result.operationId ?? operationId,
+        user_id: user.id,
+        action: "save_event_draft",
+        duration_ms: Date.now() - startedAt,
+        outcome: result.conflict ? "conflict" : "failure",
+        warning_count: result.warnings?.length ?? 0,
+        failed_count: Array.isArray(result.failed) ? result.failed.length : 0
+      });
     }
 
     return result;
@@ -1102,13 +1126,13 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
         versionWarning = true;
         console.error(`[event-save:${operationId.slice(0, 8)}] Draft saved but event version append failed`, error);
       }
-      recordAuditLogEntry({
+      await recordAuditLogEntry({
         entity: "event",
         entityId: values.eventId,
         action: "event.draft_saved",
         actorId: user.id,
         meta: { title: values.title, isUpdate: true, operationId }
-      }).catch(() => {});
+      });
       revalidatePath(`/events/${values.eventId}`);
       if (artistSyncWarning || imageWarning || versionWarning) {
         return {
@@ -1230,13 +1254,13 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
       }
     }
 
-    recordAuditLogEntry({
+    await recordAuditLogEntry({
       entity: "event",
       entityId: created.id,
       action: "event.draft_saved",
       actorId: user.id,
       meta: { title: values.title, isNew: true, operationId }
-    }).catch(() => {});
+    });
     revalidatePath(`/events/${created.id}`);
     revalidatePath("/events");
     redirectUrl = `/events/${created.id}`;
@@ -1255,6 +1279,7 @@ export async function submitEventForReviewAction(
   _: ActionResult | undefined,
   formData: FormData
 ): Promise<ActionResult> {
+  const startedAt = Date.now();
   const operationId = readOperationId(formData);
   const user = await getCurrentUser();
   if (!user) {
@@ -1330,6 +1355,16 @@ export async function submitEventForReviewAction(
       revalidatePath("/events");
       revalidatePath("/reviews");
     }
+
+    logEventAction({
+      operation_id: result.operationId ?? operationId,
+      user_id: user.id,
+      action: "submit_event_for_review",
+      duration_ms: Date.now() - startedAt,
+      outcome: result.success ? "success" : result.conflict ? "conflict" : "failure",
+      warning_count: result.warnings?.length ?? 0,
+      failed_count: result.missingFields?.length ?? 0
+    });
 
     return result;
   }
@@ -2420,13 +2455,20 @@ export async function updateBookingSettingsAction(
     return { success: false, message: "Could not save booking settings." };
   }
 
-  recordAuditLogEntry({
-    entity: "event",
-    entityId: eventId,
-    action: "event.booking_settings_updated",
-    actorId: user.id,
-    meta: { bookingEnabled, totalCapacity, maxTicketsPerBooking }
-  }).catch(() => {});
+  try {
+    await recordAuditLogEntry({
+      entity: "event",
+      entityId: eventId,
+      action: "event.booking_settings_updated",
+      actorId: user.id,
+      meta: { bookingEnabled, totalCapacity, maxTicketsPerBooking }
+    });
+  } catch (auditError) {
+    // Booking settings save itself succeeded — audit failure is logged but
+    // does not roll the user-visible result back. Surfacing the failure
+    // would confuse the user since the settings change took effect.
+    console.error("updateBookingSettings audit log entry failed:", auditError);
+  }
   revalidatePath(`/events/${eventId}`);
   return { success: true, message: "Booking settings saved.", seoSlug };
 }

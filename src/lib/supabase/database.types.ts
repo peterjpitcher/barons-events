@@ -2477,6 +2477,14 @@ export type Database = {
         Args: { p_new_assignee_ids: string[]; p_template_id: string }
         Returns: number
       }
+      propose_event_draft: {
+        Args: {
+          p_idempotency_key: string
+          p_operation_id: string
+          p_payload: Json
+        }
+        Returns: Json
+      }
       reassign_and_deactivate_user: {
         Args: {
           p_caller_id: string

@@ -254,6 +254,7 @@ export function EventForm({
       ? crypto.randomUUID()
       : "00000000-0000-4000-8000-000000000001"
   );
+  const [expectedUpdatedAt, setExpectedUpdatedAt] = useState(defaultValues?.updated_at ?? "");
 
   useEffect(() => {
     if (!draftState?.message) return;
@@ -348,6 +349,7 @@ export function EventForm({
         operationIdRef.current = crypto.randomUUID();
         idempotencyKeyRef.current = crypto.randomUUID();
       }
+      setExpectedUpdatedAt(draftState.updatedAt ?? "");
     }
   }, [draftState]);
   useEffect(() => {
@@ -358,6 +360,7 @@ export function EventForm({
         operationIdRef.current = crypto.randomUUID();
         idempotencyKeyRef.current = crypto.randomUUID();
       }
+      setExpectedUpdatedAt(submitState.updatedAt ?? "");
     }
   }, [submitState]);
 
@@ -1812,8 +1815,11 @@ export function EventForm({
           <div className="min-w-0">
             <form ref={formRef} action={draftAction} noValidate onSubmit={handleSubmit} onChange={() => setIsDirty(true)}>
               <input type="hidden" name="eventId" defaultValue={defaultValues?.id} />
-              <input type="hidden" name="operation_id" defaultValue={operationIdRef.current} />
-              <input type="hidden" name="idempotency_key" defaultValue={idempotencyKeyRef.current} />
+              <input type="hidden" name="operation_id" value={operationIdRef.current} readOnly />
+              <input type="hidden" name="idempotency_key" value={idempotencyKeyRef.current} readOnly />
+              {mode === "edit" && expectedUpdatedAt ? (
+                <input type="hidden" name="expected_updated_at" value={expectedUpdatedAt} readOnly />
+              ) : null}
               {activeState && !activeState.success && activeState.message && !activeState.fieldErrors && (
                 <div className="mb-4 rounded-lg border border-[var(--color-danger)] bg-[var(--color-danger)]/10 p-4 text-sm text-[var(--color-danger)]" role="alert">
                   <strong>Something went wrong:</strong> {activeState.message}
@@ -2054,8 +2060,11 @@ export function EventForm({
       <>
         <form action={draftAction} className="space-y-6" noValidate onSubmit={handleSubmit} onChange={() => setIsDirty(true)}>
           <input type="hidden" name="eventId" defaultValue={defaultValues?.id} />
-          <input type="hidden" name="operation_id" defaultValue={operationIdRef.current} />
-          <input type="hidden" name="idempotency_key" defaultValue={idempotencyKeyRef.current} />
+          <input type="hidden" name="operation_id" value={operationIdRef.current} readOnly />
+          <input type="hidden" name="idempotency_key" value={idempotencyKeyRef.current} readOnly />
+          {mode === "edit" && expectedUpdatedAt ? (
+            <input type="hidden" name="expected_updated_at" value={expectedUpdatedAt} readOnly />
+          ) : null}
           <button ref={legacySubmitRef} type="submit" formAction={submitAction} data-intent="submit" className="sr-only" aria-hidden tabIndex={-1} />
           {activeState && !activeState.success && activeState.message && !activeState.fieldErrors && (
             <div className="rounded-lg border border-[var(--color-danger)] bg-[var(--color-danger)]/10 p-4 text-sm text-[var(--color-danger)]" role="alert">

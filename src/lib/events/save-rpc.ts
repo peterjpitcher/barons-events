@@ -69,6 +69,7 @@ export type SaveEventDraftPayload = {
 type SaveEventDraftRpcResponse = {
   success: boolean;
   event_id?: string | null;
+  updated_at?: string | null;
   operation_id?: string;
   message?: string;
   failed?: unknown[];
@@ -80,10 +81,28 @@ type SaveEventDraftRpcResponse = {
 type SubmitEventForReviewRpcResponse = {
   success: boolean;
   event_id?: string | null;
+  updated_at?: string | null;
   operation_id?: string;
   message?: string;
   conflict?: boolean;
   missing_fields?: string[];
+};
+
+export type ProposeEventDraftPayload = {
+  venue_ids: string[];
+  title: string;
+  start_at: string;
+  notes: string;
+};
+
+type ProposeEventDraftRpcResponse = {
+  success: boolean;
+  event_id?: string | null;
+  batch_id?: string | null;
+  venue_ids?: unknown[];
+  operation_id?: string;
+  message?: string;
+  warnings?: string[];
 };
 
 /** Action-layer result returned from the save RPC adapter. */
@@ -98,6 +117,12 @@ export type SubmitEventForReviewRpcResult = ActionResult & {
   eventId?: string;
   conflict?: boolean;
   missingFields?: string[];
+};
+
+export type ProposeEventDraftRpcResult = ActionResult & {
+  eventId?: string;
+  batchId?: string;
+  venueIds?: string[];
 };
 
 /**
@@ -178,6 +203,7 @@ export function buildSaveEventDraftPayload(args: {
 
 type SaveEventDraftRpcArgs = Database["public"]["Functions"]["save_event_draft"]["Args"];
 type SubmitEventForReviewRpcArgs = Database["public"]["Functions"]["submit_event_for_review"]["Args"];
+type ProposeEventDraftRpcArgs = Database["public"]["Functions"]["propose_event_draft"]["Args"];
 
 function toResponseObject<T>(value: unknown): T | null {
   if (value && typeof value === "object" && !Array.isArray(value)) {
@@ -239,6 +265,7 @@ export async function callSaveEventDraftRpc(args: {
       message: "Draft saved.",
       operationId: responseOperationId,
       warnings: Array.isArray(response.warnings) ? response.warnings : undefined,
+      updatedAt: typeof response.updated_at === "string" ? response.updated_at : undefined,
       eventId: typeof response.event_id === "string" ? response.event_id : undefined
     };
   }
@@ -307,6 +334,7 @@ export async function callSubmitEventForReviewRpc(args: {
       success: true,
       message: "Sent to review.",
       operationId: responseOperationId,
+      updatedAt: typeof response.updated_at === "string" ? response.updated_at : undefined,
       eventId: typeof response.event_id === "string" ? response.event_id : args.eventId
     };
   }
@@ -319,5 +347,66 @@ export async function callSubmitEventForReviewRpc(args: {
     missingFields: Array.isArray(response.missing_fields)
       ? response.missing_fields.filter((f): f is string => typeof f === "string")
       : undefined
+  };
+}
+
+export async function callProposeEventDraftRpc(args: {
+  payload: ProposeEventDraftPayload;
+  idempotencyKey: string;
+  operationId: string;
+}): Promise<ProposeEventDraftRpcResult> {
+  const supabase = await createSupabaseActionClient();
+  const rpcArgs: ProposeEventDraftRpcArgs = {
+    p_payload: args.payload as unknown as Json,
+    p_idempotency_key: args.idempotencyKey,
+    p_operation_id: args.operationId
+  };
+
+  const { data, error } = await supabase.rpc("propose_event_draft", rpcArgs);
+
+  if (error) {
+    console.error(
+      `[event-propose-rpc:${args.operationId.slice(0, 8)}] propose_event_draft RPC failed:`,
+      error
+    );
+    return {
+      success: false,
+      message: "Could not submit the proposal. Please try again.",
+      operationId: args.operationId
+    };
+  }
+
+  const response = toResponseObject<ProposeEventDraftRpcResponse>(data);
+  if (!response) {
+    return {
+      success: false,
+      message: "Proposal failed — unexpected response.",
+      operationId: args.operationId
+    };
+  }
+
+  const responseOperationId = typeof response.operation_id === "string" ? response.operation_id : args.operationId;
+
+  if (response.success) {
+    const venueIds = Array.isArray(response.venue_ids)
+      ? response.venue_ids.filter((id): id is string => typeof id === "string")
+      : undefined;
+    return {
+      success: true,
+      message: venueIds && venueIds.length > 1
+        ? `Proposal submitted for ${venueIds.length} venues.`
+        : "Proposal submitted.",
+      operationId: responseOperationId,
+      warnings: Array.isArray(response.warnings) ? response.warnings : undefined,
+      eventId: typeof response.event_id === "string" ? response.event_id : undefined,
+      batchId: typeof response.batch_id === "string" ? response.batch_id : undefined,
+      venueIds
+    };
+  }
+
+  return {
+    success: false,
+    message: response.message ?? "Could not submit the proposal.",
+    operationId: responseOperationId
   };
 }

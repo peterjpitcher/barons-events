@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { proposeEventAction } from "@/actions/pre-event";
@@ -21,7 +21,7 @@ type ProposeEventFormProps = {
 };
 
 export function ProposeEventForm({ venues, defaultVenueId }: ProposeEventFormProps) {
-  const [state, formAction] = useActionState(proposeEventAction, undefined);
+  const [state, formAction, isPending] = useActionState(proposeEventAction, undefined);
   const [selectedVenueIds, setSelectedVenueIds] = useState<string[]>(() => {
     if (defaultVenueId && venues.some((v) => v.id === defaultVenueId)) {
       return [defaultVenueId];
@@ -31,7 +31,16 @@ export function ProposeEventForm({ venues, defaultVenueId }: ProposeEventFormPro
   // SEC-004 v3.2: stable idempotency key generated once per form mount.
   // The RPC uses it to deduplicate double-submits (same key -> same result).
   // A fresh form render gets a fresh key, so legitimate re-proposals work.
-  const [idempotencyKey] = useState(() => crypto.randomUUID());
+  const operationIdRef = useRef(
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : "00000000-0000-4000-8000-000000000002"
+  );
+  const idempotencyKeyRef = useRef(
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : "00000000-0000-4000-8000-000000000003"
+  );
   const router = useRouter();
 
   useEffect(() => {
@@ -40,14 +49,20 @@ export function ProposeEventForm({ venues, defaultVenueId }: ProposeEventFormPro
         toast.success(state.message);
         router.push("/events");
       } else {
-        toast.error(state.message);
+        toast.error(
+          state.operationId
+            ? `${state.message} (ref: ${state.operationId.slice(0, 8)})`
+            : state.message
+        );
       }
     }
   }, [state, router]);
 
   return (
     <form action={formAction} className="space-y-5">
-      <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
+      <input type="hidden" name="operation_id" value={operationIdRef.current} readOnly />
+      <input type="hidden" name="idempotency_key" value={idempotencyKeyRef.current} readOnly />
+      <input type="hidden" name="idempotencyKey" value={idempotencyKeyRef.current} readOnly />
       <div className="space-y-2">
         <Label htmlFor="propose-title">Event title</Label>
         <Input id="propose-title" name="title" required maxLength={200} placeholder="e.g. Easter Weekend Quiz" />
@@ -86,6 +101,7 @@ export function ProposeEventForm({ venues, defaultVenueId }: ProposeEventFormPro
         label="Submit proposal"
         pendingLabel="Submitting..."
         variant="primary"
+        disabled={isPending}
       />
     </form>
   );

@@ -10,6 +10,8 @@ import { canProposeEvents } from "@/lib/roles";
 import { recordAuditLogEntry } from "@/lib/audit-log";
 import type { ActionResult } from "@/lib/types";
 import { canOfficeWorkerUseVenueSelection } from "@/lib/visibility";
+import { callProposeEventDraftRpc } from "@/lib/events/save-rpc";
+import { logEventAction } from "@/lib/observability/event-action-log";
 
 /**
  * Wave 3 — pre-event approval server actions.
@@ -37,12 +39,34 @@ const proposalSchema = z.object({
     .max(20, "Too many venues selected")
 });
 
+function shouldUseSaveEventRpc(): boolean {
+  return process.env.EVENT_SAVE_USE_RPC === "true";
+}
+
+function readOperationId(formData: FormData): string {
+  const raw = formData.get("operation_id");
+  if (typeof raw === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw)) {
+    return raw;
+  }
+  return randomUUID();
+}
+
+function readProposalIdempotencyKey(formData: FormData): string {
+  const raw = formData.get("idempotency_key") ?? formData.get("idempotencyKey");
+  if (typeof raw === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw)) {
+    return raw;
+  }
+  return randomUUID();
+}
+
 export async function proposeEventAction(
   _: ActionResult | undefined,
   formData: FormData
 ): Promise<ActionResult> {
+  const startedAt = Date.now();
+  const operationId = readOperationId(formData);
   const user = await getCurrentUser();
-  if (!user) return { success: false, message: "You must be signed in." };
+  if (!user) return { success: false, message: "You must be signed in.", operationId };
 
   const venueIds = formData.getAll("venueIds").filter((v): v is string => typeof v === "string" && v.length > 0);
   const parsed = proposalSchema.safeParse({
@@ -55,15 +79,16 @@ export async function proposeEventAction(
   if (!parsed.success) {
     return {
       success: false,
-      message: parsed.error.issues[0]?.message ?? "Check the highlighted fields."
+      message: parsed.error.issues[0]?.message ?? "Check the highlighted fields.",
+      operationId
     };
   }
 
   if (!canProposeEvents(user.role)) {
-    return { success: false, message: "You don't have permission to propose events." };
+    return { success: false, message: "You don't have permission to propose events.", operationId };
   }
   if (!canOfficeWorkerUseVenueSelection(user, parsed.data.venueIds)) {
-    return { success: false, message: "You can only propose events for your assigned venue." };
+    return { success: false, message: "You can only propose events for your assigned venue.", operationId };
   }
 
   // WF-003 v3.1: pre-validate venue IDs with explicit error handling so a DB
@@ -73,21 +98,49 @@ export async function proposeEventAction(
   const { data: validVenues, error: venueErr } = await supabase
     .from("venues")
     .select("id")
-    .in("id", parsed.data.venueIds)
-    .is("deleted_at", null);
+    .in("id", parsed.data.venueIds);
   if (venueErr) {
-    console.error("proposeEventAction: venue validation query failed", { error: venueErr });
-    return { success: false, message: "We couldn't verify venues right now. Please try again." };
+    console.error(`[event-propose:${operationId.slice(0, 8)}] Venue validation query failed`, { error: venueErr });
+    return { success: false, message: "We couldn't verify venues right now. Please try again.", operationId };
   }
   const validIds = new Set((validVenues ?? []).map((v) => v.id));
   if (parsed.data.venueIds.some((id) => !validIds.has(id))) {
-    return { success: false, message: "One or more selected venues are not available." };
+    return { success: false, message: "One or more selected venues are not available.", operationId };
   }
 
-  const idempotencyKey = (formData.get("idempotencyKey") as string) || randomUUID();
+  const idempotencyKey = readProposalIdempotencyKey(formData);
+
+  if (shouldUseSaveEventRpc()) {
+    const result = await callProposeEventDraftRpc({
+      payload: {
+        venue_ids: parsed.data.venueIds,
+        title: parsed.data.title,
+        start_at: parsed.data.startAt,
+        notes: parsed.data.notes
+      },
+      idempotencyKey,
+      operationId
+    });
+
+    if (result.success) {
+      revalidatePath("/events");
+    }
+
+    logEventAction({
+      operation_id: result.operationId ?? operationId,
+      user_id: user.id,
+      action: "propose_event_draft",
+      duration_ms: Date.now() - startedAt,
+      outcome: result.success ? "success" : "failure",
+      warning_count: result.warnings?.length ?? 0
+    });
+
+    return result;
+  }
+
   const db = createSupabaseAdminClient();
 
-  const { data, error } = await (db as any).rpc("create_multi_venue_event_proposals", {
+  const { data, error } = await db.rpc("create_multi_venue_event_proposals", {
     p_payload: {
       // SEC-001 v3.1: authoritative created_by from the authenticated session;
       // never trust a client-supplied value, even if the RPC later checks role.
@@ -101,8 +154,8 @@ export async function proposeEventAction(
   });
 
   if (error) {
-    console.error("proposeEventAction RPC failed:", error);
-    return { success: false, message: error.message ?? "Could not submit the proposal." };
+    console.error(`[event-propose:${operationId.slice(0, 8)}] create_multi_venue_event_proposals RPC failed:`, error);
+    return { success: false, message: error.message ?? "Could not submit the proposal.", operationId };
   }
 
   revalidatePath("/events");

@@ -121,3 +121,10 @@ describe("audit coverage guard (Wave 0.4)", () => {
     }
   }
 });
+
+describe("event action audit failure guard", () => {
+  it("does not silently swallow audit failures in events.ts", () => {
+    const source = readFileSync(join(ACTIONS_DIR, "events.ts"), "utf8");
+    expect(source).not.toMatch(/\.catch\(\s*\(\)\s*=>\s*\{\s*\}\s*\)/);
+  });
+});

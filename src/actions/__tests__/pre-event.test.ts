@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // Mocks hoisted by Vitest — use vi.hoisted() for shared state so the
 // factory closures can reference them safely during hoisting.
@@ -13,9 +13,10 @@ vi.mock("@/lib/supabase/admin", () => ({
 }));
 vi.mock("@/lib/supabase/server", () => ({
   createSupabaseActionClient: () => ({
+    rpc: mocks.rpcMock,
     from: () => ({
       select: () => ({
-        in: () => ({ is: mocks.selectInMock }),
+        in: mocks.selectInMock,
       }),
     }),
   }),
@@ -34,6 +35,9 @@ const { rpcMock, selectInMock, getUserMock } = mocks;
 // Use valid UUID v4 strings — Zod's `.uuid()` enforces strict RFC 4122.
 const VENUE_A = "550e8400-e29b-41d4-a716-446655440000";
 const VENUE_B = "550e8400-e29b-41d4-a716-446655440001";
+const OP_ID = "01934c5e-7e9d-7a0a-9c12-1234567890ab";
+const IDEMP_KEY = "01934c5e-7e9d-7b0a-9c12-1234567890ab";
+const previousFlag = process.env.EVENT_SAVE_USE_RPC;
 
 function fd(fields: Record<string, string | string[]>): FormData {
   const f = new FormData();
@@ -45,7 +49,18 @@ function fd(fields: Record<string, string | string[]>): FormData {
 }
 
 describe("proposeEventAction", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    delete process.env.EVENT_SAVE_USE_RPC;
+  });
+
+  afterEach(() => {
+    if (previousFlag === undefined) {
+      delete process.env.EVENT_SAVE_USE_RPC;
+    } else {
+      process.env.EVENT_SAVE_USE_RPC = previousFlag;
+    }
+  });
 
   it("rejects executive", async () => {
     getUserMock.mockResolvedValue({ id: "exec-1", role: "executive", venueId: null });
@@ -85,7 +100,7 @@ describe("proposeEventAction", () => {
     );
   });
 
-  it("allows an unassigned office_worker to propose for any active venue", async () => {
+  it("allows an unassigned office_worker to propose for any existing venue", async () => {
     getUserMock.mockResolvedValue({ id: "ow-1", role: "office_worker", venueId: null });
     selectInMock.mockResolvedValue({
       data: [{ id: VENUE_B }],
@@ -159,7 +174,7 @@ describe("proposeEventAction", () => {
     expect(rpcMock).not.toHaveBeenCalled();
   });
 
-  it("rejects when a venue id is not in active list", async () => {
+  it("rejects when a venue id is not found", async () => {
     getUserMock.mockResolvedValue({ id: "ow-1", role: "office_worker", venueId: null });
     selectInMock.mockResolvedValue({
       data: [{ id: VENUE_A }],
@@ -175,5 +190,47 @@ describe("proposeEventAction", () => {
     expect(result.success).toBe(false);
     expect(result.message).toMatch(/not available/i);
     expect(rpcMock).not.toHaveBeenCalled();
+  });
+
+  it("calls propose_event_draft with operation and idempotency keys when the RPC flag is enabled", async () => {
+    process.env.EVENT_SAVE_USE_RPC = "true";
+    getUserMock.mockResolvedValue({ id: "ow-1", role: "office_worker", venueId: null });
+    selectInMock.mockResolvedValue({
+      data: [{ id: VENUE_A }, { id: VENUE_B }],
+      error: null,
+    });
+    rpcMock.mockResolvedValue({
+      data: {
+        success: true,
+        event_id: "550e8400-e29b-41d4-a716-446655440099",
+        batch_id: "550e8400-e29b-41d4-a716-446655440088",
+        venue_ids: [VENUE_A, VENUE_B],
+        operation_id: OP_ID,
+        warnings: []
+      },
+      error: null
+    });
+
+    const result = await proposeEventAction(undefined, fd({
+      operation_id: OP_ID,
+      idempotency_key: IDEMP_KEY,
+      title: "Test",
+      startAt: "2026-05-01T10:00:00Z",
+      notes: "Test",
+      venueIds: [VENUE_A, VENUE_B],
+    }));
+
+    expect(result.success).toBe(true);
+    expect(result.operationId).toBe(OP_ID);
+    expect(rpcMock).toHaveBeenCalledWith("propose_event_draft", {
+      p_payload: {
+        venue_ids: [VENUE_A, VENUE_B],
+        title: "Test",
+        start_at: "2026-05-01T10:00:00Z",
+        notes: "Test"
+      },
+      p_idempotency_key: IDEMP_KEY,
+      p_operation_id: OP_ID
+    });
   });
 });

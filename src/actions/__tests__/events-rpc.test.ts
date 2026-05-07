@@ -79,7 +79,7 @@ function formData(fields: Record<string, string | string[]>): FormData {
 const baseFields = {
   operation_id: OP_ID,
   idempotency_key: IDEMP_KEY,
-  eventId: "",
+  eventId: EVENT_A,
   venueIds: VENUE_A,
   title: "Spring launch",
   eventType: "general",
@@ -104,6 +104,13 @@ beforeEach(() => {
     id: USER_A,
     role: "office_worker",
     venueId: VENUE_A
+  });
+  mocks.loadCtxMock.mockResolvedValue({
+    venueId: VENUE_A,
+    managerResponsibleId: null,
+    createdBy: USER_A,
+    status: "draft",
+    deletedAt: null
   });
 });
 

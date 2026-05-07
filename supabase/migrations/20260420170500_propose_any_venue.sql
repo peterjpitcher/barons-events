@@ -58,13 +58,13 @@ BEGIN
     RAISE EXCEPTION 'Proposals require at least one venue';
   END IF;
 
-  -- R-013 / SEC v3.1: reject missing or soft-deleted venues.
+  -- R-013 / SEC v3.1: reject missing venues.
   IF EXISTS (
     SELECT 1 FROM unnest(v_venue_ids) AS submitted(id)
-    LEFT JOIN public.venues v ON v.id = submitted.id AND v.deleted_at IS NULL
+    LEFT JOIN public.venues v ON v.id = submitted.id
     WHERE v.id IS NULL
   ) THEN
-    RAISE EXCEPTION 'One or more submitted venues are invalid or deleted';
+    RAISE EXCEPTION 'One or more submitted venues are invalid';
   END IF;
 
   v_primary_venue := v_venue_ids[1];

@@ -72,6 +72,7 @@ export type ActionResult = {
   fieldErrors?: FieldErrors;
   operationId?: string;
   warnings?: string[];
+  updatedAt?: string;
 };
 
 /** Status of a customer booking. */

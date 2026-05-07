@@ -109,13 +109,13 @@ begin
   -- CHECK constraint will reject this UPDATE if these are null when status
   -- transitions to 'submitted'; we surface a structured error instead.
   if v_event_row.event_type is null then
-    v_missing := v_missing || 'event_type';
+    v_missing := array_append(v_missing, 'event_type');
   end if;
   if v_event_row.venue_space is null then
-    v_missing := v_missing || 'venue_space';
+    v_missing := array_append(v_missing, 'venue_space');
   end if;
   if v_event_row.end_at is null then
-    v_missing := v_missing || 'end_at';
+    v_missing := array_append(v_missing, 'end_at');
   end if;
 
   if array_length(v_missing, 1) > 0 then
@@ -188,6 +188,7 @@ begin
     jsonb_build_object(
       'success', true,
       'event_id', p_event_id,
+      'updated_at', v_now,
       'operation_id', p_operation_id
     ),
     v_now
@@ -196,6 +197,7 @@ begin
   return jsonb_build_object(
     'success', true,
     'event_id', p_event_id,
+    'updated_at', v_now,
     'operation_id', p_operation_id
   );
 
