@@ -2225,6 +2225,7 @@ export function EventForm({
                 pendingLabel="Saving..."
                 variant="primary"
                 data-intent="draft"
+                disabled={isSavingPending || isSubmittingPending}
               />
               {showSecondaryAction ? (
                 <SubmitButton
@@ -2233,6 +2234,7 @@ export function EventForm({
                   pendingLabel={role === "administrator" ? "Publishing..." : "Sending..."}
                   variant="secondary"
                   data-intent="submit"
+                  disabled={isSavingPending || isSubmittingPending}
                 />
               ) : null}
               {mode === "edit" && defaultValues?.id && canDelete ? (

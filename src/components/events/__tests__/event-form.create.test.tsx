@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventForm } from "@/components/events/event-form";
+import { saveEventDraftAction } from "@/actions/events";
 
 vi.mock("sonner", () => ({
   toast: {
@@ -59,3 +60,32 @@ describe("EventForm create defaults", () => {
     expect((screen.getByLabelText("Event type") as HTMLSelectElement).value).toBe("");
   });
 });
+
+describe("EventForm submit guards", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("disables Save Draft while the draft action is pending", async () => {
+    // A never-resolving promise keeps `useActionState` in the pending state.
+    vi.mocked(saveEventDraftAction).mockImplementation(
+      () => new Promise(() => {}) as ReturnType<typeof saveEventDraftAction>
+    );
+
+    renderCreateForm();
+
+    const saveButton = screen.getByRole("button", { name: /save draft/i }) as HTMLButtonElement;
+    expect(saveButton.disabled).toBe(false);
+
+    fireEvent.click(saveButton);
+
+    await waitFor(() => {
+      expect(saveButton.disabled).toBe(true);
+    });
+  });
+});
+
