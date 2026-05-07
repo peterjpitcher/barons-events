@@ -259,6 +259,15 @@ export function EventForm({
     if (!draftState?.message) return;
     if (draftState.success) {
       toast.success(draftState.message);
+      // Phase B′ image-state-machine: surface non-blocking warnings from the
+      // RPC path. Storage upload or attach failures still leave the row
+      // saved, so we treat them as warnings (not errors) and let the daily
+      // reconcile cron retry the attach.
+      if (draftState.warnings?.includes("image-upload-failed")) {
+        toast.warning("Saved, but the image upload failed. Try uploading again.");
+      } else if (draftState.warnings?.includes("image-attach-pending")) {
+        toast.warning("Saved, but the image is still attaching. It will appear shortly.");
+      }
     } else {
       // Append the short hash of the operation_id so the user can quote it
       // in support requests; server logs and audit-log meta share the same
@@ -276,6 +285,11 @@ export function EventForm({
     if (!submitState?.message) return;
     if (submitState.success) {
       toast.success(submitState.message);
+      if (submitState.warnings?.includes("image-upload-failed")) {
+        toast.warning("Submitted, but the image upload failed. Try uploading again.");
+      } else if (submitState.warnings?.includes("image-attach-pending")) {
+        toast.warning("Submitted, but the image is still attaching. It will appear shortly.");
+      }
     } else {
       toast.error(
         submitState.operationId

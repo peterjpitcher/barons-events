@@ -9,11 +9,18 @@ import { getCurrentUser } from "@/lib/auth";
 import { canReviewEvents, canProposeEvents, canEditEvent } from "@/lib/roles";
 import { loadEventEditContext } from "@/lib/events/edit-context";
 import { appendEventVersion, createEventDraft, createEventPlanningItem, recordApproval, softDeleteEvent, updateEventDraft, updateEventAssignee } from "@/lib/events";
+import {
+  buildSaveEventDraftPayload,
+  callSaveEventDraftRpc,
+  callSubmitEventForReviewRpc,
+  type SaveEventDraftRpcResult
+} from "@/lib/events/save-rpc";
 import { generateUniqueEventSlug } from "@/lib/bookings";
 import { cleanupOrphanArtists, parseArtistNames, syncEventArtists } from "@/lib/artists";
 import { eventDraftSchema, eventFormSchema } from "@/lib/validation";
 import { getFieldErrors } from "@/lib/form-errors";
 import type { ActionResult, EventStatus } from "@/lib/types";
+import type { Database } from "@/lib/supabase/database.types";
 import { sendAssigneeReassignmentEmail, sendEventSubmittedEmail, sendReviewDecisionEmail } from "@/lib/notifications";
 import { recordAuditLogEntry } from "@/lib/audit-log";
 import { generateTermsAndConditions, generateWebsiteCopy, type GeneratedWebsiteCopy } from "@/lib/ai";
@@ -42,6 +49,129 @@ function readOperationId(formData: FormData): string {
     return raw;
   }
   return crypto.randomUUID();
+}
+
+/**
+ * Reads the form-mounted persistent idempotency key. Used by the Phase B′
+ * atomic-save RPC to deduplicate retries — same key + same user replays the
+ * stored response without writing again. Falls back to a fresh UUID when the
+ * client did not send one (legacy callers, test invocations).
+ */
+function readIdempotencyKey(formData: FormData): string {
+  const raw = formData.get("idempotency_key");
+  if (typeof raw === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw)) {
+    return raw;
+  }
+  return crypto.randomUUID();
+}
+
+/**
+ * Reads the optional optimistic-concurrency token (the row's last-known
+ * `updated_at`). Returned as an ISO string for the RPC, or null when the
+ * client did not send one (e.g. first save of a new draft).
+ */
+function readExpectedUpdatedAt(formData: FormData): string | null {
+  const raw = formData.get("expected_updated_at");
+  if (typeof raw === "string" && raw.length > 0) {
+    return raw;
+  }
+  return null;
+}
+
+/** Phase B′ atomic-save feature flag. */
+function shouldUseSaveEventRpc(): boolean {
+  return process.env.EVENT_SAVE_USE_RPC === "true";
+}
+
+type EventsTable = Database["public"]["Tables"]["events"];
+type EventRowUpdate = EventsTable["Update"];
+
+/**
+ * Compensating image upload + attach for the RPC path.
+ *
+ * The atomic save RPC writes only the events row + linked tables; the binary
+ * image upload is a separate side effect that cannot share the RPC's
+ * transaction. We follow a two-phase commit:
+ *   1. Upload the bytes to storage (idempotent — overwrite uses upsert).
+ *   2. UPDATE events.event_image_path to attach.
+ * If step 1 fails we record an `image-upload-failed` warning. If step 1
+ * succeeds but step 2 fails we set `pending_image_attach` so the daily cron
+ * (`/api/cron/reconcile-event-images`) can attach later, and surface an
+ * `image-attach-pending` warning.
+ */
+async function attachEventImageAfterRpc(args: {
+  eventId: string;
+  file: File;
+  operationId: string;
+}): Promise<{ warning?: "image-upload-failed" | "image-attach-pending" }> {
+  let admin;
+  try {
+    admin = createSupabaseAdminClient();
+  } catch (error) {
+    console.error(
+      `[event-save-rpc:${args.operationId.slice(0, 8)}] Service-role client unavailable for image upload:`,
+      error
+    );
+    return { warning: "image-upload-failed" };
+  }
+
+  const fileExtRaw = (() => {
+    const parsed = args.file.name.split(".");
+    if (parsed.length < 2) return "";
+    return parsed[parsed.length - 1];
+  })();
+  const fileExt = sanitiseFileName(fileExtRaw).slice(0, 10) ||
+    (typeof args.file.type === "string" && args.file.type.startsWith("image/")
+      ? args.file.type.split("/")[1] ?? "bin"
+      : "bin");
+  const path = `${args.eventId}/${Date.now()}.${fileExt}`;
+  const bytes = Buffer.from(await args.file.arrayBuffer());
+
+  const { error: uploadError } = await admin.storage
+    .from(EVENT_IMAGE_BUCKET)
+    .upload(path, bytes, {
+      contentType: args.file.type || "application/octet-stream",
+      upsert: true
+    });
+
+  if (uploadError) {
+    console.error(
+      `[event-save-rpc:${args.operationId.slice(0, 8)}] Storage upload failed:`,
+      uploadError
+    );
+    return { warning: "image-upload-failed" };
+  }
+
+  const attachUpdate: EventRowUpdate = {
+    event_image_path: path,
+    pending_image_attach: null
+  };
+  const { error: attachError } = await admin
+    .from("events")
+    .update(attachUpdate)
+    .eq("id", args.eventId);
+
+  if (attachError) {
+    // Storage succeeded but the second write failed. Flag for reconciliation.
+    console.error(
+      `[event-save-rpc:${args.operationId.slice(0, 8)}] Image attach failed; flagging for reconcile:`,
+      attachError
+    );
+    const pendingUpdate: EventRowUpdate = { pending_image_attach: path };
+    const { error: pendingError } = await admin
+      .from("events")
+      .update(pendingUpdate)
+      .eq("id", args.eventId);
+    if (pendingError) {
+      console.error(
+        `[event-save-rpc:${args.operationId.slice(0, 8)}] Failed to set pending_image_attach:`,
+        pendingError
+      );
+    }
+    return { warning: "image-attach-pending" };
+  }
+
+  return {};
 }
 
 /**
@@ -745,6 +875,78 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
     };
   }
 
+  // Phase B′ atomic-save path. When the feature flag is enabled, the entire
+  // events row + venue/artist join writes are committed inside a single
+  // SECURITY DEFINER RPC. Image upload runs as a compensating second phase
+  // (see attachEventImageAfterRpc). The legacy multi-write path below stays
+  // available behind the same flag and will be removed once the RPC has
+  // burned in for a release.
+  if (shouldUseSaveEventRpc()) {
+    const idempotencyKey = readIdempotencyKey(formData);
+    const expectedUpdatedAt = readExpectedUpdatedAt(formData);
+    const requestedArtistIds = normaliseArtistIdList(formData.get("artistIds"));
+
+    const payload = buildSaveEventDraftPayload({
+      eventId: values.eventId ?? null,
+      venueId: values.venueId,
+      venueIds,
+      artistIds: requestedArtistIds,
+      title: values.title,
+      eventType: values.eventType ?? null,
+      startAtIso,
+      endAtIso,
+      venueSpace: values.venueSpace,
+      expectedHeadcount: values.expectedHeadcount ?? null,
+      wetPromo: values.wetPromo ?? null,
+      foodPromo: values.foodPromo ?? null,
+      goalFocus: values.goalFocus ?? null,
+      notes: values.notes ?? null,
+      bookingType: values.bookingType ?? null,
+      ticketPrice: values.ticketPrice ?? null,
+      checkInCutoffMinutes: values.checkInCutoffMinutes ?? null,
+      agePolicy: values.agePolicy ?? null,
+      accessibilityNotes: values.accessibilityNotes ?? null,
+      cancellationWindowHours: values.cancellationWindowHours ?? null,
+      termsAndConditions: values.termsAndConditions ?? null,
+      costTotal: values.costTotal ?? null,
+      costDetails: values.costDetails ?? null,
+      managerResponsibleId: values.managerResponsibleId || null,
+      publicTitle: values.publicTitle ?? null,
+      publicTeaser: values.publicTeaser ?? null,
+      publicDescription: values.publicDescription ?? null,
+      publicHighlights: values.publicHighlights ?? null,
+      bookingUrl: values.bookingUrl ?? null,
+      seoTitle: values.seoTitle ?? null,
+      seoDescription: values.seoDescription ?? null,
+      seoSlug: values.seoSlug ?? null
+    });
+
+    const result: SaveEventDraftRpcResult = await callSaveEventDraftRpc({
+      payload,
+      idempotencyKey,
+      operationId,
+      expectedUpdatedAt
+    });
+
+    if (result.success && result.eventId && eventImageFile) {
+      const imageOutcome = await attachEventImageAfterRpc({
+        eventId: result.eventId,
+        file: eventImageFile,
+        operationId
+      });
+      if (imageOutcome.warning) {
+        result.warnings = [...(result.warnings ?? []), imageOutcome.warning];
+      }
+    }
+
+    if (result.success) {
+      revalidatePath("/events");
+      if (result.eventId) revalidatePath(`/events/${result.eventId}`);
+    }
+
+    return result;
+  }
+
   let redirectUrl: string | null = null;
   try {
     if (values.eventId) {
@@ -1086,6 +1288,51 @@ export async function submitEventForReviewAction(
   const eventImageFile = eventImageEntry instanceof File && eventImageEntry.size > 0 ? eventImageEntry : null;
   const requestedArtistIds = normaliseArtistIdList(formData.get("artistIds"));
   const requestedArtistNames = normaliseArtistNameList(formData.get("artistNames"));
+
+  // Phase B′ atomic-submit path. Only the existing-event submit case is
+  // routed through the RPC for now; the create-then-submit fast path stays
+  // on the legacy multi-write so that branch can keep its full validation +
+  // assignee-resolution logic while we burn the RPC in. The legacy path
+  // remains the fallback when the flag is off.
+  if (rawEventId && shouldUseSaveEventRpc()) {
+    const parsedId = z.string().uuid().safeParse(rawEventId);
+    if (!parsedId.success) {
+      return { success: false, message: "Missing event reference.", operationId };
+    }
+    const idempotencyKey = readIdempotencyKey(formData);
+    const expectedUpdatedAt = readExpectedUpdatedAt(formData);
+    const assigneeId = (() => {
+      const parsed = reviewerFallback.safeParse(assigneeOverride);
+      return parsed.success ? parsed.data ?? null : null;
+    })();
+
+    const result = await callSubmitEventForReviewRpc({
+      eventId: parsedId.data,
+      idempotencyKey,
+      operationId,
+      expectedUpdatedAt,
+      assigneeId
+    });
+
+    if (result.success && eventImageFile) {
+      const imageOutcome = await attachEventImageAfterRpc({
+        eventId: parsedId.data,
+        file: eventImageFile,
+        operationId
+      });
+      if (imageOutcome.warning) {
+        result.warnings = [...(result.warnings ?? []), imageOutcome.warning];
+      }
+    }
+
+    if (result.success) {
+      revalidatePath(`/events/${parsedId.data}`);
+      revalidatePath("/events");
+      revalidatePath("/reviews");
+    }
+
+    return result;
+  }
 
   let targetEventId: string | null = null;
   let redirectUrl: string | null = null;
