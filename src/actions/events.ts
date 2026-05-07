@@ -433,13 +433,19 @@ function buildWebsiteCopyInput(record: WebsiteCopyEventRecord, formData?: FormDa
       : [];
   const goalFocus = formGoalFocus.length ? formGoalFocus : recordGoalFocus;
 
-  const venueValue = Array.isArray(record.venue) ? record.venue[0] : record.venue;
-  const venueName = typeof (venueValue as any)?.name === "string" ? (venueValue as any).name : null;
-  const venueAddress = typeof (venueValue as any)?.address === "string" ? (venueValue as any).address : null;
+  type EmbeddedVenue = { name?: string | null; address?: string | null } | null | undefined;
+  const venueValue: EmbeddedVenue = Array.isArray(record.venue)
+    ? (record.venue[0] as EmbeddedVenue)
+    : (record.venue as EmbeddedVenue);
+  const venueName = typeof venueValue?.name === "string" ? venueValue.name : null;
+  const venueAddress = typeof venueValue?.address === "string" ? venueValue.address : null;
 
+  type EmbeddedArtistEntry = {
+    artist?: { name?: string | null } | Array<{ name?: string | null }> | null;
+  };
   const formArtistNames = normaliseArtistNameList(getFormValue(formData, "artistNames"));
   const recordArtistNames = Array.isArray(record.artists)
-    ? (record.artists as any[])
+    ? (record.artists as EmbeddedArtistEntry[])
         .map((entry) => {
           const artistValue = Array.isArray(entry?.artist) ? entry.artist[0] : entry?.artist;
           return typeof artistValue?.name === "string" ? artistValue.name.trim() : null;
@@ -553,10 +559,11 @@ async function updateEventWithFallback(params: {
   contextLabel: string;
   reviewerAssigneeId?: string | null;
 }) {
+  type EventUpdate = Database["public"]["Tables"]["events"]["Update"];
   let updateError: { message: string } | null = null;
   try {
     const admin = createSupabaseAdminClient();
-    let adminUpdate = admin.from("events").update(params.payload as any).eq("id", params.eventId);
+    let adminUpdate = admin.from("events").update(params.payload as EventUpdate).eq("id", params.eventId);
     if (params.reviewerAssigneeId) {
       adminUpdate = adminUpdate.eq("assignee_id", params.reviewerAssigneeId);
     }
@@ -569,7 +576,7 @@ async function updateEventWithFallback(params: {
 
   if (updateError) {
     console.warn(`Service-role ${params.contextLabel} update failed; retrying with user client`, updateError);
-    let fallbackUpdate = params.supabase.from("events").update(params.payload as any).eq("id", params.eventId);
+    let fallbackUpdate = params.supabase.from("events").update(params.payload as EventUpdate).eq("id", params.eventId);
     if (params.reviewerAssigneeId) {
       fallbackUpdate = fallbackUpdate.eq("assignee_id", params.reviewerAssigneeId);
     }
