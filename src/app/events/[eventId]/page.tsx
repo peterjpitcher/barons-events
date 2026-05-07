@@ -1,11 +1,9 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { EventForm } from "@/components/events/event-form";
-import { EventFormActions } from "@/components/events/event-form-actions";
 import { BookingSettingsCard } from "@/components/events/booking-settings-card";
 import { EventDetailSummary } from "@/components/events/event-detail-summary";
 import { DeleteEventButton } from "@/components/events/delete-event-button";
-import { RevertToDraftButton } from "@/components/events/revert-to-draft-button";
 import { DecisionForm } from "@/components/reviews/decision-form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -119,7 +117,6 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
     (isVenueScoped && ["approved", "completed"].includes(event.status)) ||
     (user.role === "administrator" && ["approved", "completed"].includes(event.status));
   const canUpdateAssignee = user.role === "administrator";
-  const canRevertToDraft = event.status === "approved" && user.role === "administrator";
 
   const reassignAssignee = async (formData: FormData) => {
     "use server";
@@ -634,7 +631,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
         </CardHeader>
       </Card>
 
-      {/* EventForm for all users — editors get full sidebar, readers get read-only form */}
+      {/* EventForm for all users — read-only for non-editors */}
       <EventForm
         key={event.id}
         mode="edit"
@@ -648,62 +645,45 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
         canDelete={canDelete}
         readOnly={!canEdit}
         debrief={event.debrief}
-        sidebar={
-          <div className="space-y-6">
-            {canEdit ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Save & submit</CardTitle>
-                  <CardDescription>Save a draft first, then submit for review when ready.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <EventFormActions eventId={event.id} canDelete={canDelete} />
-                  {canRevertToDraft ? (
-                    <div className="mt-4 border-t border-[var(--color-border)] pt-4">
-                      <RevertToDraftButton eventId={event.id} />
-                    </div>
-                  ) : null}
-                </CardContent>
-              </Card>
-            ) : null}
-
-            <EventDetailSummary event={event} />
-
-            {canEdit ? (
-              <BookingSettingsCard
-                eventId={event.id}
-                bookingEnabled={Boolean(event.booking_enabled)}
-                totalCapacity={event.total_capacity ?? null}
-                maxTicketsPerBooking={event.max_tickets_per_booking ?? 10}
-                seoSlug={event.seo_slug ?? null}
-                smsPromoEnabled={Boolean(event.sms_promo_enabled)}
-                bookingUrl={event.booking_url ?? null}
-                userRole={user.role}
-              />
-            ) : null}
-
-            {sopChecklistCard}
-            <AttachmentsPanel
-              parentType="event"
-              parentId={event.id}
-              attachments={attachments}
-              canUpload={canUploadAttachments}
-              viewerId={user.id}
-              isAdmin={user.role === "administrator"}
-              description="Files attached to this event or any of its planning tasks."
-            />
-            {canPreReview ? (
-              <ProposalDecisionCard eventId={event.id} eventTitle={event.title} />
-            ) : null}
-            {reviewDecisionCard}
-            {assignmentCard}
-            {reviewerTimelineCard}
-            {auditTrailCard}
-            {debriefSubmitCard}
-            {debriefSnapshotCard}
-          </div>
-        }
       />
+
+      {/* Lower cards grid */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <EventDetailSummary event={event} />
+
+        {canEdit ? (
+          <BookingSettingsCard
+            eventId={event.id}
+            bookingEnabled={Boolean(event.booking_enabled)}
+            totalCapacity={event.total_capacity ?? null}
+            maxTicketsPerBooking={event.max_tickets_per_booking ?? 10}
+            seoSlug={event.seo_slug ?? null}
+            smsPromoEnabled={Boolean(event.sms_promo_enabled)}
+            bookingUrl={event.booking_url ?? null}
+            userRole={user.role}
+          />
+        ) : null}
+
+        {sopChecklistCard}
+        <AttachmentsPanel
+          parentType="event"
+          parentId={event.id}
+          attachments={attachments}
+          canUpload={canUploadAttachments}
+          viewerId={user.id}
+          isAdmin={user.role === "administrator"}
+          description="Files attached to this event or any of its planning tasks."
+        />
+        {canPreReview ? (
+          <ProposalDecisionCard eventId={event.id} eventTitle={event.title} />
+        ) : null}
+        {reviewDecisionCard}
+        {assignmentCard}
+        {reviewerTimelineCard}
+        {auditTrailCard}
+        {debriefSubmitCard}
+        {debriefSnapshotCard}
+      </div>
     </div>
   );
 }

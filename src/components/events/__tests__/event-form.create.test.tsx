@@ -4,7 +4,6 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { toast } from "sonner";
 import { EventForm } from "@/components/events/event-form";
-import { EventFormActions } from "@/components/events/event-form-actions";
 import {
   saveEventDraftAction,
   submitEventForReviewAction
@@ -44,7 +43,6 @@ function renderCreateForm(props: Partial<Parameters<typeof EventForm>[0]> = {}) 
       role="office_worker"
       userVenueId={venues[0].id}
       users={[]}
-      sidebar={<EventFormActions />}
       {...props}
     />
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { createArtistAction } from "@/actions/artists";
 import {
@@ -13,19 +13,18 @@ import {
 import { VenueMultiSelect, type VenueOption } from "@/components/venues/venue-multi-select";
 import { deriveEventFormVenueDefaults } from "@/lib/events/form-defaults";
 import { SubmitButton } from "@/components/ui/submit-button";
-import { DeleteEventButton } from "@/components/events/delete-event-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
 import { FieldError } from "@/components/ui/field-error";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { EventFormContext } from "@/components/events/event-form-context";
+import { WebsiteListingCard } from "@/components/events/website-listing-card";
+import { FloatingActionBar } from "@/components/events/floating-action-bar";
 import { EVENT_GOALS } from "@/lib/event-goals";
 import { cn } from "@/lib/utils";
-import { formatCurrency, formatPercent } from "@/lib/utils/format";
 import { toLondonDateTimeInputValue } from "@/lib/datetime";
 import type { EventSummary } from "@/lib/events";
 import type { UserRole } from "@/lib/types";
@@ -43,7 +42,6 @@ export type EventFormProps = {
   initialStartAt?: string;
   initialEndAt?: string;
   initialVenueId?: string;
-  sidebar?: ReactNode;
   users?: Array<{ id: string; name: string }>;
   /**
    * Gates the inline Delete button rendered inside the form actions. Caller
@@ -188,7 +186,6 @@ export function EventForm({
   initialStartAt,
   initialEndAt,
   initialVenueId,
-  sidebar,
   users,
   canDelete = false,
   readOnly = false,
@@ -203,7 +200,6 @@ export function EventForm({
   const [termsState, termsAction] = useActionState(generateTermsAndConditionsAction, undefined);
   const [artistCreateState, createArtistFormAction] = useActionState(createArtistAction, undefined);
   const [intent, setIntent] = useState<"draft" | "submit" | "generate">("draft");
-  const [activeTab, setActiveTab] = useState("event-details");
   const [isDirty, setIsDirty] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [showArtistModal, setShowArtistModal] = useState(false);
@@ -588,41 +584,15 @@ export function EventForm({
   const activeState = intent === "submit" ? submitState : draftState;
   const fieldErrors = activeState?.fieldErrors ?? {};
 
-  // Error indicators per tab
-  const tabErrors = {
-    eventDetails: Boolean(
-      fieldErrors.title || fieldErrors.venueId || fieldErrors.eventType ||
-      fieldErrors.bookingType || fieldErrors.ticketPrice ||
-      fieldErrors.notes || fieldErrors.startAt || fieldErrors.endAt || fieldErrors.venueSpace
-    ),
-    accelerateGrowth: Boolean(
-      fieldErrors.agePolicy ||
-      fieldErrors.checkInCutoffMinutes || fieldErrors.cancellationWindowHours ||
-      fieldErrors.termsAndConditions || fieldErrors.accessibilityNotes
-    ),
-    websiteListings: Boolean(
-      fieldErrors.publicTitle || fieldErrors.publicTeaser ||
-      fieldErrors.publicHighlights || fieldErrors.publicDescription || fieldErrors.seoTitle ||
-      fieldErrors.seoDescription || fieldErrors.seoSlug
-    )
-  };
-
-  // Auto-switch to the first tab with errors and scroll to the first invalid field
+  // Auto-scroll to the first invalid field when errors appear
   const hasFieldErrors = Object.keys(fieldErrors).length > 0;
   useEffect(() => {
     if (!hasFieldErrors) return;
-    if (tabErrors.eventDetails) {
-      setActiveTab("event-details");
-    } else if (tabErrors.accelerateGrowth) {
-      setActiveTab("accelerate-growth");
-    } else if (tabErrors.websiteListings) {
-      setActiveTab("website-listings");
-    }
     const timer = setTimeout(() => {
       document.querySelector('[aria-invalid="true"]')?.scrollIntoView({ behavior: "smooth", block: "center" });
     }, 100);
     return () => clearTimeout(timer);
-  }, [hasFieldErrors, tabErrors.eventDetails, tabErrors.accelerateGrowth, tabErrors.websiteListings]);
+  }, [hasFieldErrors]);
 
   const isPending = isSavingPending || isSubmittingPending || isGeneratingPending;
 
@@ -1421,13 +1391,6 @@ export function EventForm({
     </>
   );
 
-  const errorDot = (
-    <span
-      className="inline-block h-2 w-2 rounded-full bg-[var(--color-danger)]"
-      aria-label="This tab has errors"
-    />
-  );
-
   // ─── Modals ───────────────────────────────────────────────────────────────
 
   const artistModal = showArtistModal ? (
@@ -1739,254 +1702,101 @@ export function EventForm({
     </div>
   ) : null;
 
-  // ─── Tabbed layout (edit mode with sidebar) ───────────────────────────────
+  // ─── Two-column layout ────────────────────────────────────────────────────
 
-  if (sidebar) {
-    return (
-      <EventFormContext.Provider value={contextValue}>
-        <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start">
-          <div className="min-w-0">
-            <form ref={formRef} action={draftAction} noValidate onSubmit={handleSubmit} onChange={() => setIsDirty(true)}>
-              <input type="hidden" name="eventId" defaultValue={defaultValues?.id} />
-              <input type="hidden" name="operation_id" value={operationIdRef.current} readOnly />
-              <input type="hidden" name="idempotency_key" value={idempotencyKeyRef.current} readOnly />
-              {mode === "edit" && expectedUpdatedAt ? (
-                <input type="hidden" name="expected_updated_at" value={expectedUpdatedAt} readOnly />
-              ) : null}
-              {activeState && !activeState.success && activeState.message && !activeState.fieldErrors && (
-                <div className="mb-4 rounded-lg border border-[var(--color-danger)] bg-[var(--color-danger)]/10 p-4 text-sm text-[var(--color-danger)]" role="alert">
-                  <strong>Something went wrong:</strong> {activeState.message}
-                </div>
-              )}
-              {activeState?.success && activeState?.message && (
-                <div className="mb-4 rounded-lg border border-[var(--color-success)] bg-[var(--color-success)]/10 p-4 text-sm text-[var(--color-success)]" role="status">
-                  {activeState.message}
-                </div>
-              )}
-              <div className="mb-4 flex items-center gap-2">
-                {isPending ? (
-                  <span className="text-xs text-[var(--color-text-muted)] animate-pulse">
-                    {isSlow ? "Still saving — please don\u0027t navigate away..." : "Saving..."}
-                  </span>
-                ) : lastSavedAt ? (
-                  <span className="text-xs text-[var(--color-text-muted)]">
-                    Last saved: {lastSavedAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
-                  </span>
-                ) : isDirty ? (
-                  <span className="text-xs text-[var(--color-warning)]">Unsaved changes</span>
-                ) : null}
-              </div>
-              {/* Proxy buttons — sr-only, clicked programmatically from sidebar */}
-              <button
-                ref={proxyDraftRef}
-                type="submit"
-                data-intent="draft"
-                aria-hidden="true"
-                tabIndex={-1}
-                className="sr-only"
-              />
-              <button
-                ref={proxySubmitRef}
-                type="submit"
-                formAction={submitAction}
-                data-intent="submit"
-                aria-hidden="true"
-                tabIndex={-1}
-                className="sr-only"
-              />
-              <button
-                ref={proxyGenerateRef}
-                type="submit"
-                formAction={activeWebsiteCopyAction}
-                data-intent="generate"
-                aria-hidden="true"
-                tabIndex={-1}
-                className="sr-only"
-              />
+  return (
+    <EventFormContext.Provider value={contextValue}>
+      <form ref={formRef} action={draftAction} noValidate onSubmit={handleSubmit} onChange={() => setIsDirty(true)}>
+        <input type="hidden" name="eventId" defaultValue={defaultValues?.id} />
+        <input type="hidden" name="operation_id" value={operationIdRef.current} readOnly />
+        <input type="hidden" name="idempotency_key" value={idempotencyKeyRef.current} readOnly />
+        {mode === "edit" && expectedUpdatedAt ? (
+          <input type="hidden" name="expected_updated_at" value={expectedUpdatedAt} readOnly />
+        ) : null}
+        {activeState && !activeState.success && activeState.message && !activeState.fieldErrors && (
+          <div className="mb-4 rounded-lg border border-[var(--color-danger)] bg-[var(--color-danger)]/10 p-4 text-sm text-[var(--color-danger)]" role="alert">
+            <strong>Something went wrong:</strong> {activeState.message}
+          </div>
+        )}
+        {activeState?.success && activeState?.message && (
+          <div className="mb-4 rounded-lg border border-[var(--color-success)] bg-[var(--color-success)]/10 p-4 text-sm text-[var(--color-success)]" role="status">
+            {activeState.message}
+          </div>
+        )}
+        <div className="mb-4 flex items-center gap-2">
+          {isPending ? (
+            <span className="text-xs text-[var(--color-text-muted)] animate-pulse">
+              {isSlow ? "Still saving — please don't navigate away..." : "Saving..."}
+            </span>
+          ) : lastSavedAt ? (
+            <span className="text-xs text-[var(--color-text-muted)]">
+              Last saved: {lastSavedAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+            </span>
+          ) : isDirty ? (
+            <span className="text-xs text-[var(--color-warning)]">Unsaved changes</span>
+          ) : null}
+        </div>
+        {/* Proxy buttons — sr-only, clicked programmatically from FAB */}
+        <button ref={proxyDraftRef} type="submit" data-intent="draft" aria-hidden="true" tabIndex={-1} className="sr-only" />
+        <button ref={proxySubmitRef} type="submit" formAction={submitAction} data-intent="submit" aria-hidden="true" tabIndex={-1} className="sr-only" />
+        <button ref={proxyGenerateRef} type="submit" formAction={activeWebsiteCopyAction} data-intent="generate" aria-hidden="true" tabIndex={-1} className="sr-only" />
 
-              <fieldset disabled={isPending || readOnly} className="disabled:opacity-60">
-              <Card>
-                <Tabs defaultTab="event-details" value={activeTab} onValueChange={setActiveTab}>
-                  <div className="border-b border-[var(--color-border)] px-2">
-                    <TabsList>
-                      <TabsTrigger
-                        value="event-details"
-                        indicator={tabErrors.eventDetails ? errorDot : null}
-                      >
-                        Event Details
-                      </TabsTrigger>
-                      <TabsTrigger
-                        value="accelerate-growth"
-                        indicator={tabErrors.accelerateGrowth ? errorDot : null}
-                      >
-                        Accelerate Growth
-                      </TabsTrigger>
-                      <TabsTrigger
-                        value="website-listings"
-                        indicator={tabErrors.websiteListings ? errorDot : null}
-                      >
-                        Website Listings
-                      </TabsTrigger>
-                      {debrief ? (
-                        <TabsTrigger value="debrief">
-                          Debrief
-                        </TabsTrigger>
-                      ) : null}
-                    </TabsList>
-                  </div>
+        <fieldset disabled={isPending || readOnly} className="disabled:opacity-60">
+          {/* Two-column layout */}
+          <div className="grid gap-6 lg:grid-cols-2">
+            {/* Left column: Event Details */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-semibold uppercase tracking-wider text-[var(--color-primary)]">
+                  Event Details
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {titleAndVenueFields}
+                {eventTypeField}
+                {timingFields}
+                {managerResponsibleField}
+                {notesField}
+                {artistsField}
+                {spacesField}
+                {eventImageField}
+              </CardContent>
+            </Card>
 
-                  <CardContent className="pt-6">
-                    {/* Tab 1: Event Details */}
-                    <TabsContent value="event-details" className="space-y-6">
-                      {titleAndVenueFields}
-                      {eventTypeField}
-                      {notesField}
-                      {managerResponsibleField}
-                      {artistsField}
-                      {timingFields}
-                      {spacesField}
-                      {eventImageField}
-                    </TabsContent>
-
-                    {/* Tab 2: Accelerate Growth */}
-                    <TabsContent value="accelerate-growth" className="space-y-6">
-                      {promosFields}
-                      {headcountField}
-                      {bookingFields}
-                      {cutoffAndCancellationFields}
-                      {agePolicyAndAccessibilityFields}
-                      {termsField}
-                      {financialsSection}
-                      {goalsSection}
-                    </TabsContent>
-
-                    {/* Tab 3: Website Listings */}
-                    <TabsContent value="website-listings" className="space-y-6">
-                      {websiteFields}
-                      <div className="flex items-center justify-between gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-soft)] px-4 py-3">
-                        {!canGenerateWebsiteCopy ? (
-                          <p className="text-xs text-subtle">
-                            Approve the event to enable AI generation.
-                          </p>
-                        ) : (
-                          <p className="text-xs text-subtle">
-                            Generate website copy from this event&apos;s details using AI.
-                          </p>
-                        )}
-                        <SubmitButton
-                          formAction={activeWebsiteCopyAction}
-                          label="Generate with AI"
-                          pendingLabel="Generating..."
-                          variant="secondary"
-                          data-intent="generate"
-                          disabled={!canGenerateWebsiteCopy}
-                          className="shrink-0"
-                        />
-                      </div>
-                    </TabsContent>
-
-                    {/* Tab 4: Debrief (only when submitted) */}
-                    {debrief ? (
-                      <TabsContent value="debrief" className="space-y-6">
-                        <div className="grid gap-4 text-sm md:grid-cols-2">
-                          <div className="space-y-3">
-                            <h3 className="font-semibold text-[var(--color-text)]">Attendance</h3>
-                            <p>Event: {debrief.attendance ?? "—"}</p>
-                            {debrief.baseline_attendance != null && (
-                              <p>Baseline: {debrief.baseline_attendance}</p>
-                            )}
-                          </div>
-
-                          <div className="space-y-3">
-                            <h3 className="font-semibold text-[var(--color-text)]">Takings</h3>
-                            <p>Wet: {formatCurrency(debrief.wet_takings)}</p>
-                            <p>Food: {formatCurrency(debrief.food_takings)}</p>
-                            <p>Total: {formatCurrency(debrief.actual_total_takings)}</p>
-                            {debrief.baseline_total_takings != null && (
-                              <p>Baseline: {formatCurrency(debrief.baseline_total_takings)}</p>
-                            )}
-                          </div>
-
-                          <div className="space-y-3">
-                            <h3 className="font-semibold text-[var(--color-text)]">Uplift</h3>
-                            <p>Value: {formatCurrency(debrief.sales_uplift_value)}</p>
-                            <p>Percent: {formatPercent(debrief.sales_uplift_percent)}</p>
-                          </div>
-
-                          <div className="space-y-3">
-                            <h3 className="font-semibold text-[var(--color-text)]">Assessment</h3>
-                            <p>Promo effectiveness: {debrief.promo_effectiveness ?? "—"} / 5</p>
-                            <p>Would book again: {debrief.would_book_again == null ? "Not answered" : debrief.would_book_again ? "Yes" : "No"}</p>
-                          </div>
-
-                          {debrief.labour_hours != null && (
-                            <div className="space-y-3">
-                              <h3 className="font-semibold text-[var(--color-text)]">Labour</h3>
-                              <p>Hours: {debrief.labour_hours}</p>
-                              {debrief.labour_rate_gbp_at_submit != null && (
-                                <p>Cost: {formatCurrency(debrief.labour_hours * debrief.labour_rate_gbp_at_submit)}</p>
-                              )}
-                            </div>
-                          )}
-                        </div>
-
-                        {(debrief.highlights || debrief.issues || debrief.guest_sentiment_notes || debrief.operational_notes || debrief.next_time_actions) && (
-                          <div className="space-y-4 border-t border-[var(--color-border)] pt-4 text-sm">
-                            {debrief.highlights && (
-                              <div>
-                                <h3 className="font-semibold text-[var(--color-text)]">Highlights</h3>
-                                <p className="mt-1 text-muted">{debrief.highlights}</p>
-                              </div>
-                            )}
-                            {debrief.issues && (
-                              <div>
-                                <h3 className="font-semibold text-[var(--color-text)]">Issues</h3>
-                                <p className="mt-1 text-muted">{debrief.issues}</p>
-                              </div>
-                            )}
-                            {debrief.guest_sentiment_notes && (
-                              <div>
-                                <h3 className="font-semibold text-[var(--color-text)]">Guest sentiment</h3>
-                                <p className="mt-1 text-muted">{debrief.guest_sentiment_notes}</p>
-                              </div>
-                            )}
-                            {debrief.operational_notes && (
-                              <div>
-                                <h3 className="font-semibold text-[var(--color-text)]">Operational notes</h3>
-                                <p className="mt-1 text-muted">{debrief.operational_notes}</p>
-                              </div>
-                            )}
-                            {debrief.next_time_actions && (
-                              <div>
-                                <h3 className="font-semibold text-[var(--color-text)]">Next time actions</h3>
-                                <p className="mt-1 text-muted">{debrief.next_time_actions}</p>
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        <p className="text-xs text-subtle">
-                          Submitted {new Date(debrief.submitted_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
-                        </p>
-                      </TabsContent>
-                    ) : null}
-                  </CardContent>
-                </Tabs>
-              </Card>
-              </fieldset>
-            </form>
+            {/* Right column: Website Listing */}
+            <WebsiteListingCard
+              websiteFields={websiteFields}
+              generateAction={activeWebsiteCopyAction}
+              canGenerate={canGenerateWebsiteCopy}
+              readOnly={readOnly}
+            />
           </div>
 
-          <div className="space-y-6">{sidebar}</div>
-        </div>
+          {/* Lower: Booking & Ticketing */}
+          <Card className="mt-6">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-semibold uppercase tracking-wider text-[var(--color-accent)]">
+                Booking &amp; Ticketing
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {promosFields}
+              {headcountField}
+              {bookingFields}
+              {cutoffAndCancellationFields}
+              {agePolicyAndAccessibilityFields}
+              {termsField}
+              {financialsSection}
+              {goalsSection}
+            </CardContent>
+          </Card>
+        </fieldset>
+      </form>
 
-        {artistModal}
-        {termsModal}
-      </EventFormContext.Provider>
-    );
-  }
+      {!readOnly ? <FloatingActionBar /> : null}
 
-  // Defensive — both event pages always pass `sidebar`. If a future caller
-  // omits it, render nothing rather than the (now-removed) legacy layout.
-  return null;
+      {artistModal}
+      {termsModal}
+    </EventFormContext.Provider>
+  );
 }
