@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { formatInLondon } from "@/lib/datetime";
@@ -38,6 +38,7 @@ type EventRow = {
   start_at: string;
   seo_slug: string | null;
   booking_enabled: boolean;
+  booking_url: string | null;
   total_capacity: number | null;
   max_tickets_per_booking: number;
   status: string;
@@ -57,7 +58,7 @@ async function getEventBySlug(slug: string): Promise<EventRow | null> {
   const { data, error } = await db
     .from("events")
     .select(
-      "id, title, public_title, public_teaser, public_description, public_highlights, event_image_path, start_at, seo_slug, booking_enabled, total_capacity, max_tickets_per_booking, status, venue:venues!events_venue_id_fkey(id, name)"
+      "id, title, public_title, public_teaser, public_description, public_highlights, event_image_path, start_at, seo_slug, booking_enabled, booking_url, total_capacity, max_tickets_per_booking, status, venue:venues!events_venue_id_fkey(id, name)"
     )
     .eq("seo_slug", slug)
     .is("deleted_at", null)
@@ -91,6 +92,7 @@ async function getEventBySlug(slug: string): Promise<EventRow | null> {
     start_at: raw.start_at as string,
     seo_slug: (raw.seo_slug as string | null) ?? null,
     booking_enabled: raw.booking_enabled as boolean,
+    booking_url: (raw.booking_url as string | null) ?? null,
     total_capacity: (raw.total_capacity as number | null) ?? null,
     max_tickets_per_booking: (raw.max_tickets_per_booking as number) ?? 10,
     status: raw.status as string,
@@ -123,6 +125,14 @@ export default async function EventLandingPage({ params }: PageProps) {
 
   if (!event || !event.booking_enabled) {
     notFound();
+  }
+
+  // External booking link short-circuits the local booking flow.
+  // permanentRedirect issues an HTTP 308 — search engines forward link equity
+  // to the destination, browsers preserve method, and the slug remains a
+  // shareable handle should the URL ever be cleared.
+  if (event.booking_url) {
+    permanentRedirect(event.booking_url);
   }
 
   // Count confirmed tickets for sold-out detection

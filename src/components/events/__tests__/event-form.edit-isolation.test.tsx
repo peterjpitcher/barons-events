@@ -3,6 +3,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventForm } from "@/components/events/event-form";
+import { EventFormActions } from "@/components/events/event-form-actions";
 
 vi.mock("sonner", () => ({
   toast: {
@@ -72,6 +73,7 @@ describe("EventForm edit-mode isolation", () => {
         role="administrator"
         userVenueId={null}
         users={[]}
+        sidebar={<EventFormActions />}
       />
     );
 
@@ -100,6 +102,7 @@ describe("EventForm edit-mode isolation", () => {
         role="administrator"
         userVenueId={null}
         users={[]}
+        sidebar={<EventFormActions />}
       />
     );
 
@@ -118,6 +121,7 @@ describe("EventForm edit-mode isolation", () => {
         role="administrator"
         userVenueId={null}
         users={[]}
+        sidebar={<EventFormActions />}
       />
     );
 

@@ -17,7 +17,7 @@ import {
 } from "@/lib/events/save-rpc";
 import { generateUniqueEventSlug } from "@/lib/bookings";
 import { cleanupOrphanArtists, parseArtistNames, syncEventArtists } from "@/lib/artists";
-import { eventDraftSchema, eventFormSchema } from "@/lib/validation";
+import { eventDraftSchema, eventFormSchema, bookingUrlSchema } from "@/lib/validation";
 import { getFieldErrors } from "@/lib/form-errors";
 import type { ActionResult, EventStatus } from "@/lib/types";
 import type { Database } from "@/lib/supabase/database.types";
@@ -1039,7 +1039,8 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
           public_teaser: values.publicTeaser ?? null,
           public_description: values.publicDescription ?? null,
           public_highlights: values.publicHighlights ?? null,
-          booking_url: values.bookingUrl ?? null,
+          // booking_url is owned by BookingSettingsCard / updateBookingSettingsAction;
+          // intentionally omitted here so saving the event form does not clobber the URL.
           seo_title: values.seoTitle ?? null,
           seo_description: values.seoDescription ?? null,
           seo_slug: values.seoSlug ?? null
@@ -2383,6 +2384,7 @@ const bookingSettingsSchema = z.object({
   totalCapacity: z.number().int().positive().nullable(),
   maxTicketsPerBooking: z.number().int().min(1).max(50),
   smsPromoEnabled: z.boolean().optional(),
+  bookingUrl: bookingUrlSchema,
 });
 
 export type UpdateBookingSettingsInput = z.infer<typeof bookingSettingsSchema>;
@@ -2404,7 +2406,7 @@ export async function updateBookingSettingsAction(
     return { success: false, message: "Invalid booking settings." };
   }
 
-  const { eventId, bookingEnabled, totalCapacity, maxTicketsPerBooking, smsPromoEnabled } = parsed.data;
+  const { eventId, bookingEnabled, totalCapacity, maxTicketsPerBooking, smsPromoEnabled, bookingUrl } = parsed.data;
 
   // This action uses the admin client below, so the server-side guard is
   // the sole enforcement point. Validate permission via the true row.
@@ -2447,6 +2449,7 @@ export async function updateBookingSettingsAction(
     total_capacity: totalCapacity,
     max_tickets_per_booking: maxTicketsPerBooking,
     seo_slug: seoSlug,
+    booking_url: bookingUrl ?? null,
   };
   if (user.role === "administrator" && smsPromoEnabled !== undefined) {
     updatePayload.sms_promo_enabled = smsPromoEnabled;
@@ -2468,7 +2471,7 @@ export async function updateBookingSettingsAction(
       entityId: eventId,
       action: "event.booking_settings_updated",
       actorId: user.id,
-      meta: { bookingEnabled, totalCapacity, maxTicketsPerBooking }
+      meta: { bookingEnabled, totalCapacity, maxTicketsPerBooking, bookingUrl: bookingUrl ?? null }
     });
   } catch (auditError) {
     // Booking settings save itself succeeded — audit failure is logged but

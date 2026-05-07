@@ -136,6 +136,7 @@ export async function GET(request: Request) {
     open_time: string | null;
     close_time: string | null;
     is_closed: boolean;
+    availability: string | null;
     note: string | null;
     created_by: string | null;
     created_at: string;
@@ -149,6 +150,8 @@ export async function GET(request: Request) {
     open_time: row.open_time,
     close_time: row.close_time,
     is_closed: row.is_closed,
+    availability: (row.availability ?? (row.is_closed ? "closed" : "open")) as
+      "open" | "closed" | "unavailable",
     note: row.note ?? null,
     created_by: row.created_by ?? null,
     created_at: row.created_at,

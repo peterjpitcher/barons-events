@@ -1,6 +1,6 @@
 // Pure resolver — no server imports, safe for use in client components.
 // Input types are imported as type-only (erased at compile time).
-import type { ServiceTypeRow, OpeningHoursRow, OpeningOverrideRow, VenueServiceRow } from "@/lib/opening-hours";
+import type { Availability, ServiceTypeRow, OpeningHoursRow, OpeningOverrideRow, VenueServiceRow } from "@/lib/opening-hours";
 
 // ─── Output types ─────────────────────────────────────────────────────────────
 
@@ -8,6 +8,9 @@ export type ResolvedServiceHours = {
   serviceTypeId: string;
   serviceType: string;
   hasService: boolean;
+  /** "open" or "closed" — never "unavailable" (those entries are omitted). */
+  status: "open" | "closed";
+  /** Kept for backward-compat with existing API consumers. Equivalent to `status === "open"`. */
   isOpen: boolean;
   openTime: string | null;
   closeTime: string | null;
@@ -71,6 +74,15 @@ function serviceKey(venueId: string, serviceTypeId: string): string {
   return `${venueId}|${serviceTypeId}`;
 }
 
+/**
+ * Resolve `availability` from a row. Pre-migration rows lack the column,
+ * so fall back to the legacy `is_closed` boolean ("closed" or "open").
+ */
+function effectiveAvailability(row: { availability?: Availability; is_closed: boolean }): Availability {
+  if (row.availability) return row.availability;
+  return row.is_closed ? "closed" : "open";
+}
+
 // ─── Public resolver ──────────────────────────────────────────────────────────
 
 /**
@@ -117,14 +129,16 @@ export function resolveOpeningTimes(params: {
   for (const row of weeklyHours) {
     const openTime = normaliseTime(row.open_time);
     const closeTime = normaliseTime(row.close_time);
-    if (!row.is_closed && openTime && closeTime) {
+    const availability = effectiveAvailability(row);
+    if (availability === "open" && openTime && closeTime) {
       servicesWithOpeningTimes.add(serviceKey(row.venue_id, row.service_type_id));
     }
   }
   for (const override of overrides) {
     const openTime = normaliseTime(override.open_time);
     const closeTime = normaliseTime(override.close_time);
-    if (!override.is_closed && openTime && closeTime) {
+    const availability = effectiveAvailability(override);
+    if (availability === "open" && openTime && closeTime) {
       for (const venueId of override.venue_ids) {
         venueServiceSet.add(serviceKey(venueId, override.service_type_id));
         servicesWithOpeningTimes.add(serviceKey(venueId, override.service_type_id));
@@ -163,13 +177,17 @@ export function resolveOpeningTimes(params: {
         const weekly = weeklyMap.get(`${venue.id}|${st.id}|${dbDay}`);
 
         if (override) {
+          const availability = effectiveAvailability(override);
+          // Unavailable rows are omitted from the API output entirely.
+          if (availability === "unavailable") continue;
           const openTime = normaliseTime(override.open_time);
           const closeTime = normaliseTime(override.close_time);
-          const isOpen = !override.is_closed && Boolean(openTime && closeTime);
+          const isOpen = availability === "open" && Boolean(openTime && closeTime);
           services.push({
             serviceTypeId: st.id,
             serviceType: st.name,
             hasService: true,
+            status: isOpen ? "open" : "closed",
             isOpen,
             openTime: isOpen ? openTime : null,
             closeTime: isOpen ? closeTime : null,
@@ -177,13 +195,16 @@ export function resolveOpeningTimes(params: {
             note: override.note ?? null,
           });
         } else if (weekly) {
+          const availability = effectiveAvailability(weekly);
+          if (availability === "unavailable") continue;
           const openTime = normaliseTime(weekly.open_time);
           const closeTime = normaliseTime(weekly.close_time);
-          const isOpen = !weekly.is_closed && Boolean(openTime && closeTime);
+          const isOpen = availability === "open" && Boolean(openTime && closeTime);
           services.push({
             serviceTypeId: st.id,
             serviceType: st.name,
             hasService: true,
+            status: isOpen ? "open" : "closed",
             isOpen,
             openTime: isOpen ? openTime : null,
             closeTime: isOpen ? closeTime : null,
@@ -195,6 +216,7 @@ export function resolveOpeningTimes(params: {
             serviceTypeId: st.id,
             serviceType: st.name,
             hasService: true,
+            status: "closed",
             isOpen: false,
             openTime: null,
             closeTime: null,

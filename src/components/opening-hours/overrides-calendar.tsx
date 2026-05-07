@@ -8,7 +8,7 @@ import {
   updateOpeningOverrideAction,
   deleteOpeningOverrideAction
 } from "@/actions/opening-hours";
-import type { ServiceTypeRow, OpeningOverrideRow } from "@/lib/opening-hours";
+import type { Availability, ServiceTypeRow, OpeningOverrideRow } from "@/lib/opening-hours";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
@@ -47,6 +47,10 @@ function formatDisplayDate(isoDate: string): string {
     month: "short",
     year: "numeric"
   });
+}
+
+function overrideAvailability(row: OpeningOverrideRow): Availability {
+  return row.availability ?? (row.is_closed ? "closed" : "open");
 }
 
 function formatTime(t: string | null): string {
@@ -232,19 +236,28 @@ export function OverridesCalendar({
                 </div>
                 {hasOverrides ? (
                   <div className="mt-1 space-y-0.5">
-                    {dayOverrides.slice(0, 3).map((ov) => (
+                    {dayOverrides.slice(0, 3).map((ov) => {
+                      const ovAvailability = overrideAvailability(ov);
+                      return (
                       <div
                         key={ov.id}
                         className={`truncate rounded px-1 py-0.5 text-[0.65rem] font-medium ${
-                          ov.is_closed
+                          ovAvailability === "closed"
                             ? "bg-[var(--color-danger)] bg-opacity-15 text-[var(--color-danger)]"
+                            : ovAvailability === "unavailable"
+                            ? "bg-[var(--color-muted-surface)] text-subtle"
                             : "bg-[var(--color-primary-100)] text-[var(--color-primary-700)]"
                         }`}
                       >
                         {serviceName(ov.service_type_id)}
-                        {ov.is_closed ? " · Closed" : ` · ${formatTime(ov.open_time)}–${formatTime(ov.close_time)}`}
+                        {ovAvailability === "closed"
+                          ? " · Closed"
+                          : ovAvailability === "unavailable"
+                          ? " · Unavailable"
+                          : ` · ${formatTime(ov.open_time)}–${formatTime(ov.close_time)}`}
                       </div>
-                    ))}
+                      );
+                    })}
                     {dayOverrides.length > 3 ? (
                       <div className="text-[0.6rem] text-subtle">+{dayOverrides.length - 3} more</div>
                     ) : null}
@@ -300,9 +313,12 @@ export function OverridesCalendar({
                       {serviceName(ov.service_type_id)}
                     </p>
                     <p className="text-xs text-subtle">
-                      {ov.is_closed
-                        ? "Closed"
-                        : `${formatTime(ov.open_time)} – ${formatTime(ov.close_time)}`}
+                      {(() => {
+                        const ovAvailability = overrideAvailability(ov);
+                        if (ovAvailability === "closed") return "Closed";
+                        if (ovAvailability === "unavailable") return "Unavailable";
+                        return `${formatTime(ov.open_time)} – ${formatTime(ov.close_time)}`;
+                      })()}
                       {ov.note ? ` · ${ov.note}` : ""}
                     </p>
                     <p className="text-xs text-subtle">
@@ -408,7 +424,9 @@ function OverrideFormModal({
   const [serviceTypeId, setServiceTypeId] = useState(
     editingOverride?.service_type_id ?? (serviceTypes[0]?.id ?? "")
   );
-  const [isClosed, setIsClosed] = useState(editingOverride?.is_closed ?? false);
+  const initialAvailability =
+    editingOverride?.availability ?? (editingOverride?.is_closed ? "closed" : "open");
+  const [availability, setAvailability] = useState<Availability>(initialAvailability);
   const [openTime, setOpenTime] = useState(editingOverride?.open_time ?? "");
   const [closeTime, setCloseTime] = useState(editingOverride?.close_time ?? "");
   const [note, setNote] = useState(editingOverride?.note ?? "");
@@ -435,12 +453,13 @@ function OverrideFormModal({
     }
     setError(null);
 
+    const isOpen = availability === "open";
     const payload = {
       override_date: date,
       service_type_id: serviceTypeId,
-      open_time: isClosed ? null : (openTime || null),
-      close_time: isClosed ? null : (closeTime || null),
-      is_closed: isClosed,
+      open_time: isOpen ? (openTime || null) : null,
+      close_time: isOpen ? (closeTime || null) : null,
+      availability,
       note: note.trim() || null,
       venue_ids: selectedVenueIds
     };
@@ -462,7 +481,8 @@ function OverrideFormModal({
           service_type_id: payload.service_type_id,
           open_time: payload.open_time ?? null,
           close_time: payload.close_time ?? null,
-          is_closed: payload.is_closed,
+          is_closed: payload.availability !== "open",
+          availability: payload.availability,
           note: payload.note ?? null,
           created_by: editingOverride?.created_by ?? null,
           created_at: editingOverride?.created_at ?? new Date().toISOString(),
@@ -521,17 +541,31 @@ function OverrideFormModal({
             </Select>
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-[var(--color-text)]">
-            <input
-              type="checkbox"
-              checked={isClosed}
-              onChange={(e) => setIsClosed(e.target.checked)}
-              className="h-4 w-4"
-            />
-            Fully closed on this date
-          </label>
+          <fieldset className="space-y-1.5 text-sm text-[var(--color-text)]">
+            <legend className="text-xs font-semibold uppercase tracking-[0.12em] text-subtle">
+              Availability
+            </legend>
+            {(
+              [
+                { value: "open", label: "Open (set times below)" },
+                { value: "closed", label: "Closed (API serves the word “closed”)" },
+                { value: "unavailable", label: "Unavailable (API omits this service)" }
+              ] as const
+            ).map((option) => (
+              <label key={option.value} className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="override-availability"
+                  checked={availability === option.value}
+                  onChange={() => setAvailability(option.value)}
+                  className="h-4 w-4"
+                />
+                {option.label}
+              </label>
+            ))}
+          </fieldset>
 
-          {!isClosed ? (
+          {availability === "open" ? (
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="override-open">Opens at</Label>

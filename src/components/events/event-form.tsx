@@ -222,19 +222,8 @@ export function EventForm({
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [isSlow, setIsSlow] = useState(false);
 
-  // Legacy collapsible sections (create mode only)
-  const [sectionOpen, setSectionOpen] = useState({
-    core: true,
-    timing: true,
-    planning: true,
-    goals: true,
-    website: true,
-    save: true
-  });
-
   // Refs for proxy buttons and form (tabbed mode)
   const formRef = useRef<HTMLFormElement>(null);
-  const legacySubmitRef = useRef<HTMLButtonElement>(null);
   const proxyDraftRef = useRef<HTMLButtonElement>(null);
   const proxySubmitRef = useRef<HTMLButtonElement>(null);
   const proxyGenerateRef = useRef<HTMLButtonElement>(null);
@@ -437,7 +426,6 @@ export function EventForm({
   const [publicHighlights, setPublicHighlights] = useState(
     Array.isArray(defaultValues?.public_highlights) ? defaultValues.public_highlights.join("\n") : ""
   );
-  const [bookingUrl, setBookingUrl] = useState(defaultValues?.booking_url ?? "");
   const [seoTitle, setSeoTitle] = useState(defaultValues?.seo_title ?? "");
   const [seoDescription, setSeoDescription] = useState(defaultValues?.seo_description ?? "");
   const [seoSlug, setSeoSlug] = useState(defaultValues?.seo_slug ?? "");
@@ -501,7 +489,15 @@ export function EventForm({
   }, [availableArtists, artistSearch, artistTypeFilter]);
   const createArtistFieldErrors = artistCreateState?.fieldErrors ?? {};
 
-  const typeOptions = eventTypes.length ? eventTypes : ["General"];
+  const typeOptions = useMemo(() => {
+    const base = eventTypes.length ? eventTypes : ["General"];
+    const baseSet = new Set(base);
+    const options = base.map((label) => ({ label, isLegacy: false }));
+    if (eventTypeValue && !baseSet.has(eventTypeValue)) {
+      options.push({ label: eventTypeValue, isLegacy: true });
+    }
+    return options;
+  }, [eventTypes, eventTypeValue]);
   const canGenerateWebsiteCopy = mode === "edit"
     ? Boolean(defaultValues?.id) && ["approved", "completed"].includes(defaultValues?.status ?? "")
     : true;
@@ -573,50 +569,6 @@ export function EventForm({
     setIntent(nextIntent);
   }
 
-  const completionPercent = (checks: boolean[]): number => {
-    const total = checks.length;
-    const complete = checks.filter(Boolean).length;
-    return Math.round((complete / total) * 100);
-  };
-
-  // Legacy completions (create mode)
-  const coreCompletion = completionPercent([
-    titleValue.trim().length >= 3,
-    eventTypeValue.trim().length >= 3,
-    selectedVenueId.trim().length > 0,
-    eventNotes.trim().length >= 20
-  ]);
-  const timingCompletion = completionPercent([
-    startValue.trim().length > 0,
-    endValue.trim().length > 0,
-    venueSpaceValue.trim().length >= 2
-  ]);
-  const planningCompletion = completionPercent([
-    bookingType.trim().length > 0,
-    bookingType !== "ticketed" || ticketPrice.trim().length > 0,
-    agePolicy.trim().length >= 2,
-    bookingType === "free_entry" || cancellationWindowHours.trim().length > 0,
-    termsAndConditions.trim().length >= 20
-  ]);
-  const goalsCompletion = completionPercent([selectedGoals.size > 0]);
-  const websiteCompletion = completionPercent([
-    publicTitle.trim().length >= 3,
-    publicTeaser.trim().length >= 12,
-    publicDescription.trim().length >= 80,
-    publicHighlights.trim().length > 0
-  ]);
-  const saveCompletion = completionPercent([
-    coreCompletion === 100,
-    timingCompletion === 100,
-    planningCompletion >= 80,
-    goalsCompletion === 100,
-    websiteCompletion >= 60
-  ]);
-
-  function toggleSection(section: keyof typeof sectionOpen) {
-    setSectionOpen((current) => ({ ...current, [section]: !current[section] }));
-  }
-
   function toggleGoal(value: string, checked: boolean) {
     setSelectedGoals((current) => {
       const next = new Set(current);
@@ -640,15 +592,16 @@ export function EventForm({
   const tabErrors = {
     eventDetails: Boolean(
       fieldErrors.title || fieldErrors.venueId || fieldErrors.eventType ||
+      fieldErrors.bookingType || fieldErrors.ticketPrice ||
       fieldErrors.notes || fieldErrors.startAt || fieldErrors.endAt || fieldErrors.venueSpace
     ),
     accelerateGrowth: Boolean(
-      fieldErrors.bookingType || fieldErrors.ticketPrice || fieldErrors.agePolicy ||
+      fieldErrors.agePolicy ||
       fieldErrors.checkInCutoffMinutes || fieldErrors.cancellationWindowHours ||
       fieldErrors.termsAndConditions || fieldErrors.accessibilityNotes
     ),
     websiteListings: Boolean(
-      fieldErrors.publicTitle || fieldErrors.bookingUrl || fieldErrors.publicTeaser ||
+      fieldErrors.publicTitle || fieldErrors.publicTeaser ||
       fieldErrors.publicHighlights || fieldErrors.publicDescription || fieldErrors.seoTitle ||
       fieldErrors.seoDescription || fieldErrors.seoSlug
     )
@@ -852,8 +805,10 @@ export function EventForm({
           )}
         >
           <option value="">Choose event type</option>
-          {typeOptions.map((type) => (
-            <option key={type} value={type}>{type}</option>
+          {typeOptions.map(({ label, isLegacy }) => (
+            <option key={label} value={label}>
+              {label}{isLegacy ? " (legacy — pick a current type)" : ""}
+            </option>
           ))}
         </Select>
         <FieldError id="event-type-error" message={fieldErrors.eventType} />
@@ -1321,45 +1276,23 @@ export function EventForm({
 
   const websiteFields = (
     <>
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor="publicTitle">Public name</Label>
-          <Input
-            id="publicTitle"
-            name="publicTitle"
-            value={publicTitle}
-            onChange={(event) => setPublicTitle(event.target.value)}
-            placeholder="Guest-facing name for the website"
-            aria-invalid={Boolean(fieldErrors.publicTitle)}
-            aria-describedby={fieldErrors.publicTitle ? "public-title-error" : undefined}
-            className={cn(
-              fieldErrors.publicTitle
-                ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
-                : undefined
-            )}
-          />
-          <FieldError id="public-title-error" message={fieldErrors.publicTitle} />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="bookingUrl">Booking link</Label>
-          <Input
-            id="bookingUrl"
-            name="bookingUrl"
-            type="url"
-            value={bookingUrl}
-            onChange={(event) => setBookingUrl(event.target.value)}
-            placeholder="https://..."
-            aria-invalid={Boolean(fieldErrors.bookingUrl)}
-            aria-describedby={fieldErrors.bookingUrl ? "booking-url-error" : undefined}
-            className={cn(
-              fieldErrors.bookingUrl
-                ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
-                : undefined
-            )}
-          />
-          <FieldError id="booking-url-error" message={fieldErrors.bookingUrl} />
-          <p className="text-xs text-subtle">Optional. If empty, the website can hide the booking CTA.</p>
-        </div>
+      <div className="space-y-2">
+        <Label htmlFor="publicTitle">Public name</Label>
+        <Input
+          id="publicTitle"
+          name="publicTitle"
+          value={publicTitle}
+          onChange={(event) => setPublicTitle(event.target.value)}
+          placeholder="Guest-facing name for the website"
+          aria-invalid={Boolean(fieldErrors.publicTitle)}
+          aria-describedby={fieldErrors.publicTitle ? "public-title-error" : undefined}
+          className={cn(
+            fieldErrors.publicTitle
+              ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+              : undefined
+          )}
+        />
+        <FieldError id="public-title-error" message={fieldErrors.publicTitle} />
       </div>
 
       <div className="space-y-2">
@@ -2053,227 +1986,7 @@ export function EventForm({
     );
   }
 
-  // ─── Legacy collapsible cards (create mode) ───────────────────────────────
-
-  return (
-    <EventFormContext.Provider value={contextValue}>
-      <>
-        <form action={draftAction} className="space-y-6" noValidate onSubmit={handleSubmit} onChange={() => setIsDirty(true)}>
-          <input type="hidden" name="eventId" defaultValue={defaultValues?.id} />
-          <input type="hidden" name="operation_id" value={operationIdRef.current} readOnly />
-          <input type="hidden" name="idempotency_key" value={idempotencyKeyRef.current} readOnly />
-          {mode === "edit" && expectedUpdatedAt ? (
-            <input type="hidden" name="expected_updated_at" value={expectedUpdatedAt} readOnly />
-          ) : null}
-          <button ref={legacySubmitRef} type="submit" formAction={submitAction} data-intent="submit" className="sr-only" aria-hidden tabIndex={-1} />
-          {activeState && !activeState.success && activeState.message && !activeState.fieldErrors && (
-            <div className="rounded-lg border border-[var(--color-danger)] bg-[var(--color-danger)]/10 p-4 text-sm text-[var(--color-danger)]" role="alert">
-              <strong>Something went wrong:</strong> {activeState.message}
-            </div>
-          )}
-          {activeState?.success && activeState?.message && (
-            <div className="rounded-lg border border-[var(--color-success)] bg-[var(--color-success)]/10 p-4 text-sm text-[var(--color-success)]" role="status">
-              {activeState.message}
-            </div>
-          )}
-          <fieldset disabled={isPending} className="space-y-6 disabled:opacity-60">
-
-          <Card>
-            <CardHeader>
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <CardTitle>1. Core details</CardTitle>
-                  <CardDescription>Start with the venue, title, type, and the key details guests should know.</CardDescription>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="rounded-full bg-[var(--color-muted-surface)] px-3 py-1 text-xs font-semibold text-[var(--color-text)]">
-                    {coreCompletion}% complete
-                  </span>
-                  <Button type="button" variant="ghost" size="sm" onClick={() => toggleSection("core")}>
-                    {sectionOpen.core ? "Collapse" : "Expand"}
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className={cn("grid gap-6", !sectionOpen.core && "hidden")}>
-              {titleAndVenueFields}
-              {eventTypeField}
-              {notesField}
-              {managerResponsibleField}
-              {artistsField}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <CardTitle>2. Timing & spaces</CardTitle>
-                  <CardDescription>Set when the event runs, then list the spaces being used.</CardDescription>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="rounded-full bg-[var(--color-muted-surface)] px-3 py-1 text-xs font-semibold text-[var(--color-text)]">
-                    {timingCompletion}% complete
-                  </span>
-                  <Button type="button" variant="ghost" size="sm" onClick={() => toggleSection("timing")}>
-                    {sectionOpen.timing ? "Collapse" : "Expand"}
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className={cn("grid gap-6", !sectionOpen.timing && "hidden")}>
-              {timingFields}
-              {spacesField}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <CardTitle>3. Promos & planning</CardTitle>
-                  <CardDescription>
-                    Capture promotions, booking model, and commercial details so guest content stays accurate.
-                  </CardDescription>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="rounded-full bg-[var(--color-muted-surface)] px-3 py-1 text-xs font-semibold text-[var(--color-text)]">
-                    {planningCompletion}% complete
-                  </span>
-                  <Button type="button" variant="ghost" size="sm" onClick={() => toggleSection("planning")}>
-                    {sectionOpen.planning ? "Collapse" : "Expand"}
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className={cn("grid gap-6", !sectionOpen.planning && "hidden")}>
-              {promosFields}
-              {headcountField}
-              {bookingFields}
-              {cutoffAndCancellationFields}
-              {agePolicyAndAccessibilityFields}
-              {eventImageField}
-              {termsField}
-              {financialsSection}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <CardTitle>4. Goals</CardTitle>
-                  <CardDescription>Select the goals that matter for this activation.</CardDescription>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="rounded-full bg-[var(--color-muted-surface)] px-3 py-1 text-xs font-semibold text-[var(--color-text)]">
-                    {goalsCompletion}% complete
-                  </span>
-                  <Button type="button" variant="ghost" size="sm" onClick={() => toggleSection("goals")}>
-                    {sectionOpen.goals ? "Collapse" : "Expand"}
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className={cn("grid gap-6", !sectionOpen.goals && "hidden")}>
-              {goalsSection}
-            </CardContent>
-          </Card>
-
-          <Card id="website-copy">
-            <CardHeader>
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <CardTitle>5. Website listing (AI-assisted)</CardTitle>
-                  <CardDescription>Generate and polish the guest-facing name, teaser, and description for the website.</CardDescription>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="rounded-full bg-[var(--color-muted-surface)] px-3 py-1 text-xs font-semibold text-[var(--color-text)]">
-                    {websiteCompletion}% complete
-                  </span>
-                  <Button type="button" variant="ghost" size="sm" onClick={() => toggleSection("website")}>
-                    {sectionOpen.website ? "Collapse" : "Expand"}
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className={cn("grid gap-6", !sectionOpen.website && "hidden")}>
-              {websiteFields}
-              {!canGenerateWebsiteCopy ? (
-                <p className="text-xs text-subtle">
-                  Save the draft and approve the event to enable AI generation.
-                </p>
-              ) : null}
-            </CardContent>
-            <CardFooter className="justify-end">
-              <SubmitButton
-                formAction={activeWebsiteCopyAction}
-                label="Generate with AI"
-                pendingLabel="Generating..."
-                variant="secondary"
-                data-intent="generate"
-                disabled={!canGenerateWebsiteCopy}
-              />
-            </CardFooter>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <CardTitle>6. Save & submit</CardTitle>
-                  <CardDescription>Save a draft first, then submit for review when ready.</CardDescription>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="rounded-full bg-[var(--color-muted-surface)] px-3 py-1 text-xs font-semibold text-[var(--color-text)]">
-                    {saveCompletion}% complete
-                  </span>
-                  <Button type="button" variant="ghost" size="sm" onClick={() => toggleSection("save")}>
-                    {sectionOpen.save ? "Collapse" : "Expand"}
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className={cn("flex flex-wrap items-center gap-3", !sectionOpen.save && "hidden")}>
-              <SubmitButton
-                label={primaryLabel}
-                pendingLabel="Saving..."
-                variant="primary"
-                data-intent="draft"
-                disabled={isSavingPending || isSubmittingPending}
-              />
-              {showSecondaryAction ? (
-                <SubmitButton
-                  formAction={submitAction}
-                  label={secondaryLabel}
-                  pendingLabel={role === "administrator" ? "Publishing..." : "Sending..."}
-                  variant="secondary"
-                  data-intent="submit"
-                  disabled={isSavingPending || isSubmittingPending}
-                />
-              ) : null}
-              {mode === "edit" && defaultValues?.id && canDelete ? (
-                <DeleteEventButton eventId={defaultValues.id} />
-              ) : null}
-              {isPending ? (
-                <span className="text-xs text-[var(--color-text-muted)] animate-pulse">
-                  {isSlow ? "Still saving — please don\u0027t navigate away..." : "Saving..."}
-                </span>
-              ) : lastSavedAt ? (
-                <span className="text-xs text-[var(--color-text-muted)]">
-                  Last saved: {lastSavedAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
-                </span>
-              ) : isDirty ? (
-                <span className="text-xs text-[var(--color-warning)]">Unsaved changes</span>
-              ) : null}
-            </CardContent>
-          </Card>
-          </fieldset>
-        </form>
-
-        {artistModal}
-        {termsModal}
-      </>
-    </EventFormContext.Provider>
-  );
+  // Defensive — both event pages always pass `sidebar`. If a future caller
+  // omits it, render nothing rather than the (now-removed) legacy layout.
+  return null;
 }

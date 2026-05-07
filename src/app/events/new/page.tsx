@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { EventForm } from "@/components/events/event-form";
+import { EventFormActions } from "@/components/events/event-form-actions";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCurrentUser } from "@/lib/auth";
 import { canProposeEvents } from "@/lib/roles";
@@ -90,6 +91,17 @@ export default async function NewEventPage({ searchParams }: PageProps) {
         initialEndAt={initialEndAt}
         initialVenueId={initialVenueId}
         users={assignableUsers.map((u) => ({ id: u.id, name: u.name }))}
+        sidebar={
+          <Card>
+            <CardHeader>
+              <CardTitle>Save & submit</CardTitle>
+              <CardDescription>Save a draft first, then submit for review when ready.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <EventFormActions />
+            </CardContent>
+          </Card>
+        }
       />
     </div>
   );

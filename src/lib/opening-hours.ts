@@ -2,6 +2,8 @@ import { createSupabaseActionClient, createSupabaseReadonlyClient } from "@/lib/
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+export type Availability = "open" | "closed" | "unavailable";
+
 export type ServiceTypeRow = {
   id: string;
   name: string;
@@ -17,6 +19,7 @@ export type OpeningHoursRow = {
   open_time: string | null;
   close_time: string | null;
   is_closed: boolean;
+  availability: Availability;
   created_at: string;
   updated_at: string;
 };
@@ -28,6 +31,7 @@ export type OpeningOverrideRow = {
   open_time: string | null;
   close_time: string | null;
   is_closed: boolean;
+  availability: Availability;
   note: string | null;
   created_by: string | null;
   created_at: string;
@@ -47,7 +51,7 @@ export type UpsertHoursInput = {
   day_of_week: number;
   open_time: string | null;
   close_time: string | null;
-  is_closed: boolean;
+  availability: Availability;
   has_service: boolean;
 };
 
@@ -56,7 +60,7 @@ export type CreateOverrideInput = {
   service_type_id: string;
   open_time: string | null;
   close_time: string | null;
-  is_closed: boolean;
+  availability: Availability;
   note: string | null;
   venue_ids: string[];
   created_by: string;
@@ -200,7 +204,7 @@ export async function upsertVenueOpeningHours(
         .filter((row) => {
           const openTime = normaliseTimeForStorage(row.open_time);
           const closeTime = normaliseTimeForStorage(row.close_time);
-          return row.has_service && !row.is_closed && openTime && closeTime;
+          return row.has_service && row.availability === "open" && openTime && closeTime;
         })
         .map((row) => row.service_type_id)
     )
@@ -212,15 +216,21 @@ export async function upsertVenueOpeningHours(
     .map((row) => {
       const openTime = normaliseTimeForStorage(row.open_time);
       const closeTime = normaliseTimeForStorage(row.close_time);
-      const isClosed = row.is_closed || !openTime || !closeTime;
+      // Empty time fields collapse to "closed" for legacy callers; the
+      // 3-state UI sets `availability` explicitly so this is a defensive
+      // fallback only.
+      const availability: Availability =
+        row.availability === "open" && (!openTime || !closeTime) ? "closed" : row.availability;
+      const isOpen = availability === "open";
 
       return {
         venue_id: venueId,
         service_type_id: row.service_type_id,
         day_of_week: row.day_of_week,
-        open_time: isClosed ? null : openTime,
-        close_time: isClosed ? null : closeTime,
-        is_closed: isClosed,
+        open_time: isOpen ? openTime : null,
+        close_time: isOpen ? closeTime : null,
+        is_closed: !isOpen,           // kept in sync for callers still reading is_closed
+        availability,
         updated_at: new Date().toISOString()
       };
     });
@@ -302,6 +312,7 @@ export async function listOpeningOverrides(options?: {
     open_time: row.open_time,
     close_time: row.close_time,
     is_closed: row.is_closed,
+    availability: (row.availability ?? (row.is_closed ? "closed" : "open")) as Availability,
     note: row.note,
     created_by: row.created_by,
     created_at: row.created_at,
@@ -320,16 +331,19 @@ export async function createOpeningOverride(input: CreateOverrideInput): Promise
   const supabase = await createSupabaseActionClient();
   const openTime = normaliseTimeForStorage(input.open_time);
   const closeTime = normaliseTimeForStorage(input.close_time);
-  const isClosed = input.is_closed || !openTime || !closeTime;
+  const availability: Availability =
+    input.availability === "open" && (!openTime || !closeTime) ? "closed" : input.availability;
+  const isOpen = availability === "open";
 
   const { data, error } = await supabase
     .from("venue_opening_overrides")
     .insert({
       override_date: input.override_date,
       service_type_id: input.service_type_id,
-      open_time: isClosed ? null : openTime,
-      close_time: isClosed ? null : closeTime,
-      is_closed: isClosed,
+      open_time: isOpen ? openTime : null,
+      close_time: isOpen ? closeTime : null,
+      is_closed: !isOpen,
+      availability,
       note: input.note || null,
       created_by: input.created_by
     })
@@ -357,16 +371,19 @@ export async function updateOpeningOverride(id: string, input: UpdateOverrideInp
   const supabase = await createSupabaseActionClient();
   const openTime = normaliseTimeForStorage(input.open_time);
   const closeTime = normaliseTimeForStorage(input.close_time);
-  const isClosed = input.is_closed || !openTime || !closeTime;
+  const availability: Availability =
+    input.availability === "open" && (!openTime || !closeTime) ? "closed" : input.availability;
+  const isOpen = availability === "open";
 
   const { error } = await supabase
     .from("venue_opening_overrides")
     .update({
       override_date: input.override_date,
       service_type_id: input.service_type_id,
-      open_time: isClosed ? null : openTime,
-      close_time: isClosed ? null : closeTime,
-      is_closed: isClosed,
+      open_time: isOpen ? openTime : null,
+      close_time: isOpen ? closeTime : null,
+      is_closed: !isOpen,
+      availability,
       note: input.note || null,
       updated_at: new Date().toISOString()
     })

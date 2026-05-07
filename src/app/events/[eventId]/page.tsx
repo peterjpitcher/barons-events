@@ -677,6 +677,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
                 maxTicketsPerBooking={event.max_tickets_per_booking ?? 10}
                 seoSlug={event.seo_slug ?? null}
                 smsPromoEnabled={Boolean(event.sms_promo_enabled)}
+                bookingUrl={event.booking_url ?? null}
                 userRole={user.role}
               />
             ) : null}

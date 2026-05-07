@@ -12,7 +12,8 @@ import {
   createOpeningOverride,
   updateOpeningOverride,
   deleteOpeningOverride,
-  type UpsertHoursInput
+  type UpsertHoursInput,
+  type Availability
 } from "@/lib/opening-hours";
 import { getFieldErrors } from "@/lib/form-errors";
 import type { ActionResult } from "@/lib/types";
@@ -135,7 +136,7 @@ const openingHoursRowSchema = z.object({
   day_of_week: z.number().int().min(0).max(6),
   open_time: z.string().regex(/^\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/, "Invalid time format.").nullable(),
   close_time: z.string().regex(/^\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/, "Invalid time format.").nullable(),
-  is_closed: z.boolean(),
+  availability: z.enum(["open", "closed", "unavailable"]),
   has_service: z.boolean().default(true),
 });
 
@@ -246,7 +247,7 @@ const overrideSchema = z.object({
   service_type_id: z.string().uuid("Invalid service type"),
   open_time: z.string().regex(/^\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/, "Invalid time format.").nullable().optional(),
   close_time: z.string().regex(/^\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/, "Invalid time format.").nullable().optional(),
-  is_closed: z.boolean(),
+  availability: z.enum(["open", "closed", "unavailable"]),
   note: z.string().max(500).nullable().optional(),
   venue_ids: z.array(z.string().uuid()).min(1, "Select at least one venue")
 });
@@ -256,7 +257,7 @@ export async function createOpeningOverrideAction(payload: {
   service_type_id: string;
   open_time: string | null;
   close_time: string | null;
-  is_closed: boolean;
+  availability: Availability;
   note: string | null;
   venue_ids: string[];
 }): Promise<ActionResult> {
@@ -278,7 +279,7 @@ export async function createOpeningOverrideAction(payload: {
       entityId: parsed.data.venue_ids[0],
       action: "opening_hours.override_created",
       actorId: user.id,
-      meta: { overrideDate: parsed.data.override_date, isClosed: parsed.data.is_closed }
+      meta: { overrideDate: parsed.data.override_date, availability: parsed.data.availability }
     }).catch(() => {});
     revalidatePath("/venues");
     revalidatePath("/opening-hours");
@@ -296,7 +297,7 @@ export async function updateOpeningOverrideAction(
     service_type_id: string;
     open_time: string | null;
     close_time: string | null;
-    is_closed: boolean;
+    availability: Availability;
     note: string | null;
     venue_ids: string[];
   }

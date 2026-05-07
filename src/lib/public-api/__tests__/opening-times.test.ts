@@ -31,7 +31,7 @@ function makeWeeklyRow(
   dayOfWeek: number,
   openTime: string | null,
   closeTime: string | null,
-  isClosed = false
+  availability: "open" | "closed" | "unavailable" = "open"
 ): OpeningHoursRow {
   return {
     id: `${venueId}-${serviceTypeId}-${dayOfWeek}`,
@@ -40,7 +40,8 @@ function makeWeeklyRow(
     day_of_week: dayOfWeek,
     open_time: openTime,
     close_time: closeTime,
-    is_closed: isClosed,
+    is_closed: availability !== "open",
+    availability,
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
   };
@@ -52,7 +53,7 @@ function makeOverride(
   venueIds: string[],
   openTime: string | null,
   closeTime: string | null,
-  isClosed = false,
+  availability: "open" | "closed" | "unavailable" = "open",
   note: string | null = null
 ): OpeningOverrideRow {
   return {
@@ -61,7 +62,8 @@ function makeOverride(
     service_type_id: serviceTypeId,
     open_time: openTime,
     close_time: closeTime,
-    is_closed: isClosed,
+    is_closed: availability !== "open",
+    availability,
     note,
     created_by: null,
     created_at: "2026-01-01T00:00:00Z",
@@ -155,7 +157,7 @@ describe("resolveOpeningTimes", () => {
     const result = resolveOpeningTimes({
       serviceTypes: [ST_BAR],
       weeklyHours: [
-        makeWeeklyRow("v1", "st-bar", 0, null, null, true),
+        makeWeeklyRow("v1", "st-bar", 0, null, null, "closed"),
         makeWeeklyRow("v1", "st-bar", 1, "11:00", "23:00"),
       ],
       overrides: [],
@@ -205,7 +207,7 @@ describe("resolveOpeningTimes", () => {
           updated_at: "2026-01-01T00:00:00Z",
         },
       ],
-      weeklyHours: [makeWeeklyRow("v1", "st-bar", 0, null, null, false)],
+      weeklyHours: [makeWeeklyRow("v1", "st-bar", 0, null, null, "open")],
       overrides: [],
       venues: [VENUE_1],
       from: FROM,
@@ -266,7 +268,7 @@ describe("resolveOpeningTimes", () => {
       serviceTypes: [ST_BAR],
       weeklyHours: [makeWeeklyRow("v1", "st-bar", 0, "11:00", "23:00")],
       overrides: [
-        makeOverride("2026-03-09", "st-bar", ["v1"], null, null, true, "Deep clean"),
+        makeOverride("2026-03-09", "st-bar", ["v1"], null, null, "closed", "Deep clean"),
       ],
       venues: [VENUE_1],
       from: FROM,
@@ -372,5 +374,87 @@ describe("resolveOpeningTimes", () => {
 
     expect(result.venues[0].days).toHaveLength(1);
     expect(result.from).toBe(result.to);
+  });
+
+  // ─── Availability: open / closed / unavailable ──────────────────────────────
+  it('emits status: "open" for open weekly rows', () => {
+    const result = resolveOpeningTimes({
+      serviceTypes: [ST_BAR],
+      weeklyHours: [makeWeeklyRow("v1", "st-bar", 0, "11:00", "23:00", "open")],
+      overrides: [],
+      venues: [VENUE_1],
+      from: FROM,
+      days: 1,
+    });
+    const service = result.venues[0].days[0].services[0];
+    expect(service.status).toBe("open");
+    expect(service.isOpen).toBe(true);
+  });
+
+  it('emits status: "closed" for closed weekly rows (the API serves the word "closed")', () => {
+    const result = resolveOpeningTimes({
+      serviceTypes: [ST_BAR],
+      // Bar is offered (Tuesday open) but Monday is "closed".
+      weeklyHours: [
+        makeWeeklyRow("v1", "st-bar", 0, null, null, "closed"),
+        makeWeeklyRow("v1", "st-bar", 1, "11:00", "23:00", "open"),
+      ],
+      overrides: [],
+      venues: [VENUE_1],
+      from: FROM,
+      days: 1,
+    });
+    const service = result.venues[0].days[0].services[0];
+    expect(service.status).toBe("closed");
+    expect(service.isOpen).toBe(false);
+  });
+
+  it("omits the service entry entirely when a weekly row is unavailable", () => {
+    const result = resolveOpeningTimes({
+      serviceTypes: [ST_BAR],
+      // Bar is offered Tuesday but unavailable on Monday — must not appear in
+      // Monday's services array.
+      weeklyHours: [
+        makeWeeklyRow("v1", "st-bar", 0, null, null, "unavailable"),
+        makeWeeklyRow("v1", "st-bar", 1, "11:00", "23:00", "open"),
+      ],
+      overrides: [],
+      venues: [VENUE_1],
+      from: FROM,
+      days: 1,
+    });
+    expect(result.venues[0].days[0].services).toHaveLength(0);
+  });
+
+  it("omits the service entry when an override sets it unavailable", () => {
+    const result = resolveOpeningTimes({
+      serviceTypes: [ST_BAR],
+      weeklyHours: [makeWeeklyRow("v1", "st-bar", 0, "11:00", "23:00", "open")],
+      overrides: [
+        makeOverride("2026-03-09", "st-bar", ["v1"], null, null, "unavailable"),
+      ],
+      venues: [VENUE_1],
+      from: FROM,
+      days: 1,
+    });
+    expect(result.venues[0].days[0].services).toHaveLength(0);
+  });
+
+  it('emits status: "closed" for closed overrides', () => {
+    const result = resolveOpeningTimes({
+      serviceTypes: [ST_BAR],
+      weeklyHours: [makeWeeklyRow("v1", "st-bar", 0, "11:00", "23:00", "open")],
+      overrides: [
+        makeOverride("2026-03-09", "st-bar", ["v1"], null, null, "closed", "Deep clean"),
+      ],
+      venues: [VENUE_1],
+      from: FROM,
+      days: 1,
+    });
+    const service = result.venues[0].days[0].services[0];
+    expect(service.status).toBe("closed");
+    expect(service.isOpen).toBe(false);
+    expect(service.isOverride).toBe(true);
+    expect(service.note).toBe("Deep clean");
   });
 });

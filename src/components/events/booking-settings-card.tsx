@@ -19,6 +19,7 @@ type BookingSettingsCardProps = {
   maxTicketsPerBooking: number;
   seoSlug: string | null;
   smsPromoEnabled?: boolean;
+  bookingUrl: string | null;
   userRole?: string;
 };
 
@@ -29,6 +30,7 @@ export function BookingSettingsCard({
   maxTicketsPerBooking: initialMaxTickets,
   seoSlug: initialSeoSlug,
   smsPromoEnabled: initialSmsPromoEnabled = false,
+  bookingUrl: initialBookingUrl,
   userRole,
 }: BookingSettingsCardProps) {
   const [bookingEnabled, setBookingEnabled] = useState(initialBookingEnabled);
@@ -38,6 +40,7 @@ export function BookingSettingsCard({
   const [maxTickets, setMaxTickets] = useState(String(initialMaxTickets));
   const [currentSlug, setCurrentSlug] = useState<string | null>(initialSeoSlug);
   const [smsPromoEnabled, setSmsPromoEnabled] = useState(initialSmsPromoEnabled);
+  const [bookingUrl, setBookingUrl] = useState(initialBookingUrl ?? "");
   const [isPending, startTransition] = useTransition();
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -52,9 +55,15 @@ export function BookingSettingsCard({
     event.preventDefault();
     const parsedCapacity = totalCapacity.trim() ? parseInt(totalCapacity, 10) : null;
     const parsedMax = parseInt(maxTickets, 10) || 10;
+    const trimmedBookingUrl = bookingUrl.trim();
 
     if (parsedCapacity !== null && (isNaN(parsedCapacity) || parsedCapacity < 1)) {
       toast.error("Capacity must be a positive number or left blank for unlimited.");
+      return;
+    }
+
+    if (trimmedBookingUrl && !/^https?:\/\//i.test(trimmedBookingUrl)) {
+      toast.error("Booking link must be a full URL starting with https://");
       return;
     }
 
@@ -64,6 +73,7 @@ export function BookingSettingsCard({
         bookingEnabled,
         totalCapacity: parsedCapacity,
         maxTicketsPerBooking: parsedMax,
+        bookingUrl: trimmedBookingUrl ? trimmedBookingUrl : undefined,
         ...(userRole === "administrator" ? { smsPromoEnabled } : {}),
       });
 
@@ -162,6 +172,23 @@ export function BookingSettingsCard({
               A booking URL will be generated automatically when you save.
             </p>
           ) : null}
+
+          {/* External booking link — short-circuits the local landing page when set */}
+          <div className="space-y-2">
+            <Label htmlFor="bookingUrl">Booking link (optional)</Label>
+            <Input
+              id="bookingUrl"
+              type="url"
+              value={bookingUrl}
+              onChange={(e) => setBookingUrl(e.target.value)}
+              placeholder="https://example.com/buy-tickets"
+            />
+            <p className="text-xs text-subtle">
+              {bookingUrl.trim()
+                ? "Guests are redirected here instead of the local booking page."
+                : "Leave blank to use the local booking page."}
+            </p>
+          </div>
 
           {/* Total capacity */}
           <div className="space-y-2">

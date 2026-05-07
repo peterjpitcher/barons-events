@@ -74,7 +74,7 @@ const optionalBookingType = z.preprocess(
   z.enum(bookingTypeValues).optional()
 );
 
-const bookingUrlSchema = z.preprocess(
+export const bookingUrlSchema = z.preprocess(
   (value) => {
     if (typeof value !== "string") return value;
     const trimmed = value.trim();

@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { toast } from "sonner";
 import { EventForm } from "@/components/events/event-form";
+import { EventFormActions } from "@/components/events/event-form-actions";
 import {
   saveEventDraftAction,
   submitEventForReviewAction
@@ -43,6 +44,7 @@ function renderCreateForm(props: Partial<Parameters<typeof EventForm>[0]> = {}) 
       role="office_worker"
       userVenueId={venues[0].id}
       users={[]}
+      sidebar={<EventFormActions />}
       {...props}
     />
   );
@@ -104,9 +106,7 @@ describe("EventForm dirty-state reset", () => {
     });
 
     const saveButton = screen.getByRole("button", { name: /save draft/i }) as HTMLButtonElement;
-    const form = container.querySelector("form");
-    if (!form) throw new Error("Expected a form in create mode");
-    form.requestSubmit(saveButton);
+    fireEvent.click(saveButton);
 
     await waitFor(() => {
       expect(saveEventDraftAction).toHaveBeenCalled();
@@ -139,13 +139,9 @@ describe("EventForm error toasts", () => {
       fieldErrors: { title: "Title is required" }
     });
 
-    const { container } = renderCreateForm();
+    renderCreateForm();
     const saveButton = screen.getByRole("button", { name: /save draft/i }) as HTMLButtonElement;
-    const form = container.querySelector("form");
-    if (!form) throw new Error("Expected a form in create mode");
-    // React 19's form actions bind via requestSubmit, not the synthetic
-    // click→submit chain JSDOM emits for fireEvent.click.
-    form.requestSubmit(saveButton);
+    fireEvent.click(saveButton);
 
     await waitFor(() => {
       expect(saveEventDraftAction).toHaveBeenCalled();
@@ -165,14 +161,12 @@ describe("EventForm error toasts", () => {
       fieldErrors: { title: "Title is required" }
     });
 
-    const { container } = renderCreateForm();
+    renderCreateForm();
     const submitButton = screen.queryByRole("button", { name: /submit for review/i }) as HTMLButtonElement | null;
     if (!submitButton) {
       throw new Error("Expected a Submit for review button in create mode");
     }
-    const form = container.querySelector("form");
-    if (!form) throw new Error("Expected a form in create mode");
-    form.requestSubmit(submitButton);
+    fireEvent.click(submitButton);
 
     await waitFor(() => {
       expect(submitEventForReviewAction).toHaveBeenCalled();
@@ -192,11 +186,9 @@ describe("EventForm error toasts", () => {
       operationId: "abcd1234-ef56-7890-abcd-1234567890ab"
     });
 
-    const { container } = renderCreateForm();
+    renderCreateForm();
     const saveButton = screen.getByRole("button", { name: /save draft/i }) as HTMLButtonElement;
-    const form = container.querySelector("form");
-    if (!form) throw new Error("Expected a form in create mode");
-    form.requestSubmit(saveButton);
+    fireEvent.click(saveButton);
 
     await waitFor(() => {
       expect(saveEventDraftAction).toHaveBeenCalled();
@@ -216,14 +208,12 @@ describe("EventForm error toasts", () => {
       operationId: "12345678-90ab-cdef-1234-567890abcdef"
     });
 
-    const { container } = renderCreateForm();
+    renderCreateForm();
     const submitButton = screen.queryByRole("button", { name: /submit for review/i }) as HTMLButtonElement | null;
     if (!submitButton) {
       throw new Error("Expected a Submit for review button in create mode");
     }
-    const form = container.querySelector("form");
-    if (!form) throw new Error("Expected a form in create mode");
-    form.requestSubmit(submitButton);
+    fireEvent.click(submitButton);
 
     await waitFor(() => {
       expect(submitEventForReviewAction).toHaveBeenCalled();
@@ -255,14 +245,12 @@ describe("EventForm submit guards", () => {
       () => new Promise(() => {}) as ReturnType<typeof saveEventDraftAction>
     );
 
-    const { container } = renderCreateForm();
+    renderCreateForm();
 
     const saveButton = screen.getByRole("button", { name: /save draft/i }) as HTMLButtonElement;
     expect(saveButton.disabled).toBe(false);
 
-    const form = container.querySelector("form");
-    if (!form) throw new Error("Expected a form in create mode");
-    form.requestSubmit(saveButton);
+    fireEvent.click(saveButton);
 
     await waitFor(() => {
       expect(saveButton.disabled).toBe(true);
