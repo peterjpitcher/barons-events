@@ -2,11 +2,10 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { EventForm } from "@/components/events/event-form";
 import { BookingSettingsCard } from "@/components/events/booking-settings-card";
-import { EventDetailSummary } from "@/components/events/event-detail-summary";
-import { DeleteEventButton } from "@/components/events/delete-event-button";
+import { EventPageHeader } from "@/components/events/event-page-header";
+import { SopDrawer } from "@/components/events/sop-drawer";
 import { DecisionForm } from "@/components/reviews/decision-form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { SubmitButton } from "@/components/ui/submit-button";
@@ -24,11 +23,11 @@ import { formatCurrency, formatPercent } from "@/lib/utils/format";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { canViewBookings, canViewPlanning } from "@/lib/roles";
 import { canEditEventFromRow } from "@/lib/events/edit-context";
-import { SopChecklistView } from "@/components/planning/sop-checklist-view";
 import { AttachmentsPanel } from "@/components/attachments/attachments-panel";
 import { ProposalDecisionCard } from "@/components/events/proposal-decision-card";
 import { listEventAttachmentsRollup } from "@/lib/attachments";
 import { isLinkedToVenue } from "@/lib/visibility";
+import type { EventStatus } from "@/lib/types";
 import type { PlanningTask, PlanningPerson, PlanningTaskStatus } from "@/lib/planning/types";
 
 const statusCopy: Record<string, { label: string; tone: "neutral" | "info" | "success" | "warning" | "danger" }> = {
@@ -41,15 +40,6 @@ const statusCopy: Record<string, { label: string; tone: "neutral" | "info" | "su
   rejected: { label: "Rejected", tone: "danger" },
   completed: { label: "Completed", tone: "success" }
 };
-
-const formatter = new Intl.DateTimeFormat("en-GB", {
-  weekday: "long",
-  day: "numeric",
-  month: "long",
-  hour: "2-digit",
-  minute: "2-digit",
-  timeZone: "Europe/London"
-});
 
 const auditTimestampFormatter = new Intl.DateTimeFormat("en-GB", {
   dateStyle: "medium",
@@ -82,8 +72,6 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
     notFound();
   }
 
-  const status = statusCopy[event.status] ?? statusCopy.draft;
-
   // Venue-scoped permission: office_worker can act on events at their venue (not just events they created)
   const isVenueScoped =
     user.role === "office_worker" &&
@@ -107,6 +95,9 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
   // UI aligned avoids dead controls that would server-reject.
   const canEdit = canEditEventFromRow(user, eventRowForEdit);
   const canDelete = canEditEventFromRow(user, eventRowForEdit);
+  const canRevertToDraft =
+    canEdit && user.role === "administrator" &&
+    ["submitted", "needs_revisions", "approved", "rejected"].includes(event.status);
   const canViewEventBookings = canViewBookings(user.role);
 
   const canReview =
@@ -561,75 +552,38 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
     </Card>
   ) : null;
 
-  const sopChecklistCard = sopPlanningItemId && sopTasks.length > 0 ? (
-    <Card>
-      <CardHeader>
-        <CardTitle>SOP Checklist</CardTitle>
-        <CardDescription>Pre-event tasks linked to this event&apos;s planning item.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <SopChecklistView
-          tasks={sopTasks}
-          users={assignableUsers.map((u) => ({ id: u.id, name: u.name, email: u.email, role: u.role }))}
-          itemId={sopPlanningItemId}
-          currentUserId={user.id}
-        />
-      </CardContent>
-    </Card>
-  ) : null;
-
   return (
     <div className="space-y-6">
-      <Link
-        href="/events"
-        className="inline-flex items-center gap-1 text-sm text-subtle transition-colors hover:text-[var(--color-text)]"
-      >
-        ← Events
-      </Link>
+      <EventPageHeader
+        title={event.title}
+        mode={canEdit ? "edit" : "view"}
+        status={event.status as EventStatus}
+        eventId={event.id}
+        canDelete={canDelete}
+        canRevertToDraft={canRevertToDraft}
+      />
 
-      {/* Header card — always visible */}
-      <Card>
-        <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="space-y-2">
-            <CardTitle className="text-2xl text-[var(--color-primary-700)]">
-              <Link href={`/events/${event.id}`} className="transition-colors hover:text-[var(--color-primary-500)]">
-                {event.title}
-              </Link>
-            </CardTitle>
-            <Badge variant={status.tone}>{status.label}</Badge>
-            <CardDescription>
-              {event.venues.length > 0
-                ? event.venues.map((v) => v.name).join(", ")
-                : event.venue?.name ?? ""}
-              {" · "}
-              {formatter.format(new Date(event.start_at))}
-              {event.end_at ? <> → {formatter.format(new Date(event.end_at))}</> : <> → <span className="italic">end time TBC</span></>}
-            </CardDescription>
-          </div>
-          <div className="flex flex-col items-start gap-3 lg:items-end">
-            <div className="flex flex-col gap-1 text-xs text-subtle lg:items-end">
-              <span>
-                <span className="font-semibold text-[var(--color-text)]">Assignee:</span> {currentAssigneeName}
-              </span>
-              <span>
-                <span className="font-semibold text-[var(--color-text)]">Created by:</span>{" "}
-                {event.created_by === user.id ? "You" : resolveUserName(event.created_by)}
-              </span>
-              {event.manager_responsible_id ? (
-                <span>
-                  <span className="font-semibold text-[var(--color-text)]">Manager responsible:</span>{" "}
-                  {resolveUserName(event.manager_responsible_id)}
-                </span>
-              ) : null}
-            </div>
-            {canViewEventBookings ? (
-              <Button asChild variant="secondary" size="sm">
-                <Link href={`/events/${event.id}/bookings`}>Bookings</Link>
-              </Button>
-            ) : null}
-          </div>
-        </CardHeader>
-      </Card>
+      {/* Quick info bar */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-subtle">
+        <span>
+          <span className="font-semibold text-[var(--color-text)]">Assignee:</span> {currentAssigneeName}
+        </span>
+        <span>
+          <span className="font-semibold text-[var(--color-text)]">Created by:</span>{" "}
+          {event.created_by === user.id ? "You" : resolveUserName(event.created_by)}
+        </span>
+        {event.manager_responsible_id ? (
+          <span>
+            <span className="font-semibold text-[var(--color-text)]">Manager:</span>{" "}
+            {resolveUserName(event.manager_responsible_id)}
+          </span>
+        ) : null}
+        {canViewEventBookings ? (
+          <Button asChild variant="secondary" size="sm">
+            <Link href={`/events/${event.id}/bookings`}>Bookings</Link>
+          </Button>
+        ) : null}
+      </div>
 
       {/* EventForm for all users — read-only for non-editors */}
       <EventForm
@@ -649,8 +603,6 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
 
       {/* Lower cards grid */}
       <div className="grid gap-6 lg:grid-cols-2">
-        <EventDetailSummary event={event} />
-
         {canEdit ? (
           <BookingSettingsCard
             eventId={event.id}
@@ -664,7 +616,6 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
           />
         ) : null}
 
-        {sopChecklistCard}
         <AttachmentsPanel
           parentType="event"
           parentId={event.id}
@@ -684,6 +635,16 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
         {debriefSubmitCard}
         {debriefSnapshotCard}
       </div>
+
+      {sopPlanningItemId && sopTasks.length > 0 ? (
+        <SopDrawer
+          tasks={sopTasks}
+          users={assignableUsers.map((u) => ({ id: u.id, name: u.name, email: u.email, role: u.role }))}
+          itemId={sopPlanningItemId}
+          currentUserId={user.id}
+          readOnly={!canEdit}
+        />
+      ) : null}
     </div>
   );
 }

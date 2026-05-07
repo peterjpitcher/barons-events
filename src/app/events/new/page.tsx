@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { EventForm } from "@/components/events/event-form";
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { EventPageHeader } from "@/components/events/event-page-header";
 import { getCurrentUser } from "@/lib/auth";
 import { canProposeEvents } from "@/lib/roles";
 import { listVenues } from "@/lib/venues";
@@ -70,14 +70,7 @@ export default async function NewEventPage({ searchParams }: PageProps) {
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Create a new event draft</CardTitle>
-          <CardDescription>
-            Share the essentials so reviewers can respond quickly—keep the language simple and cover timings, space, and any promos.
-          </CardDescription>
-        </CardHeader>
-      </Card>
+      <EventPageHeader title="New Event" mode="create" />
       <EventForm
         key="new"
         mode="create"
