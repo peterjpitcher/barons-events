@@ -73,6 +73,53 @@ describe("EventForm create defaults", () => {
   });
 });
 
+describe("EventForm dirty-state reset", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(saveEventDraftAction).mockReset();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.resetAllMocks();
+  });
+
+  it("clears the unsaved-changes indicator after a successful save", async () => {
+    vi.mocked(saveEventDraftAction).mockResolvedValue({
+      success: true,
+      message: "Draft saved."
+    });
+
+    const { container } = renderCreateForm();
+
+    // Type in the title field to mark the form dirty.
+    const titleInput = container.querySelector('input[name="title"]') as HTMLInputElement;
+    if (!titleInput) throw new Error("Expected a title input");
+    fireEvent.change(titleInput, { target: { value: "Saturday Live Music" } });
+
+    // The form's onChange handler sets isDirty=true, which renders the
+    // "Unsaved changes" hint after the form actions in the legacy layout.
+    await waitFor(() => {
+      expect(screen.getByText(/unsaved changes/i)).toBeTruthy();
+    });
+
+    const saveButton = screen.getByRole("button", { name: /save draft/i }) as HTMLButtonElement;
+    const form = container.querySelector("form");
+    if (!form) throw new Error("Expected a form in create mode");
+    form.requestSubmit(saveButton);
+
+    await waitFor(() => {
+      expect(saveEventDraftAction).toHaveBeenCalled();
+    });
+
+    // After success the dirty indicator must clear so beforeunload no
+    // longer warns and the UI reverts to a "Last saved" timestamp.
+    await waitFor(() => {
+      expect(screen.queryByText(/unsaved changes/i)).toBeNull();
+    });
+  });
+});
+
 describe("EventForm error toasts", () => {
   beforeEach(() => {
     vi.resetAllMocks();
