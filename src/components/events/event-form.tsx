@@ -260,7 +260,14 @@ export function EventForm({
     if (draftState.success) {
       toast.success(draftState.message);
     } else {
-      toast.error(draftState.message);
+      // Append the short hash of the operation_id so the user can quote it
+      // in support requests; server logs and audit-log meta share the same
+      // value, making lookups straightforward.
+      toast.error(
+        draftState.operationId
+          ? `${draftState.message} (ref: ${draftState.operationId.slice(0, 8)})`
+          : draftState.message
+      );
     }
   }, [draftState]);
 
@@ -270,7 +277,11 @@ export function EventForm({
     if (submitState.success) {
       toast.success(submitState.message);
     } else {
-      toast.error(submitState.message);
+      toast.error(
+        submitState.operationId
+          ? `${submitState.message} (ref: ${submitState.operationId.slice(0, 8)})`
+          : submitState.message
+      );
     }
   }, [submitState]);
 

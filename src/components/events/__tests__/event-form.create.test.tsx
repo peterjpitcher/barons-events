@@ -184,6 +184,57 @@ describe("EventForm error toasts", () => {
       );
     });
   });
+
+  it("appends the operation_id short hash to draft error toasts when the action returned one", async () => {
+    vi.mocked(saveEventDraftAction).mockResolvedValue({
+      success: false,
+      message: "Save failed",
+      operationId: "abcd1234-ef56-7890-abcd-1234567890ab"
+    });
+
+    const { container } = renderCreateForm();
+    const saveButton = screen.getByRole("button", { name: /save draft/i }) as HTMLButtonElement;
+    const form = container.querySelector("form");
+    if (!form) throw new Error("Expected a form in create mode");
+    form.requestSubmit(saveButton);
+
+    await waitFor(() => {
+      expect(saveEventDraftAction).toHaveBeenCalled();
+    });
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(
+        expect.stringContaining("abcd1234")
+      );
+    });
+  });
+
+  it("appends the operation_id short hash to submit error toasts when the action returned one", async () => {
+    vi.mocked(submitEventForReviewAction).mockResolvedValue({
+      success: false,
+      message: "Submit failed",
+      operationId: "12345678-90ab-cdef-1234-567890abcdef"
+    });
+
+    const { container } = renderCreateForm();
+    const submitButton = screen.queryByRole("button", { name: /submit for review/i }) as HTMLButtonElement | null;
+    if (!submitButton) {
+      throw new Error("Expected a Submit for review button in create mode");
+    }
+    const form = container.querySelector("form");
+    if (!form) throw new Error("Expected a form in create mode");
+    form.requestSubmit(submitButton);
+
+    await waitFor(() => {
+      expect(submitEventForReviewAction).toHaveBeenCalled();
+    });
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(
+        expect.stringContaining("12345678")
+      );
+    });
+  });
 });
 
 // Run the disable test LAST: it leaves a never-resolving useActionState
