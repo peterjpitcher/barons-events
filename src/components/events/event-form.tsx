@@ -387,57 +387,13 @@ export function EventForm({
   const [seoDescription, setSeoDescription] = useState(defaultValues?.seo_description ?? "");
   const [seoSlug, setSeoSlug] = useState(defaultValues?.seo_slug ?? "");
 
-  useEffect(() => {
-    if (mode !== "edit" || !defaultValues?.id) return;
-    setTitleValue(defaultValues?.title ?? "");
-    setEventTypeValue(defaultValues?.event_type ?? "");
-    const nextVenueDefaults = deriveEventFormVenueDefaults({
-      mode,
-      initialVenueId,
-      eventVenueId: defaultValues?.venue_id ?? null,
-      eventVenues: (defaultValues as { venues?: Array<{ id: string }> } | undefined)?.venues ?? null,
-      availableVenueIds: venues.map((venue) => venue.id)
-    });
-    setSelectedVenueId(nextVenueDefaults.primaryVenueId);
-    setSelectedVenueIds(nextVenueDefaults.selectedVenueIds);
-    setVenueSpaceValue(defaultValues?.venue_space ?? "");
-    setStartValue(toLocalInputValue(defaultValues?.start_at ?? initialStartAt));
-    setEndValue(toLocalInputValue(defaultValues?.end_at ?? initialEndAt));
-    setEndDirty(Boolean(defaultValues?.end_at ?? initialEndAt));
-    setEventNotes(defaultValues?.notes ?? "");
-    setManagerResponsibleId((defaultValues as any)?.manager_responsible_id ?? "");
-    setManagerDirty(Boolean((defaultValues as any)?.manager_responsible_id));
-    setTicketPrice(defaultValues?.ticket_price != null ? String(defaultValues.ticket_price) : "");
-    setSelectedArtistIds(getLinkedArtistSelection(defaultValues).ids);
-    setSelectedGoals(
-      new Set(
-        (defaultValues?.goal_focus ?? "")
-          .split(",")
-          .map((value) => value.trim())
-          .filter(Boolean)
-      )
-    );
-    setBookingType(defaultValues?.booking_type ?? "");
-    setCheckInCutoffMinutes(
-      defaultValues?.check_in_cutoff_minutes != null ? String(defaultValues.check_in_cutoff_minutes) : ""
-    );
-    setAgePolicy(defaultValues?.age_policy ?? "");
-    setAccessibilityNotes(defaultValues?.accessibility_notes ?? "");
-    setCancellationWindowHours(
-      defaultValues?.cancellation_window_hours != null ? String(defaultValues.cancellation_window_hours) : ""
-    );
-    setTermsAndConditions(defaultValues?.terms_and_conditions ?? "");
-    setPublicTitle(defaultValues?.public_title ?? "");
-    setPublicTeaser(defaultValues?.public_teaser ?? "");
-    setPublicDescription(defaultValues?.public_description ?? "");
-    setPublicHighlights(Array.isArray(defaultValues?.public_highlights) ? defaultValues.public_highlights.join("\n") : "");
-    setBookingUrl(defaultValues?.booking_url ?? "");
-    setSeoTitle(defaultValues?.seo_title ?? "");
-    setSeoDescription(defaultValues?.seo_description ?? "");
-    setSeoSlug(defaultValues?.seo_slug ?? "");
-    // Intentionally keyed only by event id: same-event revalidation must not
-    // overwrite in-progress edits or server-action validation state.
-  }, [mode, defaultValues?.id]);
+  // NOTE: a prop-reset useEffect (keyed on `defaultValues?.id`) used to live
+  // here to re-seed every controlled state when an `id` change came in via
+  // props. It has been removed. Parents now mount this form with
+  // `key={defaultValues?.id ?? "new"}`, which means a different event id
+  // triggers a full unmount/remount and the state initialisers above re-run.
+  // For same-id revalidation (e.g. `revalidatePath` after a peripheral
+  // mutation), the form state stays exactly as the user left it.
 
   useEffect(() => {
     if (!websiteCopyState?.success || !websiteCopyState.values) return;
