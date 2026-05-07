@@ -11,112 +11,69 @@ project: barons-events-mvp
 
 See session-context.md for full schema. This file will be populated by the database agent.
 
-## Tables Referenced in Application Code (40)
+## Tables Referenced in Code
+
+The following tables were detected via `.from()` and `.rpc()` calls across [[server-actions]], [[routes]], and lib files:
 
 ### Core Domain
 
-| Table | Domain | Accessed By |
-|-------|--------|-------------|
-| `events` | Events | events.ts, bookings.ts, debriefs.ts, sop.ts, users.ts |
-| `event_artists` | Events | users.ts |
-| `event_bookings` | Bookings | bookings.ts, customers.ts |
-| `event_types` | Events | (via lib) |
-| `event_versions` | Events | users.ts |
-| `venues` | Venues | events.ts, pre-event.ts, venues.ts, users.ts |
-| `artists` | Artists | users.ts |
-| `customers` | Customers | bookings.ts, customers.ts |
-| `debriefs` | Debriefs | debriefs.ts, users.ts |
-| `users` | Auth/Users | auth.ts, users.ts |
+| Table | Primary Domain | Referenced By |
+|-------|---------------|---------------|
+| `events` | Event management | [[server-actions#events.ts\|events.ts]], [[server-actions#pre-event.ts\|pre-event.ts]], [[server-actions#bookings.ts\|bookings.ts]], [[routes#Public REST API v1\|API v1]] |
+| `event_types` | Event classification | [[server-actions#event-types.ts\|event-types.ts]], [[routes#Public REST API v1\|API v1]] |
+| `event_artists` | Event-artist junction | [[server-actions#events.ts\|events.ts]] |
+| `event_opening_hours` | Event schedule | [[server-actions#events.ts\|events.ts]] |
+| `bookings` | Event bookings | [[server-actions#bookings.ts\|bookings.ts]] |
+| `customers` | Customer records | [[server-actions#customers.ts\|customers.ts]], [[server-actions#bookings.ts\|bookings.ts]] |
+| `debriefs` | Post-event reviews | [[server-actions#debriefs.ts\|debriefs.ts]], debriefs page |
+| `artists` | Performer directory | [[server-actions#artists.ts\|artists.ts]] |
 
-### Planning
+### Planning & SOP
 
-| Table | Domain | Accessed By |
-|-------|--------|-------------|
-| `planning_items` | Planning | planning.ts, sop.ts, users.ts |
-| `planning_series` | Planning | planning.ts, users.ts |
-| `planning_series_task_templates` | Planning | users.ts |
-| `planning_tasks` | Planning | planning.ts, users.ts |
-| `planning_task_assignees` | Planning | planning.ts, users.ts |
-| `planning_task_dependencies` | Planning | (via lib) |
-| `planning_inspiration_items` | Planning | planning.ts |
-| `planning_inspiration_dismissals` | Planning | planning.ts |
+| Table | Primary Domain | Referenced By |
+|-------|---------------|---------------|
+| `planning_items` | Planning workspace | [[server-actions#planning.ts\|planning.ts]], [[server-actions#sop.ts\|sop.ts]] |
+| `planning_series` | Recurring planning | [[server-actions#planning.ts\|planning.ts]] |
+| `planning_tasks` | Task management | [[server-actions#planning.ts\|planning.ts]] |
+| `inspiration_items` | Inspiration feed | [[server-actions#planning.ts\|planning.ts]] |
+| `sop_sections` | SOP template sections | [[server-actions#sop.ts\|sop.ts]] |
+| `sop_task_templates` | SOP task templates | [[server-actions#sop.ts\|sop.ts]] |
+| `sop_dependencies` | SOP task dependencies | [[server-actions#sop.ts\|sop.ts]] |
+| `attachments` | File attachments | [[server-actions#attachments.ts\|attachments.ts]] |
 
-### SOP
+### Venues & Opening Hours
 
-| Table | Domain | Accessed By |
-|-------|--------|-------------|
-| `sop_sections` | SOP | sop.ts |
-| `sop_task_templates` | SOP | sop.ts |
-| `sop_task_dependencies` | SOP | sop.ts |
+| Table | Primary Domain | Referenced By |
+|-------|---------------|---------------|
+| `venues` | Venue records | [[server-actions#venues.ts\|venues.ts]], [[routes#Public REST API v1\|API v1]] |
+| `venue_service_types` | Service categories | [[server-actions#opening-hours.ts\|opening-hours.ts]], [[routes#Public REST API v1\|API v1]] |
+| `venue_services` | Venue services | [[routes#Public REST API v1\|API v1]] |
+| `venue_opening_hours` | Regular hours | [[server-actions#opening-hours.ts\|opening-hours.ts]], [[routes#Public REST API v1\|API v1]] |
+| `opening_overrides` | Holiday/special hours | [[server-actions#opening-hours.ts\|opening-hours.ts]] |
 
-### Operations
+### Users & Auth
 
-| Table | Domain | Accessed By |
-|-------|--------|-------------|
-| `business_settings` | Settings | business-settings.ts, debriefs.ts |
-| `venue_opening_hours` | Opening Hours | (via lib) |
-| `venue_opening_overrides` | Opening Hours | users.ts |
-| `venue_opening_override_venues` | Opening Hours | (via lib) |
-| `venue_service_types` | Opening Hours | (via lib) |
-| `venue_services` | Opening Hours | (via lib) |
-| `slt_members` | SLT | slt.ts |
+| Table | Primary Domain | Referenced By |
+|-------|---------------|---------------|
+| `users` | User accounts | [[server-actions#users.ts\|users.ts]], [[server-actions#auth.ts\|auth.ts]], settings page |
+| `slt_members` | Senior leadership | [[server-actions#slt.ts\|slt.ts]], settings page |
 
-### Communications
+### System
 
-| Table | Domain | Accessed By |
-|-------|--------|-------------|
-| `sms_campaign_sends` | SMS | bookings.ts |
-| `sms_inbound_messages` | SMS | (webhook) |
-| `short_links` | Links | users.ts |
-| `customer_consent_events` | GDPR | (via lib) |
-
-### Infrastructure
-
-| Table | Domain | Accessed By |
-|-------|--------|-------------|
-| `app_sessions` | Auth | users.ts |
-| `approvals` | Workflow | users.ts |
-| `attachments` | Files | attachments.ts |
-| `audit_log` | Audit | users.ts |
-| `login_attempts` | Auth | (via lib) |
-| `pending_cascade_backfill` | System | venues.ts |
+| Table | Primary Domain | Referenced By |
+|-------|---------------|---------------|
+| `business_settings` | Global config | [[server-actions#business-settings.ts\|business-settings.ts]], settings page, debriefs page |
+| `short_links` | URL shortener | [[server-actions#links.ts\|links.ts]], [[routes#Short Link Handler\|short link handler]] |
 
 ### Storage Buckets
 
-| Bucket | Purpose |
-|--------|---------|
-| `event-images` | Event promotional images |
-| `task-attachments` | Planning task file attachments |
+| Bucket | Purpose | Referenced By |
+|--------|---------|---------------|
+| `task-attachments` | Planning task files | [[server-actions#attachments.ts\|attachments.ts]] |
 
-## RPC Functions (22)
+### RPC Functions
 
-| RPC | Domain | Called From |
-|-----|--------|-------------|
-| `save_event_draft` | Events | events.ts (when `EVENT_SAVE_USE_RPC=true`) |
-| `submit_event_for_review` | Events | events.ts |
-| `propose_event_draft` | Events | pre-event.ts |
-| `create_multi_venue_event_proposals` | Events | pre-event.ts |
-| `pre_approve_event_proposal` | Events | pre-event.ts |
-| `reject_event_proposal` | Events | pre-event.ts |
-| `next_event_version` | Events | events.ts |
-| `set_event_venues` | Events | events.ts |
-| `sync_event_artists` | Events | events.ts |
-| `create_booking` | Bookings | bookings.ts |
-| `create_booking_from_campaign` | Bookings | bookings.ts |
-| `get_campaign_audience` | SMS | cron |
-| `get_reminder_bookings` | SMS | cron |
-| `get_post_event_bookings` | SMS | cron |
-| `list_customers_with_stats` | Customers | (via lib) |
-| `increment_link_clicks` | Links | (via lib) |
-| `set_planning_item_venues` | Planning | planning.ts |
-| `generate_sop_checklist_v2` | SOP | sop.ts |
-| `recalculate_sop_dates` | SOP | sop.ts |
-| `reassign_user_content` | Users | users.ts |
-| `reassign_and_deactivate_user` | Users | users.ts |
-| `set_config` | Settings | (via lib) |
-
-## Cross-References
-
-- [[server-actions]] -- which actions touch which tables
-- [[relationships]] -- table relationship map
-- [[overview]] -- stack context
+| Function | Purpose | Called From |
+|----------|---------|------------|
+| `increment_link_clicks` | Increment short link click counter | [[routes#Short Link Handler\|/[code] route]] |
+| Various event save RPCs | Atomic event save (behind `EVENT_SAVE_USE_RPC` flag) | [[server-actions#events.ts\|events.ts]] |
