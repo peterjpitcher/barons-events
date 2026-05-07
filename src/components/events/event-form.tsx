@@ -240,43 +240,39 @@ export function EventForm({
   const proxyGenerateRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    if (draftState?.message) {
-      if (draftState.success) {
-        toast.success(draftState.message);
-      } else if (!draftState.fieldErrors) {
-        toast.error(draftState.message);
-      }
+    if (!draftState?.message) return;
+    if (draftState.success) {
+      toast.success(draftState.message);
+    } else {
+      toast.error(draftState.message);
     }
   }, [draftState]);
 
 
   useEffect(() => {
-    if (submitState?.message) {
-      if (submitState.success) {
-        toast.success(submitState.message);
-      } else if (!submitState.fieldErrors) {
-        toast.error(submitState.message);
-      }
+    if (!submitState?.message) return;
+    if (submitState.success) {
+      toast.success(submitState.message);
+    } else {
+      toast.error(submitState.message);
     }
   }, [submitState]);
 
   useEffect(() => {
-    if (websiteCopyState?.message) {
-      if (websiteCopyState.success) {
-        toast.success(websiteCopyState.message);
-      } else if (!websiteCopyState.fieldErrors) {
-        toast.error(websiteCopyState.message);
-      }
+    if (!websiteCopyState?.message) return;
+    if (websiteCopyState.success) {
+      toast.success(websiteCopyState.message);
+    } else {
+      toast.error(websiteCopyState.message);
     }
   }, [websiteCopyState]);
 
   useEffect(() => {
-    if (websiteCopyFormState?.message) {
-      if (websiteCopyFormState.success) {
-        toast.success(websiteCopyFormState.message);
-      } else if (!websiteCopyFormState.fieldErrors) {
-        toast.error(websiteCopyFormState.message);
-      }
+    if (!websiteCopyFormState?.message) return;
+    if (websiteCopyFormState.success) {
+      toast.success(websiteCopyFormState.message);
+    } else {
+      toast.error(websiteCopyFormState.message);
     }
   }, [websiteCopyFormState]);
 
@@ -335,9 +331,7 @@ export function EventForm({
       toast.success(artistCreateState.message);
       return;
     }
-    if (!artistCreateState.fieldErrors) {
-      toast.error(artistCreateState.message ?? "Could not add artist.");
-    }
+    toast.error(artistCreateState.message ?? "Could not add artist.");
   }, [artistCreateState]);
 
   const canChooseVenue = role === "administrator" || (mode === "create" && role === "office_worker");

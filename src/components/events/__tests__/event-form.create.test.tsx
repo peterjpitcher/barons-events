@@ -1,9 +1,13 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { toast } from "sonner";
 import { EventForm } from "@/components/events/event-form";
-import { saveEventDraftAction } from "@/actions/events";
+import {
+  saveEventDraftAction,
+  submitEventForReviewAction
+} from "@/actions/events";
 
 vi.mock("sonner", () => ({
   toast: {
@@ -45,6 +49,14 @@ function renderCreateForm(props: Partial<Parameters<typeof EventForm>[0]> = {}) 
 }
 
 describe("EventForm create defaults", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
   it("does not preselect venue or event type for a direct create form", () => {
     const { container } = renderCreateForm();
 
@@ -61,13 +73,82 @@ describe("EventForm create defaults", () => {
   });
 });
 
-describe("EventForm submit guards", () => {
+describe("EventForm error toasts", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    vi.mocked(saveEventDraftAction).mockReset();
+    vi.mocked(submitEventForReviewAction).mockReset();
   });
 
   afterEach(() => {
-    vi.clearAllMocks();
+    cleanup();
+    vi.resetAllMocks();
+  });
+
+  it("shows an error toast when the draft action returns success=false even with fieldErrors", async () => {
+    vi.mocked(saveEventDraftAction).mockResolvedValue({
+      success: false,
+      message: "Validation failed",
+      fieldErrors: { title: "Title is required" }
+    });
+
+    const { container } = renderCreateForm();
+    const saveButton = screen.getByRole("button", { name: /save draft/i }) as HTMLButtonElement;
+    const form = container.querySelector("form");
+    if (!form) throw new Error("Expected a form in create mode");
+    // React 19's form actions bind via requestSubmit, not the synthetic
+    // click→submit chain JSDOM emits for fireEvent.click.
+    form.requestSubmit(saveButton);
+
+    await waitFor(() => {
+      expect(saveEventDraftAction).toHaveBeenCalled();
+    });
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(
+        expect.stringContaining("Validation failed")
+      );
+    });
+  });
+
+  it("shows an error toast when the submit action returns success=false even with fieldErrors", async () => {
+    vi.mocked(submitEventForReviewAction).mockResolvedValue({
+      success: false,
+      message: "Submit validation failed",
+      fieldErrors: { title: "Title is required" }
+    });
+
+    const { container } = renderCreateForm();
+    const submitButton = screen.queryByRole("button", { name: /submit for review/i }) as HTMLButtonElement | null;
+    if (!submitButton) {
+      throw new Error("Expected a Submit for review button in create mode");
+    }
+    const form = container.querySelector("form");
+    if (!form) throw new Error("Expected a form in create mode");
+    form.requestSubmit(submitButton);
+
+    await waitFor(() => {
+      expect(submitEventForReviewAction).toHaveBeenCalled();
+    });
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(
+        expect.stringContaining("Submit validation failed")
+      );
+    });
+  });
+});
+
+// Run the disable test LAST: it leaves a never-resolving useActionState
+// pending state which can otherwise leak into the next test's render.
+describe("EventForm submit guards", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.resetAllMocks();
   });
 
   it("disables Save Draft while the draft action is pending", async () => {
@@ -76,12 +157,14 @@ describe("EventForm submit guards", () => {
       () => new Promise(() => {}) as ReturnType<typeof saveEventDraftAction>
     );
 
-    renderCreateForm();
+    const { container } = renderCreateForm();
 
     const saveButton = screen.getByRole("button", { name: /save draft/i }) as HTMLButtonElement;
     expect(saveButton.disabled).toBe(false);
 
-    fireEvent.click(saveButton);
+    const form = container.querySelector("form");
+    if (!form) throw new Error("Expected a form in create mode");
+    form.requestSubmit(saveButton);
 
     await waitFor(() => {
       expect(saveButton.disabled).toBe(true);
