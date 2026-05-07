@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "backfill:website-copy": "node scripts/backfill-website-copy.mjs",
     "supabase:migrate": "supabase db push",
-    "supabase:reset": "supabase db reset --linked --yes"
+    "supabase:reset": "supabase db reset --linked --yes",
+    "advisors": "supabase db lint --linked"
   },
   "dependencies": {
     "@marsidev/react-turnstile": "^1.5.0",

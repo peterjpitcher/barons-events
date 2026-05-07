@@ -22,6 +22,7 @@ npm run test:watch       # Vitest watch mode
 npm run typecheck        # TypeScript check (tsc --noEmit)
 npm run supabase:migrate # Apply pending migrations
 npm run supabase:reset   # Reset database (linked, requires confirmation)
+npm run advisors         # Supabase advisors (security + performance) — run before merging migrations / pre-deploy
 ```
 
 ## Architecture
