@@ -14,6 +14,37 @@
 
 ---
 
+## Execution mode: **LEAN**
+
+User preference confirmed mid-session (2026-05-07): execute in lean mode rather than full TDD-per-step ceremony. Specifically:
+
+- For migrations, SQL, config, and docs — write the artifact, push, verify once, commit; do NOT write a "failing test first" — the migration IS the artifact.
+- For new helpers + their tests — write helper + test together, run once, commit once. No red-green-refactor split.
+- Each agent verifies ONCE at end of its scope (`npm run lint && npm run typecheck && npm test -- <scoped pattern>`), not per task.
+- Handoff files are ~10 lines (file paths + commit hashes + 1-line caveats), not multi-section reports.
+- Batch commits where logically consistent; one commit per task is the granularity, not one per "step".
+- Real type safety, RLS verification, schema-reality checks before drafting SQL, and Supabase advisors after migration push are NON-NEGOTIABLE — leanness applies to ceremony, not correctness.
+- The TDD step-by-step blocks below remain authoritative for *what changes*; agents implement them lean.
+
+---
+
+## Live status (2026-05-07)
+
+| Wave | Agent | Status | Commits |
+|------|-------|--------|---------|
+| 1 | Form Surgeon (A1, A2, A3, A4, A5, A7) | ✅ done | `cb16668`, `e75616f`, `22e569c`, `00c47cc`, `5451a91`, `1f41aa9` |
+| 1 | RLS Migrator (A6) | ✅ done | `411b6bf` |
+| 2 | RPC Plumber (B0, B1, B2 + types) | ✅ done | `24deb69`, `b214345`, `b011aa8` |
+| 3 | Action Rewirer (B3, B5, B6) | 🟡 partial — commit 1 of 3 landed; commits 2 + 3 outstanding; events.ts has uncommitted changes | `58eaadb` (so far) |
+| 3 | Cron Engineer (B4 cron) | ✅ done | `2248d2e` |
+| 4 | Propose Surgeon (B″1, B″2) | ⏳ pending | — |
+| 4 | Verification Engineer (C1–C6) | ⏳ pending | — |
+| Final | Codex adversarial review | ⏳ pending | — |
+
+**11 commits landed; ~8 commits remaining (Action Rewirer follow-up + Wave 4).**
+
+---
+
 ## Cross-phase conventions
 
 These apply to every task below.
