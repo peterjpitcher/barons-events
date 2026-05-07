@@ -239,6 +239,22 @@ export function EventForm({
   const proxySubmitRef = useRef<HTMLButtonElement>(null);
   const proxyGenerateRef = useRef<HTMLButtonElement>(null);
 
+  // Form-mount correlation ids. `operation_id` is echoed back through the
+  // server action's ActionResult so error toasts can surface a short hash for
+  // support. `idempotency_key` is reserved for the Phase B′ atomic-save RPC
+  // (Action Rewirer wave) — emit it now so the field exists when that lands.
+  // Regenerated after every successful save (effect below).
+  const operationIdRef = useRef<string>(
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : "00000000-0000-4000-8000-000000000000"
+  );
+  const idempotencyKeyRef = useRef<string>(
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : "00000000-0000-4000-8000-000000000001"
+  );
+
   useEffect(() => {
     if (!draftState?.message) return;
     if (draftState.success) {
@@ -300,12 +316,23 @@ export function EventForm({
     if (draftState?.success) {
       setIsDirty(false);
       setLastSavedAt(new Date());
+      // Rotate correlation ids so the next save gets fresh ones — without
+      // this, a re-submission would replay the same operation_id and (in the
+      // upcoming RPC path) the same idempotency_key.
+      if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+        operationIdRef.current = crypto.randomUUID();
+        idempotencyKeyRef.current = crypto.randomUUID();
+      }
     }
   }, [draftState]);
   useEffect(() => {
     if (submitState?.success) {
       setIsDirty(false);
       setLastSavedAt(new Date());
+      if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+        operationIdRef.current = crypto.randomUUID();
+        idempotencyKeyRef.current = crypto.randomUUID();
+      }
     }
   }, [submitState]);
 
@@ -1760,6 +1787,8 @@ export function EventForm({
           <div className="min-w-0">
             <form ref={formRef} action={draftAction} noValidate onSubmit={handleSubmit} onChange={() => setIsDirty(true)}>
               <input type="hidden" name="eventId" defaultValue={defaultValues?.id} />
+              <input type="hidden" name="operation_id" defaultValue={operationIdRef.current} />
+              <input type="hidden" name="idempotency_key" defaultValue={idempotencyKeyRef.current} />
               {activeState && !activeState.success && activeState.message && !activeState.fieldErrors && (
                 <div className="mb-4 rounded-lg border border-[var(--color-danger)] bg-[var(--color-danger)]/10 p-4 text-sm text-[var(--color-danger)]" role="alert">
                   <strong>Something went wrong:</strong> {activeState.message}
@@ -2000,6 +2029,8 @@ export function EventForm({
       <>
         <form action={draftAction} className="space-y-6" noValidate onSubmit={handleSubmit} onChange={() => setIsDirty(true)}>
           <input type="hidden" name="eventId" defaultValue={defaultValues?.id} />
+          <input type="hidden" name="operation_id" defaultValue={operationIdRef.current} />
+          <input type="hidden" name="idempotency_key" defaultValue={idempotencyKeyRef.current} />
           <button ref={legacySubmitRef} type="submit" formAction={submitAction} data-intent="submit" className="sr-only" aria-hidden tabIndex={-1} />
           {activeState && !activeState.success && activeState.message && !activeState.fieldErrors && (
             <div className="rounded-lg border border-[var(--color-danger)] bg-[var(--color-danger)]/10 p-4 text-sm text-[var(--color-danger)]" role="alert">
