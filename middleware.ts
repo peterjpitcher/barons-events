@@ -58,23 +58,23 @@ function applySecurityHeaders(response: NextResponse, nonce: string): void {
     "Permissions-Policy",
     "camera=(), microphone=(), geolocation=()"
   );
-  response.headers.set(
-    "Content-Security-Policy",
-    [
-      "default-src 'self'",
-      // 'nonce-…' allows Next.js hydration inline scripts and any <Script nonce={nonce}> tags.
-      // https://challenges.cloudflare.com is required for the Turnstile widget JS.
-      `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://challenges.cloudflare.com`,
-      // 'unsafe-inline' on style-src is needed for Turnstile's injected inline styles.
-      "style-src 'self' 'unsafe-inline'",
-      `connect-src 'self' ${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""} https://api.pwnedpasswords.com https://challenges.cloudflare.com`,
-      `img-src 'self' data: blob: ${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""}`,
-      "font-src 'self' https://fonts.gstatic.com",
-      // frame-src is required for the Turnstile challenge iframe.
-      "frame-src https://challenges.cloudflare.com",
-      "frame-ancestors 'none'",
-    ].join("; ")
-  );
+  // Skip CSP in development — Turbopack's HMR WebSocket is blocked by the
+  // strict connect-src policy, causing an infinite full-page reload loop.
+  if (process.env.NODE_ENV === "production") {
+    response.headers.set(
+      "Content-Security-Policy",
+      [
+        "default-src 'self'",
+        `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://challenges.cloudflare.com`,
+        "style-src 'self' 'unsafe-inline'",
+        `connect-src 'self' ${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""} https://api.pwnedpasswords.com https://challenges.cloudflare.com`,
+        `img-src 'self' data: blob: ${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""}`,
+        "font-src 'self' https://fonts.gstatic.com",
+        "frame-src https://challenges.cloudflare.com",
+        "frame-ancestors 'none'",
+      ].join("; ")
+    );
+  }
 }
 
 // ─── Nonce / CSRF helpers ──────────────────────────────────────────────────────
