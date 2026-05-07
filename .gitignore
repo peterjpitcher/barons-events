@@ -29,3 +29,7 @@ yarn-error.log*
 graphify-out/
 .claude/changes-manifest.log
 docs/architecture/.section-hashes.json
+
+# Playwright
+playwright-report/
+test-results/

@@ -12,6 +12,7 @@ export default defineConfig({
   test: {
     environment: "node",
     globals: true,
-    setupFiles: []
+    setupFiles: [],
+    exclude: ["node_modules", "tests/e2e"]
   }
 });
