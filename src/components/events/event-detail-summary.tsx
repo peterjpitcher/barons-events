@@ -132,7 +132,7 @@ export function EventDetailSummary({ event }: EventDetailSummaryProps) {
             <span className="font-semibold text-[var(--color-text)]">End:</span>{" "}
             {event.end_at ? formatter.format(new Date(event.end_at)) : <span className="italic text-subtle">TBC</span>}
           </p>
-          {event.expected_headcount ? (
+          {event.expected_headcount != null ? (
             <p>
               <span className="font-semibold text-[var(--color-text)]">Headcount:</span>{" "}
               {event.expected_headcount}
@@ -180,6 +180,32 @@ export function EventDetailSummary({ event }: EventDetailSummaryProps) {
               {event.age_policy}
             </p>
           ) : null}
+          <p>
+            <span className="font-semibold text-[var(--color-text)]">Bookings:</span>{" "}
+            {event.booking_enabled ? "Enabled" : "Disabled"}
+          </p>
+          {event.total_capacity != null ? (
+            <p>
+              <span className="font-semibold text-[var(--color-text)]">Capacity:</span>{" "}
+              {event.total_capacity}
+            </p>
+          ) : null}
+          {event.max_tickets_per_booking != null ? (
+            <p>
+              <span className="font-semibold text-[var(--color-text)]">Max per booking:</span>{" "}
+              {event.max_tickets_per_booking}
+            </p>
+          ) : null}
+          {event.booking_url ? (
+            <p>
+              <span className="font-semibold text-[var(--color-text)]">Booking link:</span>{" "}
+              <a href={event.booking_url} target="_blank" rel="noopener noreferrer" className="text-[var(--color-primary-500)] underline">{event.booking_url}</a>
+            </p>
+          ) : null}
+          <p>
+            <span className="font-semibold text-[var(--color-text)]">SMS promo:</span>{" "}
+            {event.sms_promo_enabled ? "Enabled" : "Disabled"}
+          </p>
           {artistNames.length ? (
             <p>
               <span className="font-semibold text-[var(--color-text)]">
