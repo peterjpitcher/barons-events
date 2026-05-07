@@ -23,6 +23,10 @@
     {
       "path": "/api/cron/weekly-digest",
       "schedule": "0 8 * * 1,4"
+    },
+    {
+      "path": "/api/cron/reconcile-event-images",
+      "schedule": "15 3 * * *"
     }
   ]
 }

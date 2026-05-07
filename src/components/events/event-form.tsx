@@ -239,44 +239,82 @@ export function EventForm({
   const proxySubmitRef = useRef<HTMLButtonElement>(null);
   const proxyGenerateRef = useRef<HTMLButtonElement>(null);
 
+  // Form-mount correlation ids. `operation_id` is echoed back through the
+  // server action's ActionResult so error toasts can surface a short hash for
+  // support. `idempotency_key` is reserved for the Phase B′ atomic-save RPC
+  // (Action Rewirer wave) — emit it now so the field exists when that lands.
+  // Regenerated after every successful save (effect below).
+  const operationIdRef = useRef<string>(
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : "00000000-0000-4000-8000-000000000000"
+  );
+  const idempotencyKeyRef = useRef<string>(
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : "00000000-0000-4000-8000-000000000001"
+  );
+  const [expectedUpdatedAt, setExpectedUpdatedAt] = useState(defaultValues?.updated_at ?? "");
+
   useEffect(() => {
-    if (draftState?.message) {
-      if (draftState.success) {
-        toast.success(draftState.message);
-      } else if (!draftState.fieldErrors) {
-        toast.error(draftState.message);
+    if (!draftState?.message) return;
+    if (draftState.success) {
+      toast.success(draftState.message);
+      // Phase B′ image-state-machine: surface non-blocking warnings from the
+      // RPC path. Storage upload or attach failures still leave the row
+      // saved, so we treat them as warnings (not errors) and let the daily
+      // reconcile cron retry the attach.
+      if (draftState.warnings?.includes("image-upload-failed")) {
+        toast.warning("Saved, but the image upload failed. Try uploading again.");
+      } else if (draftState.warnings?.includes("image-attach-pending")) {
+        toast.warning("Saved, but the image is still attaching. It will appear shortly.");
       }
+    } else {
+      // Append the short hash of the operation_id so the user can quote it
+      // in support requests; server logs and audit-log meta share the same
+      // value, making lookups straightforward.
+      toast.error(
+        draftState.operationId
+          ? `${draftState.message} (ref: ${draftState.operationId.slice(0, 8)})`
+          : draftState.message
+      );
     }
   }, [draftState]);
 
 
   useEffect(() => {
-    if (submitState?.message) {
-      if (submitState.success) {
-        toast.success(submitState.message);
-      } else if (!submitState.fieldErrors) {
-        toast.error(submitState.message);
+    if (!submitState?.message) return;
+    if (submitState.success) {
+      toast.success(submitState.message);
+      if (submitState.warnings?.includes("image-upload-failed")) {
+        toast.warning("Submitted, but the image upload failed. Try uploading again.");
+      } else if (submitState.warnings?.includes("image-attach-pending")) {
+        toast.warning("Submitted, but the image is still attaching. It will appear shortly.");
       }
+    } else {
+      toast.error(
+        submitState.operationId
+          ? `${submitState.message} (ref: ${submitState.operationId.slice(0, 8)})`
+          : submitState.message
+      );
     }
   }, [submitState]);
 
   useEffect(() => {
-    if (websiteCopyState?.message) {
-      if (websiteCopyState.success) {
-        toast.success(websiteCopyState.message);
-      } else if (!websiteCopyState.fieldErrors) {
-        toast.error(websiteCopyState.message);
-      }
+    if (!websiteCopyState?.message) return;
+    if (websiteCopyState.success) {
+      toast.success(websiteCopyState.message);
+    } else {
+      toast.error(websiteCopyState.message);
     }
   }, [websiteCopyState]);
 
   useEffect(() => {
-    if (websiteCopyFormState?.message) {
-      if (websiteCopyFormState.success) {
-        toast.success(websiteCopyFormState.message);
-      } else if (!websiteCopyFormState.fieldErrors) {
-        toast.error(websiteCopyFormState.message);
-      }
+    if (!websiteCopyFormState?.message) return;
+    if (websiteCopyFormState.success) {
+      toast.success(websiteCopyFormState.message);
+    } else {
+      toast.error(websiteCopyFormState.message);
     }
   }, [websiteCopyFormState]);
 
@@ -304,12 +342,25 @@ export function EventForm({
     if (draftState?.success) {
       setIsDirty(false);
       setLastSavedAt(new Date());
+      // Rotate correlation ids so the next save gets fresh ones — without
+      // this, a re-submission would replay the same operation_id and (in the
+      // upcoming RPC path) the same idempotency_key.
+      if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+        operationIdRef.current = crypto.randomUUID();
+        idempotencyKeyRef.current = crypto.randomUUID();
+      }
+      setExpectedUpdatedAt(draftState.updatedAt ?? "");
     }
   }, [draftState]);
   useEffect(() => {
     if (submitState?.success) {
       setIsDirty(false);
       setLastSavedAt(new Date());
+      if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+        operationIdRef.current = crypto.randomUUID();
+        idempotencyKeyRef.current = crypto.randomUUID();
+      }
+      setExpectedUpdatedAt(submitState.updatedAt ?? "");
     }
   }, [submitState]);
 
@@ -335,9 +386,7 @@ export function EventForm({
       toast.success(artistCreateState.message);
       return;
     }
-    if (!artistCreateState.fieldErrors) {
-      toast.error(artistCreateState.message ?? "Could not add artist.");
-    }
+    toast.error(artistCreateState.message ?? "Could not add artist.");
   }, [artistCreateState]);
 
   const canChooseVenue = role === "administrator" || (mode === "create" && role === "office_worker");
@@ -393,57 +442,13 @@ export function EventForm({
   const [seoDescription, setSeoDescription] = useState(defaultValues?.seo_description ?? "");
   const [seoSlug, setSeoSlug] = useState(defaultValues?.seo_slug ?? "");
 
-  useEffect(() => {
-    if (mode !== "edit" || !defaultValues?.id) return;
-    setTitleValue(defaultValues?.title ?? "");
-    setEventTypeValue(defaultValues?.event_type ?? "");
-    const nextVenueDefaults = deriveEventFormVenueDefaults({
-      mode,
-      initialVenueId,
-      eventVenueId: defaultValues?.venue_id ?? null,
-      eventVenues: (defaultValues as { venues?: Array<{ id: string }> } | undefined)?.venues ?? null,
-      availableVenueIds: venues.map((venue) => venue.id)
-    });
-    setSelectedVenueId(nextVenueDefaults.primaryVenueId);
-    setSelectedVenueIds(nextVenueDefaults.selectedVenueIds);
-    setVenueSpaceValue(defaultValues?.venue_space ?? "");
-    setStartValue(toLocalInputValue(defaultValues?.start_at ?? initialStartAt));
-    setEndValue(toLocalInputValue(defaultValues?.end_at ?? initialEndAt));
-    setEndDirty(Boolean(defaultValues?.end_at ?? initialEndAt));
-    setEventNotes(defaultValues?.notes ?? "");
-    setManagerResponsibleId((defaultValues as any)?.manager_responsible_id ?? "");
-    setManagerDirty(Boolean((defaultValues as any)?.manager_responsible_id));
-    setTicketPrice(defaultValues?.ticket_price != null ? String(defaultValues.ticket_price) : "");
-    setSelectedArtistIds(getLinkedArtistSelection(defaultValues).ids);
-    setSelectedGoals(
-      new Set(
-        (defaultValues?.goal_focus ?? "")
-          .split(",")
-          .map((value) => value.trim())
-          .filter(Boolean)
-      )
-    );
-    setBookingType(defaultValues?.booking_type ?? "");
-    setCheckInCutoffMinutes(
-      defaultValues?.check_in_cutoff_minutes != null ? String(defaultValues.check_in_cutoff_minutes) : ""
-    );
-    setAgePolicy(defaultValues?.age_policy ?? "");
-    setAccessibilityNotes(defaultValues?.accessibility_notes ?? "");
-    setCancellationWindowHours(
-      defaultValues?.cancellation_window_hours != null ? String(defaultValues.cancellation_window_hours) : ""
-    );
-    setTermsAndConditions(defaultValues?.terms_and_conditions ?? "");
-    setPublicTitle(defaultValues?.public_title ?? "");
-    setPublicTeaser(defaultValues?.public_teaser ?? "");
-    setPublicDescription(defaultValues?.public_description ?? "");
-    setPublicHighlights(Array.isArray(defaultValues?.public_highlights) ? defaultValues.public_highlights.join("\n") : "");
-    setBookingUrl(defaultValues?.booking_url ?? "");
-    setSeoTitle(defaultValues?.seo_title ?? "");
-    setSeoDescription(defaultValues?.seo_description ?? "");
-    setSeoSlug(defaultValues?.seo_slug ?? "");
-    // Intentionally keyed only by event id: same-event revalidation must not
-    // overwrite in-progress edits or server-action validation state.
-  }, [mode, defaultValues?.id]);
+  // NOTE: a prop-reset useEffect (keyed on `defaultValues?.id`) used to live
+  // here to re-seed every controlled state when an `id` change came in via
+  // props. It has been removed. Parents now mount this form with
+  // `key={defaultValues?.id ?? "new"}`, which means a different event id
+  // triggers a full unmount/remount and the state initialisers above re-run.
+  // For same-id revalidation (e.g. `revalidatePath` after a peripheral
+  // mutation), the form state stays exactly as the user left it.
 
   useEffect(() => {
     if (!websiteCopyState?.success || !websiteCopyState.values) return;
@@ -1810,6 +1815,11 @@ export function EventForm({
           <div className="min-w-0">
             <form ref={formRef} action={draftAction} noValidate onSubmit={handleSubmit} onChange={() => setIsDirty(true)}>
               <input type="hidden" name="eventId" defaultValue={defaultValues?.id} />
+              <input type="hidden" name="operation_id" value={operationIdRef.current} readOnly />
+              <input type="hidden" name="idempotency_key" value={idempotencyKeyRef.current} readOnly />
+              {mode === "edit" && expectedUpdatedAt ? (
+                <input type="hidden" name="expected_updated_at" value={expectedUpdatedAt} readOnly />
+              ) : null}
               {activeState && !activeState.success && activeState.message && !activeState.fieldErrors && (
                 <div className="mb-4 rounded-lg border border-[var(--color-danger)] bg-[var(--color-danger)]/10 p-4 text-sm text-[var(--color-danger)]" role="alert">
                   <strong>Something went wrong:</strong> {activeState.message}
@@ -2050,6 +2060,11 @@ export function EventForm({
       <>
         <form action={draftAction} className="space-y-6" noValidate onSubmit={handleSubmit} onChange={() => setIsDirty(true)}>
           <input type="hidden" name="eventId" defaultValue={defaultValues?.id} />
+          <input type="hidden" name="operation_id" value={operationIdRef.current} readOnly />
+          <input type="hidden" name="idempotency_key" value={idempotencyKeyRef.current} readOnly />
+          {mode === "edit" && expectedUpdatedAt ? (
+            <input type="hidden" name="expected_updated_at" value={expectedUpdatedAt} readOnly />
+          ) : null}
           <button ref={legacySubmitRef} type="submit" formAction={submitAction} data-intent="submit" className="sr-only" aria-hidden tabIndex={-1} />
           {activeState && !activeState.success && activeState.message && !activeState.fieldErrors && (
             <div className="rounded-lg border border-[var(--color-danger)] bg-[var(--color-danger)]/10 p-4 text-sm text-[var(--color-danger)]" role="alert">
@@ -2225,6 +2240,7 @@ export function EventForm({
                 pendingLabel="Saving..."
                 variant="primary"
                 data-intent="draft"
+                disabled={isSavingPending || isSubmittingPending}
               />
               {showSecondaryAction ? (
                 <SubmitButton
@@ -2233,6 +2249,7 @@ export function EventForm({
                   pendingLabel={role === "administrator" ? "Publishing..." : "Sending..."}
                   variant="secondary"
                   data-intent="submit"
+                  disabled={isSavingPending || isSubmittingPending}
                 />
               ) : null}
               {mode === "edit" && defaultValues?.id && canDelete ? (

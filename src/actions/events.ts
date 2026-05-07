@@ -9,11 +9,18 @@ import { getCurrentUser } from "@/lib/auth";
 import { canReviewEvents, canProposeEvents, canEditEvent } from "@/lib/roles";
 import { loadEventEditContext } from "@/lib/events/edit-context";
 import { appendEventVersion, createEventDraft, createEventPlanningItem, recordApproval, softDeleteEvent, updateEventDraft, updateEventAssignee } from "@/lib/events";
+import {
+  buildSaveEventDraftPayload,
+  callSaveEventDraftRpc,
+  callSubmitEventForReviewRpc,
+  type SaveEventDraftRpcResult
+} from "@/lib/events/save-rpc";
 import { generateUniqueEventSlug } from "@/lib/bookings";
 import { cleanupOrphanArtists, parseArtistNames, syncEventArtists } from "@/lib/artists";
 import { eventDraftSchema, eventFormSchema } from "@/lib/validation";
 import { getFieldErrors } from "@/lib/form-errors";
 import type { ActionResult, EventStatus } from "@/lib/types";
+import type { Database } from "@/lib/supabase/database.types";
 import { sendAssigneeReassignmentEmail, sendEventSubmittedEmail, sendReviewDecisionEmail } from "@/lib/notifications";
 import { recordAuditLogEntry } from "@/lib/audit-log";
 import { generateTermsAndConditions, generateWebsiteCopy, type GeneratedWebsiteCopy } from "@/lib/ai";
@@ -24,8 +31,149 @@ import {
   normaliseOptionalInteger as normaliseOptionalIntegerField,
 } from "@/lib/normalise";
 import { canOfficeWorkerUseVenueSelection } from "@/lib/visibility";
+import { logEventAction } from "@/lib/observability/event-action-log";
 
 const reviewerFallback = z.string().uuid().optional();
+
+/**
+ * Reads the form-mounted correlation id from FormData. The client-side
+ * EventForm seeds this via a hidden `operation_id` input so that error
+ * toasts, server logs and audit-log meta share a single hash for support.
+ *
+ * Falls back to a fresh UUID when the client did not send one or sent a
+ * malformed value, so server logs always have a correlation id even on
+ * direct/test invocations.
+ */
+function readOperationId(formData: FormData): string {
+  const raw = formData.get("operation_id");
+  if (typeof raw === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw)) {
+    return raw;
+  }
+  return crypto.randomUUID();
+}
+
+/**
+ * Reads the form-mounted persistent idempotency key. Used by the Phase B′
+ * atomic-save RPC to deduplicate retries — same key + same user replays the
+ * stored response without writing again. Falls back to a fresh UUID when the
+ * client did not send one (legacy callers, test invocations).
+ */
+function readIdempotencyKey(formData: FormData): string {
+  const raw = formData.get("idempotency_key");
+  if (typeof raw === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw)) {
+    return raw;
+  }
+  return crypto.randomUUID();
+}
+
+/**
+ * Reads the optional optimistic-concurrency token (the row's last-known
+ * `updated_at`). Returned as an ISO string for the RPC, or null when the
+ * client did not send one (e.g. first save of a new draft).
+ */
+function readExpectedUpdatedAt(formData: FormData): string | null {
+  const raw = formData.get("expected_updated_at");
+  if (typeof raw === "string" && raw.length > 0) {
+    return raw;
+  }
+  return null;
+}
+
+/** Phase B′ atomic-save feature flag. */
+function shouldUseSaveEventRpc(): boolean {
+  return process.env.EVENT_SAVE_USE_RPC === "true";
+}
+
+type EventsTable = Database["public"]["Tables"]["events"];
+type EventRowUpdate = EventsTable["Update"];
+
+/**
+ * Compensating image upload + attach for the RPC path.
+ *
+ * The atomic save RPC writes only the events row + linked tables; the binary
+ * image upload is a separate side effect that cannot share the RPC's
+ * transaction. We follow a two-phase commit:
+ *   1. Upload the bytes to storage (idempotent — overwrite uses upsert).
+ *   2. UPDATE events.event_image_path to attach.
+ * If step 1 fails we record an `image-upload-failed` warning. If step 1
+ * succeeds but step 2 fails we set `pending_image_attach` so the daily cron
+ * (`/api/cron/reconcile-event-images`) can attach later, and surface an
+ * `image-attach-pending` warning.
+ */
+async function attachEventImageAfterRpc(args: {
+  eventId: string;
+  file: File;
+  operationId: string;
+}): Promise<{ warning?: "image-upload-failed" | "image-attach-pending" }> {
+  let admin;
+  try {
+    admin = createSupabaseAdminClient();
+  } catch (error) {
+    console.error(
+      `[event-save-rpc:${args.operationId.slice(0, 8)}] Service-role client unavailable for image upload:`,
+      error
+    );
+    return { warning: "image-upload-failed" };
+  }
+
+  const fileExtRaw = (() => {
+    const parsed = args.file.name.split(".");
+    if (parsed.length < 2) return "";
+    return parsed[parsed.length - 1];
+  })();
+  const fileExt = sanitiseFileName(fileExtRaw).slice(0, 10) ||
+    (typeof args.file.type === "string" && args.file.type.startsWith("image/")
+      ? args.file.type.split("/")[1] ?? "bin"
+      : "bin");
+  const path = `${args.eventId}/${Date.now()}.${fileExt}`;
+  const bytes = Buffer.from(await args.file.arrayBuffer());
+
+  const { error: uploadError } = await admin.storage
+    .from(EVENT_IMAGE_BUCKET)
+    .upload(path, bytes, {
+      contentType: args.file.type || "application/octet-stream",
+      upsert: true
+    });
+
+  if (uploadError) {
+    console.error(
+      `[event-save-rpc:${args.operationId.slice(0, 8)}] Storage upload failed:`,
+      uploadError
+    );
+    return { warning: "image-upload-failed" };
+  }
+
+  const attachUpdate: EventRowUpdate = {
+    event_image_path: path,
+    pending_image_attach: null
+  };
+  const { error: attachError } = await admin
+    .from("events")
+    .update(attachUpdate)
+    .eq("id", args.eventId);
+
+  if (attachError) {
+    // Storage succeeded but the second write failed. Flag for reconciliation.
+    console.error(
+      `[event-save-rpc:${args.operationId.slice(0, 8)}] Image attach failed; flagging for reconcile:`,
+      attachError
+    );
+    const pendingUpdate: EventRowUpdate = { pending_image_attach: path };
+    const { error: pendingError } = await admin
+      .from("events")
+      .update(pendingUpdate)
+      .eq("id", args.eventId);
+    if (pendingError) {
+      console.error(
+        `[event-save-rpc:${args.operationId.slice(0, 8)}] Failed to set pending_image_attach:`,
+        pendingError
+      );
+    }
+    return { warning: "image-attach-pending" };
+  }
+
+  return {};
+}
 
 /**
  * Keeps the event_venues join table in sync with the picked venue list.
@@ -36,7 +184,7 @@ async function syncEventVenueAttachments(eventId: string, venueIds: string[]): P
   if (!eventId) return;
   const db = createSupabaseAdminClient();
    
-  const { error } = await (db as any).rpc("set_event_venues", {
+  const { error } = await db.rpc("set_event_venues", {
     p_event_id: eventId,
     p_venue_ids: venueIds
   });
@@ -609,6 +757,8 @@ async function autoApproveEvent(params: {
 }
 
 export async function saveEventDraftAction(_: ActionResult | undefined, formData: FormData): Promise<ActionResult> {
+  const startedAt = Date.now();
+  const operationId = readOperationId(formData);
   const user = await getCurrentUser();
   if (!user) {
     redirect("/login");
@@ -620,19 +770,19 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
 
   if (isCreate) {
     if (!canProposeEvents(user.role)) {
-      return { success: false, message: "You don't have permission to create events." };
+      return { success: false, message: "You don't have permission to create events.", operationId };
     }
   } else {
     const parsedId = z.string().uuid().safeParse(rawEventId);
     if (!parsedId.success) {
-      return { success: false, message: "Missing event reference." };
+      return { success: false, message: "Missing event reference.", operationId };
     }
     const ctx = await loadEventEditContext(parsedId.data);
     if (!ctx) {
-      return { success: false, message: "Event not found." };
+      return { success: false, message: "Event not found.", operationId };
     }
     if (!canEditEvent(user.role, user.id, user.venueId, ctx)) {
-      return { success: false, message: "You don't have permission to edit this event." };
+      return { success: false, message: "You don't have permission to edit this event.", operationId };
     }
   }
 
@@ -653,7 +803,8 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
     return {
       success: false,
       message: "You can only create or edit events for your assigned venue.",
-      fieldErrors: { venueId: "Choose your assigned venue" }
+      fieldErrors: { venueId: "Choose your assigned venue" },
+      operationId
     };
   }
   const venueId = venueIds[0] ?? "";
@@ -708,7 +859,8 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
     return {
       success: false,
       message: "Check the highlighted fields.",
-      fieldErrors: getFieldErrors(parsed.error)
+      fieldErrors: getFieldErrors(parsed.error),
+      operationId
     };
   }
 
@@ -720,8 +872,103 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
     return {
       success: false,
       message: "Choose a venue before saving.",
-      fieldErrors: { venueId: "Choose a venue" }
+      fieldErrors: { venueId: "Choose a venue" },
+      operationId
     };
+  }
+
+  // Phase B′ atomic-save path. When the feature flag is enabled, the entire
+  // events row + venue/artist join writes are committed inside a single
+  // SECURITY DEFINER RPC. Image upload runs as a compensating second phase
+  // (see attachEventImageAfterRpc). The legacy multi-write path below stays
+  // available behind the same flag and will be removed once the RPC has
+  // burned in for a release.
+  if (shouldUseSaveEventRpc()) {
+    const idempotencyKey = readIdempotencyKey(formData);
+    const expectedUpdatedAt = readExpectedUpdatedAt(formData);
+    const requestedArtistIds = normaliseArtistIdList(formData.get("artistIds"));
+
+    const payload = buildSaveEventDraftPayload({
+      eventId: values.eventId ?? null,
+      venueId: values.venueId,
+      venueIds,
+      artistIds: requestedArtistIds,
+      title: values.title,
+      eventType: values.eventType ?? null,
+      startAtIso,
+      endAtIso,
+      venueSpace: values.venueSpace,
+      expectedHeadcount: values.expectedHeadcount ?? null,
+      wetPromo: values.wetPromo ?? null,
+      foodPromo: values.foodPromo ?? null,
+      goalFocus: values.goalFocus ?? null,
+      notes: values.notes ?? null,
+      bookingType: values.bookingType ?? null,
+      ticketPrice: values.ticketPrice ?? null,
+      checkInCutoffMinutes: values.checkInCutoffMinutes ?? null,
+      agePolicy: values.agePolicy ?? null,
+      accessibilityNotes: values.accessibilityNotes ?? null,
+      cancellationWindowHours: values.cancellationWindowHours ?? null,
+      termsAndConditions: values.termsAndConditions ?? null,
+      costTotal: values.costTotal ?? null,
+      costDetails: values.costDetails ?? null,
+      managerResponsibleId: values.managerResponsibleId || null,
+      publicTitle: values.publicTitle ?? null,
+      publicTeaser: values.publicTeaser ?? null,
+      publicDescription: values.publicDescription ?? null,
+      publicHighlights: values.publicHighlights ?? null,
+      bookingUrl: values.bookingUrl ?? null,
+      seoTitle: values.seoTitle ?? null,
+      seoDescription: values.seoDescription ?? null,
+      seoSlug: values.seoSlug ?? null
+    });
+
+    const result: SaveEventDraftRpcResult = await callSaveEventDraftRpc({
+      payload,
+      idempotencyKey,
+      operationId,
+      expectedUpdatedAt
+    });
+
+    if (result.success && result.eventId && eventImageFile) {
+      const imageOutcome = await attachEventImageAfterRpc({
+        eventId: result.eventId,
+        file: eventImageFile,
+        operationId
+      });
+      if (imageOutcome.warning) {
+        result.warnings = [...(result.warnings ?? []), imageOutcome.warning];
+      }
+    }
+
+    if (result.success) {
+      revalidatePath("/events");
+      if (result.eventId) revalidatePath(`/events/${result.eventId}`);
+      logEventAction({
+        operation_id: result.operationId ?? operationId,
+        user_id: user.id,
+        action: "save_event_draft",
+        duration_ms: Date.now() - startedAt,
+        outcome: "success",
+        warning_count: result.warnings?.length ?? 0,
+        failed_count: Array.isArray(result.failed) ? result.failed.length : 0
+      });
+      if (!values.eventId && result.eventId) {
+        redirect(`/events/${result.eventId}`);
+      }
+    } else {
+      logEventAction({
+        operation_id: result.operationId ?? operationId,
+        user_id: user.id,
+        action: "save_event_draft",
+        duration_ms: Date.now() - startedAt,
+        outcome: result.conflict ? "conflict" : "failure",
+        warning_count: result.warnings?.length ?? 0,
+        failed_count: Array.isArray(result.failed) ? result.failed.length : 0
+      });
+    }
+
+    return result;
   }
 
   let redirectUrl: string | null = null;
@@ -798,7 +1045,8 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
         if (msg.includes("no rows were affected")) {
           return {
             success: false,
-            message: "Could not save — the event's current status may prevent editing. Try reverting to draft first, then editing."
+            message: "Could not save — the event's current status may prevent editing. Try reverting to draft first, then editing.",
+            operationId
           };
         }
         throw updateError; // Let outer catch handle
@@ -829,14 +1077,15 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
               meta: {
                 previousArtists: artistSync.previousNames,
                 artists: artistSync.nextNames,
-                changes: ["Artists"]
+                changes: ["Artists"],
+                operationId
               }
             });
           }
         }
       } catch (error) {
         artistSyncWarning = true;
-        console.error("Draft saved but artist sync failed", error);
+        console.error(`[event-save:${operationId.slice(0, 8)}] Draft saved but artist sync failed`, error);
       }
 
       let imageWarning = false;
@@ -847,7 +1096,7 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
           existingPath: updated.event_image_path
         });
         if ("error" in uploadResult) {
-          return { success: false, message: uploadResult.error };
+          return { success: false, message: uploadResult.error, operationId };
         }
         if (uploadResult.path !== updated.event_image_path) {
           try {
@@ -861,7 +1110,7 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
             void _imageUpdated;
           } catch (error) {
             imageWarning = true;
-            console.error("Draft saved but event image path update failed", error);
+            console.error(`[event-save:${operationId.slice(0, 8)}] Draft saved but event image path update failed`, error);
           }
         }
       }
@@ -875,20 +1124,21 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
         });
       } catch (error) {
         versionWarning = true;
-        console.error("Draft saved but event version append failed", error);
+        console.error(`[event-save:${operationId.slice(0, 8)}] Draft saved but event version append failed`, error);
       }
-      recordAuditLogEntry({
+      await recordAuditLogEntry({
         entity: "event",
         entityId: values.eventId,
         action: "event.draft_saved",
         actorId: user.id,
-        meta: { title: values.title, isUpdate: true }
-      }).catch(() => {});
+        meta: { title: values.title, isUpdate: true, operationId }
+      });
       revalidatePath(`/events/${values.eventId}`);
       if (artistSyncWarning || imageWarning || versionWarning) {
         return {
           success: true,
-          message: "Draft updated, but some optional linked data could not be synced."
+          message: "Draft updated, but some optional linked data could not be synced.",
+          operationId
         };
       }
       const warnings: string[] = [];
@@ -899,7 +1149,7 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
         warnings.push(`These fields may not have saved correctly: ${mismatches.join(", ")}`);
       }
       const warningText = warnings.length ? ` (${warnings.join("; ")})` : "";
-      return { success: true, message: `Draft updated.${warningText}` };
+      return { success: true, message: `Draft updated.${warningText}`, operationId };
     }
 
     const created = await createEventDraft({
@@ -949,7 +1199,7 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
         user.id
       );
     } catch (sopError) {
-      console.error("SOP checklist generation failed:", sopError);
+      console.error(`[event-save:${operationId.slice(0, 8)}] SOP checklist generation failed:`, sopError);
     }
 
     const artistIds = normaliseArtistIdList(formData.get("artistIds"));
@@ -970,12 +1220,13 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
             actorId: user.id,
             meta: {
               artists: artistSync.nextNames,
-              changes: ["Artists"]
+              changes: ["Artists"],
+              operationId
             }
           });
         }
       } catch (error) {
-        console.error("Draft created but artist sync failed", error);
+        console.error(`[event-save:${operationId.slice(0, 8)}] Draft created but artist sync failed`, error);
       }
     }
 
@@ -996,38 +1247,40 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
           );
           void _imgUpdated;
         } catch (error) {
-          console.error("Draft created but event image path update failed", error);
+          console.error(`[event-save:${operationId.slice(0, 8)}] Draft created but event image path update failed`, error);
         }
       } else {
-        console.warn("Event image upload failed after draft create", uploadResult.error);
+        console.warn(`[event-save:${operationId.slice(0, 8)}] Event image upload failed after draft create`, uploadResult.error);
       }
     }
 
-    recordAuditLogEntry({
+    await recordAuditLogEntry({
       entity: "event",
       entityId: created.id,
       action: "event.draft_saved",
       actorId: user.id,
-      meta: { title: values.title, isNew: true }
-    }).catch(() => {});
+      meta: { title: values.title, isNew: true, operationId }
+    });
     revalidatePath(`/events/${created.id}`);
     revalidatePath("/events");
     redirectUrl = `/events/${created.id}`;
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Unknown error";
-    console.error("[events] Draft save failed:", detail, error);
-    return { success: false, message: "Could not save the draft. Please try again." };
+    console.error(`[event-save:${operationId.slice(0, 8)}] Draft save failed:`, detail, error);
+    return { success: false, message: "Could not save the draft. Please try again.", operationId };
   }
   if (redirectUrl) {
     redirect(redirectUrl);
   }
-  return { success: true, message: "Draft saved." };
+  return { success: true, message: "Draft saved.", operationId };
 }
 
 export async function submitEventForReviewAction(
   _: ActionResult | undefined,
   formData: FormData
 ): Promise<ActionResult> {
+  const startedAt = Date.now();
+  const operationId = readOperationId(formData);
   const user = await getCurrentUser();
   if (!user) {
     redirect("/login");
@@ -1038,19 +1291,19 @@ export async function submitEventForReviewAction(
 
   if (!rawEventId) {
     if (!canProposeEvents(user.role)) {
-      return { success: false, message: "You don't have permission to submit events." };
+      return { success: false, message: "You don't have permission to submit events.", operationId };
     }
   } else {
     const parsedId = z.string().uuid().safeParse(rawEventId);
     if (!parsedId.success) {
-      return { success: false, message: "Missing event reference." };
+      return { success: false, message: "Missing event reference.", operationId };
     }
     const ctx = await loadEventEditContext(parsedId.data);
     if (!ctx) {
-      return { success: false, message: "Event not found." };
+      return { success: false, message: "Event not found.", operationId };
     }
     if (!canEditEvent(user.role, user.id, user.venueId, ctx)) {
-      return { success: false, message: "You don't have permission to edit this event." };
+      return { success: false, message: "You don't have permission to edit this event.", operationId };
     }
   }
 
@@ -1061,6 +1314,61 @@ export async function submitEventForReviewAction(
   const requestedArtistIds = normaliseArtistIdList(formData.get("artistIds"));
   const requestedArtistNames = normaliseArtistNameList(formData.get("artistNames"));
 
+  // Phase B′ atomic-submit path. Only the existing-event submit case is
+  // routed through the RPC for now; the create-then-submit fast path stays
+  // on the legacy multi-write so that branch can keep its full validation +
+  // assignee-resolution logic while we burn the RPC in. The legacy path
+  // remains the fallback when the flag is off.
+  if (rawEventId && shouldUseSaveEventRpc()) {
+    const parsedId = z.string().uuid().safeParse(rawEventId);
+    if (!parsedId.success) {
+      return { success: false, message: "Missing event reference.", operationId };
+    }
+    const idempotencyKey = readIdempotencyKey(formData);
+    const expectedUpdatedAt = readExpectedUpdatedAt(formData);
+    const assigneeId = (() => {
+      const parsed = reviewerFallback.safeParse(assigneeOverride);
+      return parsed.success ? parsed.data ?? null : null;
+    })();
+
+    const result = await callSubmitEventForReviewRpc({
+      eventId: parsedId.data,
+      idempotencyKey,
+      operationId,
+      expectedUpdatedAt,
+      assigneeId
+    });
+
+    if (result.success && eventImageFile) {
+      const imageOutcome = await attachEventImageAfterRpc({
+        eventId: parsedId.data,
+        file: eventImageFile,
+        operationId
+      });
+      if (imageOutcome.warning) {
+        result.warnings = [...(result.warnings ?? []), imageOutcome.warning];
+      }
+    }
+
+    if (result.success) {
+      revalidatePath(`/events/${parsedId.data}`);
+      revalidatePath("/events");
+      revalidatePath("/reviews");
+    }
+
+    logEventAction({
+      operation_id: result.operationId ?? operationId,
+      user_id: user.id,
+      action: "submit_event_for_review",
+      duration_ms: Date.now() - startedAt,
+      outcome: result.success ? "success" : result.conflict ? "conflict" : "failure",
+      warning_count: result.warnings?.length ?? 0,
+      failed_count: result.missingFields?.length ?? 0
+    });
+
+    return result;
+  }
+
   let targetEventId: string | null = null;
   let redirectUrl: string | null = null;
   let finalResult: ActionResult | null = null;
@@ -1069,7 +1377,7 @@ export async function submitEventForReviewAction(
     if (rawEventId) {
       const parsedId = z.string().uuid().safeParse(rawEventId);
       if (!parsedId.success) {
-        return { success: false, message: "Missing event reference." };
+        return { success: false, message: "Missing event reference.", operationId };
       }
       targetEventId = parsedId.data;
     } else {
@@ -1085,7 +1393,8 @@ export async function submitEventForReviewAction(
         return {
           success: false,
           message: "You can only submit events for your assigned venue.",
-          fieldErrors: { venueId: "Choose your assigned venue" }
+          fieldErrors: { venueId: "Choose your assigned venue" },
+          operationId
         };
       }
       const venueId = venueIds[0] ?? "";
@@ -1141,7 +1450,8 @@ export async function submitEventForReviewAction(
         return {
           success: false,
           message: "Check the highlighted fields.",
-          fieldErrors: getFieldErrors(parsed.error)
+          fieldErrors: getFieldErrors(parsed.error),
+          operationId
         };
       }
 
@@ -1152,7 +1462,8 @@ export async function submitEventForReviewAction(
         return {
           success: false,
           message: "Choose a venue before submitting.",
-          fieldErrors: { venueId: "Choose a venue" }
+          fieldErrors: { venueId: "Choose a venue" },
+          operationId
         };
       }
 
@@ -1201,7 +1512,7 @@ export async function submitEventForReviewAction(
           user.id
         );
       } catch (sopError) {
-        console.error("SOP checklist generation failed:", sopError);
+        console.error(`[event-submit:${operationId.slice(0, 8)}] SOP checklist generation failed:`, sopError);
       }
 
       const artistSync = await syncEventArtists({
@@ -1218,7 +1529,8 @@ export async function submitEventForReviewAction(
           actorId: user.id,
           meta: {
             artists: artistSync.nextNames,
-            changes: ["Artists"]
+            changes: ["Artists"],
+            operationId
           }
         });
       }
@@ -1239,13 +1551,13 @@ export async function submitEventForReviewAction(
           );
           void _submitImgUpdated;
         } else {
-          console.warn("Event image upload failed before submit", uploadResult.error);
+          console.warn(`[event-submit:${operationId.slice(0, 8)}] Event image upload failed before submit`, uploadResult.error);
         }
       }
     }
 
     if (!targetEventId) {
-      return { success: false, message: "Missing event reference." };
+      return { success: false, message: "Missing event reference.", operationId };
     }
 
     const supabase = await createSupabaseActionClient();
@@ -1261,7 +1573,7 @@ export async function submitEventForReviewAction(
     }
 
     if (user.role === "office_worker" && existingEvent?.created_by !== user.id) {
-      return { success: false, message: "You can only submit events you created." };
+      return { success: false, message: "You can only submit events you created.", operationId };
     }
 
     if (!existingEvent) {
@@ -1273,9 +1585,9 @@ export async function submitEventForReviewAction(
         revalidatePath(`/events/${targetEventId}`);
         revalidatePath("/events");
         revalidatePath("/reviews");
-        return { success: true, message: "Event already approved." };
+        return { success: true, message: "Event already approved.", operationId };
       }
-      return { success: false, message: "This event cannot be submitted in its current state." };
+      return { success: false, message: "This event cannot be submitted in its current state.", operationId };
     }
 
     if (rawEventId) {
@@ -1294,7 +1606,8 @@ export async function submitEventForReviewAction(
           meta: {
             previousArtists: artistSync.previousNames,
             artists: artistSync.nextNames,
-            changes: ["Artists"]
+            changes: ["Artists"],
+            operationId
           }
         });
       }
@@ -1306,7 +1619,7 @@ export async function submitEventForReviewAction(
           existingPath: existingEvent?.event_image_path ?? null
         });
         if ("error" in uploadResult) {
-          return { success: false, message: uploadResult.error };
+          return { success: false, message: uploadResult.error, operationId };
         }
 
         if (uploadResult.path !== (existingEvent?.event_image_path ?? null)) {
@@ -1339,14 +1652,14 @@ export async function submitEventForReviewAction(
       const warningText = approvalResult.warnings.length
         ? ` Note: ${approvalResult.warnings.join("; ")}.`
         : "";
-      finalResult = { success: true, message: `Event approved instantly.${warningText}` };
+      finalResult = { success: true, message: `Event approved instantly.${warningText}`, operationId };
       if (!rawEventId) {
         redirectUrl = `/events/${targetEventId}`;
       }
     } else {
 
       if (existingEvent?.created_by !== user.id) {
-        return { success: false, message: "You can only submit events you created." };
+        return { success: false, message: "You can only submit events you created.", operationId };
       }
 
       async function resolveAssignee(): Promise<string | null> {
@@ -1362,7 +1675,7 @@ export async function submitEventForReviewAction(
             .maybeSingle();
 
           if (venueError) {
-            console.error("Could not load venue default approver", venueError);
+            console.error(`[event-submit:${operationId.slice(0, 8)}] Could not load venue default approver`, venueError);
           } else if (venueRow?.default_approver_id) {
             return venueRow.default_approver_id;
           }
@@ -1413,7 +1726,8 @@ export async function submitEventForReviewAction(
             previousStatus: statusBefore,
             assigneeId: assigneeId ?? null,
             previousAssigneeId: assigneeBefore ?? null,
-            changes
+            changes,
+            operationId
           }
         });
       }
@@ -1428,25 +1742,25 @@ export async function submitEventForReviewAction(
       revalidatePath(`/events/${targetEventId}`);
       revalidatePath("/events");
       revalidatePath("/reviews");
-      finalResult = { success: true, message: "Sent to review." };
+      finalResult = { success: true, message: "Sent to review.", operationId };
       if (!rawEventId) {
         redirectUrl = `/events/${targetEventId}`;
       }
     }
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Unknown error";
-    console.error("[events] Submit for review failed:", detail, error);
+    console.error(`[event-submit:${operationId.slice(0, 8)}] Submit for review failed:`, detail, error);
     if (!rawEventId && targetEventId) {
       revalidatePath(`/events/${targetEventId}`);
       revalidatePath("/events");
       redirect(`/events/${targetEventId}`);
     }
-    return { success: false, message: "Could not submit right now. Please try again." };
+    return { success: false, message: "Could not submit right now. Please try again.", operationId };
   }
   if (redirectUrl) {
     redirect(redirectUrl);
   }
-  return finalResult ?? { success: true, message: "Sent to review." };
+  return finalResult ?? { success: true, message: "Sent to review.", operationId };
 }
 
 export async function reviewerDecisionAction(
@@ -2141,13 +2455,20 @@ export async function updateBookingSettingsAction(
     return { success: false, message: "Could not save booking settings." };
   }
 
-  recordAuditLogEntry({
-    entity: "event",
-    entityId: eventId,
-    action: "event.booking_settings_updated",
-    actorId: user.id,
-    meta: { bookingEnabled, totalCapacity, maxTicketsPerBooking }
-  }).catch(() => {});
+  try {
+    await recordAuditLogEntry({
+      entity: "event",
+      entityId: eventId,
+      action: "event.booking_settings_updated",
+      actorId: user.id,
+      meta: { bookingEnabled, totalCapacity, maxTicketsPerBooking }
+    });
+  } catch (auditError) {
+    // Booking settings save itself succeeded — audit failure is logged but
+    // does not roll the user-visible result back. Surfacing the failure
+    // would confuse the user since the settings change took effect.
+    console.error("updateBookingSettings audit log entry failed:", auditError);
+  }
   revalidatePath(`/events/${eventId}`);
   return { success: true, message: "Booking settings saved.", seoSlug };
 }

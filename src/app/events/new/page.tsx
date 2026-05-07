@@ -79,6 +79,7 @@ export default async function NewEventPage({ searchParams }: PageProps) {
         </CardHeader>
       </Card>
       <EventForm
+        key="new"
         mode="create"
         venues={eventVenues}
         artists={artists}

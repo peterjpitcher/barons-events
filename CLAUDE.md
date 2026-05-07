@@ -71,6 +71,7 @@ npm run supabase:reset   # Reset database (linked, requires confirmation)
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service-role key (server-only) |
 | `RESEND_API_KEY` | Resend email service key |
 | `BARONSHUB_WEBSITE_API_KEY` | BaronsHub website integration API key |
+| `EVENT_SAVE_USE_RPC` | Feature flag: `"true"` enables the atomic event save/submit/propose RPC path; absent or `"false"` keeps the legacy fallback. |
 
 ## Project-Specific Rules / Gotchas
 

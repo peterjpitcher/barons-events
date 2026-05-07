@@ -56,11 +56,23 @@ export type { FieldErrors } from "@/lib/form-errors";
 /**
  * Standard result type returned by server actions.
  * Extended by action-specific result types (e.g. WebsiteCopyActionResult).
+ *
+ * `operationId` echoes the form-mount-generated correlation id back to the
+ * client so error toasts can surface a short hash for support requests and
+ * audit-log lookups. Populated in event-save / event-submit paths.
+ *
+ * `warnings` is reserved for the Phase B′ image-state-machine and atomic-RPC
+ * paths to surface non-blocking soft-failures (e.g. "draft saved but artist
+ * sync failed"). Currently unused by Phase A′ but added now to avoid a
+ * second type-extension pass.
  */
 export type ActionResult = {
   success: boolean;
   message?: string;
   fieldErrors?: FieldErrors;
+  operationId?: string;
+  warnings?: string[];
+  updatedAt?: string;
 };
 
 /** Status of a customer booking. */

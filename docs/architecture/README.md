@@ -1,6 +1,6 @@
 ---
 generated: true
-last_updated: 2026-04-23T12:30:00Z
+last_updated: 2026-05-07T12:00:00Z
 source: session-setup
 project: barons-events-mvp
 ---
@@ -14,20 +14,20 @@ project: barons-events-mvp
 
 | File | Contents | Last Updated |
 |---|---|---|
-| [[overview]] | Project summary, stack, roles, env vars, entry points | 2026-04-23 |
-| [[routes]] | All 30 pages, 21 API routes, middleware auth flow | 2026-04-23 |
-| [[server-actions]] | 80+ server actions across 16 domain files | 2026-04-23 |
-| [[data-model]] | 30+ known tables, storage buckets, conventions | 2026-04-23 |
-| [[relationships]] | Event/booking/planning/debrief lifecycles, integration map | 2026-04-23 |
+| [[overview]] | Project summary, stack, roles, env vars, entry points | 2026-05-07 |
+| [[routes]] | All 30 pages, 15 API routes, middleware auth flow | 2026-05-07 |
+| [[server-actions]] | 70+ server actions across 17 domain files | 2026-05-07 |
+| [[data-model]] | 30+ known tables, storage buckets, conventions | (database agent) |
+| [[relationships]] | Event/booking/planning/debrief lifecycles, integration map | 2026-05-07 |
 | [[NOTES]] | Persistent session notes (not overwritten) | — |
 
 ## Quick Reference
 
-- **30 pages** (25 authenticated, 5 public incl. `/l/[slug]`)
-- **21 API routes** (8 public v1, 9 cron, 2 auth, 1 webhook, 1 short-link redirect)
-- **80+ server actions** across 16 domain files
-- **7 external integrations**: Resend, Twilio, OpenAI, Upstash Redis, Cloudflare Turnstile, QR Code, Supabase Storage
-- **20 env vars** (4 public, 16 server-only)
+- **30 pages** (24 authenticated, 6 public incl. `/l/[slug]`)
+- **15 API routes** (8 public v1, 2 cron, 2 auth, 1 webhook, 1 short-link redirect, 1 confirm)
+- **70+ server actions** across 17 domain files
+- **6 external integrations**: Supabase, Resend, Twilio, OpenAI, QR Code, Cloudflare Turnstile (+ Upstash Redis for rate limiting)
+- **17 env vars declared** in `.env.example`, 23 referenced in code (4 public, 19 server-only)
 
 ## Refresh
 

@@ -636,6 +636,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
 
       {/* EventForm for all users — editors get full sidebar, readers get read-only form */}
       <EventForm
+        key={event.id}
         mode="edit"
         defaultValues={event}
         venues={venues}
