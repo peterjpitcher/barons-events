@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 import { ClipboardList } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import {
   Sheet,
   SheetContent,
@@ -38,15 +37,24 @@ export function SopDrawer({
 
   return (
     <>
-      <Button
-        variant="primary"
-        size="md"
-        className="fixed bottom-6 left-6 z-40 shadow-lg"
-        onClick={() => setOpen(true)}
-      >
-        <ClipboardList className="h-4 w-4" />
-        SOP Checklist ({doneCount}/{tasks.length})
-      </Button>
+      {/* Right-edge handle — always visible when drawer is closed */}
+      {!open && (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="fixed right-0 top-1/2 z-40 flex -translate-y-1/2 items-center gap-1.5 rounded-l-md border border-r-0 border-[var(--color-border)] bg-white px-1.5 py-2.5 shadow-md transition-colors hover:bg-[var(--color-muted-surface)]"
+          style={{ writingMode: "vertical-lr" }}
+          aria-label={`Open 30/60/90 Planning — ${doneCount} of ${tasks.length} complete`}
+        >
+          <ClipboardList className="h-4 w-4 rotate-90" />
+          <span className="text-sm font-medium text-[var(--color-text)]">
+            30/60/90 Planning
+          </span>
+          <span className="text-xs font-semibold text-[var(--color-primary-500)]">
+            {doneCount}/{tasks.length}
+          </span>
+        </button>
+      )}
 
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent side="right" className="flex flex-col">
