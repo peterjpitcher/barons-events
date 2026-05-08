@@ -348,11 +348,11 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
 
   const assignmentCard = (
     <Card>
-      <CardHeader>
-        <CardTitle>Assignment</CardTitle>
-        <CardDescription>Send the next action to the right teammate.</CardDescription>
+      <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--color-primary-700)] px-6 py-3">
+        <CardTitle className="text-sm font-semibold uppercase tracking-wider !text-white">Assignment</CardTitle>
       </CardHeader>
       <CardContent>
+        <p className="mb-4 text-sm text-muted">Send the next action to the right teammate.</p>
         {canUpdateAssignee ? (
           <form className="space-y-3 text-sm" action={reassignAssignee}>
             <div className="space-y-2">
@@ -392,11 +392,11 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
 
   const reviewDecisionCard = canReview ? (
     <Card>
-      <CardHeader>
-        <CardTitle>Review decision</CardTitle>
-        <CardDescription>Share a clear decision so the venue knows what to do next.</CardDescription>
+      <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--color-primary-700)] px-6 py-3">
+        <CardTitle className="text-sm font-semibold uppercase tracking-wider !text-white">Review decision</CardTitle>
       </CardHeader>
       <CardContent>
+        <p className="mb-4 text-sm text-muted">Share a clear decision so the venue knows what to do next.</p>
         <DecisionForm eventId={event.id} />
       </CardContent>
     </Card>
@@ -404,11 +404,11 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
 
   const reviewerTimelineCard = (
     <Card>
-      <CardHeader>
-        <CardTitle>Reviewer timeline</CardTitle>
-        <CardDescription>Quick view of submissions and reviewer notes.</CardDescription>
+      <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--color-primary-700)] px-6 py-3">
+        <CardTitle className="text-sm font-semibold uppercase tracking-wider !text-white">Reviewer timeline</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        <p className="text-sm text-muted">Quick view of submissions and reviewer notes.</p>
         {event.approvals.length === 0 ? (
           <p className="text-sm text-subtle">No reviewer decisions recorded yet.</p>
         ) : (
@@ -433,11 +433,11 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
 
   const auditTrailCard = (
     <Card>
-      <CardHeader>
-        <CardTitle>Audit trail</CardTitle>
-        <CardDescription>Track status changes, assignments, and reviewer feedback.</CardDescription>
+      <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--color-primary-700)] px-6 py-3">
+        <CardTitle className="text-sm font-semibold uppercase tracking-wider !text-white">Audit trail</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        <p className="text-sm text-muted">Track status changes, assignments, and reviewer feedback.</p>
         {auditEntries.length === 0 ? (
           <p className="text-sm text-subtle">No activity recorded yet.</p>
         ) : (
@@ -480,11 +480,12 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
 
   const debriefSubmitCard = canSubmitDebrief ? (
     <Card>
-      <CardHeader>
-        <CardTitle>Post-event debrief</CardTitle>
-        <CardDescription>Capture attendance and takings as soon as possible.</CardDescription>
+      <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--color-primary-700)] px-6 py-3">
+        <CardTitle className="text-sm font-semibold uppercase tracking-wider !text-white">Post-event debrief</CardTitle>
       </CardHeader>
-      <CardContent className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <CardContent>
+        <p className="mb-4 text-sm text-muted">Capture attendance and takings as soon as possible.</p>
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="text-sm text-muted">
           {event.debrief ? (
             <p>
@@ -495,20 +496,22 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
             <p>No debrief yet. Please add it after the event.</p>
           )}
         </div>
-        <Button asChild variant="secondary">
-          <Link href={`/debriefs/${event.id}`}>{event.debrief ? "Update debrief" : "Add debrief"}</Link>
-        </Button>
+          <Button asChild variant="secondary">
+            <Link href={`/debriefs/${event.id}`}>{event.debrief ? "Update debrief" : "Add debrief"}</Link>
+          </Button>
+        </div>
       </CardContent>
     </Card>
   ) : null;
 
   const debriefSnapshotCard = event.debrief ? (
     <Card>
-      <CardHeader>
-        <CardTitle>Debrief snapshot</CardTitle>
-        <CardDescription>Commercial outcome and guest sentiment for this event.</CardDescription>
+      <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--color-primary-700)] px-6 py-3">
+        <CardTitle className="text-sm font-semibold uppercase tracking-wider !text-white">Debrief snapshot</CardTitle>
       </CardHeader>
-      <CardContent className="grid gap-3 text-sm text-muted md:grid-cols-2">
+      <CardContent>
+        <p className="mb-4 text-sm text-muted">Commercial outcome and guest sentiment for this event.</p>
+        <div className="grid gap-3 text-sm text-muted md:grid-cols-2">
         <p>
           <span className="font-semibold text-[var(--color-text)]">Attendance:</span>{" "}
           {event.debrief.attendance ?? "—"}
@@ -548,6 +551,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
             {event.debrief.next_time_actions}
           </p>
         ) : null}
+        </div>
       </CardContent>
     </Card>
   ) : null;

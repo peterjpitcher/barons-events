@@ -18,8 +18,8 @@ export function WebsiteListingCard({
 }: WebsiteListingCardProps): ReactNode {
   return (
     <Card>
-      <CardHeader>
-        <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-warning)]">
+      <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--color-primary-700)] px-6 py-3">
+        <span className="text-sm font-semibold uppercase tracking-wider text-white">
           Website Listing
         </span>
       </CardHeader>

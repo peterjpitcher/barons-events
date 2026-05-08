@@ -56,14 +56,14 @@ export function ProposalDecisionCard({ eventId, eventTitle }: ProposalDecisionCa
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Approve or reject this proposal</CardTitle>
-        <CardDescription>
-          Approving unlocks the full event form for the creator so they can add the remaining details.
-          Rejecting closes the proposal with a reason you provide.
-        </CardDescription>
+      <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--color-primary-700)] px-6 py-3">
+        <CardTitle className="text-sm font-semibold uppercase tracking-wider !text-white">Approve or reject this proposal</CardTitle>
       </CardHeader>
       <CardContent>
+        <p className="mb-4 text-sm text-muted">
+          Approving unlocks the full event form for the creator so they can add the remaining details.
+          Rejecting closes the proposal with a reason you provide.
+        </p>
         <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"

@@ -100,14 +100,14 @@ export function BookingSettingsCard({
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Booking settings</CardTitle>
-        <CardDescription>
-          Enable online bookings to get a public landing page at{" "}
-          <span className="font-mono text-xs">{LANDING_BASE}/…</span>
-        </CardDescription>
+      <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--color-primary-700)] px-6 py-3">
+        <CardTitle className="text-sm font-semibold uppercase tracking-wider !text-white">Booking settings</CardTitle>
       </CardHeader>
       <CardContent>
+        <p className="mb-4 text-sm text-muted">
+          Enable online bookings to get a public landing page at{" "}
+          <span className="font-mono text-xs">{LANDING_BASE}/…</span>
+        </p>
         <form ref={formRef} onSubmit={handleSave} className="space-y-5" noValidate>
           {/* Booking enabled toggle */}
           <div className="flex items-center gap-3">

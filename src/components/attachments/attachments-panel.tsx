@@ -64,11 +64,13 @@ export function AttachmentsPanel({
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        {description ? <CardDescription>{description}</CardDescription> : null}
+      <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--color-primary-700)] px-6 py-3">
+        <CardTitle className="text-sm font-semibold uppercase tracking-wider !text-white">{title}</CardTitle>
       </CardHeader>
-      <CardContent>{body}</CardContent>
+      <CardContent>
+        {description ? <p className="mb-4 text-sm text-muted">{description}</p> : null}
+        {body}
+      </CardContent>
     </Card>
   );
 }

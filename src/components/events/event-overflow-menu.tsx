@@ -42,7 +42,11 @@ export function EventOverflowMenu({
         ].join(" ")}
       >
         {canRevertToDraft && <RevertToDraftButton eventId={eventId} />}
-        {canDelete && <DeleteEventButton eventId={eventId} />}
+        {canDelete && (
+          <div className="-mb-1 overflow-hidden rounded-b-lg [&_button]:!bg-red-600 [&_button]:!text-white [&_button]:hover:!bg-red-700">
+            <DeleteEventButton eventId={eventId} />
+          </div>
+        )}
       </div>
     </DropdownMenu>
   );

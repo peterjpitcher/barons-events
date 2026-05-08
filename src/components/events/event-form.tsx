@@ -1746,8 +1746,8 @@ export function EventForm({
           <div className="grid gap-6 lg:grid-cols-2">
             {/* Left column: Event Details */}
             <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-semibold uppercase tracking-wider text-[var(--color-primary)]">
+              <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--color-primary-700)] px-6 py-3">
+                <CardTitle className="text-sm font-semibold uppercase tracking-wider !text-white">
                   Event Details
                 </CardTitle>
               </CardHeader>
@@ -1774,8 +1774,8 @@ export function EventForm({
 
           {/* Lower: Booking & Ticketing */}
           <Card className="mt-6">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold uppercase tracking-wider text-[var(--color-accent)]">
+            <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--color-primary-700)] px-6 py-3">
+              <CardTitle className="text-sm font-semibold uppercase tracking-wider !text-white">
                 Booking &amp; Ticketing
               </CardTitle>
             </CardHeader>
