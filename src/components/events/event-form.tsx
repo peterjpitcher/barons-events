@@ -757,8 +757,7 @@ export function EventForm({
   );
 
   const eventTypeField = (
-    <div className="grid gap-4 md:grid-cols-2">
-      <div className="space-y-2">
+    <div className="space-y-2">
         <Label htmlFor="eventType">Event type</Label>
         <Select
           id="eventType"
@@ -787,7 +786,6 @@ export function EventForm({
             ? "Need a new option? Add it in Settings."
             : "Need a new option? Contact your administrator to add new event types."}
         </p>
-      </div>
     </div>
   );
 
@@ -937,18 +935,16 @@ export function EventForm({
   );
 
   const eventImageField = (
-    <div className="grid gap-4 md:grid-cols-2">
-      <div className="space-y-2">
-        <Label htmlFor="eventImage">Event image (optional)</Label>
-        <Input id="eventImage" name="eventImage" type="file" accept="image/*" />
-        {defaultValues?.event_image_path ? (
-          <p className="text-xs text-subtle">
-            Current image: {defaultValues.event_image_path.split("/").at(-1) ?? defaultValues.event_image_path}
-          </p>
-        ) : (
-          <p className="text-xs text-subtle">Add a hero image to strengthen event listings and social shares.</p>
-        )}
-      </div>
+    <div className="space-y-2">
+      <Label htmlFor="eventImage">Event image (optional)</Label>
+      <Input id="eventImage" name="eventImage" type="file" accept="image/*" />
+      {defaultValues?.event_image_path ? (
+        <p className="text-xs text-subtle">
+          Current image: {defaultValues.event_image_path.split("/").at(-1) ?? defaultValues.event_image_path}
+        </p>
+      ) : (
+        <p className="text-xs text-subtle">Add a hero image to strengthen event listings and social shares.</p>
+      )}
     </div>
   );
 
@@ -1752,13 +1748,28 @@ export function EventForm({
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
+                {/* Row 1: Title + Venue (side by side — already a grid) */}
                 {titleAndVenueFields}
-                {eventTypeField}
+
+                {/* Row 2: Event type + Manager side by side */}
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>{eventTypeField}</div>
+                  <div>{managerResponsibleField}</div>
+                </div>
+
+                {/* Row 3: Timing (Start + End — already a grid) */}
                 {timingFields}
-                {managerResponsibleField}
+
+                {/* Row 4: Spaces + Artists side by side */}
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>{spacesField}</div>
+                  <div>{artistsField}</div>
+                </div>
+
+                {/* Row 5: Notes (full width textarea) */}
                 {notesField}
-                {artistsField}
-                {spacesField}
+
+                {/* Row 6: Event image */}
                 {eventImageField}
               </CardContent>
             </Card>
