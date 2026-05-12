@@ -6,6 +6,8 @@ import { formatSpacesLabel } from "@/lib/venue-spaces";
 import { getTodayLondonIsoDate, formatInLondon } from "@/lib/datetime";
 
 const RESEND_FROM_ADDRESS = process.env.RESEND_FROM_EMAIL ?? "BaronsHub <noreply@auth.orangejelly.co.uk>";
+const BOOKING_RESEND_FROM_ADDRESS =
+  process.env.BOOKING_RESEND_FROM_EMAIL ?? "Barons Pub Company <noreply@auth.orangejelly.co.uk>";
 const APP_BASE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ??
   process.env.NEXT_PUBLIC_APP_URL ??
@@ -29,6 +31,15 @@ type EmailContent = {
   button?: { label: string; url: string };
   meta?: string[];
   footerNote?: string;
+};
+
+type CustomerBookingEmailContent = {
+  headline: string;
+  intro: string;
+  body?: string[];
+  details?: Array<{ label: string; value: string | number | null | undefined }>;
+  afterDetails?: string[];
+  signoff?: string[];
 };
 
 function escapeHtml(value: string): string {
@@ -203,6 +214,210 @@ function renderEmailTemplate({ headline, intro, body = [], button, meta, footerN
   return { html, text };
 }
 
+function renderCustomerBookingEmailTemplate({
+  headline,
+  intro,
+  body = [],
+  details = [],
+  afterDetails = [],
+  signoff = ["See you soon,", "Barons Pub Company"],
+}: CustomerBookingEmailContent): {
+  html: string;
+  text: string;
+} {
+  const safeHeadline = escapeHtml(headline);
+  const safeIntro = escapeHtml(intro);
+  const paragraphHtml = body.map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`).join("\n");
+  const detailRows = details
+    .filter((detail) => detail.value !== null && detail.value !== undefined && `${detail.value}`.trim() !== "")
+    .map(
+      (detail) => `<tr>
+              <th>${escapeHtml(detail.label)}</th>
+              <td>${escapeHtml(String(detail.value))}</td>
+            </tr>`,
+    )
+    .join("\n");
+  const detailsHtml = detailRows
+    ? `<table class="details" role="presentation" cellspacing="0" cellpadding="0">
+            <tbody>${detailRows}</tbody>
+          </table>`
+    : "";
+  const afterDetailsHtml = afterDetails.map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`).join("\n");
+  const signoffHtml = signoff.map((line) => `<p>${escapeHtml(line)}</p>`).join("\n");
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>${safeHeadline}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      :root {
+        color-scheme: light;
+      }
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: Arial, Helvetica, sans-serif;
+        background-color: #f4f1eb;
+        color: #273640;
+      }
+      .wrapper {
+        padding: 32px 16px;
+      }
+      .card {
+        max-width: 600px;
+        margin: 0 auto;
+        background-color: #ffffff;
+        border-radius: 12px;
+        overflow: hidden;
+      }
+      .header {
+        background-color: #273640;
+        color: #ffffff;
+        padding: 28px 32px;
+      }
+      .header h1 {
+        margin: 0;
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: 26px;
+        line-height: 1.2;
+      }
+      .header p {
+        margin: 8px 0 0;
+        color: #d9aa6d;
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .content {
+        padding: 32px;
+      }
+      .content h2 {
+        margin: 0 0 18px;
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: 24px;
+        line-height: 1.25;
+      }
+      .content p {
+        margin: 0 0 16px;
+        line-height: 1.6;
+        font-size: 15px;
+      }
+      .details {
+        width: 100%;
+        margin: 24px 0;
+        border: 1px solid #d4d9dd;
+        border-radius: 10px;
+        border-collapse: separate;
+        border-spacing: 0;
+        background-color: #f8f4ee;
+        overflow: hidden;
+      }
+      .details th,
+      .details td {
+        padding: 12px 16px;
+        border-bottom: 1px solid #d4d9dd;
+        font-size: 14px;
+        line-height: 1.4;
+        vertical-align: top;
+      }
+      .details tr:last-child th,
+      .details tr:last-child td {
+        border-bottom: 0;
+      }
+      .details th {
+        width: 34%;
+        color: #637c8c;
+        font-weight: 600;
+        text-align: left;
+      }
+      .details td {
+        color: #273640;
+        font-weight: 700;
+        text-align: right;
+      }
+      .signoff {
+        margin-top: 24px;
+      }
+      .signoff p {
+        margin-bottom: 4px;
+      }
+      @media (max-width: 640px) {
+        .wrapper {
+          padding: 0;
+        }
+        .card {
+          border-radius: 0;
+        }
+        .header,
+        .content {
+          padding-left: 24px;
+          padding-right: 24px;
+        }
+        .details th,
+        .details td {
+          display: block;
+          width: auto;
+          text-align: left;
+          border-bottom: 0;
+          padding-bottom: 4px;
+        }
+        .details td {
+          padding-top: 0;
+          padding-bottom: 12px;
+          border-bottom: 1px solid #d4d9dd;
+        }
+        .details tr:last-child td {
+          border-bottom: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrapper">
+      <div class="card">
+        <div class="header">
+          <h1>Barons Pub Company</h1>
+          <p>Event booking</p>
+        </div>
+        <div class="content">
+          <h2>${safeHeadline}</h2>
+          <p>${safeIntro}</p>
+          ${paragraphHtml}
+          ${detailsHtml}
+          ${afterDetailsHtml}
+          <div class="signoff">
+            ${signoffHtml}
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>`;
+
+  const textDetails = details
+    .filter((detail) => detail.value !== null && detail.value !== undefined && `${detail.value}`.trim() !== "")
+    .map((detail) => `${detail.label}: ${detail.value}`);
+  const textParts = [
+    headline,
+    "",
+    intro,
+    "",
+    ...body,
+    "",
+    textDetails.length ? "Booking details:" : "",
+    ...textDetails,
+    "",
+    ...afterDetails,
+    "",
+    ...signoff,
+  ].filter(Boolean);
+
+  return { html, text: textParts.join("\n") };
+}
+
 function getResendClient() {
   const key = process.env.RESEND_API_KEY;
   if (!key) {
@@ -316,24 +531,32 @@ export async function sendBookingPaymentConfirmationEmail(params: {
   const { date, time } = formatInLondon(context.event.start_at);
   const venueName = context.event.venue?.name ?? "the venue";
   const amount = formatPaymentAmount(params.amountPence, params.currency);
-  const fullName = [context.booking.first_name, context.booking.last_name].filter(Boolean).join(" ");
-  const content = renderEmailTemplate({
+  const content = renderCustomerBookingEmailTemplate({
     headline: "Your booking is confirmed",
-    intro: `Hi ${context.booking.first_name}, your payment has been received and your booking is confirmed.`,
-    body: [
-      `${context.event.title} at ${venueName}`,
-      `${date} at ${time}`,
-      `${context.booking.ticket_count} ticket${context.booking.ticket_count === 1 ? "" : "s"} · ${amount} paid`,
+    intro: `Hi ${context.booking.first_name},`,
+    body: ["Thanks for booking. Your payment has been received and your place is confirmed."],
+    details: [
+      { label: "Event", value: context.event.title },
+      { label: "Venue", value: venueName },
+      { label: "Date/time", value: `${date} at ${time}` },
+      {
+        label: "Tickets",
+        value: `${context.booking.ticket_count} ticket${context.booking.ticket_count === 1 ? "" : "s"}`,
+      },
+      { label: "Amount paid", value: amount },
+      { label: "Booking reference", value: context.booking.id.slice(0, 8) },
     ],
-    meta: [`Booking reference: ${context.booking.id}`, fullName ? `Guest: ${fullName}` : ""].filter(Boolean),
-    footerNote: "Keep this email for your records. Card payments are processed securely by Stripe.",
+    afterDetails: [
+      "Please keep this email handy and bring it with you on the day. If you are viewing your confirmation on mobile, we recommend taking a screenshot of your booking details.",
+      "If you have any questions about your booking, please contact the venue directly.",
+    ],
   });
 
   try {
     await resend.emails.send({
-      from: RESEND_FROM_ADDRESS,
+      from: BOOKING_RESEND_FROM_ADDRESS,
       to: context.booking.email,
-      subject: `Booking confirmed: ${context.event.title}`,
+      subject: "Your booking is confirmed",
       html: content.html,
       text: content.text,
     });
@@ -365,22 +588,30 @@ export async function sendBookingRefundEmail(params: {
   }
 
   const amount = formatPaymentAmount(params.amountPence, params.currency);
-  const content = renderEmailTemplate({
+  const { date, time } = formatInLondon(context.event.start_at);
+  const venueName = context.event.venue?.name ?? "the venue";
+  const content = renderCustomerBookingEmailTemplate({
     headline: params.isFullRefund ? "Your booking has been refunded" : "A refund has been issued",
-    intro: `Hi ${context.booking.first_name}, ${amount} has been refunded for your booking.`,
-    body: [
-      `${context.event.title}`,
-      params.isFullRefund
-        ? "Your booking has been cancelled and the refund will return to your original payment method."
-        : "Your booking remains active. The refund will return to your original payment method.",
+    intro: `Hi ${context.booking.first_name},`,
+    body: [`${amount} has been refunded for your booking.`],
+    details: [
+      { label: "Event", value: context.event.title },
+      { label: "Venue", value: venueName },
+      { label: "Date/time", value: `${date} at ${time}` },
+      { label: "Refund amount", value: amount },
+      { label: "Booking reference", value: context.booking.id.slice(0, 8) },
     ],
-    meta: [`Booking reference: ${context.booking.id}`],
-    footerNote: "Refund timings depend on the card issuer and are usually a few working days.",
+    afterDetails: [
+      params.isFullRefund
+        ? "Your booking has been cancelled. The refund will return to your original payment method."
+        : "Your booking remains active. The refund will return to your original payment method.",
+      "Refund timings depend on the card issuer and are usually a few working days.",
+    ],
   });
 
   try {
     await resend.emails.send({
-      from: RESEND_FROM_ADDRESS,
+      from: BOOKING_RESEND_FROM_ADDRESS,
       to: context.booking.email,
       subject: params.isFullRefund
         ? `Refund issued: ${context.event.title}`
