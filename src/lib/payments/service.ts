@@ -58,6 +58,7 @@ type BookingPaymentView = {
   bookingId: string;
   eventId: string;
   eventTitle: string;
+  eventStartAt: string | null;
   venueName: string | null;
   firstName: string;
   ticketCount: number;
@@ -709,7 +710,7 @@ export async function getCheckoutSessionView(
       event_bookings!payment_transactions_booking_id_fkey (
         id, first_name, ticket_count, status, payment_status,
         events (
-          id, title,
+          id, title, start_at,
           venue:venues!events_venue_id_fkey(name)
         )
       )
@@ -734,6 +735,7 @@ export async function getCheckoutSessionView(
     bookingId: bookingRaw.id as string,
     eventId: (eventRaw?.id as string | undefined) ?? "",
     eventTitle: (eventRaw?.title as string | undefined) ?? "Event",
+    eventStartAt: (eventRaw?.start_at as string | null | undefined) ?? null,
     venueName: (venueRaw?.name as string | null | undefined) ?? null,
     firstName: bookingRaw.first_name as string,
     ticketCount: bookingRaw.ticket_count as number,

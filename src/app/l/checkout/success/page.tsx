@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatInLondon } from "@/lib/datetime";
 import { getCheckoutSessionView } from "@/lib/payments/service";
 
 type PageProps = {
@@ -13,11 +14,18 @@ function formatAmount(amountPence: number | null, currency = "gbp"): string {
   }).format(amountPence / 100);
 }
 
+function formatEventDateTime(startAt: string | null): string | null {
+  if (!startAt) return null;
+  const { date, time } = formatInLondon(startAt);
+  return `${date} at ${time}`;
+}
+
 export default async function CheckoutSuccessPage({ searchParams }: PageProps) {
   const { session_id: sessionId } = await searchParams;
   const view = sessionId
     ? await getCheckoutSessionView(sessionId, { attemptFulfillment: true })
     : null;
+  const eventDateTime = view ? formatEventDateTime(view.eventStartAt) : null;
 
   return (
     <main className="min-h-screen bg-[#273640] px-4 py-8 text-[#273640]">
@@ -55,6 +63,12 @@ export default async function CheckoutSuccessPage({ searchParams }: PageProps) {
                   <dd className="text-right font-semibold">{view.venueName}</dd>
                 </div>
               ) : null}
+              {eventDateTime ? (
+                <div className="flex justify-between gap-4">
+                  <dt className="text-[#637c8c]">Date/time</dt>
+                  <dd className="text-right font-semibold">{eventDateTime}</dd>
+                </div>
+              ) : null}
               <div className="flex justify-between gap-4">
                 <dt className="text-[#637c8c]">Tickets</dt>
                 <dd className="font-semibold">{view.ticketCount}</dd>
@@ -68,6 +82,9 @@ export default async function CheckoutSuccessPage({ searchParams }: PageProps) {
                 <dd className="font-mono text-xs">{view.bookingId.slice(0, 8)}</dd>
               </div>
             </dl>
+            <p className="mt-4 rounded-lg border border-[#d9aa6d] bg-[#fff8ed] px-4 py-3 text-sm font-semibold text-[#273640]">
+              On mobile? Take a screenshot of this page now so you have your booking details handy at the venue.
+            </p>
           </>
         ) : (
           <>
