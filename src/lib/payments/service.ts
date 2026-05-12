@@ -508,16 +508,24 @@ export async function fulfillCheckoutSession(sessionId: string): Promise<{
     actorId: null,
   });
 
-  sendBookingConfirmationSms(transaction.booking_id).catch((error) => {
-    console.warn("Paid booking confirmation SMS failed:", error);
-  });
-  sendBookingPaymentConfirmationEmail({
-    bookingId: transaction.booking_id,
-    amountPence: transaction.amount_pence,
-    currency: transaction.currency,
-  }).catch((error) => {
-    console.warn("Paid booking confirmation email failed:", error);
-  });
+  const [smsResult, emailResult] = await Promise.allSettled([
+    sendBookingConfirmationSms(transaction.booking_id),
+    sendBookingPaymentConfirmationEmail({
+      bookingId: transaction.booking_id,
+      amountPence: transaction.amount_pence,
+      currency: transaction.currency,
+    }),
+  ]);
+
+  if (smsResult.status === "rejected") {
+    console.warn("Paid booking confirmation SMS failed:", smsResult.reason);
+  }
+  if (emailResult.status === "rejected" || emailResult.value === false) {
+    console.warn(
+      "Paid booking confirmation email failed:",
+      emailResult.status === "rejected" ? emailResult.reason : "email_not_sent"
+    );
+  }
 
   return {
     completed: true,
