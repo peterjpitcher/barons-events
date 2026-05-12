@@ -17,20 +17,22 @@ import {
 // ── resolveCtaMode ──────────────────────────────────────────────────────────
 
 describe("resolveCtaMode", () => {
-  it("returns 'link' for ticketed events", () => {
-    expect(resolveCtaMode("ticketed")).toBe("link");
+  it("returns 'link' for free booking formats", () => {
+    expect(resolveCtaMode("free_seated")).toBe("link");
+    expect(resolveCtaMode("free_standing")).toBe("link");
+    expect(resolveCtaMode("free_standing_unreserved")).toBe("link");
   });
 
-  it("returns 'reply' for table_booking events", () => {
-    expect(resolveCtaMode("table_booking")).toBe("reply");
+  it("returns 'link' for paid booking formats", () => {
+    expect(resolveCtaMode("paid_seated")).toBe("link");
+    expect(resolveCtaMode("paid_standing")).toBe("link");
+    expect(resolveCtaMode("paid_standing_unreserved")).toBe("link");
   });
 
-  it("returns 'reply' for free_entry events", () => {
-    expect(resolveCtaMode("free_entry")).toBe("reply");
-  });
-
-  it("returns 'link' for mixed events", () => {
-    expect(resolveCtaMode("mixed")).toBe("link");
+  it("returns 'reply' for pay-on-arrival booking formats", () => {
+    expect(resolveCtaMode("pay_on_arrival_seated")).toBe("reply");
+    expect(resolveCtaMode("pay_on_arrival_standing")).toBe("reply");
+    expect(resolveCtaMode("pay_on_arrival_standing_unreserved")).toBe("reply");
   });
 });
 
@@ -236,6 +238,28 @@ describe("renderCampaignSms", () => {
       });
       expect(result).toContain("Tomorrow!");
       expect(result).toContain("Reply with your required number of seats. Last chance to book!");
+    });
+
+    it("renders ticket wording when requested", () => {
+      const result = renderCampaignSms({
+        ...baseParams,
+        wave: 1,
+        ctaMode: "reply",
+        bookingLink: null,
+        replyNoun: "tickets",
+      });
+      expect(result).toContain("Reply with how many tickets you'd like!");
+    });
+
+    it("renders pay-on-arrival price copy when ticketPrice is set", () => {
+      const result = renderCampaignSms({
+        ...baseParams,
+        wave: 1,
+        ctaMode: "reply",
+        bookingLink: null,
+        ticketPrice: 7.5,
+      });
+      expect(result).toContain("Pay £7.5 on arrival.");
     });
   });
 });

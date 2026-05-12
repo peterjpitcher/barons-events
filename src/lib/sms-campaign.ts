@@ -2,6 +2,13 @@ import "server-only";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { sendTwilioSms } from "@/lib/twilio";
 import { createSystemShortLink } from "@/lib/system-short-links";
+import {
+  isPaidBookingFormat,
+  isPayOnArrivalBookingFormat,
+  isSeatedBookingFormat,
+  isFreeBookingFormat,
+  type BookingFormat
+} from "@/lib/booking-format";
 import { format } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
 
@@ -9,13 +16,11 @@ import { toZonedTime } from "date-fns-tz";
 
 export type CtaMode = "link" | "reply";
 
-export type BookingType = "ticketed" | "table_booking" | "free_entry" | "mixed";
-
 export interface CampaignEvent {
   id: string;
   publicTitle: string;
   eventType: string;
-  bookingType: BookingType;
+  bookingType: BookingFormat;
   venueId: string;
   venueName: string;
   startAt: Date;
@@ -41,15 +46,8 @@ export interface CampaignStats {
 
 // ── CTA Resolution ──────────────────────────────────────────────────────────
 
-export function resolveCtaMode(bookingType: BookingType): CtaMode {
-  switch (bookingType) {
-    case "ticketed":
-    case "mixed":
-      return "link";
-    case "table_booking":
-    case "free_entry":
-      return "reply";
-  }
+export function resolveCtaMode(bookingType: BookingFormat): CtaMode {
+  return isPayOnArrivalBookingFormat(bookingType) ? "reply" : "link";
 }
 
 // ── Capacity Hints ──────────────────────────────────────────────────────────
@@ -126,6 +124,7 @@ export function renderCampaignSms(params: {
   capacityHint: string;
   bookingLink: string | null;
   replyCode: string | null;
+  replyNoun?: "seats" | "tickets";
 }): string {
   const {
     wave,
@@ -138,9 +137,14 @@ export function renderCampaignSms(params: {
     capacityHint,
     bookingLink,
     replyCode,
+    replyNoun = "seats",
   } = params;
   const date = formatShortDate(startAt);
-  const price = ticketPrice ? `Tickets £${ticketPrice}. ` : "";
+  const price = ticketPrice
+    ? ctaMode === "reply"
+      ? `Pay £${ticketPrice} on arrival. `
+      : `Tickets £${ticketPrice}. `
+    : "";
 
   if (ctaMode === "link") {
     switch (wave) {
@@ -154,11 +158,11 @@ export function renderCampaignSms(params: {
   } else {
     switch (wave) {
       case 1:
-        return `Hi ${firstName}! ${publicTitle} is coming to ${venueName} on ${date}. ${capacityHint}Reply with how many seats you'd like!`;
+        return `Hi ${firstName}! ${publicTitle} is coming to ${venueName} on ${date}. ${price}${capacityHint}Reply with how many ${replyNoun} you'd like!`;
       case 2:
-        return `Just 1 week until ${publicTitle} at ${venueName}! ${capacityHint}Reply with your required number of seats to book in now!`;
+        return `Just 1 week until ${publicTitle} at ${venueName}! ${price}${capacityHint}Reply with your required number of ${replyNoun} to book in now!`;
       case 3:
-        return `Tomorrow! ${publicTitle} at ${venueName}. Reply with your required number of seats. Last chance to book!`;
+        return `Tomorrow! ${publicTitle} at ${venueName}. ${price}Reply with your required number of ${replyNoun}. Last chance to book!`;
     }
   }
 }
@@ -180,6 +184,18 @@ export async function sendCampaignSms(params: {
 
   const ctaMode = resolveCtaMode(event.bookingType);
   const replyCode = ctaMode === "reply" ? generateReplyCode() : null;
+  const linkDestination =
+    ctaMode === "link"
+      ? event.bookingUrl ??
+        (!isPaidBookingFormat(event.bookingType) && event.seoSlug
+          ? `https://l.baronspubs.com/${event.seoSlug}`
+          : null)
+      : null;
+
+  if (ctaMode === "link" && !linkDestination) {
+    console.warn("Campaign link unavailable:", event.id);
+    return false;
+  }
 
   // Step 1: Claim — insert row with status 'claimed'
   const { error: claimError } = await db
@@ -200,27 +216,19 @@ export async function sendCampaignSms(params: {
 
   // Step 2: Compose message
   let bookingLink: string | null = null;
-  if (ctaMode === "link") {
-    const destination =
-      event.bookingUrl ??
-      (event.seoSlug
-        ? `https://l.baronspubs.com/${event.seoSlug}`
-        : null);
+  if (ctaMode === "link" && linkDestination) {
+    const url = new URL(linkDestination);
+    url.searchParams.set("utm_source", "sms");
+    url.searchParams.set("utm_campaign", "booking-driver");
+    url.searchParams.set("utm_content", `wave-${wave}`);
 
-    if (destination) {
-      const url = new URL(destination);
-      url.searchParams.set("utm_source", "sms");
-      url.searchParams.set("utm_campaign", "booking-driver");
-      url.searchParams.set("utm_content", `wave-${wave}`);
-
-      bookingLink = await createSystemShortLink({
-        name: `Campaign w${wave} — ${event.publicTitle}`,
-        destination: url.toString(),
-        linkType: "booking",
-      });
-    }
+    bookingLink = await createSystemShortLink({
+      name: `Campaign w${wave} — ${event.publicTitle}`,
+      destination: url.toString(),
+      linkType: "booking",
+    });
     // Fallback if short link creation fails
-    if (!bookingLink) bookingLink = destination;
+    if (!bookingLink) bookingLink = linkDestination;
   }
 
   const capacityHint = getCapacityHint(confirmedTickets, event.totalCapacity);
@@ -233,12 +241,13 @@ export async function sendCampaignSms(params: {
     venueName: event.venueName,
     startAt: event.startAt,
     ticketPrice:
-      ctaMode === "link" && event.bookingType === "ticketed"
+      !isFreeBookingFormat(event.bookingType)
         ? event.ticketPrice
         : null,
     capacityHint,
     bookingLink,
     replyCode,
+    replyNoun: isSeatedBookingFormat(event.bookingType) ? "seats" : "tickets",
   });
 
   // Step 3: Send via Twilio

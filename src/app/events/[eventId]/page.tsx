@@ -47,13 +47,6 @@ const auditTimestampFormatter = new Intl.DateTimeFormat("en-GB", {
   timeZone: "Europe/London"
 });
 
-const bookingTypeLabel: Record<string, string> = {
-  ticketed: "Ticketed event",
-  table_booking: "Table booking event",
-  free_entry: "Free entry",
-  mixed: "Mixed booking model"
-};
-
 const toMetaRecord = (value: unknown): Record<string, unknown> =>
   value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 
@@ -616,6 +609,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
             seoSlug={event.seo_slug ?? null}
             smsPromoEnabled={Boolean(event.sms_promo_enabled)}
             bookingUrl={event.booking_url ?? null}
+            bookingType={event.booking_type ?? null}
             userRole={user.role}
           />
         ) : null}

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { BOOKING_FORMATS, isFreeBookingFormat, isPaidBookingFormat } from "@/lib/booking-format";
 
 const trimmedStringOrUndefined = z.preprocess(
   (value) => {
@@ -63,15 +64,13 @@ const isoDateString = z
     message: "Use a valid date and time"
   });
 
-const bookingTypeValues = ["ticketed", "table_booking", "free_entry", "mixed"] as const;
-
 const optionalBookingType = z.preprocess(
   (value) => {
     if (typeof value !== "string") return value;
     const trimmed = value.trim();
     return trimmed.length ? trimmed : undefined;
   },
-  z.enum(bookingTypeValues).optional()
+  z.enum(BOOKING_FORMATS).optional()
 );
 
 export const bookingUrlSchema = z.preprocess(
@@ -137,7 +136,7 @@ export const eventDraftSchema = eventDraftBaseSchema.refine(
 
 export const eventFormSchema = eventDraftBaseSchema
   .extend({
-    bookingType: z.enum(bookingTypeValues, { message: "Choose a booking format" }),
+    bookingType: z.enum(BOOKING_FORMATS, { message: "Choose a booking format" }),
     agePolicy: requiredText(2, 120, "Add an age policy")
   })
   .superRefine((values, ctx) => {
@@ -148,14 +147,14 @@ export const eventFormSchema = eventDraftBaseSchema
         path: ["endAt"]
       });
     }
-    if (values.bookingType === "ticketed" && values.ticketPrice === undefined) {
+    if (isPaidBookingFormat(values.bookingType) && values.ticketPrice === undefined) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Add ticket price for ticketed events",
+        message: "Add ticket price for paid events",
         path: ["ticketPrice"]
       });
     }
-    if (values.bookingType !== "free_entry" && values.cancellationWindowHours === undefined) {
+    if (!isFreeBookingFormat(values.bookingType) && values.cancellationWindowHours === undefined) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "Add a cancellation/refund window in hours",

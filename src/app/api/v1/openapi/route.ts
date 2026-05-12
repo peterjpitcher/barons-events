@@ -2,6 +2,7 @@ import "server-only";
 
 import { NextResponse } from "next/server";
 
+import { BOOKING_FORMATS } from "@/lib/booking-format";
 import { checkApiRateLimit, requireWebsiteApiKey } from "@/lib/public-api/auth";
 
 export const runtime = "nodejs";
@@ -64,7 +65,7 @@ const spec = {
           endAt: { type: "string", format: "date-time" },
           venueSpaces: { type: "array", items: { type: "string" } },
           description: { type: ["string", "null"] },
-          bookingType: { type: ["string", "null"], enum: ["ticketed", "table_booking", "free_entry", "mixed", null] },
+          bookingType: { type: ["string", "null"], enum: [...BOOKING_FORMATS, null] },
           ticketPrice: { type: ["number", "null"] },
           checkInCutoffMinutes: { type: ["integer", "null"] },
           agePolicy: { type: ["string", "null"] },

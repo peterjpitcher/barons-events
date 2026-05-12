@@ -41,7 +41,7 @@ function makeEvent(overrides: Record<string, unknown> = {}) {
     start_at: "2026-07-04T19:00:00.000Z",
     end_at: "2026-07-04T22:00:00.000Z",
     notes: "Initial notes",
-    booking_type: "free_entry",
+    booking_type: "free_standing",
     age_policy: "All ages welcome",
     status: "draft",
     public_highlights: [],

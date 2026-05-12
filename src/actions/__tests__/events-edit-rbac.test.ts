@@ -99,7 +99,7 @@ function validFullEventForm(overrides: Record<string, string | string[]> = {}): 
     startAt: "2026-07-19T19:00:00",
     endAt: "2026-07-19T22:00:00",
     venueSpace: "Meade Hall",
-    bookingType: "free_entry",
+    bookingType: "free_standing",
     agePolicy: "All ages welcome",
     notes: "A live music evening for guests at Meade Hall.",
     ...overrides
@@ -132,7 +132,7 @@ function setupSuccessfulCreateSubmitMocks() {
     food_promo: null,
     cost_total: null,
     cost_details: null,
-    booking_type: "free_entry",
+    booking_type: "free_standing",
     ticket_price: null,
     check_in_cutoff_minutes: null,
     age_policy: "All ages welcome",
@@ -267,6 +267,22 @@ describe("submitEventForReviewAction — create path venue rules", () => {
       USER_A
     );
     expect(redirect).toHaveBeenCalledWith(`/events/${createdEvent.id}`);
+  });
+
+  it("strips ticket price from free booking formats server-side", async () => {
+    setupSuccessfulCreateSubmitMocks();
+    getUserMock.mockResolvedValue({ id: USER_A, role: "administrator", venueId: null });
+
+    await expect(
+      submitEventForReviewAction(undefined, validFullEventForm({ ticketPrice: "12.50" }))
+    ).rejects.toThrow("NEXT_REDIRECT");
+
+    expect(createEventDraft).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bookingType: "free_standing",
+        ticketPrice: null,
+      })
+    );
   });
 
   it("office_worker full-form submit redirects to the created event", async () => {
@@ -499,6 +515,44 @@ describe("deleteEventAction", () => {
     const result = await deleteEventAction(undefined, formData({ eventId: EVENT_ID }));
     expect(result.success).toBe(false);
     expect(result.message).toMatch(/event not found/i);
+  });
+
+  it("rejects paid public bookings without an external booking link", async () => {
+    getUserMock.mockResolvedValue({ id: USER_A, role: "administrator", venueId: null });
+    loadCtxMock.mockResolvedValue({
+      venueId: VENUE_A,
+      managerResponsibleId: USER_A,
+      createdBy: USER_A,
+      status: "approved",
+      deletedAt: null,
+    });
+
+    const maybeSingle = vi.fn().mockResolvedValue({
+      data: {
+        id: EVENT_ID,
+        title: "Paid event",
+        start_at: "2026-07-19T18:00:00.000Z",
+        venue_id: VENUE_A,
+        seo_slug: "paid-event",
+        booking_type: "paid_standing_unreserved",
+      },
+      error: null,
+    });
+    const eq = vi.fn(() => ({ maybeSingle }));
+    const select = vi.fn(() => ({ eq }));
+    vi.mocked(createSupabaseAdminClient).mockReturnValue({
+      from: vi.fn(() => ({ select })),
+    } as never);
+
+    const result = await updateBookingSettingsAction({
+      eventId: EVENT_ID,
+      bookingEnabled: true,
+      totalCapacity: 100,
+      maxTicketsPerBooking: 5,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/external booking link/i);
   });
 });
 

@@ -1,8 +1,16 @@
 import "server-only";
 
+import {
+  getBookingCtaLabel,
+  getBookingFormatLabel,
+  isFreeBookingFormat,
+  isPaidBookingFormat,
+  isPayOnArrivalBookingFormat,
+  isSeatedBookingFormat,
+  isUnreservedBookingFormat,
+  type BookingFormat
+} from "@/lib/booking-format";
 import { formatCurrency } from "@/lib/utils/format";
-
-export type BookingType = "ticketed" | "table_booking" | "free_entry" | "mixed";
 
 export type WebsiteCopyInput = {
   title: string;
@@ -19,7 +27,7 @@ export type WebsiteCopyInput = {
   foodPromo: string | null;
   costTotal: number | null;
   costDetails: string | null;
-  bookingType: BookingType | null;
+  bookingType: BookingFormat | null;
   ticketPrice: number | null;
   checkInCutoffMinutes: number | null;
   agePolicy: string | null;
@@ -35,7 +43,7 @@ export type WebsiteCopyInput = {
 };
 
 export type TermsHelperInput = {
-  bookingType: BookingType | null;
+  bookingType: BookingFormat | null;
   ticketPrice: number | null;
   checkInCutoffMinutes: number | null;
   cancellationWindowHours: number | null;
@@ -218,12 +226,8 @@ function toIsoOrOriginal(value: string): string {
   return parsed.toISOString();
 }
 
-function toDisplayBookingType(value: BookingType | null): string {
-  if (value === "ticketed") return "Ticketed event";
-  if (value === "table_booking") return "Table booking event";
-  if (value === "mixed") return "Mixed booking model";
-  if (value === "free_entry") return "Free entry";
-  return "Not provided";
+function toDisplayBookingType(value: BookingFormat | null): string {
+  return getBookingFormatLabel(value);
 }
 
 
@@ -252,23 +256,48 @@ function buildBookingSummary(input: WebsiteCopyInput): string {
     typeof input.cancellationWindowHours === "number" && Number.isFinite(input.cancellationWindowHours)
       ? `Please review the ${formatHoursLabel(input.cancellationWindowHours)} cancellation window before booking.`
       : "";
+  const format = input.bookingType;
+  const priceLine =
+    typeof input.ticketPrice === "number" && Number.isFinite(input.ticketPrice)
+      ? `Tickets from ${formatCurrency(input.ticketPrice)}.`
+      : "Tickets are paid.";
+  const withCancellation = (value: string) => `${value} ${cancellationLine}`.trim();
 
-  if (input.bookingType === "ticketed") {
-    if (typeof input.ticketPrice === "number" && Number.isFinite(input.ticketPrice)) {
-      return `Tickets from ${formatCurrency(input.ticketPrice)}. Book early to avoid missing out. ${cancellationLine}`.trim();
+  if (!format) {
+    return withCancellation("Book now to lock in your plans and avoid disappointment.");
+  }
+  if (isFreeBookingFormat(format)) {
+    if (isSeatedBookingFormat(format)) {
+      return "Free entry. Book your seats in advance to guarantee your spot.";
     }
-    return `This is a ticketed event, so advance booking is strongly recommended. ${cancellationLine}`.trim();
+    if (isUnreservedBookingFormat(format)) {
+      return "Free entry. Book your tickets early for standing / unreserved seating.";
+    }
+    return "Free entry. Book your tickets early to avoid missing out.";
   }
-  if (input.bookingType === "table_booking") {
-    return `Table bookings are recommended to secure the best spot for your group. ${cancellationLine}`.trim();
+  if (isPaidBookingFormat(format)) {
+    if (isSeatedBookingFormat(format)) {
+      return withCancellation(`${priceLine} Buy your seats now to secure the best spot.`);
+    }
+    if (isUnreservedBookingFormat(format)) {
+      return withCancellation(`${priceLine} Buy your tickets early for standing / unreserved seating.`);
+    }
+    return withCancellation(`${priceLine} Buy your tickets early to avoid missing out.`);
   }
-  if (input.bookingType === "mixed") {
-    return `Pre-booking is recommended, with limited walk-in availability on the day. ${cancellationLine}`.trim();
+  if (isPayOnArrivalBookingFormat(format)) {
+    const arrivalPriceLine =
+      typeof input.ticketPrice === "number" && Number.isFinite(input.ticketPrice)
+        ? `Pay ${formatCurrency(input.ticketPrice)} on arrival.`
+        : "Pay on the door.";
+    if (isSeatedBookingFormat(format)) {
+      return withCancellation(`${arrivalPriceLine} Reserve your seats in advance to guarantee your spot.`);
+    }
+    if (isUnreservedBookingFormat(format)) {
+      return withCancellation(`${arrivalPriceLine} Reserve your tickets for standing / unreserved seating.`);
+    }
+    return withCancellation(`${arrivalPriceLine} Reserve your tickets now to secure your place.`);
   }
-  if (input.bookingType === "free_entry") {
-    return "Free entry, with space available on a first-come basis.";
-  }
-  return `Book now to lock in your plans and avoid disappointment. ${cancellationLine}`.trim();
+  return withCancellation("Book now to lock in your plans and avoid disappointment.");
 }
 
 function buildFallbackHighlights(input: WebsiteCopyInput): string[] {
@@ -305,12 +334,20 @@ function buildFallbackHighlights(input: WebsiteCopyInput): string[] {
     if (cleaned) highlights.push(cleaned);
   }
 
-  if (input.bookingType === "ticketed" && typeof input.ticketPrice === "number" && Number.isFinite(input.ticketPrice)) {
+  if (input.bookingType && isPaidBookingFormat(input.bookingType) && typeof input.ticketPrice === "number" && Number.isFinite(input.ticketPrice)) {
     highlights.push(`Tickets from ${formatCurrency(input.ticketPrice)}`);
-  } else if (input.bookingType === "table_booking") {
-    highlights.push("Advance table booking advised");
-  } else if (input.bookingType === "free_entry") {
+  } else if (input.bookingType && isFreeBookingFormat(input.bookingType)) {
     highlights.push("Free entry event");
+  } else if (input.bookingType && isPayOnArrivalBookingFormat(input.bookingType)) {
+    if (typeof input.ticketPrice === "number" && Number.isFinite(input.ticketPrice)) {
+      highlights.push(`Pay ${formatCurrency(input.ticketPrice)} on arrival`);
+    } else {
+      highlights.push("Pay on arrival");
+    }
+  }
+
+  if (input.bookingType && isUnreservedBookingFormat(input.bookingType)) {
+    highlights.push("Standing / unreserved seating");
   }
 
   if (typeof input.checkInCutoffMinutes === "number" && Number.isFinite(input.checkInCutoffMinutes)) {
@@ -371,9 +408,10 @@ function buildFallbackDescription(input: WebsiteCopyInput, publicTitle: string):
   }
 
   const booking = buildBookingSummary(input);
+  const ctaLabel = getBookingCtaLabel(input.bookingType).toLowerCase();
   const cta = input.bookingUrl
-    ? `${booking} Use the booking link to secure your place now.`
-    : `${booking} Contact the venue team to reserve your place.`;
+    ? `${booking} Use the booking link to ${ctaLabel} now.`
+    : `${booking} Contact the venue team to ${ctaLabel}.`;
   const termsLine = terms ? `Please note: ${terms}` : "Plan ahead and arrive in good time to make the most of the event.";
 
   return clampWords(normaliseParagraphSpacing([intro, detailLines.join(" "), `${cta} ${termsLine}`].join("\n\n")), 340);
@@ -387,7 +425,7 @@ function buildFallbackWebsiteCopy(input: WebsiteCopyInput): GeneratedWebsiteCopy
   const publicTitle = clampChars(baseTitle, 80);
   const teaserSeed =
     sanitiseUntrustedInput(input.existingPublicTeaser, 160) ??
-    `${publicTitle}${input.venueName ? ` at ${input.venueName}` : ""}${eventDateForSeo ? ` on ${eventDateForSeo}` : ""}. Book now.`;
+    `${publicTitle}${input.venueName ? ` at ${input.venueName}` : ""}${eventDateForSeo ? ` on ${eventDateForSeo}` : ""}. ${getBookingCtaLabel(input.bookingType)}.`;
   const publicTeaser = clampChars(teaserSeed, 160);
   const publicDescription = buildFallbackDescription(input, publicTitle);
   const existingPublicHighlights = normaliseHighlights(input.existingPublicHighlights, 5).slice(0, 5);
@@ -452,7 +490,13 @@ function buildWebsiteCopyPrompt(input: WebsiteCopyInput): string {
     typeof input.costTotal === "number" ? `Planned cost total: ${formatCurrency(input.costTotal)}` : "Planned cost total: Not provided",
     costDetails ? `Cost details: ${costDetails}` : "Cost details: Not provided",
     `Booking model: ${toDisplayBookingType(input.bookingType)}`,
-    typeof input.ticketPrice === "number" ? `Ticket price: ${formatCurrency(input.ticketPrice)}` : "Ticket price: Not provided",
+    typeof input.ticketPrice === "number"
+      ? `${
+          input.bookingType && isPayOnArrivalBookingFormat(input.bookingType)
+            ? "Pay on arrival price"
+            : "Ticket price"
+        }: ${formatCurrency(input.ticketPrice)}`
+      : "Ticket price: Not provided",
     typeof input.checkInCutoffMinutes === "number"
       ? `Last admission/check-in cutoff: ${formatMinutesLabel(input.checkInCutoffMinutes)} before start${
           checkInCutoffTime ? ` (around ${checkInCutoffTime} UK time)` : ""
@@ -820,18 +864,30 @@ export async function generateWebsiteCopy(input: WebsiteCopyInput): Promise<Gene
 function buildTermsFallback(input: TermsHelperInput): string {
   const lines: string[] = [];
 
-  if (input.bookingType === "ticketed") {
+  if (input.bookingType && isPaidBookingFormat(input.bookingType)) {
     lines.push("Tickets must be purchased in advance and are subject to availability.");
-  } else if (input.bookingType === "table_booking") {
-    lines.push("Table bookings are recommended and are held for a limited arrival window.");
-  } else if (input.bookingType === "mixed") {
-    lines.push("This event has both pre-booked spaces and limited walk-in availability.");
+  } else if (input.bookingType && isFreeBookingFormat(input.bookingType)) {
+    lines.push("Free entry. Booking is recommended to guarantee your place.");
+  } else if (input.bookingType && isPayOnArrivalBookingFormat(input.bookingType)) {
+    lines.push("Payment is taken on arrival. Reservations are recommended to guarantee your place.");
   } else {
     lines.push("Entry is managed in line with venue capacity and licensing requirements.");
   }
 
-  if (typeof input.ticketPrice === "number" && Number.isFinite(input.ticketPrice)) {
-    lines.push(`Ticket prices start from ${formatCurrency(input.ticketPrice)} unless otherwise stated.`);
+  if (input.bookingType && isUnreservedBookingFormat(input.bookingType)) {
+    lines.push("Standing / unreserved seating is available on a first-come basis.");
+  }
+
+  if (
+    typeof input.ticketPrice === "number" &&
+    Number.isFinite(input.ticketPrice) &&
+    (!input.bookingType || !isFreeBookingFormat(input.bookingType))
+  ) {
+    if (input.bookingType && isPayOnArrivalBookingFormat(input.bookingType)) {
+      lines.push(`Payment on arrival starts from ${formatCurrency(input.ticketPrice)} unless otherwise stated.`);
+    } else {
+      lines.push(`Ticket prices start from ${formatCurrency(input.ticketPrice)} unless otherwise stated.`);
+    }
   }
 
   if (input.refundAllowed === false) {

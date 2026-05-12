@@ -1,6 +1,12 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { parseVenueSpaces } from "@/lib/venue-spaces";
 import { EVENT_GOALS_BY_VALUE, humanizeGoalValue, parseGoalFocus } from "@/lib/event-goals";
+import {
+  BOOKING_FORMAT_LABELS,
+  isBookingFormat,
+  isFreeBookingFormat,
+  isPayOnArrivalBookingFormat
+} from "@/lib/booking-format";
 import type { EventDetail } from "@/lib/events";
 import { formatCurrency } from "@/lib/utils/format";
 
@@ -18,13 +24,6 @@ const cutoffTimeFormatter = new Intl.DateTimeFormat("en-GB", {
   minute: "2-digit",
   timeZone: "Europe/London"
 });
-
-const bookingTypeLabel: Record<string, string> = {
-  ticketed: "Ticketed event",
-  table_booking: "Table booking event",
-  free_entry: "Free entry",
-  mixed: "Mixed booking model"
-};
 
 function buildEventImageUrl(path: string | null | undefined): string | null {
   if (!path || !path.trim().length) return null;
@@ -55,6 +54,15 @@ type EventDetailSummaryProps = {
 };
 
 export function EventDetailSummary({ event }: EventDetailSummaryProps) {
+  const bookingFormat = isBookingFormat(event.booking_type) ? event.booking_type : null;
+  const displayTicketPrice =
+    bookingFormat && !isFreeBookingFormat(bookingFormat) && event.ticket_price != null
+      ? event.ticket_price
+      : null;
+  const ticketPriceLabel =
+    bookingFormat && isPayOnArrivalBookingFormat(bookingFormat)
+      ? "Pay on arrival price"
+      : "Ticket price";
   const venueSpaces = parseVenueSpaces(event.venue_space);
   const venueNames = Array.isArray(event.venues) && event.venues.length > 0
     ? event.venues.map((v) => v.name)
@@ -153,13 +161,13 @@ export function EventDetailSummary({ event }: EventDetailSummaryProps) {
           {event.booking_type ? (
             <p>
               <span className="font-semibold text-[var(--color-text)]">Booking format:</span>{" "}
-              {bookingTypeLabel[event.booking_type] ?? event.booking_type}
+              {bookingFormat ? BOOKING_FORMAT_LABELS[bookingFormat] : event.booking_type}
             </p>
           ) : null}
-          {event.ticket_price != null ? (
+          {displayTicketPrice != null ? (
             <p>
-              <span className="font-semibold text-[var(--color-text)]">Ticket price:</span> £
-              {event.ticket_price.toFixed(2)}
+              <span className="font-semibold text-[var(--color-text)]">{ticketPriceLabel}:</span>{" "}
+              {formatCurrency(displayTicketPrice)}
             </p>
           ) : null}
           {checkInCutoffLabel ? (

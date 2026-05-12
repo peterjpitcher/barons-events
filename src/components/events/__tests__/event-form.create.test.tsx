@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { toast } from "sonner";
 import { EventForm } from "@/components/events/event-form";
+import { BOOKING_FORMAT_LABELS, BOOKING_FORMATS } from "@/lib/booking-format";
 import {
   saveEventDraftAction,
   submitEventForReviewAction
@@ -70,6 +71,40 @@ describe("EventForm create defaults", () => {
 
     expect((screen.getByLabelText("Venue") as HTMLSelectElement).value).toBe(venues[1].id);
     expect((screen.getByLabelText("Event type") as HTMLSelectElement).value).toBe("");
+  });
+
+  it("renders all booking formats and paid helper copy", () => {
+    renderCreateForm();
+
+    const select = screen.getByLabelText("Booking format") as HTMLSelectElement;
+    const options = Array.from(select.options).filter((option) => option.value);
+
+    expect(options.map((option) => option.value)).toEqual([...BOOKING_FORMATS]);
+    expect(options.map((option) => option.textContent)).toEqual(
+      BOOKING_FORMATS.map((format) => BOOKING_FORMAT_LABELS[format])
+    );
+
+    fireEvent.change(select, { target: { value: "paid_standing_unreserved" } });
+    expect(screen.getByText("Required for paid events.")).toBeTruthy();
+  });
+
+  it("clears and disables ticket price for free formats", async () => {
+    renderCreateForm();
+
+    const select = screen.getByLabelText("Booking format") as HTMLSelectElement;
+    const ticketPrice = screen.getByLabelText("Ticket price (£)") as HTMLInputElement;
+
+    fireEvent.change(select, { target: { value: "paid_standing" } });
+    fireEvent.change(ticketPrice, { target: { value: "12.50" } });
+    expect(ticketPrice.value).toBe("12.50");
+
+    fireEvent.change(select, { target: { value: "free_standing" } });
+
+    await waitFor(() => {
+      expect(ticketPrice.value).toBe("");
+      expect(ticketPrice.disabled).toBe(true);
+    });
+    expect(screen.getByText("No price for free formats.")).toBeTruthy();
   });
 });
 
@@ -255,4 +290,3 @@ describe("EventForm submit guards", () => {
     });
   });
 });
-

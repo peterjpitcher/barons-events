@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { formatInLondon } from "@/lib/datetime";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getConfirmedTicketCount } from "@/lib/bookings";
+import { isBookingFormat, isPaidBookingFormat } from "@/lib/booking-format";
 import { BookingForm } from "./BookingForm";
 
 export const revalidate = 60; // ISR — refresh every minute
@@ -38,6 +39,7 @@ type EventRow = {
   start_at: string;
   seo_slug: string | null;
   booking_enabled: boolean;
+  booking_type: string | null;
   booking_url: string | null;
   total_capacity: number | null;
   max_tickets_per_booking: number;
@@ -58,7 +60,7 @@ async function getEventBySlug(slug: string): Promise<EventRow | null> {
   const { data, error } = await db
     .from("events")
     .select(
-      "id, title, public_title, public_teaser, public_description, public_highlights, event_image_path, start_at, seo_slug, booking_enabled, booking_url, total_capacity, max_tickets_per_booking, status, venue:venues!events_venue_id_fkey(id, name)"
+      "id, title, public_title, public_teaser, public_description, public_highlights, event_image_path, start_at, seo_slug, booking_enabled, booking_type, booking_url, total_capacity, max_tickets_per_booking, status, venue:venues!events_venue_id_fkey(id, name)"
     )
     .eq("seo_slug", slug)
     .is("deleted_at", null)
@@ -92,6 +94,7 @@ async function getEventBySlug(slug: string): Promise<EventRow | null> {
     start_at: raw.start_at as string,
     seo_slug: (raw.seo_slug as string | null) ?? null,
     booking_enabled: raw.booking_enabled as boolean,
+    booking_type: (raw.booking_type as string | null) ?? null,
     booking_url: (raw.booking_url as string | null) ?? null,
     total_capacity: (raw.total_capacity as number | null) ?? null,
     max_tickets_per_booking: (raw.max_tickets_per_booking as number) ?? 10,
@@ -134,6 +137,9 @@ export default async function EventLandingPage({ params }: PageProps) {
   if (event.booking_url) {
     permanentRedirect(event.booking_url);
   }
+
+  const bookingFormat = isBookingFormat(event.booking_type) ? event.booking_type : null;
+  const paidWithoutPaymentUrl = bookingFormat ? isPaidBookingFormat(bookingFormat) : false;
 
   // Count confirmed tickets for sold-out detection
   const confirmedCount = await getConfirmedTicketCount(event.id);
@@ -266,12 +272,24 @@ export default async function EventLandingPage({ params }: PageProps) {
 
           {/* Booking form */}
           <div className="mt-auto">
-            <BookingForm
-              eventId={event.id}
-              maxTickets={event.max_tickets_per_booking}
-              isSoldOut={isSoldOut}
-              nonce={nonce}
-            />
+            {paidWithoutPaymentUrl ? (
+              <div className="bg-white border-t border-[#cbd5db] p-6">
+                <div className="rounded-lg border border-[#cbd5db] bg-[#f1f4f6] p-4 text-center">
+                  <p className="text-sm font-semibold text-[#273640]">Online payment link unavailable</p>
+                  <p className="mt-1 text-sm text-[#637c8c]">
+                    Please contact the venue team to check ticket availability for this event.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <BookingForm
+                eventId={event.id}
+                maxTickets={event.max_tickets_per_booking}
+                isSoldOut={isSoldOut}
+                bookingType={bookingFormat}
+                nonce={nonce}
+              />
+            )}
           </div>
         </div>
       </div>

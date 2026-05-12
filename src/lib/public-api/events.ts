@@ -1,5 +1,6 @@
 import "server-only";
 
+import { isBookingFormat, isFreeBookingFormat, type BookingFormat } from "@/lib/booking-format";
 import { parseVenueSpaces } from "@/lib/venue-spaces";
 import { normaliseOptionalText, normaliseOptionalInteger } from "@/lib/normalise";
 
@@ -25,7 +26,7 @@ export type PublicEvent = {
   endAt: string;
   venueSpaces: string[];
   description: string | null;
-  bookingType: "ticketed" | "table_booking" | "free_entry" | "mixed" | null;
+  bookingType: BookingFormat | null;
   ticketPrice: number | null;
   checkInCutoffMinutes: number | null;
   agePolicy: string | null;
@@ -188,14 +189,9 @@ export function toPublicEvent(row: RawEventRow): PublicEvent {
   const description = normaliseOptionalText(row.public_description) ?? null;
   const highlights = normaliseHighlights(row.public_highlights);
   const bookingUrl = normaliseOptionalText(row.booking_url);
-  const bookingType =
-    row.booking_type === "ticketed" ||
-    row.booking_type === "table_booking" ||
-    row.booking_type === "free_entry" ||
-    row.booking_type === "mixed"
-      ? row.booking_type
-      : null;
-  const ticketPrice = typeof row.ticket_price === "number" && Number.isFinite(row.ticket_price) ? row.ticket_price : null;
+  const bookingType = isBookingFormat(row.booking_type) ? row.booking_type : null;
+  const rawTicketPrice = typeof row.ticket_price === "number" && Number.isFinite(row.ticket_price) ? row.ticket_price : null;
+  const ticketPrice = bookingType && isFreeBookingFormat(bookingType) ? null : rawTicketPrice;
   const checkInCutoffMinutes = normaliseOptionalInteger(row.check_in_cutoff_minutes);
   const agePolicy = normaliseOptionalText(row.age_policy);
   const accessibilityNotes = normaliseOptionalText(row.accessibility_notes);

@@ -23,6 +23,14 @@ import { FieldError } from "@/components/ui/field-error";
 import { EventFormContext } from "@/components/events/event-form-context";
 import { WebsiteListingCard } from "@/components/events/website-listing-card";
 import { FloatingActionBar } from "@/components/events/floating-action-bar";
+import {
+  BOOKING_FORMAT_LABELS,
+  BOOKING_FORMATS,
+  isBookingFormat,
+  isFreeBookingFormat,
+  isPaidBookingFormat,
+  isPayOnArrivalBookingFormat
+} from "@/lib/booking-format";
 import { EVENT_GOALS } from "@/lib/event-goals";
 import { cn } from "@/lib/utils";
 import { toLondonDateTimeInputValue } from "@/lib/datetime";
@@ -404,6 +412,10 @@ export function EventForm({
   const [managerResponsibleId, setManagerResponsibleId] = useState<string>((defaultValues as any)?.manager_responsible_id ?? "");
   const [managerDirty, setManagerDirty] = useState(Boolean((defaultValues as any)?.manager_responsible_id));
   const [bookingType, setBookingType] = useState(defaultValues?.booking_type ?? "");
+  const selectedBookingFormat = isBookingFormat(bookingType) ? bookingType : null;
+  const isFreeBookingSelected = selectedBookingFormat ? isFreeBookingFormat(selectedBookingFormat) : false;
+  const isPaidBookingSelected = selectedBookingFormat ? isPaidBookingFormat(selectedBookingFormat) : false;
+  const isPayOnArrivalBookingSelected = selectedBookingFormat ? isPayOnArrivalBookingFormat(selectedBookingFormat) : false;
   const [ticketPrice, setTicketPrice] = useState(defaultValues?.ticket_price != null ? String(defaultValues.ticket_price) : "");
   const [selectedGoals, setSelectedGoals] = useState<Set<string>>(new Set(defaultGoalValues));
   const [checkInCutoffMinutes, setCheckInCutoffMinutes] = useState(
@@ -425,6 +437,12 @@ export function EventForm({
   const [seoTitle, setSeoTitle] = useState(defaultValues?.seo_title ?? "");
   const [seoDescription, setSeoDescription] = useState(defaultValues?.seo_description ?? "");
   const [seoSlug, setSeoSlug] = useState(defaultValues?.seo_slug ?? "");
+
+  useEffect(() => {
+    if (isFreeBookingSelected && ticketPrice) {
+      setTicketPrice("");
+    }
+  }, [isFreeBookingSelected, ticketPrice]);
 
   // NOTE: a prop-reset useEffect (keyed on `defaultValues?.id`) used to live
   // here to re-seed every controlled state when an `id` change came in via
@@ -1007,10 +1025,9 @@ export function EventForm({
           )}
         >
           <option value="" disabled>Choose booking format</option>
-          <option value="ticketed">Ticketed event</option>
-          <option value="table_booking">Table booking event</option>
-          <option value="free_entry">Free entry</option>
-          <option value="mixed">Mixed (ticketed + booking)</option>
+          {BOOKING_FORMATS.map((format) => (
+            <option key={format} value={format}>{BOOKING_FORMAT_LABELS[format]}</option>
+          ))}
         </Select>
         <FieldError id="booking-type-error" message={fieldErrors.bookingType} />
         <p className="text-xs text-subtle">This drives AI copy so guests understand how to secure their place.</p>
@@ -1025,6 +1042,7 @@ export function EventForm({
           step="0.01"
           value={ticketPrice}
           onChange={(event) => setTicketPrice(event.target.value)}
+          disabled={isFreeBookingSelected}
           placeholder="e.g. 15.00"
           aria-invalid={Boolean(fieldErrors.ticketPrice)}
           aria-describedby={fieldErrors.ticketPrice ? "ticket-price-error" : undefined}
@@ -1036,9 +1054,13 @@ export function EventForm({
         />
         <FieldError id="ticket-price-error" message={fieldErrors.ticketPrice} />
         <p className="text-xs text-subtle">
-          {bookingType === "ticketed"
-            ? "Required for ticketed events."
-            : "Optional for non-ticketed events (use for deposits or packages)."}
+          {isFreeBookingSelected
+            ? "No price for free formats."
+            : isPaidBookingSelected
+            ? "Required for paid events."
+            : isPayOnArrivalBookingSelected
+              ? "Optional, shown as pay-on-arrival price."
+              : "Choose a booking format to set price rules."}
         </p>
       </div>
     </div>
@@ -1093,7 +1115,7 @@ export function EventForm({
         />
         <FieldError id="cancellation-window-error" message={fieldErrors.cancellationWindowHours} />
         <p className="text-xs text-subtle">
-          {bookingType === "free_entry"
+          {isFreeBookingSelected
             ? "Optional for free-entry events."
             : "Required for bookable events so guests get a clear cancellation/refund policy."}
         </p>

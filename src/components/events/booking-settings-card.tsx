@@ -9,6 +9,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SubmitButton } from "@/components/ui/submit-button";
+import {
+  BOOKING_FORMAT_LABELS,
+  getBookingCtaLabel,
+  isBookingFormat,
+  isPaidBookingFormat
+} from "@/lib/booking-format";
 
 const LANDING_BASE = "l.baronspubs.com";
 
@@ -20,6 +26,7 @@ type BookingSettingsCardProps = {
   seoSlug: string | null;
   smsPromoEnabled?: boolean;
   bookingUrl: string | null;
+  bookingType: string | null;
   userRole?: string;
 };
 
@@ -31,6 +38,7 @@ export function BookingSettingsCard({
   seoSlug: initialSeoSlug,
   smsPromoEnabled: initialSmsPromoEnabled = false,
   bookingUrl: initialBookingUrl,
+  bookingType,
   userRole,
 }: BookingSettingsCardProps) {
   const [bookingEnabled, setBookingEnabled] = useState(initialBookingEnabled);
@@ -50,6 +58,9 @@ export function BookingSettingsCard({
   }, [initialSeoSlug]);
 
   const landingUrl = currentSlug ? `https://${LANDING_BASE}/${currentSlug}` : null;
+  const bookingFormat = isBookingFormat(bookingType) ? bookingType : null;
+  const isPaidFormat = bookingFormat ? isPaidBookingFormat(bookingFormat) : false;
+  const missingPaidBookingUrl = bookingEnabled && isPaidFormat && !bookingUrl.trim();
 
   function handleSave(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -64,6 +75,11 @@ export function BookingSettingsCard({
 
     if (trimmedBookingUrl && !/^https?:\/\//i.test(trimmedBookingUrl)) {
       toast.error("Booking link must be a full URL starting with https://");
+      return;
+    }
+
+    if (bookingEnabled && isPaidFormat && !trimmedBookingUrl) {
+      toast.error("Paid events need an external booking link until Stripe payments are available.");
       return;
     }
 
@@ -109,6 +125,14 @@ export function BookingSettingsCard({
           <span className="font-mono text-xs">{LANDING_BASE}/…</span>
         </p>
         <form ref={formRef} onSubmit={handleSave} className="space-y-5" noValidate>
+          {bookingFormat ? (
+            <div className="rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-muted-surface)] px-3 py-2 text-xs text-subtle">
+              <span className="font-semibold text-[var(--color-text)]">{BOOKING_FORMAT_LABELS[bookingFormat]}</span>
+              {" · "}
+              Guest CTA: {getBookingCtaLabel(bookingFormat)}
+            </div>
+          ) : null}
+
           {/* Booking enabled toggle */}
           <div className="flex items-center gap-3">
             <button
@@ -186,8 +210,15 @@ export function BookingSettingsCard({
             <p className="text-xs text-subtle">
               {bookingUrl.trim()
                 ? "Guests are redirected here instead of the local booking page."
-                : "Leave blank to use the local booking page."}
+                : isPaidFormat
+                  ? "Required for paid events until Stripe payments are available."
+                  : "Leave blank to use the local booking page."}
             </p>
+            {missingPaidBookingUrl ? (
+              <p className="rounded-[var(--radius)] border border-[#9a6d2b] bg-[rgba(192,139,60,0.1)] px-3 py-2 text-xs text-[var(--color-warning)]">
+                Paid events need an external booking link before public bookings can be enabled.
+              </p>
+            ) : null}
           </div>
 
           {/* Total capacity */}
@@ -258,7 +289,7 @@ export function BookingSettingsCard({
               label="Save booking settings"
               pendingLabel="Saving…"
               variant="secondary"
-              disabled={isPending}
+              disabled={isPending || missingPaidBookingUrl}
             />
           </div>
         </form>

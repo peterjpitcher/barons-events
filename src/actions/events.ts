@@ -24,6 +24,7 @@ import type { Database } from "@/lib/supabase/database.types";
 import { sendAssigneeReassignmentEmail, sendEventSubmittedEmail, sendReviewDecisionEmail } from "@/lib/notifications";
 import { recordAuditLogEntry } from "@/lib/audit-log";
 import { generateTermsAndConditions, generateWebsiteCopy, type GeneratedWebsiteCopy } from "@/lib/ai";
+import { isBookingFormat, isFreeBookingFormat, isPaidBookingFormat, type BookingFormat } from "@/lib/booking-format";
 import { normaliseEventDateTimeForStorage } from "@/lib/datetime";
 import {
   normaliseOptionalText as normaliseOptionalTextField,
@@ -316,9 +317,6 @@ function normaliseVenueSpacesField(value: FormDataEntryValue | null): string {
   return unique.join(", ");
 }
 
-type BookingType = "ticketed" | "table_booking" | "free_entry" | "mixed";
-const BOOKING_TYPE_VALUES = new Set<BookingType>(["ticketed", "table_booking", "free_entry", "mixed"]);
-
 function normaliseOptionalHighlightsField(value: FormDataEntryValue | null): string[] | null {
   if (typeof value !== "string") return null;
   const highlights = value
@@ -328,12 +326,19 @@ function normaliseOptionalHighlightsField(value: FormDataEntryValue | null): str
   return highlights.length ? highlights : null;
 }
 
-function normaliseOptionalBookingTypeField(value: FormDataEntryValue | null): BookingType | null {
+function normaliseOptionalBookingTypeField(value: FormDataEntryValue | null): BookingFormat | null {
   if (typeof value !== "string") return null;
-  if (BOOKING_TYPE_VALUES.has(value as BookingType)) {
-    return value as BookingType;
+  return isBookingFormat(value) ? value : null;
+}
+
+function normaliseTicketPriceForBookingFormat(
+  bookingType: BookingFormat | null | undefined,
+  ticketPrice: number | null | undefined
+): number | null {
+  if (bookingType && isFreeBookingFormat(bookingType)) {
+    return null;
   }
-  return null;
+  return ticketPrice ?? null;
 }
 
 function sanitiseFileName(value: string): string {
@@ -455,8 +460,8 @@ function buildWebsiteCopyInput(record: WebsiteCopyEventRecord, formData?: FormDa
   const artistNames = formArtistNames.length ? formArtistNames : recordArtistNames;
 
   const formBookingType = normaliseOptionalBookingTypeField(getFormValue(formData, "bookingType"));
-  const recordBookingType = BOOKING_TYPE_VALUES.has(record.booking_type as BookingType)
-    ? (record.booking_type as BookingType)
+  const recordBookingType = isBookingFormat(record.booking_type)
+    ? record.booking_type
     : null;
   const bookingType = formBookingType ?? recordBookingType;
 
@@ -497,9 +502,11 @@ function buildWebsiteCopyInput(record: WebsiteCopyEventRecord, formData?: FormDa
       normaliseOptionalTextField(getFormValue(formData, "costDetails")) ??
       (typeof record.cost_details === "string" ? record.cost_details : null),
     bookingType,
-    ticketPrice:
+    ticketPrice: normaliseTicketPriceForBookingFormat(
+      bookingType,
       normaliseOptionalNumberField(getFormValue(formData, "ticketPrice")) ??
-      (typeof record.ticket_price === "number" ? record.ticket_price : null),
+        (typeof record.ticket_price === "number" ? record.ticket_price : null)
+    ),
     checkInCutoffMinutes:
       normaliseOptionalIntegerField(getFormValue(formData, "checkInCutoffMinutes")) ??
       (typeof record.check_in_cutoff_minutes === "number" ? record.check_in_cutoff_minutes : null),
@@ -911,7 +918,7 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
       goalFocus: values.goalFocus ?? null,
       notes: values.notes ?? null,
       bookingType: values.bookingType ?? null,
-      ticketPrice: values.ticketPrice ?? null,
+      ticketPrice: normaliseTicketPriceForBookingFormat(values.bookingType ?? null, values.ticketPrice ?? null),
       checkInCutoffMinutes: values.checkInCutoffMinutes ?? null,
       agePolicy: values.agePolicy ?? null,
       accessibilityNotes: values.accessibilityNotes ?? null,
@@ -1024,7 +1031,7 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
           wet_promo: values.wetPromo ?? null,
           food_promo: values.foodPromo ?? null,
           booking_type: values.bookingType ?? null,
-          ticket_price: values.ticketPrice ?? null,
+          ticket_price: normaliseTicketPriceForBookingFormat(values.bookingType ?? null, values.ticketPrice ?? null),
           check_in_cutoff_minutes: values.checkInCutoffMinutes ?? null,
           age_policy: values.agePolicy ?? null,
           accessibility_notes: values.accessibilityNotes ?? null,
@@ -1172,7 +1179,7 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
       wetPromo: values.wetPromo ?? null,
       foodPromo: values.foodPromo ?? null,
       bookingType: values.bookingType ?? null,
-      ticketPrice: values.ticketPrice ?? null,
+      ticketPrice: normaliseTicketPriceForBookingFormat(values.bookingType ?? null, values.ticketPrice ?? null),
       checkInCutoffMinutes: values.checkInCutoffMinutes ?? null,
       agePolicy: values.agePolicy ?? null,
       accessibilityNotes: values.accessibilityNotes ?? null,
@@ -1487,7 +1494,7 @@ export async function submitEventForReviewAction(
         wetPromo: values.wetPromo ?? null,
         foodPromo: values.foodPromo ?? null,
         bookingType: values.bookingType ?? null,
-        ticketPrice: values.ticketPrice ?? null,
+        ticketPrice: normaliseTicketPriceForBookingFormat(values.bookingType ?? null, values.ticketPrice ?? null),
         checkInCutoffMinutes: values.checkInCutoffMinutes ?? null,
         agePolicy: values.agePolicy ?? null,
         accessibilityNotes: values.accessibilityNotes ?? null,
@@ -2054,7 +2061,10 @@ export async function generateWebsiteCopyFromFormAction(
       costTotal: normaliseOptionalNumberField(getFormValue(formData, "costTotal")) ?? null,
       costDetails: normaliseOptionalTextField(getFormValue(formData, "costDetails")) ?? null,
       bookingType,
-      ticketPrice: normaliseOptionalNumberField(getFormValue(formData, "ticketPrice")) ?? null,
+      ticketPrice: normaliseTicketPriceForBookingFormat(
+        bookingType,
+        normaliseOptionalNumberField(getFormValue(formData, "ticketPrice"))
+      ),
       checkInCutoffMinutes: normaliseOptionalIntegerField(getFormValue(formData, "checkInCutoffMinutes")) ?? null,
       agePolicy: normaliseOptionalTextField(getFormValue(formData, "agePolicy")) ?? null,
       accessibilityNotes: normaliseOptionalTextField(getFormValue(formData, "accessibilityNotes")) ?? null,
@@ -2118,7 +2128,10 @@ export async function generateTermsAndConditionsAction(
   }
 
   const bookingType = normaliseOptionalBookingTypeField(formData.get("bookingType"));
-  const ticketPrice = normaliseOptionalNumberField(formData.get("ticketPrice"));
+  const ticketPrice = normaliseTicketPriceForBookingFormat(
+    bookingType,
+    normaliseOptionalNumberField(formData.get("ticketPrice"))
+  );
   const checkInCutoffMinutes = normaliseOptionalIntegerField(formData.get("checkInCutoffMinutes"));
   const cancellationWindowHours = normaliseOptionalIntegerField(formData.get("cancellationWindowHours"));
   const agePolicy = normaliseOptionalTextField(formData.get("agePolicy"));
@@ -2424,12 +2437,21 @@ export async function updateBookingSettingsAction(
   // verified above via loadEventEditContext.
   const { data: event, error: fetchError } = await supabase
     .from("events")
-    .select("id, title, start_at, venue_id, seo_slug")
+    .select("id, title, start_at, venue_id, seo_slug, booking_type")
     .eq("id", eventId)
     .maybeSingle();
 
   if (fetchError || !event) {
     return { success: false, message: "Event not found." };
+  }
+
+  const nextBookingUrl = bookingUrl ?? null;
+  const bookingFormat = isBookingFormat(event.booking_type) ? event.booking_type : null;
+  if (bookingEnabled && bookingFormat && isPaidBookingFormat(bookingFormat) && !nextBookingUrl) {
+    return {
+      success: false,
+      message: "Paid events need an external booking link until Stripe payments are available."
+    };
   }
 
   // Auto-generate slug when enabling bookings for the first time
@@ -2449,7 +2471,7 @@ export async function updateBookingSettingsAction(
     total_capacity: totalCapacity,
     max_tickets_per_booking: maxTicketsPerBooking,
     seo_slug: seoSlug,
-    booking_url: bookingUrl ?? null,
+    booking_url: nextBookingUrl,
   };
   if (user.role === "administrator" && smsPromoEnabled !== undefined) {
     updatePayload.sms_promo_enabled = smsPromoEnabled;
@@ -2471,7 +2493,7 @@ export async function updateBookingSettingsAction(
       entityId: eventId,
       action: "event.booking_settings_updated",
       actorId: user.id,
-      meta: { bookingEnabled, totalCapacity, maxTicketsPerBooking, bookingUrl: bookingUrl ?? null }
+      meta: { bookingEnabled, totalCapacity, maxTicketsPerBooking, bookingUrl: nextBookingUrl }
     });
   } catch (auditError) {
     // Booking settings save itself succeeded — audit failure is logged but

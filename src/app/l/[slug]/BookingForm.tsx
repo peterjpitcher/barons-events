@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import { createBookingAction, updateExistingBookingAction } from "@/actions/bookings";
 import type { CreateBookingInput } from "@/actions/bookings";
+import { getBookingCtaLabel, isBookingFormat, isSeatedBookingFormat } from "@/lib/booking-format";
 import { MARKETING_CONSENT_WORDING } from "@/lib/booking-consent";
 import { TurnstileWidget } from "@/components/turnstile-widget";
 
@@ -17,10 +18,11 @@ interface BookingFormProps {
   eventId: string;
   maxTickets: number;
   isSoldOut: boolean;
+  bookingType: string | null;
   nonce?: string;
 }
 
-export function BookingForm({ eventId, maxTickets, isSoldOut, nonce }: BookingFormProps) {
+export function BookingForm({ eventId, maxTickets, isSoldOut, bookingType, nonce }: BookingFormProps) {
   const [ticketCount, setTicketCount] = useState(1);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -33,6 +35,9 @@ export function BookingForm({ eventId, maxTickets, isSoldOut, nonce }: BookingFo
   const [marketingOptIn, setMarketingOptIn] = useState(false);
   const [existingPrompt, setExistingPrompt] = useState<ExistingBookingPrompt | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  const bookingFormat = isBookingFormat(bookingType) ? bookingType : null;
+  const ctaLabel = getBookingCtaLabel(bookingFormat);
+  const bookingNoun = bookingFormat && isSeatedBookingFormat(bookingFormat) ? "seats" : "tickets";
 
   if (isSoldOut) {
     return (
@@ -185,13 +190,13 @@ export function BookingForm({ eventId, maxTickets, isSoldOut, nonce }: BookingFo
   return (
     <div className="bg-white border-t border-[#cbd5db] p-6">
       <h2 className="text-sm font-bold uppercase tracking-wider text-[#273640] mb-4">
-        Reserve Your Seats
+        {ctaLabel}
       </h2>
 
       <form ref={formRef} onSubmit={handleSubmit} noValidate className="space-y-4">
         {/* Ticket count stepper */}
         <div className="flex items-center justify-between">
-          <span className="text-sm text-[#637c8c]">How many seats?</span>
+          <span className="text-sm text-[#637c8c]">How many {bookingNoun}?</span>
           <div className="flex items-center gap-3">
             <button
               type="button"
@@ -329,7 +334,7 @@ export function BookingForm({ eventId, maxTickets, isSoldOut, nonce }: BookingFo
                      uppercase tracking-wider py-3 rounded-md disabled:opacity-50
                      transition-colors focus:outline-none focus:ring-2 focus:ring-[#c8a005] focus:ring-offset-1"
         >
-          {loading ? "Booking…" : "Book Now — Free Entry"}
+          {loading ? "Submitting…" : ctaLabel}
         </button>
       </form>
     </div>
