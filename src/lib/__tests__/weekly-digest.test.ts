@@ -192,8 +192,9 @@ function setupMockDb(tableResults: Record<string, { data: unknown; error: unknow
 describe("sendWeeklyDigestEmail", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Enable notifications and provide Resend key
+    // Enable operational notifications and provide Resend key.
     delete process.env.NOTIFICATIONS_DISABLED;
+    process.env.BARONSHUB_OPERATIONAL_EMAILS_ENABLED = "true";
     process.env.RESEND_API_KEY = "re_test_key";
   });
 

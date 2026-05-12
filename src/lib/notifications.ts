@@ -212,18 +212,22 @@ function getResendClient() {
 }
 
 /**
- * Global kill-switch for all non-auth notification emails. When the env var
- * NOTIFICATIONS_DISABLED is set to "true", the nine business notifications
- * (event submitted, review decisions, debrief reminders, SLT digest, etc.)
- * log a "would have sent" line and return early. Auth emails
- * (sendInviteEmail, sendPasswordResetEmail) are intentionally excluded and
- * always attempt to send — users still need to sign in and reset passwords.
+ * Booking emails are customer communications and may send whenever Resend is
+ * configured. Wider BaronsHub operational emails are opt-in so enabling Resend
+ * for booking confirmations does not start staff workflow emails.
  *
- * To bring notifications back: remove NOTIFICATIONS_DISABLED (or set it to
- * anything other than "true") and redeploy / restart the dev server.
+ * Auth emails (sendInviteEmail, sendPasswordResetEmail) are intentionally
+ * separate and always attempt to send because users need account access.
  */
-function areNotificationsEnabled(): boolean {
-  return process.env.NOTIFICATIONS_DISABLED !== "true";
+function areBookingEmailsEnabled(): boolean {
+  return process.env.BOOKING_EMAILS_DISABLED !== "true";
+}
+
+function areOperationalEmailsEnabled(): boolean {
+  return (
+    process.env.BARONSHUB_OPERATIONAL_EMAILS_ENABLED === "true" &&
+    process.env.NOTIFICATIONS_DISABLED !== "true"
+  );
 }
 
 function logNotificationSkipped(label: string, ...context: unknown[]): void {
@@ -295,7 +299,7 @@ export async function sendBookingPaymentConfirmationEmail(params: {
   amountPence: number;
   currency?: string;
 }): Promise<boolean> {
-  if (!areNotificationsEnabled()) {
+  if (!areBookingEmailsEnabled()) {
     logNotificationSkipped("booking-payment-confirmation", params.bookingId);
     return true;
   }
@@ -346,7 +350,7 @@ export async function sendBookingRefundEmail(params: {
   currency?: string;
   isFullRefund: boolean;
 }): Promise<boolean> {
-  if (!areNotificationsEnabled()) {
+  if (!areBookingEmailsEnabled()) {
     logNotificationSkipped("booking-refund", params.bookingId);
     return true;
   }
@@ -487,7 +491,7 @@ function buildGreeting(user: Pick<UserRow, "full_name"> | null | undefined, fall
 }
 
 export async function sendEventSubmittedEmail(eventId: string) {
-  if (!areNotificationsEnabled()) {
+  if (!areOperationalEmailsEnabled()) {
     logNotificationSkipped("sendEventSubmittedEmail", { eventId });
     return;
   }
@@ -528,7 +532,7 @@ export async function sendEventSubmittedEmail(eventId: string) {
 }
 
 export async function sendReviewDecisionEmail(eventId: string, decision: string) {
-  if (!areNotificationsEnabled()) {
+  if (!areOperationalEmailsEnabled()) {
     logNotificationSkipped("sendReviewDecisionEmail", { eventId, decision });
     return;
   }
@@ -633,7 +637,7 @@ export async function sendPasswordResetEmail(email: string, resetLink: string) {
 }
 
 export async function sendDebriefReminderEmail(eventId: string) {
-  if (!areNotificationsEnabled()) {
+  if (!areOperationalEmailsEnabled()) {
     logNotificationSkipped("sendDebriefReminderEmail", { eventId });
     return;
   }
@@ -674,7 +678,7 @@ export async function sendDebriefReminderEmail(eventId: string) {
 }
 
 export async function sendUpcomingEventReminderEmail(eventId: string) {
-  if (!areNotificationsEnabled()) {
+  if (!areOperationalEmailsEnabled()) {
     logNotificationSkipped("sendUpcomingEventReminderEmail", { eventId });
     return;
   }
@@ -714,7 +718,7 @@ export async function sendUpcomingEventReminderEmail(eventId: string) {
 }
 
 export async function sendNeedsRevisionsFollowUpEmail(eventId: string) {
-  if (!areNotificationsEnabled()) {
+  if (!areOperationalEmailsEnabled()) {
     logNotificationSkipped("sendNeedsRevisionsFollowUpEmail", { eventId });
     return;
   }
@@ -758,7 +762,7 @@ export async function sendAssigneeReassignmentEmail(
   newAssigneeId: string | null,
   previousAssigneeId?: string | null
 ) {
-  if (!areNotificationsEnabled()) {
+  if (!areOperationalEmailsEnabled()) {
     logNotificationSkipped("sendAssigneeReassignmentEmail", { eventId, newAssigneeId, previousAssigneeId });
     return;
   }
@@ -826,7 +830,7 @@ export async function sendAssigneeReassignmentEmail(
 }
 
 export async function sendPostEventDigestEmail(eventId: string) {
-  if (!areNotificationsEnabled()) {
+  if (!areOperationalEmailsEnabled()) {
     logNotificationSkipped("sendPostEventDigestEmail", { eventId });
     return;
   }
@@ -948,7 +952,7 @@ async function getSltRecipients(): Promise<string[]> {
  * the debrief submission succeeds even if email delivery fails.
  */
 export async function sendDebriefSubmittedToSltEmail(eventId: string): Promise<void> {
-  if (!areNotificationsEnabled()) {
+  if (!areOperationalEmailsEnabled()) {
     logNotificationSkipped("sendDebriefSubmittedToSltEmail", { eventId });
     return;
   }
@@ -1041,7 +1045,7 @@ export async function sendDebriefSubmittedToSltEmail(eventId: string): Promise<v
  * Idempotent per calendar day (London timezone) — duplicate runs on the same day are skipped.
  */
 export async function sendWeeklyDigestEmail(): Promise<{ sent: number; failed: number; skippedAssignees: number }> {
-  if (!areNotificationsEnabled()) {
+  if (!areOperationalEmailsEnabled()) {
     logNotificationSkipped("sendWeeklyDigestEmail");
     return { sent: 0, failed: 0, skippedAssignees: 0 };
   }
