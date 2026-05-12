@@ -22,7 +22,8 @@ type RecordAuditParams = {
     | "slt_member"
     | "business_settings"
     | "attachment"
-    | "digest";
+    | "digest"
+    | "payment";
   entityId: string;
   action: string;
   meta?: Record<string, unknown>;
@@ -62,6 +63,30 @@ export async function recordAuditLogEntry(params: RecordAuditParams): Promise<vo
     }
   } catch (error) {
     console.error("Audit log insert failed", error);
+  }
+}
+
+/**
+ * Logs system/public-context audit events with the service-role client.
+ * Use this for unauthenticated providers/webhooks where the normal action
+ * client has no user session and RLS would reject the insert.
+ */
+export async function recordSystemAuditLogEntry(params: RecordAuditParams): Promise<void> {
+  try {
+    const db = createSupabaseAdminClient();
+    const { error } = await db.from("audit_log").insert({
+      entity: params.entity,
+      entity_id: params.entityId,
+      action: params.action,
+      meta: serialiseMeta(params.meta),
+      actor_id: params.actorId ?? null
+    });
+
+    if (error) {
+      console.warn("[audit] System event insert failed:", error.message, { action: params.action });
+    }
+  } catch (error) {
+    console.error("System audit log failed:", error);
   }
 }
 

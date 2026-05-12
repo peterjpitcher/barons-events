@@ -1,6 +1,6 @@
 import "server-only";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import type { AppUser, BookingStatus } from "@/lib/types";
+import type { AppUser, BookingPaymentStatus, BookingStatus } from "@/lib/types";
 
 export interface BookingRow {
   id: string;
@@ -9,6 +9,9 @@ export interface BookingRow {
   mobile: string;
   ticketCount: number;
   status: BookingStatus;
+  paymentStatus: BookingPaymentStatus;
+  paymentAmountPence: number | null;
+  paymentCurrency: string | null;
   createdAt: Date;
 }
 
@@ -43,7 +46,8 @@ export async function listAllBookingsForUser(
   let query = db
     .from("event_bookings")
     .select(`
-      id, first_name, last_name, mobile, ticket_count, status, created_at,
+      id, first_name, last_name, mobile, ticket_count, status, payment_status, created_at,
+      payment_transaction:payment_transactions!event_bookings_payment_transaction_id_fkey(amount_pence, currency),
       events!inner (
         id, title, start_at, venue_id,
         venues!events_venue_id_fkey ( id, name )
@@ -109,6 +113,10 @@ export async function listAllBookingsForUser(
     const tickets = row.ticket_count as number;
 
     const status = row.status as BookingStatus;
+    const paymentRelation = row.payment_transaction;
+    const paymentTransaction = Array.isArray(paymentRelation)
+      ? (paymentRelation[0] as Record<string, unknown> | undefined) ?? null
+      : (paymentRelation as Record<string, unknown> | null | undefined) ?? null;
 
     group.bookings.push({
       id:          row.id as string,
@@ -117,6 +125,9 @@ export async function listAllBookingsForUser(
       mobile:      row.mobile as string,
       ticketCount: tickets,
       status,
+      paymentStatus: ((row.payment_status as BookingPaymentStatus | null) ?? "not_required"),
+      paymentAmountPence: typeof paymentTransaction?.amount_pence === "number" ? paymentTransaction.amount_pence : null,
+      paymentCurrency: typeof paymentTransaction?.currency === "string" ? paymentTransaction.currency : null,
       createdAt:   new Date(row.created_at as string),
     });
 

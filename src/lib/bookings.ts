@@ -1,12 +1,17 @@
 import "server-only";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import type { EventBooking, BookingRpcResult } from "@/lib/types";
+import type { EventBooking, BookingPaymentStatus, BookingRpcResult } from "@/lib/types";
 
 /**
  * Convert a raw DB row (snake_case, ISO strings) to an EventBooking (camelCase, Dates).
  * Inline conversion — no shared fromDb utility exists in this project.
  */
 function rowToEventBooking(row: Record<string, unknown>): EventBooking {
+  const paymentRelation = row.payment_transaction;
+  const paymentTransaction = Array.isArray(paymentRelation)
+    ? (paymentRelation[0] as Record<string, unknown> | undefined) ?? null
+    : (paymentRelation as Record<string, unknown> | null | undefined) ?? null;
+
   return {
     id:                     row.id as string,
     eventId:                row.event_id as string,
@@ -16,6 +21,31 @@ function rowToEventBooking(row: Record<string, unknown>): EventBooking {
     email:                  (row.email as string | null) ?? null,
     ticketCount:            row.ticket_count as number,
     status:                 row.status as EventBooking["status"],
+    paymentStatus:          ((row.payment_status as BookingPaymentStatus | null) ?? "not_required"),
+    paymentTransactionId:   (row.payment_transaction_id as string | null) ?? null,
+    paymentCompletedAt:     row.payment_completed_at
+                              ? new Date(row.payment_completed_at as string)
+                              : null,
+    paymentFailedAt:        row.payment_failed_at
+                              ? new Date(row.payment_failed_at as string)
+                              : null,
+    paymentRefundedAt:      row.payment_refunded_at
+                              ? new Date(row.payment_refunded_at as string)
+                              : null,
+    paymentAmountPence:     typeof paymentTransaction?.amount_pence === "number"
+                              ? paymentTransaction.amount_pence
+                              : null,
+    paymentRefundedAmountPence:
+                              typeof paymentTransaction?.refunded_amount_pence === "number"
+                                ? paymentTransaction.refunded_amount_pence
+                                : null,
+    paymentCurrency:        typeof paymentTransaction?.currency === "string"
+                              ? paymentTransaction.currency
+                              : null,
+    stripeCheckoutSessionId:
+                              typeof paymentTransaction?.stripe_checkout_session_id === "string"
+                                ? paymentTransaction.stripe_checkout_session_id
+                                : null,
     createdAt:              new Date(row.created_at as string),
     smsConfirmationSentAt:  row.sms_confirmation_sent_at
                               ? new Date(row.sms_confirmation_sent_at as string)
@@ -61,6 +91,38 @@ export async function createBookingAtomic(params: {
 }
 
 /**
+ * Atomically reserve capacity for a paid booking. The booking remains
+ * status='confirmed' so it holds capacity, but payment_status='pending' until
+ * Checkout completes.
+ */
+export async function createPaidBookingAtomic(params: {
+  eventId: string;
+  firstName: string;
+  lastName: string | null;
+  mobile: string;
+  email: string | null;
+  ticketCount: number;
+}): Promise<BookingRpcResult> {
+  const db = createSupabaseAdminClient();
+  const { data, error } = await db.rpc("create_paid_booking", {
+    p_event_id:     params.eventId,
+    p_first_name:   params.firstName,
+    p_last_name:    params.lastName,
+    p_mobile:       params.mobile,
+    p_email:        params.email,
+    p_ticket_count: params.ticketCount,
+  });
+
+  if (error) throw new Error(`create_paid_booking RPC failed: ${error.message}`);
+
+  const result = data as { ok: boolean; reason?: string; booking_id?: string };
+  if (!result.ok) {
+    return { ok: false, reason: result.reason as "not_found" | "sold_out" | "booking_limit_reached" | "too_many_tickets" };
+  }
+  return { ok: true, bookingId: result.booking_id! };
+}
+
+/**
  * Fetch all bookings for an event.
  * Scoping (venue manager vs planner) enforced by the caller.
  */
@@ -68,7 +130,7 @@ export async function getBookingsForEvent(eventId: string): Promise<EventBooking
   const db = createSupabaseAdminClient();
   const { data, error } = await db
     .from("event_bookings")
-    .select("*")
+    .select("*, payment_transaction:payment_transactions!event_bookings_payment_transaction_id_fkey(amount_pence, refunded_amount_pence, currency, stripe_checkout_session_id)")
     .eq("event_id", eventId)
     .order("created_at", { ascending: false });
 

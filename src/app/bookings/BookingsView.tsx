@@ -27,6 +27,23 @@ function StatusBadge({ status }: { status: BookingStatus }) {
   );
 }
 
+function PaymentBadge({ booking }: { booking: BookingRow }) {
+  if (booking.paymentStatus === "not_required") {
+    return <span className="text-xs text-[#637c8c]">Not required</span>;
+  }
+  const classes =
+    booking.paymentStatus === "completed"
+      ? "bg-green-100 text-green-800"
+      : booking.paymentStatus === "pending" || booking.paymentStatus === "partially_refunded"
+        ? "bg-amber-100 text-amber-800"
+        : "bg-red-100 text-red-800";
+  return (
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${classes}`}>
+      {booking.paymentStatus.replace(/_/g, " ")}
+    </span>
+  );
+}
+
 export function BookingsView({ groups }: Props) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -162,6 +179,9 @@ export function BookingsView({ groups }: Props) {
                       <th scope="col" className="px-4 py-2 text-left font-medium text-[#273640]">
                         Status
                       </th>
+                      <th scope="col" className="px-4 py-2 text-left font-medium text-[#273640]">
+                        Payment
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--color-border)] bg-white">
@@ -180,6 +200,9 @@ export function BookingsView({ groups }: Props) {
                         </td>
                         <td className="px-4 py-2">
                           <StatusBadge status={booking.status} />
+                        </td>
+                        <td className="px-4 py-2">
+                          <PaymentBadge booking={booking} />
                         </td>
                       </tr>
                     ))}

@@ -23,6 +23,8 @@ describe("BookingForm booking-format copy", () => {
         maxTickets={10}
         isSoldOut={false}
         bookingType="free_seated"
+        isPaidBooking={false}
+        ticketPrice={null}
       />
     );
 
@@ -38,6 +40,8 @@ describe("BookingForm booking-format copy", () => {
         maxTickets={10}
         isSoldOut={false}
         bookingType="pay_on_arrival_standing_unreserved"
+        isPaidBooking={false}
+        ticketPrice={null}
       />
     );
 

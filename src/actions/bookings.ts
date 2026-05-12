@@ -15,6 +15,8 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { upsertCustomerForBooking, linkBookingToCustomer } from "@/lib/customers";
 import { verifyTurnstile } from "@/lib/turnstile";
 import { isLinkedToVenue } from "@/lib/visibility";
+import { isBookingFormat, isPaidBookingFormat } from "@/lib/booking-format";
+import { processRefund } from "@/lib/payments/service";
 
 const BOOKING_UPDATE_TOKEN_TTL_MS = 10 * 60 * 1000;
 
@@ -80,6 +82,23 @@ function verifyBookingUpdateToken(token: string): BookingUpdateTokenPayload | nu
   }
 }
 
+async function isPaidInAppBookingEvent(eventId: string): Promise<boolean> {
+  try {
+    const db = createSupabaseAdminClient();
+    const { data, error } = await db
+      .from("events")
+      .select("booking_type")
+      .eq("id", eventId)
+      .maybeSingle();
+    if (error || !data) return false;
+    const bookingType = (data as { booking_type?: unknown }).booking_type;
+    return isBookingFormat(bookingType) && isPaidBookingFormat(bookingType);
+  } catch (error) {
+    console.warn("Paid booking guard failed:", error);
+    return false;
+  }
+}
+
 const createBookingSchema = z.object({
   eventId:       z.string().uuid(),
   firstName:     z.string().min(1, "First name is required").max(100),
@@ -131,6 +150,10 @@ export async function createBookingAction(
   }
 
   const data = parsed.data;
+
+  if (await isPaidInAppBookingEvent(data.eventId)) {
+    return { success: false, error: "Paid bookings must be completed through the payment flow." };
+  }
 
   // Validate + normalise mobile to E.164
   if (!isValidPhoneNumber(data.mobile, "GB")) {
@@ -446,4 +469,50 @@ export async function cancelBookingAction(
 
   revalidatePath(`/events/${actualEventId}/bookings`);
   return { success: true };
+}
+
+const refundBookingSchema = z.object({
+  transactionId: z.string().uuid(),
+  eventId: z.string().uuid(),
+  amountPence: z.number().int().positive().optional().nullable(),
+  reason: z.string().max(500).optional().nullable(),
+});
+
+export type RefundBookingResult =
+  | { success: true; refundId: string; amountPence: number; isFullRefund: boolean }
+  | { success: false; error: string };
+
+export async function refundBookingAction(
+  input: z.infer<typeof refundBookingSchema>
+): Promise<RefundBookingResult> {
+  const user = await getCurrentUser();
+  if (!user) {
+    return { success: false, error: "Unauthorized" };
+  }
+  if (user.role !== "administrator") {
+    return { success: false, error: "Only administrators can issue refunds." };
+  }
+
+  const parsed = refundBookingSchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0]?.message ?? "Invalid refund request." };
+  }
+
+  try {
+    const result = await processRefund({
+      transactionId: parsed.data.transactionId,
+      amountPence: parsed.data.amountPence ?? null,
+      reason: parsed.data.reason ?? null,
+      adminUserId: user.id,
+    });
+
+    if (!result.success) return result;
+
+    revalidatePath(`/events/${parsed.data.eventId}/bookings`);
+    revalidatePath("/bookings");
+    return result;
+  } catch (error) {
+    console.error("refundBookingAction failed:", error);
+    return { success: false, error: "Refund failed. Please check Stripe before retrying." };
+  }
 }

@@ -24,7 +24,7 @@ import type { Database } from "@/lib/supabase/database.types";
 import { sendAssigneeReassignmentEmail, sendEventSubmittedEmail, sendReviewDecisionEmail } from "@/lib/notifications";
 import { recordAuditLogEntry } from "@/lib/audit-log";
 import { generateTermsAndConditions, generateWebsiteCopy, type GeneratedWebsiteCopy } from "@/lib/ai";
-import { isBookingFormat, isFreeBookingFormat, isPaidBookingFormat, type BookingFormat } from "@/lib/booking-format";
+import { isBookingFormat, isFreeBookingFormat, type BookingFormat } from "@/lib/booking-format";
 import { normaliseEventDateTimeForStorage } from "@/lib/datetime";
 import {
   normaliseOptionalText as normaliseOptionalTextField,
@@ -2446,13 +2446,6 @@ export async function updateBookingSettingsAction(
   }
 
   const nextBookingUrl = bookingUrl ?? null;
-  const bookingFormat = isBookingFormat(event.booking_type) ? event.booking_type : null;
-  if (bookingEnabled && bookingFormat && isPaidBookingFormat(bookingFormat) && !nextBookingUrl) {
-    return {
-      success: false,
-      message: "Paid events need an external booking link until Stripe payments are available."
-    };
-  }
 
   // Auto-generate slug when enabling bookings for the first time
   let seoSlug: string | null = event.seo_slug ?? null;

@@ -187,9 +187,7 @@ export async function sendCampaignSms(params: {
   const linkDestination =
     ctaMode === "link"
       ? event.bookingUrl ??
-        (!isPaidBookingFormat(event.bookingType) && event.seoSlug
-          ? `https://l.baronspubs.com/${event.seoSlug}`
-          : null)
+        (event.seoSlug ? `https://l.baronspubs.com/${event.seoSlug}` : null)
       : null;
 
   if (ctaMode === "link" && !linkDestination) {

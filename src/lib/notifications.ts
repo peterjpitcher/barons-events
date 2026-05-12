@@ -230,6 +230,167 @@ function logNotificationSkipped(label: string, ...context: unknown[]): void {
   console.log(`[notifications disabled] skipped ${label}`, ...context);
 }
 
+function formatPaymentAmount(amountPence: number, currency = "gbp"): string {
+  return new Intl.NumberFormat("en-GB", {
+    style: "currency",
+    currency: currency.toUpperCase(),
+  }).format(amountPence / 100);
+}
+
+async function fetchBookingNotificationContext(bookingId: string): Promise<{
+  booking: {
+    id: string;
+    first_name: string;
+    last_name: string | null;
+    email: string | null;
+    ticket_count: number;
+  };
+  event: { title: string; start_at: string; venue: { name: string | null } | null };
+} | null> {
+  const db = createSupabaseAdminClient();
+  const { data, error } = await db
+    .from("event_bookings")
+    .select(`
+      id, first_name, last_name, email, ticket_count,
+      events (
+        title, start_at,
+        venue:venues!events_venue_id_fkey(name)
+      )
+    `)
+    .eq("id", bookingId)
+    .maybeSingle();
+
+  if (error || !data) {
+    console.error("fetchBookingNotificationContext failed", bookingId, error);
+    return null;
+  }
+
+  const row = data as Record<string, unknown>;
+  const eventRaw = Array.isArray(row.events)
+    ? row.events[0] as Record<string, unknown> | undefined
+    : row.events as Record<string, unknown> | undefined;
+  if (!eventRaw) return null;
+  const venueRaw = Array.isArray(eventRaw.venue)
+    ? eventRaw.venue[0] as Record<string, unknown> | undefined
+    : eventRaw.venue as Record<string, unknown> | undefined;
+
+  return {
+    booking: {
+      id: row.id as string,
+      first_name: row.first_name as string,
+      last_name: (row.last_name as string | null) ?? null,
+      email: (row.email as string | null) ?? null,
+      ticket_count: row.ticket_count as number,
+    },
+    event: {
+      title: eventRaw.title as string,
+      start_at: eventRaw.start_at as string,
+      venue: venueRaw ? { name: (venueRaw.name as string | null) ?? null } : null,
+    },
+  };
+}
+
+export async function sendBookingPaymentConfirmationEmail(params: {
+  bookingId: string;
+  amountPence: number;
+  currency?: string;
+}): Promise<boolean> {
+  if (!areNotificationsEnabled()) {
+    logNotificationSkipped("booking-payment-confirmation", params.bookingId);
+    return true;
+  }
+
+  const context = await fetchBookingNotificationContext(params.bookingId);
+  if (!context?.booking.email) return false;
+
+  const resend = getResendClient();
+  if (!resend) {
+    console.warn("sendBookingPaymentConfirmationEmail skipped: RESEND_API_KEY not configured");
+    return false;
+  }
+
+  const { date, time } = formatInLondon(context.event.start_at);
+  const venueName = context.event.venue?.name ?? "the venue";
+  const amount = formatPaymentAmount(params.amountPence, params.currency);
+  const fullName = [context.booking.first_name, context.booking.last_name].filter(Boolean).join(" ");
+  const content = renderEmailTemplate({
+    headline: "Your booking is confirmed",
+    intro: `Hi ${context.booking.first_name}, your payment has been received and your booking is confirmed.`,
+    body: [
+      `${context.event.title} at ${venueName}`,
+      `${date} at ${time}`,
+      `${context.booking.ticket_count} ticket${context.booking.ticket_count === 1 ? "" : "s"} · ${amount} paid`,
+    ],
+    meta: [`Booking reference: ${context.booking.id}`, fullName ? `Guest: ${fullName}` : ""].filter(Boolean),
+    footerNote: "Keep this email for your records. Card payments are processed securely by Stripe.",
+  });
+
+  try {
+    await resend.emails.send({
+      from: RESEND_FROM_ADDRESS,
+      to: context.booking.email,
+      subject: `Booking confirmed: ${context.event.title}`,
+      html: content.html,
+      text: content.text,
+    });
+    return true;
+  } catch (error) {
+    console.error("sendBookingPaymentConfirmationEmail failed", error);
+    return false;
+  }
+}
+
+export async function sendBookingRefundEmail(params: {
+  bookingId: string;
+  amountPence: number;
+  currency?: string;
+  isFullRefund: boolean;
+}): Promise<boolean> {
+  if (!areNotificationsEnabled()) {
+    logNotificationSkipped("booking-refund", params.bookingId);
+    return true;
+  }
+
+  const context = await fetchBookingNotificationContext(params.bookingId);
+  if (!context?.booking.email) return false;
+
+  const resend = getResendClient();
+  if (!resend) {
+    console.warn("sendBookingRefundEmail skipped: RESEND_API_KEY not configured");
+    return false;
+  }
+
+  const amount = formatPaymentAmount(params.amountPence, params.currency);
+  const content = renderEmailTemplate({
+    headline: params.isFullRefund ? "Your booking has been refunded" : "A refund has been issued",
+    intro: `Hi ${context.booking.first_name}, ${amount} has been refunded for your booking.`,
+    body: [
+      `${context.event.title}`,
+      params.isFullRefund
+        ? "Your booking has been cancelled and the refund will return to your original payment method."
+        : "Your booking remains active. The refund will return to your original payment method.",
+    ],
+    meta: [`Booking reference: ${context.booking.id}`],
+    footerNote: "Refund timings depend on the card issuer and are usually a few working days.",
+  });
+
+  try {
+    await resend.emails.send({
+      from: RESEND_FROM_ADDRESS,
+      to: context.booking.email,
+      subject: params.isFullRefund
+        ? `Refund issued: ${context.event.title}`
+        : `Partial refund issued: ${context.event.title}`,
+      html: content.html,
+      text: content.text,
+    });
+    return true;
+  } catch (error) {
+    console.error("sendBookingRefundEmail failed", error);
+    return false;
+  }
+}
+
 async function fetchEventContext(eventId: string): Promise<EventContext | null> {
   const supabase = await createSupabaseReadonlyClient();
   const { data, error } = await supabase

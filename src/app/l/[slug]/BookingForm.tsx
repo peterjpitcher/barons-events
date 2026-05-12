@@ -19,10 +19,46 @@ interface BookingFormProps {
   maxTickets: number;
   isSoldOut: boolean;
   bookingType: string | null;
+  isPaidBooking: boolean;
+  ticketPrice: number | null;
   nonce?: string;
 }
 
-export function BookingForm({ eventId, maxTickets, isSoldOut, bookingType, nonce }: BookingFormProps) {
+function formatAmount(amount: number): string {
+  return new Intl.NumberFormat("en-GB", {
+    style: "currency",
+    currency: "GBP",
+  }).format(amount);
+}
+
+function paidBookingErrorMessage(error: string): string {
+  switch (error) {
+    case "sold_out":
+      return "Sorry, this event is now fully booked.";
+    case "existing_booking":
+      return "You already have a paid booking for this event.";
+    case "existing_pending_payment":
+      return "You already have a payment in progress for this event. Please complete it or try again shortly.";
+    case "too_many_tickets":
+      return "Too many tickets requested. Please reduce your selection.";
+    case "rate_limited":
+      return "Too many attempts. Please try again in a few minutes.";
+    case "payment_setup_failed":
+      return "Payment could not be started. Please try again later.";
+    default:
+      return error || "Something went wrong. Please try again.";
+  }
+}
+
+export function BookingForm({
+  eventId,
+  maxTickets,
+  isSoldOut,
+  bookingType,
+  isPaidBooking,
+  ticketPrice,
+  nonce
+}: BookingFormProps) {
   const [ticketCount, setTicketCount] = useState(1);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -38,6 +74,7 @@ export function BookingForm({ eventId, maxTickets, isSoldOut, bookingType, nonce
   const bookingFormat = isBookingFormat(bookingType) ? bookingType : null;
   const ctaLabel = getBookingCtaLabel(bookingFormat);
   const bookingNoun = bookingFormat && isSeatedBookingFormat(bookingFormat) ? "seats" : "tickets";
+  const paidTotal = isPaidBooking && ticketPrice != null ? ticketPrice * ticketCount : null;
 
   if (isSoldOut) {
     return (
@@ -79,6 +116,43 @@ export function BookingForm({ eventId, maxTickets, isSoldOut, bookingType, nonce
       marketingOptIn,
       turnstileToken,
     };
+
+    if (isPaidBooking) {
+      if (ticketPrice == null || ticketPrice <= 0) {
+        setLoading(false);
+        setError("Tickets are not currently available online for this event.");
+        return;
+      }
+      if (!email.trim()) {
+        setLoading(false);
+        setError("Add an email address so we can send your payment confirmation.");
+        return;
+      }
+
+      try {
+        const response = await fetch("/api/bookings/payment/create-order", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...input, email: email.trim() }),
+        });
+        const result = await response.json() as
+          | { success: true; approvalUrl: string }
+          | { success: false; error: string };
+
+        if (!result.success) {
+          setLoading(false);
+          setError(paidBookingErrorMessage(result.error));
+          return;
+        }
+
+        window.location.href = result.approvalUrl;
+        return;
+      } catch {
+        setLoading(false);
+        setError("Payment could not be started. Please try again.");
+        return;
+      }
+    }
 
     const result = await createBookingAction(input);
     setLoading(false);
@@ -193,6 +267,24 @@ export function BookingForm({ eventId, maxTickets, isSoldOut, bookingType, nonce
         {ctaLabel}
       </h2>
 
+      {isPaidBooking ? (
+        <div className="mb-4 rounded-lg border border-[#cbd5db] bg-[#f1f4f6] p-4 text-sm text-[#273640]">
+          <div className="flex items-center justify-between gap-3">
+            <span>{ticketCount} {ticketCount === 1 ? bookingNoun.slice(0, -1) : bookingNoun}</span>
+            <span className="font-semibold">
+              {ticketPrice != null ? formatAmount(ticketPrice) : "Unavailable"}
+            </span>
+          </div>
+          <div className="mt-2 flex items-center justify-between border-t border-[#cbd5db] pt-2 font-bold">
+            <span>Total</span>
+            <span>{paidTotal != null ? formatAmount(paidTotal) : "Unavailable"}</span>
+          </div>
+          <p className="mt-2 text-xs text-[#637c8c]">
+            You&apos;ll pay securely by card through Stripe Checkout.
+          </p>
+        </div>
+      ) : null}
+
       <form ref={formRef} onSubmit={handleSubmit} noValidate className="space-y-4">
         {/* Ticket count stepper */}
         <div className="flex items-center justify-between">
@@ -279,9 +371,10 @@ export function BookingForm({ eventId, maxTickets, isSoldOut, bookingType, nonce
           <input
             id="email"
             type="email"
-            placeholder="Email address (optional)"
+            placeholder={isPaidBooking ? "Email address *" : "Email address (optional)"}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            required={isPaidBooking}
             autoComplete="email"
             className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm
                        placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-[#273640]"
@@ -329,12 +422,12 @@ export function BookingForm({ eventId, maxTickets, isSoldOut, bookingType, nonce
         {/* Submit */}
         <button
           type="submit"
-          disabled={loading || !firstName.trim() || !mobile.trim()}
+          disabled={loading || !firstName.trim() || !mobile.trim() || (isPaidBooking && !email.trim())}
           className="w-full bg-[#c8a005] hover:bg-[#a88804] text-white font-bold text-sm
                      uppercase tracking-wider py-3 rounded-md disabled:opacity-50
                      transition-colors focus:outline-none focus:ring-2 focus:ring-[#c8a005] focus:ring-offset-1"
         >
-          {loading ? "Submitting…" : ctaLabel}
+          {loading ? (isPaidBooking ? "Opening checkout…" : "Submitting…") : ctaLabel}
         </button>
       </form>
     </div>

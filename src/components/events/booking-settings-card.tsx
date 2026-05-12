@@ -60,7 +60,6 @@ export function BookingSettingsCard({
   const landingUrl = currentSlug ? `https://${LANDING_BASE}/${currentSlug}` : null;
   const bookingFormat = isBookingFormat(bookingType) ? bookingType : null;
   const isPaidFormat = bookingFormat ? isPaidBookingFormat(bookingFormat) : false;
-  const missingPaidBookingUrl = bookingEnabled && isPaidFormat && !bookingUrl.trim();
 
   function handleSave(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -75,11 +74,6 @@ export function BookingSettingsCard({
 
     if (trimmedBookingUrl && !/^https?:\/\//i.test(trimmedBookingUrl)) {
       toast.error("Booking link must be a full URL starting with https://");
-      return;
-    }
-
-    if (bookingEnabled && isPaidFormat && !trimmedBookingUrl) {
-      toast.error("Paid events need an external booking link until Stripe payments are available.");
       return;
     }
 
@@ -211,14 +205,9 @@ export function BookingSettingsCard({
               {bookingUrl.trim()
                 ? "Guests are redirected here instead of the local booking page."
                 : isPaidFormat
-                  ? "Required for paid events until Stripe payments are available."
+                  ? "Leave blank to use in-app Stripe Checkout."
                   : "Leave blank to use the local booking page."}
             </p>
-            {missingPaidBookingUrl ? (
-              <p className="rounded-[var(--radius)] border border-[#9a6d2b] bg-[rgba(192,139,60,0.1)] px-3 py-2 text-xs text-[var(--color-warning)]">
-                Paid events need an external booking link before public bookings can be enabled.
-              </p>
-            ) : null}
           </div>
 
           {/* Total capacity */}
@@ -289,7 +278,7 @@ export function BookingSettingsCard({
               label="Save booking settings"
               pendingLabel="Saving…"
               variant="secondary"
-              disabled={isPending || missingPaidBookingUrl}
+              disabled={isPending}
             />
           </div>
         </form>

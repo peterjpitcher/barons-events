@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { SmsCampaignStats } from "@/components/events/sms-campaign-stats";
 import { Badge } from "@/components/ui/badge";
 import { CancelBookingButton } from "@/components/bookings/cancel-booking-button";
+import { RefundBookingButton } from "@/components/bookings/refund-booking-button";
 import { canManageBookings } from "@/lib/roles";
 
 const dateFormatter = new Intl.DateTimeFormat("en-GB", {
@@ -19,6 +20,21 @@ const dateFormatter = new Intl.DateTimeFormat("en-GB", {
   minute: "2-digit",
   timeZone: "Europe/London",
 });
+
+function formatPaymentAmount(amountPence: number | null, currency: string | null): string {
+  if (amountPence == null) return "—";
+  return new Intl.NumberFormat("en-GB", {
+    style: "currency",
+    currency: (currency ?? "gbp").toUpperCase(),
+  }).format(amountPence / 100);
+}
+
+function paymentBadgeVariant(status: string): "neutral" | "success" | "warning" | "danger" {
+  if (status === "completed" || status === "not_required") return "success";
+  if (status === "pending" || status === "partially_refunded") return "warning";
+  if (status === "failed" || status === "refunded") return "danger";
+  return "neutral";
+}
 
 export async function generateMetadata({ params }: { params: Promise<{ eventId: string }> }) {
   const { eventId } = await params;
@@ -121,6 +137,7 @@ export default async function BookingsPage({
                 <th scope="col" className="px-4 py-3 text-right">Tickets</th>
                 <th scope="col" className="px-4 py-3">Booked at</th>
                 <th scope="col" className="px-4 py-3">Status</th>
+                <th scope="col" className="px-4 py-3">Payment</th>
                 <th scope="col" className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
@@ -147,8 +164,30 @@ export default async function BookingsPage({
                       {booking.status}
                     </Badge>
                   </td>
+                  <td className="px-4 py-3">
+                    <div className="space-y-1">
+                      <Badge variant={paymentBadgeVariant(booking.paymentStatus)}>
+                        {booking.paymentStatus.replace(/_/g, " ")}
+                      </Badge>
+                      {booking.paymentAmountPence != null ? (
+                        <p className="text-xs text-subtle">
+                          {formatPaymentAmount(booking.paymentAmountPence, booking.paymentCurrency)}
+                          {booking.paymentRefundedAmountPence ? (
+                            <> · refunded {formatPaymentAmount(booking.paymentRefundedAmountPence, booking.paymentCurrency)}</>
+                          ) : null}
+                        </p>
+                      ) : null}
+                    </div>
+                  </td>
                   <td className="px-4 py-3 text-right">
-                    {booking.status === "confirmed" && canCancelBookings ? (
+                    {booking.status === "confirmed" && user.role === "administrator" && booking.paymentTransactionId && booking.paymentAmountPence != null && (booking.paymentStatus === "completed" || booking.paymentStatus === "partially_refunded") ? (
+                      <RefundBookingButton
+                        transactionId={booking.paymentTransactionId}
+                        eventId={eventId}
+                        refundableAmountPence={booking.paymentAmountPence - (booking.paymentRefundedAmountPence ?? 0)}
+                        currency={booking.paymentCurrency ?? "gbp"}
+                      />
+                    ) : booking.status === "confirmed" && canCancelBookings && !["completed", "partially_refunded", "refunded"].includes(booking.paymentStatus) ? (
                       <CancelBookingButton
                         bookingId={booking.id}
                         eventId={eventId}

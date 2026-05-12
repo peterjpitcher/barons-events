@@ -78,6 +78,15 @@ export type ActionResult = {
 /** Status of a customer booking. */
 export type BookingStatus = "confirmed" | "cancelled";
 
+/** Payment lifecycle for a booking. */
+export type BookingPaymentStatus =
+  | "not_required"
+  | "pending"
+  | "completed"
+  | "failed"
+  | "refunded"
+  | "partially_refunded";
+
 /** A customer record — one per unique mobile number across all bookings. */
 export interface Customer {
   id: string;
@@ -107,6 +116,15 @@ export interface EventBooking {
   email: string | null;
   ticketCount: number;
   status: BookingStatus;
+  paymentStatus: BookingPaymentStatus;
+  paymentTransactionId: string | null;
+  paymentCompletedAt: Date | null;
+  paymentFailedAt: Date | null;
+  paymentRefundedAt: Date | null;
+  paymentAmountPence: number | null;
+  paymentRefundedAmountPence: number | null;
+  paymentCurrency: string | null;
+  stripeCheckoutSessionId: string | null;
   createdAt: Date;
   smsConfirmationSentAt: Date | null;
   smsReminderSentAt: Date | null;

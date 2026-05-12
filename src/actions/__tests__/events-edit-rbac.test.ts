@@ -517,7 +517,7 @@ describe("deleteEventAction", () => {
     expect(result.message).toMatch(/event not found/i);
   });
 
-  it("rejects paid public bookings without an external booking link", async () => {
+  it("allows paid public bookings without an external booking link for Stripe Checkout", async () => {
     getUserMock.mockResolvedValue({ id: USER_A, role: "administrator", venueId: null });
     loadCtxMock.mockResolvedValue({
       venueId: VENUE_A,
@@ -541,7 +541,12 @@ describe("deleteEventAction", () => {
     const eq = vi.fn(() => ({ maybeSingle }));
     const select = vi.fn(() => ({ eq }));
     vi.mocked(createSupabaseAdminClient).mockReturnValue({
-      from: vi.fn(() => ({ select })),
+      from: vi.fn(() => ({
+        select,
+        update: vi.fn(() => ({
+          eq: vi.fn().mockResolvedValue({ error: null }),
+        })),
+      })),
     } as never);
 
     const result = await updateBookingSettingsAction({
@@ -551,8 +556,7 @@ describe("deleteEventAction", () => {
       maxTicketsPerBooking: 5,
     });
 
-    expect(result.success).toBe(false);
-    expect(result.message).toMatch(/external booking link/i);
+    expect(result.success).toBe(true);
   });
 });
 

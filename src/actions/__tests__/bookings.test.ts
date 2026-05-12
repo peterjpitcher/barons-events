@@ -172,6 +172,31 @@ describe("createBookingAction", () => {
     if (!result.success) expect(result.error).toMatch(/security/i);
   });
 
+  it("rejects crafted paid-format submissions from the free booking action", async () => {
+    const eventMaybeSingle = vi.fn().mockResolvedValue({
+      data: { booking_type: "paid_standing" },
+      error: null,
+    });
+    mockCreateSupabaseAdminClient.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "events") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({ maybeSingle: eventMaybeSingle }),
+            }),
+          };
+        }
+        return {};
+      }),
+    } as never);
+
+    const result = await createBookingAction(VALID_INPUT);
+
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error).toMatch(/payment flow/i);
+    expect(mockCreateBookingAtomic).not.toHaveBeenCalled();
+  });
+
   it("should return booking_limit_reached from RPC", async () => {
     mockCreateBookingAtomic.mockResolvedValue({ ok: false, reason: "booking_limit_reached" });
     const result = await createBookingAction(VALID_INPUT);

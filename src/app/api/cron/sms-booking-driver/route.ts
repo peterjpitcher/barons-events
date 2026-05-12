@@ -8,7 +8,7 @@ import {
   sendCampaignSms,
   type CampaignEvent,
 } from "@/lib/sms-campaign";
-import { isBookingFormat, isPaidBookingFormat } from "@/lib/booking-format";
+import { isBookingFormat } from "@/lib/booking-format";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -80,15 +80,6 @@ export async function GET(request: Request): Promise<NextResponse> {
       seoSlug: row.seo_slug as string | null,
       maxTicketsPerBooking: (row.max_tickets_per_booking as number) || 10,
     };
-
-    if (isPaidBookingFormat(campaignEvent.bookingType) && !campaignEvent.bookingUrl) {
-      console.log(JSON.stringify({
-        event: "cron.skip_paid_missing_booking_url",
-        eventId: campaignEvent.id,
-        wave,
-      }));
-      continue;
-    }
 
     // Get audience
     const { data: audience, error: audienceError } = await db.rpc("get_campaign_audience", {

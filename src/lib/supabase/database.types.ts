@@ -624,6 +624,11 @@ export type Database = {
           id: string
           last_name: string | null
           mobile: string
+          payment_completed_at: string | null
+          payment_failed_at: string | null
+          payment_refunded_at: string | null
+          payment_status: string
+          payment_transaction_id: string | null
           sms_confirmation_sent_at: string | null
           sms_post_event_sent_at: string | null
           sms_reminder_sent_at: string | null
@@ -639,6 +644,11 @@ export type Database = {
           id?: string
           last_name?: string | null
           mobile: string
+          payment_completed_at?: string | null
+          payment_failed_at?: string | null
+          payment_refunded_at?: string | null
+          payment_status?: string
+          payment_transaction_id?: string | null
           sms_confirmation_sent_at?: string | null
           sms_post_event_sent_at?: string | null
           sms_reminder_sent_at?: string | null
@@ -654,6 +664,11 @@ export type Database = {
           id?: string
           last_name?: string | null
           mobile?: string
+          payment_completed_at?: string | null
+          payment_failed_at?: string | null
+          payment_refunded_at?: string | null
+          payment_status?: string
+          payment_transaction_id?: string | null
           sms_confirmation_sent_at?: string | null
           sms_post_event_sent_at?: string | null
           sms_reminder_sent_at?: string | null
@@ -675,7 +690,167 @@ export type Database = {
             referencedRelation: "events"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "event_bookings_payment_transaction_id_fkey"
+            columns: ["payment_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "payment_transactions"
+            referencedColumns: ["id"]
+          },
         ]
+      }
+      payment_transactions: {
+        Row: {
+          amount_pence: number
+          booking_id: string
+          completed_at: string | null
+          created_at: string
+          currency: string
+          event_id: string
+          failed_at: string | null
+          id: string
+          idempotency_key: string
+          metadata: Json
+          refunded_amount_pence: number
+          refunded_at: string | null
+          status: string
+          stripe_checkout_session_id: string
+          stripe_customer_id: string | null
+          stripe_payment_intent_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount_pence: number
+          booking_id: string
+          completed_at?: string | null
+          created_at?: string
+          currency?: string
+          event_id: string
+          failed_at?: string | null
+          id?: string
+          idempotency_key: string
+          metadata?: Json
+          refunded_amount_pence?: number
+          refunded_at?: string | null
+          status?: string
+          stripe_checkout_session_id: string
+          stripe_customer_id?: string | null
+          stripe_payment_intent_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount_pence?: number
+          booking_id?: string
+          completed_at?: string | null
+          created_at?: string
+          currency?: string
+          event_id?: string
+          failed_at?: string | null
+          id?: string
+          idempotency_key?: string
+          metadata?: Json
+          refunded_amount_pence?: number
+          refunded_at?: string | null
+          status?: string
+          stripe_checkout_session_id?: string
+          stripe_customer_id?: string | null
+          stripe_payment_intent_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_transactions_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "event_bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_transactions_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payment_refunds: {
+        Row: {
+          admin_user_id: string | null
+          amount_pence: number
+          booking_id: string
+          created_at: string
+          event_id: string
+          id: string
+          idempotency_key: string
+          reason: string | null
+          status: string
+          stripe_refund_id: string
+          transaction_id: string
+        }
+        Insert: {
+          admin_user_id?: string | null
+          amount_pence: number
+          booking_id: string
+          created_at?: string
+          event_id: string
+          id?: string
+          idempotency_key: string
+          reason?: string | null
+          status?: string
+          stripe_refund_id: string
+          transaction_id: string
+        }
+        Update: {
+          admin_user_id?: string | null
+          amount_pence?: number
+          booking_id?: string
+          created_at?: string
+          event_id?: string
+          id?: string
+          idempotency_key?: string
+          reason?: string | null
+          status?: string
+          stripe_refund_id?: string
+          transaction_id?: string
+        }
+        Relationships: []
+      }
+      payment_webhooks: {
+        Row: {
+          attempts: number
+          error_message: string | null
+          event_type: string
+          id: string
+          payload_summary: Json
+          processed_at: string | null
+          received_at: string
+          status: string
+          stripe_event_id: string
+        }
+        Insert: {
+          attempts?: number
+          error_message?: string | null
+          event_type: string
+          id?: string
+          payload_summary?: Json
+          processed_at?: string | null
+          received_at?: string
+          status?: string
+          stripe_event_id: string
+        }
+        Update: {
+          attempts?: number
+          error_message?: string | null
+          event_type?: string
+          id?: string
+          payload_summary?: Json
+          processed_at?: string | null
+          received_at?: string
+          status?: string
+          stripe_event_id?: string
+        }
+        Relationships: []
       }
       event_creation_batches: {
         Row: {
