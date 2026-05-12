@@ -12,6 +12,7 @@ import type { ActionResult } from "@/lib/types";
 import { canOfficeWorkerUseVenueSelection } from "@/lib/visibility";
 import { callProposeEventDraftRpc } from "@/lib/events/save-rpc";
 import { logEventAction } from "@/lib/observability/event-action-log";
+import { normaliseEventDateTimeForStorage } from "@/lib/datetime";
 
 /**
  * Wave 3 — pre-event approval server actions.
@@ -109,13 +110,14 @@ export async function proposeEventAction(
   }
 
   const idempotencyKey = readProposalIdempotencyKey(formData);
+  const startAtIso = normaliseEventDateTimeForStorage(parsed.data.startAt);
 
   if (shouldUseSaveEventRpc()) {
     const result = await callProposeEventDraftRpc({
       payload: {
         venue_ids: parsed.data.venueIds,
         title: parsed.data.title,
-        start_at: parsed.data.startAt,
+        start_at: startAtIso,
         notes: parsed.data.notes
       },
       idempotencyKey,
@@ -147,7 +149,7 @@ export async function proposeEventAction(
       created_by: user.id,
       venue_ids: parsed.data.venueIds,
       title: parsed.data.title,
-      start_at: parsed.data.startAt,
+      start_at: startAtIso,
       notes: parsed.data.notes
     },
     p_idempotency_key: idempotencyKey

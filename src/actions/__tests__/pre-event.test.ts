@@ -119,7 +119,36 @@ describe("proposeEventAction", () => {
     expect(rpcMock).toHaveBeenCalledWith(
       "create_multi_venue_event_proposals",
       expect.objectContaining({
-        p_payload: expect.objectContaining({ venue_ids: [VENUE_B] }),
+        p_payload: expect.objectContaining({
+          venue_ids: [VENUE_B],
+          start_at: "2026-05-01T10:00:00.000Z"
+        }),
+      }),
+    );
+  });
+
+  it("normalises naive proposal times as London local time before calling the legacy RPC", async () => {
+    getUserMock.mockResolvedValue({ id: "ow-1", role: "office_worker", venueId: null });
+    selectInMock.mockResolvedValue({
+      data: [{ id: VENUE_A }],
+      error: null,
+    });
+    rpcMock.mockResolvedValue({ data: { event_id: "e1" }, error: null });
+
+    const result = await proposeEventAction(undefined, fd({
+      title: "Test",
+      startAt: "2026-05-01T10:00",
+      notes: "Test",
+      venueIds: VENUE_A,
+    }));
+
+    expect(result.success).toBe(true);
+    expect(rpcMock).toHaveBeenCalledWith(
+      "create_multi_venue_event_proposals",
+      expect.objectContaining({
+        p_payload: expect.objectContaining({
+          start_at: "2026-05-01T09:00:00.000Z"
+        }),
       }),
     );
   });
@@ -226,7 +255,48 @@ describe("proposeEventAction", () => {
       p_payload: {
         venue_ids: [VENUE_A, VENUE_B],
         title: "Test",
-        start_at: "2026-05-01T10:00:00Z",
+        start_at: "2026-05-01T10:00:00.000Z",
+        notes: "Test"
+      },
+      p_idempotency_key: IDEMP_KEY,
+      p_operation_id: OP_ID
+    });
+  });
+
+  it("normalises naive proposal times as London local time before calling the authenticated RPC", async () => {
+    process.env.EVENT_SAVE_USE_RPC = "true";
+    getUserMock.mockResolvedValue({ id: "ow-1", role: "office_worker", venueId: null });
+    selectInMock.mockResolvedValue({
+      data: [{ id: VENUE_A }],
+      error: null,
+    });
+    rpcMock.mockResolvedValue({
+      data: {
+        success: true,
+        event_id: "550e8400-e29b-41d4-a716-446655440099",
+        batch_id: "550e8400-e29b-41d4-a716-446655440088",
+        venue_ids: [VENUE_A],
+        operation_id: OP_ID,
+        warnings: []
+      },
+      error: null
+    });
+
+    const result = await proposeEventAction(undefined, fd({
+      operation_id: OP_ID,
+      idempotency_key: IDEMP_KEY,
+      title: "Test",
+      startAt: "2026-05-01T10:00",
+      notes: "Test",
+      venueIds: VENUE_A,
+    }));
+
+    expect(result.success).toBe(true);
+    expect(rpcMock).toHaveBeenCalledWith("propose_event_draft", {
+      p_payload: {
+        venue_ids: [VENUE_A],
+        title: "Test",
+        start_at: "2026-05-01T09:00:00.000Z",
         notes: "Test"
       },
       p_idempotency_key: IDEMP_KEY,
