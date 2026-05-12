@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import dayjs from "dayjs";
 import type { BookingGroup, BookingRow } from "@/lib/all-bookings";
 import type { BookingStatus } from "@/lib/types";
 
@@ -11,6 +10,32 @@ interface Props {
 
 type StatusFilter = "all" | BookingStatus;
 type DateFilter = "all" | "this_month" | "next_30_days";
+
+const londonDateFormatter = new Intl.DateTimeFormat("en-GB", {
+  day: "numeric",
+  month: "short",
+  timeZone: "Europe/London",
+});
+
+const londonDateTimeFormatter = new Intl.DateTimeFormat("en-GB", {
+  day: "numeric",
+  month: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+  timeZone: "Europe/London",
+});
+
+function toDate(value: Date | string): Date {
+  return value instanceof Date ? value : new Date(value);
+}
+
+function formatLondonDate(value: Date | string): string {
+  return londonDateFormatter.format(toDate(value));
+}
+
+function formatLondonDateTime(value: Date | string): string {
+  return londonDateTimeFormatter.format(toDate(value));
+}
 
 function StatusBadge({ status }: { status: BookingStatus }) {
   if (status === "confirmed") {
@@ -38,9 +63,16 @@ function PaymentBadge({ booking }: { booking: BookingRow }) {
         ? "bg-amber-100 text-amber-800"
         : "bg-red-100 text-red-800";
   return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${classes}`}>
-      {booking.paymentStatus.replace(/_/g, " ")}
-    </span>
+    <div className="space-y-1">
+      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${classes}`}>
+        {booking.paymentStatus.replace(/_/g, " ")}
+      </span>
+      {booking.paymentCompletedAt ? (
+        <p className="text-xs text-[#637c8c]">
+          Paid {formatLondonDateTime(booking.paymentCompletedAt)}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -50,20 +82,19 @@ export function BookingsView({ groups }: Props) {
   const [dateFilter, setDateFilter] = useState<DateFilter>("all");
 
   const filteredGroups = useMemo<BookingGroup[]>(() => {
-    const now = dayjs();
-    const startOfMonth = now.startOf("month");
-    const endOfMonth = now.endOf("month");
-    const in30 = now.add(30, "day");
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+    const in30 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
     return groups
       .map((group) => {
         // Date filter on event start
+        const start = toDate(group.eventStartAt);
         if (dateFilter === "this_month") {
-          const start = dayjs(group.eventStartAt);
-          if (start.isBefore(startOfMonth) || start.isAfter(endOfMonth)) return null;
+          if (start < startOfMonth || start > endOfMonth) return null;
         } else if (dateFilter === "next_30_days") {
-          const start = dayjs(group.eventStartAt);
-          if (start.isBefore(now) || start.isAfter(in30)) return null;
+          if (start < now || start > in30) return null;
         }
 
         // Filter bookings within the group
@@ -151,7 +182,7 @@ export function BookingsView({ groups }: Props) {
                   {group.eventTitle}
                 </h2>
                 <span className="text-sm text-[#637c8c]">
-                  {dayjs(group.eventStartAt).format("ddd D MMM")}
+                  {formatLondonDate(group.eventStartAt)}
                   {group.venueName ? ` · ${group.venueName}` : ""}
                 </span>
                 <span className="text-xs text-[#637c8c] sm:ml-auto">
@@ -196,7 +227,7 @@ export function BookingsView({ groups }: Props) {
                           {booking.ticketCount}
                         </td>
                         <td className="px-4 py-2 text-[#637c8c]">
-                          {dayjs(booking.createdAt).format("D MMM")}
+                          {formatLondonDateTime(booking.createdAt)}
                         </td>
                         <td className="px-4 py-2">
                           <StatusBadge status={booking.status} />

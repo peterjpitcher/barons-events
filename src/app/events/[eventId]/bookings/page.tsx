@@ -177,6 +177,14 @@ export default async function BookingsPage({
                           ) : null}
                         </p>
                       ) : null}
+                      {booking.paymentCompletedAt ? (
+                        <p className="text-xs text-subtle">
+                          Paid{" "}
+                          <time dateTime={booking.paymentCompletedAt.toISOString()}>
+                            {dateFormatter.format(booking.paymentCompletedAt)}
+                          </time>
+                        </p>
+                      ) : null}
                     </div>
                   </td>
                   <td className="px-4 py-3 text-right">

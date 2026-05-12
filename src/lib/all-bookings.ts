@@ -12,6 +12,7 @@ export interface BookingRow {
   paymentStatus: BookingPaymentStatus;
   paymentAmountPence: number | null;
   paymentCurrency: string | null;
+  paymentCompletedAt: Date | null;
   createdAt: Date;
 }
 
@@ -128,6 +129,7 @@ export async function listAllBookingsForUser(
       paymentStatus: ((row.payment_status as BookingPaymentStatus | null) ?? "not_required"),
       paymentAmountPence: typeof paymentTransaction?.amount_pence === "number" ? paymentTransaction.amount_pence : null,
       paymentCurrency: typeof paymentTransaction?.currency === "string" ? paymentTransaction.currency : null,
+      paymentCompletedAt: row.payment_completed_at ? new Date(row.payment_completed_at as string) : null,
       createdAt:   new Date(row.created_at as string),
     });
 
