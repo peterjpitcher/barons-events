@@ -4,6 +4,9 @@ export type CreateOrderParams = {
   bookingId: string;
   eventId: string;
   eventName: string;
+  venueName?: string | null;
+  eventDateLabel?: string | null;
+  accountingLabel: string;
   ticketCount: number;
   unitPricePence: number;
   customerEmail?: string | null;

@@ -46,6 +46,19 @@ export const stripePaymentProvider: PaymentProvider = {
         cancel_url: params.cancelUrl,
         client_reference_id: params.bookingId,
         customer_email: params.customerEmail || undefined,
+        payment_intent_data: {
+          description: params.accountingLabel,
+          metadata: {
+            bookingId: params.bookingId,
+            eventId: params.eventId,
+            eventName: params.eventName,
+            venueName: params.venueName ?? "",
+            eventDate: params.eventDateLabel ?? "",
+            ticketCount: String(params.ticketCount),
+            unitPricePence: String(params.unitPricePence),
+            customerName: params.customerName ?? "",
+          },
+        },
         line_items: [
           {
             quantity: params.ticketCount,
@@ -54,8 +67,11 @@ export const stripePaymentProvider: PaymentProvider = {
               unit_amount: params.unitPricePence,
               product_data: {
                 name: params.eventName,
+                description: params.accountingLabel,
                 metadata: {
                   eventId: params.eventId,
+                  venueName: params.venueName ?? "",
+                  eventDate: params.eventDateLabel ?? "",
                 },
               },
             },
@@ -64,6 +80,10 @@ export const stripePaymentProvider: PaymentProvider = {
         metadata: {
           bookingId: params.bookingId,
           eventId: params.eventId,
+          eventName: params.eventName,
+          venueName: params.venueName ?? "",
+          eventDate: params.eventDateLabel ?? "",
+          accountingLabel: params.accountingLabel,
           ticketCount: String(params.ticketCount),
           unitPricePence: String(params.unitPricePence),
           customerName: params.customerName ?? "",

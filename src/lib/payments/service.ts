@@ -20,6 +20,7 @@ import {
 } from "@/lib/payments/config";
 import { stripePaymentProvider } from "@/lib/payments/providers/stripe";
 import type { SessionStatus } from "@/lib/payments/types";
+import { formatInLondon } from "@/lib/datetime";
 
 export type CreatePaidCheckoutInput = {
   eventId: string;
@@ -126,11 +127,16 @@ async function fetchPaidEvent(eventId: string): Promise<{
   booking_type: string | null;
   booking_url: string | null;
   ticket_price: unknown;
+  start_at: string | null;
+  venue_name: string | null;
 } | null> {
   const db = createSupabaseAdminClient();
   const { data, error } = await db
     .from("events")
-    .select("id, title, public_title, booking_type, booking_url, ticket_price, booking_enabled, status, deleted_at")
+    .select(`
+      id, title, public_title, booking_type, booking_url, ticket_price, booking_enabled, status, deleted_at, start_at,
+      venue:venues!events_venue_id_fkey(name)
+    `)
     .eq("id", eventId)
     .maybeSingle();
 
@@ -148,6 +154,10 @@ async function fetchPaidEvent(eventId: string): Promise<{
     return null;
   }
 
+  const venueRaw = Array.isArray(row.venue)
+    ? row.venue[0] as Record<string, unknown> | undefined
+    : row.venue as Record<string, unknown> | undefined;
+
   return {
     id: row.id as string,
     title: row.title as string,
@@ -155,7 +165,33 @@ async function fetchPaidEvent(eventId: string): Promise<{
     booking_type: bookingFormat,
     booking_url: null,
     ticket_price: row.ticket_price,
+    start_at: (row.start_at as string | null) ?? null,
+    venue_name: (venueRaw?.name as string | null | undefined) ?? null,
   };
+}
+
+function buildEventDateLabel(startAt: string | null): string | null {
+  if (!startAt) return null;
+  const { date, time } = formatInLondon(startAt);
+  return `${date} ${time}`;
+}
+
+function buildStripeAccountingLabel(params: {
+  eventName: string;
+  venueName: string | null;
+  eventDateLabel: string | null;
+  bookingId: string;
+}): string {
+  return [
+    "BaronsHub event booking",
+    params.eventName,
+    params.venueName,
+    params.eventDateLabel,
+    `Ref ${params.bookingId.slice(0, 8)}`,
+  ]
+    .filter(Boolean)
+    .join(" | ")
+    .slice(0, 500);
 }
 
 async function findExistingPaidBooking(params: {
@@ -230,12 +266,23 @@ export async function createPaidCheckoutSession(
     unitPricePence,
   });
   const urls = checkoutUrls();
+  const eventName = event.public_title ?? event.title;
+  const eventDateLabel = buildEventDateLabel(event.start_at);
+  const accountingLabel = buildStripeAccountingLabel({
+    eventName,
+    venueName: event.venue_name,
+    eventDateLabel,
+    bookingId,
+  });
 
   try {
     const order = await stripePaymentProvider.createOrder({
       bookingId,
       eventId: input.eventId,
-      eventName: event.public_title ?? event.title,
+      eventName,
+      venueName: event.venue_name,
+      eventDateLabel,
+      accountingLabel,
       ticketCount: input.ticketCount,
       unitPricePence,
       customerEmail: input.email,
