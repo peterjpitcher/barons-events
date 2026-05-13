@@ -4,6 +4,11 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/types";
 import { formatSpacesLabel } from "@/lib/venue-spaces";
 import { getTodayLondonIsoDate, formatInLondon } from "@/lib/datetime";
+import {
+  buildMonthlySalesReportAttachments,
+  renderMonthlySalesReportEmail,
+  type SalesReport,
+} from "@/lib/monthly-sales-report";
 
 const RESEND_FROM_ADDRESS = process.env.RESEND_FROM_EMAIL ?? "BaronsHub <noreply@auth.orangejelly.co.uk>";
 const BOOKING_RESEND_FROM_ADDRESS =
@@ -1503,4 +1508,42 @@ export async function sendWeeklyDigestEmail(): Promise<{ sent: number; failed: n
   }
 
   return { sent, failed, skippedAssignees };
+}
+
+export async function sendMonthlySalesReportEmail(params: {
+  report: SalesReport;
+  recipientEmail: string;
+  testMode?: boolean;
+}): Promise<{ sent: boolean; recipientEmail: string; reportMonth: string; transactionCount: number }> {
+  const resend = getResendClient();
+  if (!resend) {
+    console.warn("sendMonthlySalesReportEmail skipped: RESEND_API_KEY not configured");
+    return {
+      sent: false,
+      recipientEmail: params.recipientEmail,
+      reportMonth: params.report.period.key,
+      transactionCount: params.report.lineItems.length,
+    };
+  }
+
+  const email = renderMonthlySalesReportEmail(params.report, {
+    testMode: params.testMode ?? false,
+    testRecipientEmail: params.testMode ? params.recipientEmail : undefined,
+  });
+
+  await resend.emails.send({
+    from: RESEND_FROM_ADDRESS,
+    to: [params.recipientEmail],
+    subject: email.subject,
+    html: email.html,
+    text: email.text,
+    attachments: buildMonthlySalesReportAttachments(params.report),
+  });
+
+  return {
+    sent: true,
+    recipientEmail: params.recipientEmail,
+    reportMonth: params.report.period.key,
+    transactionCount: params.report.lineItems.length,
+  };
 }

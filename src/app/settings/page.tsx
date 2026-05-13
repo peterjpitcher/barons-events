@@ -52,6 +52,11 @@ export default async function SettingsPage() {
   ]);
 
   const labourRateGbp = Number(businessSettings?.labour_rate_gbp ?? 12.71);
+  const accountantSalesReportEnabled = businessSettings?.accountant_sales_report_enabled !== false;
+  const accountantSalesReportEmail =
+    typeof businessSettings?.accountant_sales_report_email === "string" && businessSettings.accountant_sales_report_email
+      ? businessSettings.accountant_sales_report_email
+      : "julieware@hotmail.com";
 
   type SltRowShape = { users?: { id?: string; full_name?: string | null; email?: string | null; deactivated_at?: string | null } };
   const members = (sltRows as SltRowShape[])
@@ -75,6 +80,8 @@ export default async function SettingsPage() {
       content: (
         <BusinessSettingsManager
           labourRateGbp={labourRateGbp}
+          accountantSalesReportEnabled={accountantSalesReportEnabled}
+          accountantSalesReportEmail={accountantSalesReportEmail}
           updatedAt={businessSettings?.updated_at ?? null}
           updatedBy={businessSettings?.updated_by ?? null}
         />

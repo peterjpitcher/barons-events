@@ -334,18 +334,24 @@ export type Database = {
       }
       business_settings: {
         Row: {
+          accountant_sales_report_email: string
+          accountant_sales_report_enabled: boolean
           id: boolean
           labour_rate_gbp: number
           updated_at: string
           updated_by: string | null
         }
         Insert: {
+          accountant_sales_report_email?: string
+          accountant_sales_report_enabled?: boolean
           id?: boolean
           labour_rate_gbp?: number
           updated_at?: string
           updated_by?: string | null
         }
         Update: {
+          accountant_sales_report_email?: string
+          accountant_sales_report_enabled?: boolean
           id?: boolean
           labour_rate_gbp?: number
           updated_at?: string

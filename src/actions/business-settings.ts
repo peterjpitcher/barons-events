@@ -11,7 +11,15 @@ const updateSettingsSchema = z.object({
   labourRateGbp: z.coerce
     .number()
     .positive("Rate must be greater than zero")
-    .max(999.99, "Rate must be £999.99 or less")
+    .max(999.99, "Rate must be £999.99 or less"),
+  accountantSalesReportEnabled: z.preprocess(
+    (value) => value === "on" || value === "true",
+    z.boolean()
+  ),
+  accountantSalesReportEmail: z.string()
+    .trim()
+    .toLowerCase()
+    .email({ message: "Use a valid accountant email address." })
 });
 
 export async function updateBusinessSettingsAction(
@@ -28,7 +36,9 @@ export async function updateBusinessSettingsAction(
   }
 
   const parsed = updateSettingsSchema.safeParse({
-    labourRateGbp: formData.get("labourRateGbp")
+    labourRateGbp: formData.get("labourRateGbp"),
+    accountantSalesReportEnabled: formData.get("accountantSalesReportEnabled"),
+    accountantSalesReportEmail: formData.get("accountantSalesReportEmail")
   });
   if (!parsed.success) {
     return {
@@ -42,16 +52,26 @@ export async function updateBusinessSettingsAction(
    
   const { data: before } = await (db as any)
     .from("business_settings")
-    .select("labour_rate_gbp")
+    .select("labour_rate_gbp, accountant_sales_report_enabled, accountant_sales_report_email")
     .eq("id", true)
     .maybeSingle();
   const oldValue = before?.labour_rate_gbp ?? null;
+  const oldReportEnabled = before?.accountant_sales_report_enabled ?? null;
+  const oldReportEmail = before?.accountant_sales_report_email ?? null;
+
+  const changedFields = [
+    oldValue !== parsed.data.labourRateGbp ? "labour_rate_gbp" : null,
+    oldReportEnabled !== parsed.data.accountantSalesReportEnabled ? "accountant_sales_report_enabled" : null,
+    oldReportEmail !== parsed.data.accountantSalesReportEmail ? "accountant_sales_report_email" : null,
+  ].filter((field): field is string => field !== null);
 
    
   const { error } = await (db as any)
     .from("business_settings")
     .update({
       labour_rate_gbp: parsed.data.labourRateGbp,
+      accountant_sales_report_enabled: parsed.data.accountantSalesReportEnabled,
+      accountant_sales_report_email: parsed.data.accountantSalesReportEmail,
       updated_by: user.id,
       updated_at: new Date().toISOString()
     })
@@ -68,12 +88,22 @@ export async function updateBusinessSettingsAction(
     action: "business_settings.updated",
     actorId: user.id,
     meta: {
-      changed_fields: ["labour_rate_gbp"],
-      old_value: oldValue,
-      new_value: parsed.data.labourRateGbp
+      changed_fields: changedFields,
+      labour_rate_gbp: {
+        old_value: oldValue,
+        new_value: parsed.data.labourRateGbp
+      },
+      accountant_sales_report_enabled: {
+        old_value: oldReportEnabled,
+        new_value: parsed.data.accountantSalesReportEnabled
+      },
+      accountant_sales_report_email: {
+        old_value: oldReportEmail,
+        new_value: parsed.data.accountantSalesReportEmail
+      }
     }
   });
 
   revalidatePath("/settings");
-  return { success: true, message: "Labour rate updated." };
+  return { success: true, message: "Business settings updated." };
 }
