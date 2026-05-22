@@ -24,7 +24,6 @@ type BookingUpdateTokenPayload = {
   v: 1;
   bookingId: string;
   eventId: string;
-  ticketCount: number;
   exp: number;
 };
 
@@ -70,7 +69,6 @@ function verifyBookingUpdateToken(token: string): BookingUpdateTokenPayload | nu
       payload.v !== 1 ||
       typeof payload.bookingId !== "string" ||
       typeof payload.eventId !== "string" ||
-      typeof payload.ticketCount !== "number" ||
       typeof payload.exp !== "number" ||
       payload.exp < Date.now()
     ) {
@@ -121,8 +119,6 @@ export type CreateBookingResult =
       existingBookingId: string;
       /** The ticket count already on record. */
       existingTicketCount: number;
-      /** The ticket count the user asked for this time. */
-      requestedTicketCount: number;
       /** Short-lived signed proof required to update the existing booking. */
       updateToken: string;
     }
@@ -192,7 +188,6 @@ export async function createBookingAction(
           v: 1,
           bookingId: existingBooking.id,
           eventId: data.eventId,
-          ticketCount: data.ticketCount,
           exp: Date.now() + BOOKING_UPDATE_TOKEN_TTL_MS
         });
         return {
@@ -200,7 +195,6 @@ export async function createBookingAction(
           error: "existing_booking",
           existingBookingId: existingBooking.id,
           existingTicketCount: existingBooking.ticket_count,
-          requestedTicketCount: data.ticketCount,
           updateToken
         };
       }
@@ -290,9 +284,8 @@ export type UpdateExistingBookingResult =
 
 /**
  * Update an existing confirmed booking's ticket count. Called from the
- * public booking form when the user confirms the "you already have a
- * booking for this event — update it?" prompt returned by
- * createBookingAction.
+ * public booking form when the user amends the total number of people from
+ * the "you already have a booking" prompt returned by createBookingAction.
  *
  * Capacity is checked in the app layer (current confirmed ticket_count sum
  * + delta must fit within the event's total_capacity). A small race
@@ -314,15 +307,13 @@ export async function updateExistingBookingAction(
   const tokenPayload = verifyBookingUpdateToken(parsed.data.updateToken);
   if (
     !tokenPayload ||
-    tokenPayload.bookingId !== parsed.data.bookingId ||
-    tokenPayload.ticketCount !== parsed.data.ticketCount
+    tokenPayload.bookingId !== parsed.data.bookingId
   ) {
     return { success: false, error: "Update link expired. Please submit the booking form again." };
   }
 
   const db = createSupabaseAdminClient();
 
-   
   const { data: booking, error: bookingError } = await (db as any)
     .from("event_bookings")
     .select("id, event_id, customer_id, ticket_count, status")
@@ -341,17 +332,22 @@ export async function updateExistingBookingAction(
 
   const delta = parsed.data.ticketCount - (booking.ticket_count as number);
 
+  const { data: eventRow } = await (db as any)
+    .from("events")
+    .select("total_capacity, max_tickets_per_booking")
+    .eq("id", booking.event_id)
+    .maybeSingle();
+
+  if (
+    typeof eventRow?.max_tickets_per_booking === "number" &&
+    parsed.data.ticketCount > eventRow.max_tickets_per_booking
+  ) {
+    return { success: false, error: "too_many_tickets" };
+  }
+
   if (delta > 0) {
     // Need to check capacity before growing the booking.
-     
-    const { data: eventRow } = await (db as any)
-      .from("events")
-      .select("total_capacity")
-      .eq("id", booking.event_id)
-      .maybeSingle();
-
     if (eventRow?.total_capacity != null) {
-       
       const { data: confirmed } = await (db as any)
         .from("event_bookings")
         .select("ticket_count")

@@ -249,7 +249,6 @@ describe("createBookingAction", () => {
     expect(result.success).toBe(false);
     if (!result.success && "updateToken" in result) {
       expect(result.updateToken).toMatch(/^[^.]+\.[^.]+$/);
-      expect(result.requestedTicketCount).toBe(4);
     } else {
       throw new Error("Expected existing booking result");
     }
@@ -316,9 +315,53 @@ describe("updateExistingBookingAction", () => {
     expect(from).not.toHaveBeenCalled();
   });
 
-  it("rejects a valid token when the requested ticket count is changed", async () => {
+  it("allows a valid amendment token to update a different ticket count", async () => {
     const token = await issueUpdateToken(3);
-    const from = vi.fn();
+    const updateEq = vi.fn().mockResolvedValue({ error: null });
+    const from = vi.fn((table: string) => {
+      if (table === "event_bookings") {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn((field: string) => {
+              if (field === "id") {
+                return {
+                  maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                      id: "22222222-2222-4222-8222-222222222222",
+                      event_id: VALID_INPUT.eventId,
+                      customer_id: "11111111-1111-4111-8111-111111111111",
+                      ticket_count: 1,
+                      status: "confirmed"
+                    },
+                    error: null
+                  })
+                };
+              }
+              return {
+                eq: vi.fn().mockResolvedValue({
+                  data: [{ ticket_count: 1 }],
+                  error: null
+                })
+              };
+            })
+          }),
+          update: vi.fn().mockReturnValue({ eq: updateEq })
+        };
+      }
+      if (table === "events") {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              maybeSingle: vi.fn().mockResolvedValue({
+                data: { total_capacity: 10, max_tickets_per_booking: 5 },
+                error: null
+              })
+            })
+          })
+        };
+      }
+      return {};
+    });
     mockCreateSupabaseAdminClient.mockReturnValue({ from } as never);
 
     const result = await updateExistingBookingAction({
@@ -327,8 +370,8 @@ describe("updateExistingBookingAction", () => {
       updateToken: token
     });
 
-    expect(result.success).toBe(false);
-    expect(from).not.toHaveBeenCalled();
+    expect(result.success).toBe(true);
+    expect(updateEq).toHaveBeenCalledWith("id", "22222222-2222-4222-8222-222222222222");
   });
 
   it("updates the booking when the signed token matches", async () => {
@@ -385,6 +428,66 @@ describe("updateExistingBookingAction", () => {
 
     expect(result.success).toBe(true);
     expect(updateEq).toHaveBeenCalledWith("id", "22222222-2222-4222-8222-222222222222");
+  });
+
+  it("rejects totals above the event maximum before updating", async () => {
+    const token = await issueUpdateToken(3);
+    const updateEq = vi.fn().mockResolvedValue({ error: null });
+    const from = vi.fn((table: string) => {
+      if (table === "event_bookings") {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn((field: string) => {
+              if (field === "id") {
+                return {
+                  maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                      id: "22222222-2222-4222-8222-222222222222",
+                      event_id: VALID_INPUT.eventId,
+                      customer_id: "11111111-1111-4111-8111-111111111111",
+                      ticket_count: 1,
+                      status: "confirmed"
+                    },
+                    error: null
+                  })
+                };
+              }
+              return {
+                eq: vi.fn().mockResolvedValue({
+                  data: [{ ticket_count: 1 }],
+                  error: null
+                })
+              };
+            })
+          }),
+          update: vi.fn().mockReturnValue({ eq: updateEq })
+        };
+      }
+      if (table === "events") {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              maybeSingle: vi.fn().mockResolvedValue({
+                data: { total_capacity: 10, max_tickets_per_booking: 3 },
+                error: null
+              })
+            })
+          })
+        };
+      }
+      return {};
+    });
+    mockCreateSupabaseAdminClient.mockReturnValue({ from } as never);
+
+    const result = await updateExistingBookingAction({
+      bookingId: "22222222-2222-4222-8222-222222222222",
+      ticketCount: 4,
+      updateToken: token
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error).toBe("too_many_tickets");
+    expect(updateEq).not.toHaveBeenCalled();
   });
 
   it("rate-limits update attempts", async () => {

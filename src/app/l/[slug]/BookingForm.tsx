@@ -10,7 +10,6 @@ import { TurnstileWidget } from "@/components/turnstile-widget";
 type ExistingBookingPrompt = {
   bookingId: string;
   existingTicketCount: number;
-  requestedTicketCount: number;
   updateToken: string;
 };
 
@@ -29,6 +28,10 @@ function formatAmount(amount: number): string {
     style: "currency",
     currency: "GBP",
   }).format(amount);
+}
+
+function peopleLabel(count: number): string {
+  return count === 1 ? "person" : "people";
 }
 
 function paidBookingErrorMessage(error: string): string {
@@ -67,9 +70,9 @@ export function BookingForm({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const [bookedMobile, setBookedMobile] = useState("");
   const [marketingOptIn, setMarketingOptIn] = useState(false);
   const [existingPrompt, setExistingPrompt] = useState<ExistingBookingPrompt | null>(null);
+  const [amendedTicketCount, setAmendedTicketCount] = useState(1);
   const formRef = useRef<HTMLFormElement>(null);
   const bookingFormat = isBookingFormat(bookingType) ? bookingType : null;
   const ctaLabel = getBookingCtaLabel(bookingFormat);
@@ -159,14 +162,14 @@ export function BookingForm({
 
     if (!result.success) {
       if (result.error === "existing_booking" && "existingBookingId" in result) {
-        // Public-flow dedup: surface an update prompt with the existing and
-        // requested counts side-by-side so the user can confirm the change.
+        // Public-flow dedup: surface the existing booking and let the user
+        // explicitly choose the amended total before updating.
         setExistingPrompt({
           bookingId: result.existingBookingId,
           existingTicketCount: result.existingTicketCount,
-          requestedTicketCount: result.requestedTicketCount,
           updateToken: result.updateToken
         });
+        setAmendedTicketCount(result.existingTicketCount);
         return;
       }
       if (result.error === "sold_out") {
@@ -183,7 +186,6 @@ export function BookingForm({
       return;
     }
 
-    setBookedMobile(mobile.trim());
     setSuccess(true);
   }
 
@@ -193,68 +195,95 @@ export function BookingForm({
     setError(null);
     const result = await updateExistingBookingAction({
       bookingId: existingPrompt.bookingId,
-      ticketCount: existingPrompt.requestedTicketCount,
+      ticketCount: amendedTicketCount,
       updateToken: existingPrompt.updateToken
     });
     setLoading(false);
     if (!result.success) {
       if (result.error === "sold_out") {
-        setError("Sorry, there aren't enough seats left to increase this booking.");
+        setError("Sorry, there aren't enough places left to increase this booking.");
+      } else if (result.error === "too_many_tickets") {
+        setError(`Sorry, the maximum booking size is ${maxTickets} ${peopleLabel(maxTickets)}.`);
+      } else if (result.error === "rate_limited") {
+        setError("Too many attempts. Please try again in a few minutes.");
       } else {
         setError(result.error || "Could not update your booking.");
       }
       return;
     }
     setExistingPrompt(null);
-    setBookedMobile(mobile.trim());
     setSuccess(true);
   }
 
   if (existingPrompt) {
-    const { existingTicketCount, requestedTicketCount } = existingPrompt;
-    const isSame = existingTicketCount === requestedTicketCount;
+    const { existingTicketCount } = existingPrompt;
+    const isSame = existingTicketCount === amendedTicketCount;
     return (
       <div className="rounded-lg bg-white border border-[#cbd5db] p-6 space-y-4">
         <div>
           <p className="text-lg font-semibold text-[#273640]">You already have a booking</p>
-          {isSame ? (
-            <p className="mt-1 text-sm text-[#637c8c]">
-              We already have a booking for you on this event for{" "}
-              <strong>{existingTicketCount}</strong>{" "}
-              {existingTicketCount === 1 ? "person" : "people"}. Nothing to update.
-            </p>
-          ) : (
-            <p className="mt-1 text-sm text-[#637c8c]">
-              We already have a booking for you on this event for{" "}
-              <strong>{existingTicketCount}</strong>{" "}
-              {existingTicketCount === 1 ? "person" : "people"}. Would you like to change it to{" "}
-              <strong>{requestedTicketCount}</strong>{" "}
-              {requestedTicketCount === 1 ? "person" : "people"}?
-            </p>
-          )}
+          <p className="mt-1 text-sm text-[#637c8c]">
+            We already have a booking for you on this event for{" "}
+            <strong>{existingTicketCount}</strong>{" "}
+            {peopleLabel(existingTicketCount)}.
+          </p>
+          <p className="mt-2 text-sm text-[#637c8c]">
+            Would you like to amend your total number of people?
+          </p>
+        </div>
+        <div className="flex items-center justify-between rounded-md border border-[#cbd5db] bg-[#f1f4f6] px-3 py-3">
+          <span className="text-sm font-medium text-[#273640]">Total people</span>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setAmendedTicketCount((n) => Math.max(1, n - 1))}
+              disabled={loading || amendedTicketCount <= 1}
+              className="w-8 h-8 rounded-full bg-[#273640] text-white font-bold
+                         disabled:opacity-40 flex items-center justify-center hover:bg-[#637c8c]
+                         focus:outline-none focus:ring-2 focus:ring-[#273640] focus:ring-offset-1"
+              aria-label="Decrease total people"
+            >
+              −
+            </button>
+            <span className="text-lg font-bold w-8 text-center text-[#273640]" aria-live="polite">
+              {amendedTicketCount}
+            </span>
+            <button
+              type="button"
+              onClick={() => setAmendedTicketCount((n) => Math.min(maxTickets, n + 1))}
+              disabled={loading || amendedTicketCount >= maxTickets}
+              className="w-8 h-8 rounded-full bg-[#273640] text-white font-bold
+                         disabled:opacity-40 flex items-center justify-center hover:bg-[#637c8c]
+                         focus:outline-none focus:ring-2 focus:ring-[#273640] focus:ring-offset-1"
+              aria-label="Increase total people"
+            >
+              +
+            </button>
+          </div>
         </div>
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
         <div className="flex flex-wrap gap-2">
-          {!isSame ? (
-            <button
-              type="button"
-              disabled={loading}
-              onClick={handleConfirmUpdate}
-              className="rounded-full bg-[#273640] px-4 py-2 text-sm font-semibold text-white hover:bg-[#637c8c] disabled:opacity-60"
-            >
-              {loading ? "Updating…" : `Yes, update to ${requestedTicketCount}`}
-            </button>
-          ) : null}
+          <button
+            type="button"
+            disabled={loading || isSame}
+            onClick={handleConfirmUpdate}
+            className="rounded-full bg-[#273640] px-4 py-2 text-sm font-semibold text-white hover:bg-[#637c8c] disabled:opacity-60"
+          >
+            {loading
+              ? "Updating…"
+              : `Update total to ${amendedTicketCount} ${peopleLabel(amendedTicketCount)}`}
+          </button>
           <button
             type="button"
             disabled={loading}
             onClick={() => {
               setExistingPrompt(null);
               setError(null);
+              setSuccess(true);
             }}
             className="rounded-full border border-[#cbd5db] px-4 py-2 text-sm font-semibold text-[#273640] hover:bg-[#f1f4f6]"
           >
-            Keep existing booking
+            Keep booking at {existingTicketCount} {peopleLabel(existingTicketCount)}
           </button>
         </div>
       </div>
