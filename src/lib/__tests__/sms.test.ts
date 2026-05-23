@@ -39,10 +39,10 @@ const mockFromSelect = vi.fn(() => ({
         id: "booking-1",
         first_name: "Jane",
         mobile: "+447700900001",
-        events: {
+        event: {
           title: "Jazz Night",
           start_at: "2026-03-20T19:00:00Z",
-          venues: { name: "The Anchor" },
+          venue: { name: "The Anchor" },
         },
       },
       error: null,
@@ -152,6 +152,8 @@ describe("sendBookingConfirmationSms", () => {
   it("should not throw when booking exists", async () => {
     const { sendBookingConfirmationSms } = await import("../sms");
     await expect(sendBookingConfirmationSms("booking-1")).resolves.not.toThrow();
+    expect(mockFromSelect).toHaveBeenCalledWith(expect.stringContaining("event:events!event_bookings_event_id_fkey"));
+    expect(mockFromSelect).toHaveBeenCalledWith(expect.stringContaining("venue:venues!events_venue_id_fkey"));
   });
 
   it("should return early and not throw when booking is not found", async () => {

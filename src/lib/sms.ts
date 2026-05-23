@@ -31,9 +31,9 @@ export async function sendBookingConfirmationSms(bookingId: string): Promise<voi
     .from("event_bookings")
     .select(`
       id, first_name, mobile,
-      events (
+      event:events!event_bookings_event_id_fkey (
         title, start_at,
-        venues ( name )
+        venue:venues!events_venue_id_fkey ( name )
       )
     `)
     .eq("id", bookingId)
@@ -44,11 +44,11 @@ export async function sendBookingConfirmationSms(bookingId: string): Promise<voi
     return;
   }
 
-  const event = (data.events as unknown) as { title: string; start_at: string; venues: { name: string } };
+  const event = (data.event as unknown) as { title: string; start_at: string; venue: { name: string } };
   const { dayDate, time } = formatEventDateTime(new Date(event.start_at));
 
   const body =
-    `Hi ${data.first_name}! You're booked in for ${event.title} at ${event.venues.name} ` +
+    `Hi ${data.first_name}! You're booked in for ${event.title} at ${event.venue.name} ` +
     `on ${dayDate} at ${time}. See you there! — Barons Pubs`;
 
   await sendTwilioSms({ to: data.mobile, body });
