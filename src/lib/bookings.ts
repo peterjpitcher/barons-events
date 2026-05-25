@@ -19,6 +19,7 @@ function rowToEventBooking(row: Record<string, unknown>): EventBooking {
     lastName:               (row.last_name as string | null) ?? null,
     mobile:                 row.mobile as string,
     email:                  (row.email as string | null) ?? null,
+    customerNotes:          (row.customer_notes as string | null) ?? null,
     ticketCount:            row.ticket_count as number,
     status:                 row.status as EventBooking["status"],
     paymentStatus:          ((row.payment_status as BookingPaymentStatus | null) ?? "not_required"),
@@ -70,6 +71,7 @@ export async function createBookingAtomic(params: {
   mobile: string;
   email: string | null;
   ticketCount: number;
+  customerNotes?: string | null;
 }): Promise<BookingRpcResult> {
   const db = createSupabaseAdminClient();
   const { data, error } = await db.rpc("create_booking", {
@@ -79,6 +81,7 @@ export async function createBookingAtomic(params: {
     p_mobile:       params.mobile,
     p_email:        params.email,
     p_ticket_count: params.ticketCount,
+    p_customer_notes: params.customerNotes ?? null,
   });
 
   if (error) throw new Error(`create_booking RPC failed: ${error.message}`);
@@ -102,6 +105,7 @@ export async function createPaidBookingAtomic(params: {
   mobile: string;
   email: string | null;
   ticketCount: number;
+  customerNotes?: string | null;
 }): Promise<BookingRpcResult> {
   const db = createSupabaseAdminClient();
   const { data, error } = await db.rpc("create_paid_booking", {
@@ -111,6 +115,7 @@ export async function createPaidBookingAtomic(params: {
     p_mobile:       params.mobile,
     p_email:        params.email,
     p_ticket_count: params.ticketCount,
+    p_customer_notes: params.customerNotes ?? null,
   });
 
   if (error) throw new Error(`create_paid_booking RPC failed: ${error.message}`);

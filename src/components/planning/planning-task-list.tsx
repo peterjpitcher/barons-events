@@ -2,9 +2,11 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Plus, Trash2, Pencil } from "lucide-react";
+import { Link2, Plus, Trash2, Pencil, X } from "lucide-react";
 import {
   createPlanningTaskAction,
+  createPlanningTaskDependencyAction,
+  deletePlanningTaskDependencyAction,
   deletePlanningTaskAction,
   togglePlanningTaskStatusAction,
   updatePlanningTaskAction
@@ -128,9 +130,19 @@ export function PlanningTaskList({ itemId, tasks, users, onChanged }: PlanningTa
         {sortedTasks.map((task) => {
           const isOverdue = task.status === "open" && task.dueDate < new Date().toISOString().slice(0, 10);
           const isResolved = task.status === "done" || task.status === "not_required";
+          const isBlocked = task.status === "open" && task.isBlocked;
           const titleClass = isResolved ? "line-through text-subtle" : "font-medium";
           const notesExpanded = expandedNotesTaskId === task.id;
           const hasNotes = Boolean(task.notes && task.notes.trim().length);
+          const dependencyTasks = task.dependsOnTaskIds
+            .map((dependencyId) => sortedTasks.find((candidate) => candidate.id === dependencyId))
+            .filter((candidate): candidate is PlanningTask => Boolean(candidate));
+          const openDependencyNames = dependencyTasks
+            .filter((dependency) => dependency.status === "open")
+            .map((dependency) => dependency.title);
+          const dependencyOptions = sortedTasks.filter(
+            (candidate) => candidate.id !== task.id && !task.dependsOnTaskIds.includes(candidate.id)
+          );
 
           return (
             <li
@@ -144,7 +156,7 @@ export function PlanningTaskList({ itemId, tasks, users, onChanged }: PlanningTa
                   <Select
                     aria-label={`Status for ${task.title}`}
                     value={task.status}
-                    disabled={isPending}
+                    disabled={isPending || isBlocked}
                     className="mt-0.5 h-7 w-[9rem] py-0 text-xs"
                     onChange={(event) => {
                       const next = event.currentTarget.value as PlanningTaskStatus;
@@ -224,6 +236,11 @@ export function PlanningTaskList({ itemId, tasks, users, onChanged }: PlanningTa
                     <span className={`block text-xs ${isOverdue ? "text-[var(--color-danger)]" : "text-subtle"}`}>
                       {task.assigneeName} · due {formatDueDate(task.dueDate)}
                     </span>
+                    {isBlocked ? (
+                      <span className="mt-0.5 block text-xs text-[var(--color-warning)]">
+                        Waiting on: {openDependencyNames.length ? openDependencyNames.join(", ") : "dependencies"}
+                      </span>
+                    ) : null}
                   </span>
                 </div>
                 <div className="flex shrink-0 items-start gap-1">
@@ -268,6 +285,70 @@ export function PlanningTaskList({ itemId, tasks, users, onChanged }: PlanningTa
                 </div>
               </div>
 
+              <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs md:pl-[calc(9rem+0.5rem)]">
+                {dependencyTasks.length > 0 ? (
+                  <>
+                    <span className="inline-flex items-center gap-1 text-subtle">
+                      <Link2 className="h-3.5 w-3.5" aria-hidden="true" />
+                      Depends on
+                    </span>
+                    {dependencyTasks.map((dependency) => (
+                      <span
+                        key={dependency.id}
+                        className="inline-flex max-w-full items-center gap-1 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-0.5 text-[11px] text-[var(--color-text)]"
+                      >
+                        <span className="truncate">{dependency.title}</span>
+                        <button
+                          type="button"
+                          disabled={isPending}
+                          aria-label={`Remove dependency on ${dependency.title}`}
+                          title="Remove dependency"
+                          className="rounded-full p-0.5 text-subtle hover:bg-[var(--color-muted-surface)] hover:text-[var(--color-text)] disabled:opacity-50"
+                          onClick={() =>
+                            runTaskAction(
+                              () =>
+                                deletePlanningTaskDependencyAction({
+                                  taskId: task.id,
+                                  dependsOnTaskId: dependency.id
+                                }),
+                              "Dependency removed."
+                            )
+                          }
+                        >
+                          <X className="h-3 w-3" aria-hidden="true" />
+                        </button>
+                      </span>
+                    ))}
+                  </>
+                ) : null}
+                {dependencyOptions.length > 0 ? (
+                  <Select
+                    aria-label={`Add dependency for ${task.title}`}
+                    value=""
+                    disabled={isPending}
+                    className="h-7 w-full max-w-[15rem] py-0 text-xs md:w-[15rem]"
+                    onChange={(event) => {
+                      const dependsOnTaskId = event.currentTarget.value;
+                      if (!dependsOnTaskId) return;
+                      runTaskAction(
+                        () =>
+                          createPlanningTaskDependencyAction({
+                            taskId: task.id,
+                            dependsOnTaskId
+                          }),
+                        "Dependency added."
+                      );
+                    }}
+                  >
+                    <option value="">Add dependency</option>
+                    {dependencyOptions.map((candidate) => (
+                      <option key={candidate.id} value={candidate.id}>
+                        {candidate.title}
+                      </option>
+                    ))}
+                  </Select>
+                ) : null}
+              </div>
             </li>
           );
         })}

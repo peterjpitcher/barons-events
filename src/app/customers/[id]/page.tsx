@@ -108,6 +108,7 @@ export default async function CustomerDetailPage({
                   <th scope="col" className="px-4 py-3">Event</th>
                   <th scope="col" className="px-4 py-3">Venue</th>
                   <th scope="col" className="px-4 py-3">Date</th>
+                  <th scope="col" className="px-4 py-3">Notes</th>
                   <th scope="col" className="px-4 py-3 text-right">Tickets</th>
                   <th scope="col" className="px-4 py-3">Status</th>
                 </tr>
@@ -126,6 +127,13 @@ export default async function CustomerDetailPage({
                       <time dateTime={booking.eventStartAt.toISOString()}>
                         {dateFormatter.format(booking.eventStartAt)}
                       </time>
+                    </td>
+                    <td className="max-w-xs px-4 py-3 text-[var(--color-text-muted)]">
+                      {booking.customerNotes ? (
+                        <span className="block break-words">{booking.customerNotes}</span>
+                      ) : (
+                        <span className="text-[var(--color-text-subtle)]">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums">{booking.ticketCount}</td>
                     <td className="px-4 py-3">

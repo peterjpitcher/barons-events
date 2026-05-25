@@ -15,6 +15,7 @@ const createPaidOrderSchema = z.object({
   lastName: z.string().max(100).nullable(),
   mobile: z.string().min(1, "Mobile number is required"),
   email: z.string().email("Email address is required for paid bookings"),
+  customerNotes: z.string().max(1000).nullable().optional(),
   ticketCount: z.number().int().min(1).max(50),
   marketingOptIn: z.boolean().default(false),
   turnstileToken: z.string().min(1),

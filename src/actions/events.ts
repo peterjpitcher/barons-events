@@ -2396,6 +2396,7 @@ const bookingSettingsSchema = z.object({
   bookingEnabled: z.boolean(),
   totalCapacity: z.number().int().positive().nullable(),
   maxTicketsPerBooking: z.number().int().min(1).max(50),
+  bookingNotesEnabled: z.boolean().optional(),
   smsPromoEnabled: z.boolean().optional(),
   bookingUrl: bookingUrlSchema,
 });
@@ -2419,7 +2420,15 @@ export async function updateBookingSettingsAction(
     return { success: false, message: "Invalid booking settings." };
   }
 
-  const { eventId, bookingEnabled, totalCapacity, maxTicketsPerBooking, smsPromoEnabled, bookingUrl } = parsed.data;
+  const {
+    eventId,
+    bookingEnabled,
+    totalCapacity,
+    maxTicketsPerBooking,
+    bookingNotesEnabled,
+    smsPromoEnabled,
+    bookingUrl
+  } = parsed.data;
 
   // This action uses the admin client below, so the server-side guard is
   // the sole enforcement point. Validate permission via the true row.
@@ -2463,6 +2472,7 @@ export async function updateBookingSettingsAction(
     booking_enabled: bookingEnabled,
     total_capacity: totalCapacity,
     max_tickets_per_booking: maxTicketsPerBooking,
+    booking_notes_enabled: bookingNotesEnabled ?? false,
     seo_slug: seoSlug,
     booking_url: nextBookingUrl,
   };
@@ -2486,7 +2496,7 @@ export async function updateBookingSettingsAction(
       entityId: eventId,
       action: "event.booking_settings_updated",
       actorId: user.id,
-      meta: { bookingEnabled, totalCapacity, maxTicketsPerBooking, bookingUrl: nextBookingUrl }
+      meta: { bookingEnabled, totalCapacity, maxTicketsPerBooking, bookingNotesEnabled: bookingNotesEnabled ?? false, bookingUrl: nextBookingUrl }
     });
   } catch (auditError) {
     // Booking settings save itself succeeded — audit failure is logged but

@@ -114,6 +114,7 @@ export interface EventBooking {
   lastName: string | null;
   mobile: string;          // E.164
   email: string | null;
+  customerNotes: string | null;
   ticketCount: number;
   status: BookingStatus;
   paymentStatus: BookingPaymentStatus;
@@ -136,6 +137,7 @@ export interface EventBookingSettings {
   bookingEnabled: boolean;
   totalCapacity: number | null;   // null = unlimited
   maxTicketsPerBooking: number;
+  bookingNotesEnabled: boolean;
   seoSlug: string | null;
 }
 

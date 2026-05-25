@@ -231,6 +231,8 @@ export function EventForm({
   const proxyDraftRef = useRef<HTMLButtonElement>(null);
   const proxySubmitRef = useRef<HTMLButtonElement>(null);
   const proxyGenerateRef = useRef<HTMLButtonElement>(null);
+  const artistModalRef = useRef<HTMLDivElement>(null);
+  const termsModalRef = useRef<HTMLDivElement>(null);
 
   // Form-mount correlation ids. `operation_id` is echoed back through the
   // server action's ActionResult so error toasts can surface a short hash for
@@ -360,6 +362,16 @@ export function EventForm({
   useEffect(() => {
     setAvailableArtists((current) => mergeArtistOptions(current, artists));
   }, [artists]);
+
+  useEffect(() => {
+    if (!showArtistModal) return;
+    artistModalRef.current?.focus();
+  }, [showArtistModal]);
+
+  useEffect(() => {
+    if (!showTermsModal) return;
+    termsModalRef.current?.focus();
+  }, [showTermsModal]);
 
   useEffect(() => {
     if (!artistCreateState?.message) return;
@@ -607,7 +619,7 @@ export function EventForm({
   useEffect(() => {
     if (!hasFieldErrors) return;
     const timer = setTimeout(() => {
-      document.querySelector('[aria-invalid="true"]')?.scrollIntoView({ behavior: "smooth", block: "center" });
+      document.querySelector('[aria-invalid="true"]')?.scrollIntoView?.({ behavior: "smooth", block: "center" });
     }, 100);
     return () => clearTimeout(timer);
   }, [hasFieldErrors]);
@@ -1420,7 +1432,7 @@ export function EventForm({
       aria-label="Select artists"
       tabIndex={-1}
       onKeyDown={(e) => { if (e.key === "Escape") setShowArtistModal(false); }}
-      ref={(el) => { if (el) el.focus(); }}
+      ref={artistModalRef}
     >
       <div className="w-full max-w-5xl rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-white shadow-soft">
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--color-border)] p-5">
@@ -1634,7 +1646,7 @@ export function EventForm({
       aria-label="Generate terms and conditions"
       tabIndex={-1}
       onKeyDown={(e) => { if (e.key === "Escape") setShowTermsModal(false); }}
-      ref={(el) => { if (el) el.focus(); }}
+      ref={termsModalRef}
     >
       <div className="w-full max-w-2xl rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-white shadow-soft">
         <div className="flex items-start justify-between border-b border-[var(--color-border)] p-5">

@@ -110,7 +110,8 @@ export function BookingsView({ groups }: Props) {
             (b) =>
               b.firstName.toLowerCase().includes(term) ||
               (b.lastName ?? "").toLowerCase().includes(term) ||
-              b.mobile.toLowerCase().includes(term),
+              b.mobile.toLowerCase().includes(term) ||
+              (b.customerNotes ?? "").toLowerCase().includes(term),
           );
         }
 
@@ -201,6 +202,9 @@ export function BookingsView({ groups }: Props) {
                       <th scope="col" className="px-4 py-2 text-left font-medium text-[#273640]">
                         Mobile
                       </th>
+                      <th scope="col" className="px-4 py-2 text-left font-medium text-[#273640]">
+                        Notes
+                      </th>
                       <th scope="col" className="px-4 py-2 text-right font-medium text-[#273640]">
                         Tickets
                       </th>
@@ -223,6 +227,13 @@ export function BookingsView({ groups }: Props) {
                           {booking.lastName ? ` ${booking.lastName}` : ""}
                         </td>
                         <td className="px-4 py-2 text-[#637c8c]">{booking.mobile}</td>
+                        <td className="max-w-xs px-4 py-2 text-[#637c8c]">
+                          {booking.customerNotes ? (
+                            <span className="block break-words">{booking.customerNotes}</span>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
                         <td className="px-4 py-2 text-right text-[var(--color-text)]">
                           {booking.ticketCount}
                         </td>

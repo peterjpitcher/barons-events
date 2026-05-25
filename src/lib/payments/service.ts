@@ -28,6 +28,7 @@ export type CreatePaidCheckoutInput = {
   lastName: string | null;
   mobile: string;
   email: string | null;
+  customerNotes?: string | null;
   ticketCount: number;
   marketingOptIn: boolean;
 };
@@ -258,6 +259,7 @@ export async function createPaidCheckoutSession(
     mobile,
     email: input.email,
     ticketCount: input.ticketCount,
+    customerNotes: input.customerNotes ?? null,
   });
 
   if (!rpcResult.ok) {

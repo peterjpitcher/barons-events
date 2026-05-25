@@ -7,6 +7,7 @@ export interface BookingRow {
   firstName: string;
   lastName: string | null;
   mobile: string;
+  customerNotes: string | null;
   ticketCount: number;
   status: BookingStatus;
   paymentStatus: BookingPaymentStatus;
@@ -47,7 +48,7 @@ export async function listAllBookingsForUser(
   let query = db
     .from("event_bookings")
     .select(`
-      id, first_name, last_name, mobile, ticket_count, status, payment_status, created_at,
+      id, first_name, last_name, mobile, customer_notes, ticket_count, status, payment_status, created_at,
       payment_transaction:payment_transactions!event_bookings_payment_transaction_id_fkey(amount_pence, currency),
       events!inner (
         id, title, start_at, venue_id,
@@ -124,6 +125,7 @@ export async function listAllBookingsForUser(
       firstName:   row.first_name as string,
       lastName:    (row.last_name as string | null) ?? null,
       mobile:      row.mobile as string,
+      customerNotes: (row.customer_notes as string | null) ?? null,
       ticketCount: tickets,
       status,
       paymentStatus: ((row.payment_status as BookingPaymentStatus | null) ?? "not_required"),

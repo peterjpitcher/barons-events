@@ -606,6 +606,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
             bookingEnabled={Boolean(event.booking_enabled)}
             totalCapacity={event.total_capacity ?? null}
             maxTicketsPerBooking={event.max_tickets_per_booking ?? 10}
+            bookingNotesEnabled={Boolean(event.booking_notes_enabled)}
             seoSlug={event.seo_slug ?? null}
             smsPromoEnabled={Boolean(event.sms_promo_enabled)}
             bookingUrl={event.booking_url ?? null}

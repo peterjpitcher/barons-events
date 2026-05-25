@@ -51,6 +51,7 @@ export async function listCustomersForUser(
 export interface CustomerBooking {
   id: string;
   ticketCount: number;
+  customerNotes: string | null;
   status: "confirmed" | "cancelled";
   createdAt: Date;
   eventId: string;
@@ -83,7 +84,7 @@ export async function getCustomerById(
   const { data: bookingRows, error: bookingsError } = await db
     .from("event_bookings")
     .select(`
-      id, ticket_count, status, created_at,
+      id, ticket_count, customer_notes, status, created_at,
       events!inner (
         id, title, start_at, venue_id,
         venues!events_venue_id_fkey ( id, name )
@@ -101,6 +102,7 @@ export async function getCustomerById(
     return {
       id:           row.id as string,
       ticketCount:  row.ticket_count as number,
+      customerNotes: (row.customer_notes as string | null) ?? null,
       status:       row.status as "confirmed" | "cancelled",
       createdAt:    new Date(row.created_at as string),
       eventId:      event.id as string,

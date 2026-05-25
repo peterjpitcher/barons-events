@@ -86,6 +86,7 @@ type PublicBookingEligibility =
       bookingType: BookingFormat;
       totalCapacity: number | null;
       maxTicketsPerBooking: number | null;
+      bookingNotesEnabled: boolean;
     }
   | { ok: false; reason: "not_found" | "paid_booking" };
 
@@ -109,6 +110,7 @@ async function getPublicBookingEligibility(eventId: string): Promise<PublicBooki
         deleted_at,
         total_capacity,
         max_tickets_per_booking,
+        booking_notes_enabled,
         venue:venues!events_venue_id_fkey(is_internal)
       `)
       .eq("id", eventId)
@@ -144,6 +146,7 @@ async function getPublicBookingEligibility(eventId: string): Promise<PublicBooki
       bookingType,
       totalCapacity: typeof row.total_capacity === "number" ? row.total_capacity : null,
       maxTicketsPerBooking: typeof row.max_tickets_per_booking === "number" ? row.max_tickets_per_booking : null,
+      bookingNotesEnabled: row.booking_notes_enabled === true,
     };
   } catch (error) {
     console.warn("Public booking eligibility check failed:", error);
@@ -157,6 +160,7 @@ const createBookingSchema = z.object({
   lastName:      z.string().max(100).nullable(),
   mobile:        z.string().min(1, "Mobile number is required"),
   email:         z.string().email("Invalid email address").nullable(),
+  customerNotes: z.string().max(1000).nullable().optional(),
   ticketCount:   z.number().int().min(1).max(50),
   marketingOptIn: z.boolean().default(false),
   turnstileToken: z.string().min(1),
@@ -173,6 +177,8 @@ export type CreateBookingResult =
       existingBookingId: string;
       /** The ticket count already on record. */
       existingTicketCount: number;
+      /** Existing customer note, if notes are enabled for the event. */
+      existingCustomerNotes: string | null;
       /** Short-lived signed proof required to update the existing booking. */
       updateToken: string;
     }
@@ -239,7 +245,7 @@ export async function createBookingAction(
        
       const { data: existingBooking } = await (db as any)
         .from("event_bookings")
-        .select("id, ticket_count, status")
+        .select("id, ticket_count, status, customer_notes")
         .eq("event_id", data.eventId)
         .eq("customer_id", customer.id)
         .eq("status", "confirmed")
@@ -257,6 +263,10 @@ export async function createBookingAction(
           error: "existing_booking",
           existingBookingId: existingBooking.id,
           existingTicketCount: existingBooking.ticket_count,
+          existingCustomerNotes:
+            eligibility.bookingNotesEnabled && typeof existingBooking.customer_notes === "string"
+              ? existingBooking.customer_notes
+              : null,
           updateToken
         };
       }
@@ -275,6 +285,7 @@ export async function createBookingAction(
       mobile:      normalisedMobile,
       email:       data.email,
       ticketCount: data.ticketCount,
+      customerNotes: eligibility.bookingNotesEnabled ? data.customerNotes ?? null : null,
     });
   } catch (err) {
     console.error("createBookingAtomic failed:", err);
@@ -337,6 +348,7 @@ export async function createBookingAction(
 const updateExistingBookingSchema = z.object({
   bookingId: z.string().uuid(),
   ticketCount: z.number().int().min(1).max(50),
+  customerNotes: z.string().max(1000).nullable().optional(),
   updateToken: z.string().min(1)
 });
 
@@ -425,9 +437,14 @@ export async function updateExistingBookingAction(
   }
 
    
+  const updatePayload: Record<string, unknown> = { ticket_count: parsed.data.ticketCount };
+  if (eligibility.bookingNotesEnabled && Object.prototype.hasOwnProperty.call(parsed.data, "customerNotes")) {
+    updatePayload.customer_notes = parsed.data.customerNotes?.trim() ? parsed.data.customerNotes.trim() : null;
+  }
+
   const { error: updateError } = await (db as any)
     .from("event_bookings")
-    .update({ ticket_count: parsed.data.ticketCount })
+    .update(updatePayload)
     .eq("id", parsed.data.bookingId);
 
   if (updateError) {

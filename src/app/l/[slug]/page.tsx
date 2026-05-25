@@ -39,6 +39,7 @@ type EventRow = {
   start_at: string;
   seo_slug: string | null;
   booking_enabled: boolean;
+  booking_notes_enabled: boolean;
   booking_type: string | null;
   booking_url: string | null;
   ticket_price: number | null;
@@ -62,7 +63,7 @@ async function getEventBySlug(slug: string): Promise<EventRow | null> {
   const { data, error } = await db
     .from("events")
     .select(
-      "id, title, public_title, public_teaser, public_description, public_highlights, event_image_path, start_at, seo_slug, booking_enabled, booking_type, booking_url, ticket_price, total_capacity, max_tickets_per_booking, status, venue:venues!events_venue_id_fkey(id, name, is_internal)"
+      "id, title, public_title, public_teaser, public_description, public_highlights, event_image_path, start_at, seo_slug, booking_enabled, booking_notes_enabled, booking_type, booking_url, ticket_price, total_capacity, max_tickets_per_booking, status, venue:venues!events_venue_id_fkey(id, name, is_internal)"
     )
     .eq("seo_slug", slug)
     .is("deleted_at", null)
@@ -98,6 +99,7 @@ async function getEventBySlug(slug: string): Promise<EventRow | null> {
     start_at: raw.start_at as string,
     seo_slug: (raw.seo_slug as string | null) ?? null,
     booking_enabled: raw.booking_enabled as boolean,
+    booking_notes_enabled: raw.booking_notes_enabled as boolean,
     booking_type: (raw.booking_type as string | null) ?? null,
     booking_url: (raw.booking_url as string | null) ?? null,
     ticket_price: (raw.ticket_price as number | null) ?? null,
@@ -284,6 +286,7 @@ export default async function EventLandingPage({ params }: PageProps) {
               bookingType={bookingFormat}
               isPaidBooking={isPaidInAppBooking}
               ticketPrice={event.ticket_price}
+              bookingNotesEnabled={event.booking_notes_enabled}
               nonce={nonce}
             />
           </div>

@@ -86,6 +86,7 @@ export interface Database {
           notes: string | null;
           event_image_path: string | null;
           booking_type: string | null;
+          booking_notes_enabled: boolean;
           ticket_price: number | null;
           check_in_cutoff_minutes: number | null;
           age_policy: string | null;

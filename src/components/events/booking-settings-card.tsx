@@ -23,6 +23,7 @@ type BookingSettingsCardProps = {
   bookingEnabled: boolean;
   totalCapacity: number | null;
   maxTicketsPerBooking: number;
+  bookingNotesEnabled: boolean;
   seoSlug: string | null;
   smsPromoEnabled?: boolean;
   bookingUrl: string | null;
@@ -35,6 +36,7 @@ export function BookingSettingsCard({
   bookingEnabled: initialBookingEnabled,
   totalCapacity: initialTotalCapacity,
   maxTicketsPerBooking: initialMaxTickets,
+  bookingNotesEnabled: initialBookingNotesEnabled,
   seoSlug: initialSeoSlug,
   smsPromoEnabled: initialSmsPromoEnabled = false,
   bookingUrl: initialBookingUrl,
@@ -46,6 +48,7 @@ export function BookingSettingsCard({
     initialTotalCapacity != null ? String(initialTotalCapacity) : ""
   );
   const [maxTickets, setMaxTickets] = useState(String(initialMaxTickets));
+  const [bookingNotesEnabled, setBookingNotesEnabled] = useState(initialBookingNotesEnabled);
   const [currentSlug, setCurrentSlug] = useState<string | null>(initialSeoSlug);
   const [smsPromoEnabled, setSmsPromoEnabled] = useState(initialSmsPromoEnabled);
   const [bookingUrl, setBookingUrl] = useState(initialBookingUrl ?? "");
@@ -83,6 +86,7 @@ export function BookingSettingsCard({
         bookingEnabled,
         totalCapacity: parsedCapacity,
         maxTicketsPerBooking: parsedMax,
+        bookingNotesEnabled,
         bookingUrl: trimmedBookingUrl ? trimmedBookingUrl : undefined,
         ...(userRole === "administrator" ? { smsPromoEnabled } : {}),
       });
@@ -239,6 +243,35 @@ export function BookingSettingsCard({
               required
             />
             <p className="text-xs text-subtle">Maximum number of tickets a single booking can include.</p>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <button
+                id="bookingNotesEnabled"
+                type="button"
+                role="switch"
+                aria-checked={bookingNotesEnabled}
+                onClick={() => setBookingNotesEnabled((v) => !v)}
+                className={`relative inline-flex h-6 w-11 flex-none cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(39,54,64,0.45)] ${
+                  bookingNotesEnabled
+                    ? "bg-[var(--color-primary-700)]"
+                    : "bg-[rgba(39,54,64,0.2)]"
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                    bookingNotesEnabled ? "translate-x-5" : "translate-x-0"
+                  }`}
+                />
+              </button>
+              <Label htmlFor="bookingNotesEnabled" className="cursor-pointer select-none">
+                {bookingNotesEnabled ? "Customer notes enabled" : "Customer notes disabled"}
+              </Label>
+            </div>
+            <p className="text-xs text-subtle">
+              Adds an optional notes box to the public booking form for this event.
+            </p>
           </div>
 
           {/* Promotional SMS toggle — administrators only */}

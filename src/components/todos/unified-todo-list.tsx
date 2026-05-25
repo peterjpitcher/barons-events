@@ -209,7 +209,7 @@ function DashboardMode({
               </button>
             </p>
           ) : (
-            <p className="text-sm text-subtle">You&apos;re all caught up</p>
+            <p className="text-sm text-subtle">No assigned todos right now.</p>
           )}
         </div>
       ) : (

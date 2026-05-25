@@ -10,6 +10,7 @@ import { TurnstileWidget } from "@/components/turnstile-widget";
 type ExistingBookingPrompt = {
   bookingId: string;
   existingTicketCount: number;
+  existingCustomerNotes: string | null;
   updateToken: string;
 };
 
@@ -20,6 +21,7 @@ interface BookingFormProps {
   bookingType: string | null;
   isPaidBooking: boolean;
   ticketPrice: number | null;
+  bookingNotesEnabled?: boolean;
   nonce?: string;
 }
 
@@ -60,6 +62,7 @@ export function BookingForm({
   bookingType,
   isPaidBooking,
   ticketPrice,
+  bookingNotesEnabled = false,
   nonce
 }: BookingFormProps) {
   const [ticketCount, setTicketCount] = useState(1);
@@ -67,12 +70,14 @@ export function BookingForm({
   const [lastName, setLastName] = useState("");
   const [mobile, setMobile] = useState("");
   const [email, setEmail] = useState("");
+  const [customerNotes, setCustomerNotes] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [marketingOptIn, setMarketingOptIn] = useState(false);
   const [existingPrompt, setExistingPrompt] = useState<ExistingBookingPrompt | null>(null);
   const [amendedTicketCount, setAmendedTicketCount] = useState(1);
+  const [amendedCustomerNotes, setAmendedCustomerNotes] = useState("");
   const formRef = useRef<HTMLFormElement>(null);
   const bookingFormat = isBookingFormat(bookingType) ? bookingType : null;
   const ctaLabel = getBookingCtaLabel(bookingFormat);
@@ -115,6 +120,7 @@ export function BookingForm({
       lastName: lastName.trim() || null,
       mobile: mobile.trim(),
       email: email.trim() || null,
+      customerNotes: bookingNotesEnabled ? customerNotes.trim() || null : null,
       ticketCount,
       marketingOptIn,
       turnstileToken,
@@ -167,9 +173,11 @@ export function BookingForm({
         setExistingPrompt({
           bookingId: result.existingBookingId,
           existingTicketCount: result.existingTicketCount,
+          existingCustomerNotes: result.existingCustomerNotes,
           updateToken: result.updateToken
         });
         setAmendedTicketCount(result.existingTicketCount);
+        setAmendedCustomerNotes(customerNotes.trim() || result.existingCustomerNotes || "");
         return;
       }
       if (result.error === "sold_out") {
@@ -196,6 +204,7 @@ export function BookingForm({
     const result = await updateExistingBookingAction({
       bookingId: existingPrompt.bookingId,
       ticketCount: amendedTicketCount,
+      customerNotes: bookingNotesEnabled ? amendedCustomerNotes.trim() || null : undefined,
       updateToken: existingPrompt.updateToken
     });
     setLoading(false);
@@ -216,8 +225,10 @@ export function BookingForm({
   }
 
   if (existingPrompt) {
-    const { existingTicketCount } = existingPrompt;
+    const { existingTicketCount, existingCustomerNotes } = existingPrompt;
     const isSame = existingTicketCount === amendedTicketCount;
+    const notesAreSame = (existingCustomerNotes ?? "") === amendedCustomerNotes.trim();
+    const isNotesOnlyUpdate = bookingNotesEnabled && isSame && !notesAreSame;
     return (
       <div className="rounded-lg bg-white border border-[#cbd5db] p-6 space-y-4">
         <div>
@@ -261,17 +272,36 @@ export function BookingForm({
             </button>
           </div>
         </div>
+        {bookingNotesEnabled ? (
+          <div className="space-y-2">
+            <label htmlFor="amendedCustomerNotes" className="text-sm font-medium text-[#273640]">
+              Notes for the team
+            </label>
+            <textarea
+              id="amendedCustomerNotes"
+              value={amendedCustomerNotes}
+              onChange={(event) => setAmendedCustomerNotes(event.target.value)}
+              maxLength={1000}
+              rows={3}
+              placeholder="Optional"
+              className="w-full rounded-md border border-[#cbd5db] bg-white px-3 py-2 text-sm
+                         placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-[#273640]"
+            />
+          </div>
+        ) : null}
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            disabled={loading || isSame}
+            disabled={loading || (isSame && notesAreSame)}
             onClick={handleConfirmUpdate}
             className="rounded-full bg-[#273640] px-4 py-2 text-sm font-semibold text-white hover:bg-[#637c8c] disabled:opacity-60"
           >
             {loading
               ? "Updating…"
-              : `Update total to ${amendedTicketCount} ${peopleLabel(amendedTicketCount)}`}
+              : isNotesOnlyUpdate
+                ? "Update notes"
+                : `Update total to ${amendedTicketCount} ${peopleLabel(amendedTicketCount)}`}
           </button>
           <button
             type="button"
@@ -409,6 +439,22 @@ export function BookingForm({
                        placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-[#273640]"
           />
         </div>
+
+        {bookingNotesEnabled ? (
+          <div>
+            <label htmlFor="customerNotes" className="sr-only">Notes for the team</label>
+            <textarea
+              id="customerNotes"
+              placeholder="Notes for the team (optional)"
+              value={customerNotes}
+              onChange={(e) => setCustomerNotes(e.target.value)}
+              maxLength={1000}
+              rows={3}
+              className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm
+                         placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-[#273640]"
+            />
+          </div>
+        ) : null}
 
         {/* Marketing opt-in — unchecked by default (UK GDPR: pre-ticked boxes not permitted) */}
         <div className="flex items-start gap-3 rounded-md border border-[#93ab97] bg-[#f5f8f5] p-3">

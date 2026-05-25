@@ -63,6 +63,7 @@ describe("BookingForm booking-format copy", () => {
       error: "existing_booking",
       existingBookingId: "22222222-2222-4222-8222-222222222222",
       existingTicketCount: 2,
+      existingCustomerNotes: null,
       updateToken: "update-token"
     });
     mockUpdateExistingBookingAction.mockResolvedValue({

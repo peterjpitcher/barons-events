@@ -134,6 +134,7 @@ export default async function BookingsPage({
                 <th scope="col" className="px-4 py-3">Name</th>
                 <th scope="col" className="px-4 py-3">Mobile</th>
                 <th scope="col" className="px-4 py-3">Email</th>
+                <th scope="col" className="px-4 py-3">Notes</th>
                 <th scope="col" className="px-4 py-3 text-right">Tickets</th>
                 <th scope="col" className="px-4 py-3">Booked at</th>
                 <th scope="col" className="px-4 py-3">Status</th>
@@ -153,6 +154,13 @@ export default async function BookingsPage({
                   </td>
                   <td className="px-4 py-3 font-mono text-xs text-subtle">{booking.mobile}</td>
                   <td className="px-4 py-3 text-subtle">{booking.email ?? "—"}</td>
+                  <td className="max-w-xs px-4 py-3 text-subtle">
+                    {booking.customerNotes ? (
+                      <span className="block break-words">{booking.customerNotes}</span>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-right tabular-nums">{booking.ticketCount}</td>
                   <td className="px-4 py-3 text-subtle">
                     <time dateTime={booking.createdAt.toISOString()}>

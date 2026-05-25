@@ -624,6 +624,7 @@ export type Database = {
         Row: {
           created_at: string
           customer_id: string | null
+          customer_notes: string | null
           email: string | null
           event_id: string
           first_name: string
@@ -644,6 +645,7 @@ export type Database = {
         Insert: {
           created_at?: string
           customer_id?: string | null
+          customer_notes?: string | null
           email?: string | null
           event_id: string
           first_name: string
@@ -664,6 +666,7 @@ export type Database = {
         Update: {
           created_at?: string
           customer_id?: string | null
+          customer_notes?: string | null
           email?: string | null
           event_id?: string
           first_name?: string
@@ -1037,6 +1040,7 @@ export type Database = {
           age_policy: string | null
           assignee_id: string | null
           booking_enabled: boolean
+          booking_notes_enabled: boolean
           booking_type: string | null
           booking_url: string | null
           cancellation_window_hours: number | null
@@ -1083,6 +1087,7 @@ export type Database = {
           age_policy?: string | null
           assignee_id?: string | null
           booking_enabled?: boolean
+          booking_notes_enabled?: boolean
           booking_type?: string | null
           booking_url?: string | null
           cancellation_window_hours?: number | null
@@ -1129,6 +1134,7 @@ export type Database = {
           age_policy?: string | null
           assignee_id?: string | null
           booking_enabled?: boolean
+          booking_notes_enabled?: boolean
           booking_type?: string | null
           booking_url?: string | null
           cancellation_window_hours?: number | null
@@ -2546,6 +2552,7 @@ export type Database = {
           p_first_name: string
           p_last_name: string
           p_mobile: string
+          p_customer_notes: string
           p_ticket_count: number
         }
         Returns: Json

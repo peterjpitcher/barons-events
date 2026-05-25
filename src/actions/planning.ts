@@ -661,6 +661,244 @@ const updateTaskSchema = z.object({
   notes: z.string().max(10_000).nullable().optional()
 });
 
+const taskDependencySchema = z.object({
+  taskId: uuidSchema,
+  dependsOnTaskId: uuidSchema
+});
+
+type PlanningTaskDependencyRow = {
+  task_id: string;
+  depends_on_task_id: string;
+};
+
+type PlanningTaskDependencyValidationResult =
+  | { success: true; planningItemId: string }
+  | { success: false; message?: string; fieldErrors?: Record<string, string> };
+
+async function refreshPlanningTaskBlockedStatus(taskId: string): Promise<void> {
+  const db = createSupabaseAdminClient();
+  const { data: dependencyRows, error: dependencyError } = await db
+    .from("planning_task_dependencies")
+    .select("depends_on_task_id")
+    .eq("task_id", taskId);
+
+  if (dependencyError) {
+    throw new Error(dependencyError.message);
+  }
+
+  const dependencyIds = (dependencyRows ?? [])
+    .map((row: { depends_on_task_id: string | null }) => row.depends_on_task_id)
+    .filter((id): id is string => Boolean(id));
+
+  if (dependencyIds.length === 0) {
+    const { error } = await db
+      .from("planning_tasks")
+      .update({ is_blocked: false })
+      .eq("id", taskId)
+      .eq("status", "open");
+    if (error) throw new Error(error.message);
+    return;
+  }
+
+  const { data: dependencyTasks, error: taskError } = await db
+    .from("planning_tasks")
+    .select("id, status")
+    .in("id", dependencyIds);
+
+  if (taskError) {
+    throw new Error(taskError.message);
+  }
+
+  const dependencyStatus = new Map(
+    (dependencyTasks ?? []).map((task: { id: string; status: string }) => [task.id, task.status])
+  );
+  const isBlocked = dependencyIds.some((id) => dependencyStatus.get(id) === "open");
+
+  const { error } = await db
+    .from("planning_tasks")
+    .update({ is_blocked: isBlocked })
+    .eq("id", taskId)
+    .eq("status", "open");
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+async function validatePlanningTaskDependency(
+  taskId: string,
+  dependsOnTaskId: string
+): Promise<PlanningTaskDependencyValidationResult> {
+  if (taskId === dependsOnTaskId) {
+    return { success: false, message: "A task cannot depend on itself." };
+  }
+
+  const db = createSupabaseAdminClient();
+  const { data: taskRows, error: taskError } = await db
+    .from("planning_tasks")
+    .select("id, planning_item_id")
+    .in("id", [taskId, dependsOnTaskId]);
+
+  if (taskError) {
+    throw new Error(taskError.message);
+  }
+
+  const tasksById = new Map(
+    (taskRows ?? []).map((task: { id: string; planning_item_id: string }) => [task.id, task])
+  );
+  const task = tasksById.get(taskId);
+  const dependency = tasksById.get(dependsOnTaskId);
+
+  if (!task || !dependency) {
+    return { success: false, message: "Task not found." };
+  }
+  if (task.planning_item_id !== dependency.planning_item_id) {
+    return { success: false, message: "Dependencies can only be added between tasks on the same planning item." };
+  }
+
+  const { data: siblingRows, error: siblingError } = await db
+    .from("planning_tasks")
+    .select("id")
+    .eq("planning_item_id", task.planning_item_id);
+
+  if (siblingError) {
+    throw new Error(siblingError.message);
+  }
+
+  const siblingIds = (siblingRows ?? []).map((row: { id: string }) => row.id);
+  const { data: dependencyRows, error: dependencyError } = await db
+    .from("planning_task_dependencies")
+    .select("task_id, depends_on_task_id")
+    .in("task_id", siblingIds);
+
+  if (dependencyError) {
+    throw new Error(dependencyError.message);
+  }
+
+  const edges = new Map<string, string[]>();
+  for (const row of (dependencyRows ?? []) as PlanningTaskDependencyRow[]) {
+    const existing = edges.get(row.task_id) ?? [];
+    existing.push(row.depends_on_task_id);
+    edges.set(row.task_id, existing);
+  }
+  edges.set(taskId, [...(edges.get(taskId) ?? []), dependsOnTaskId]);
+
+  const visited = new Set<string>();
+  function reachesTask(currentId: string): boolean {
+    if (currentId === taskId) return true;
+    if (visited.has(currentId)) return false;
+    visited.add(currentId);
+    return (edges.get(currentId) ?? []).some((nextId) => reachesTask(nextId));
+  }
+
+  if (reachesTask(dependsOnTaskId)) {
+    return { success: false, message: "That dependency would create a circular chain." };
+  }
+
+  return { success: true, planningItemId: task.planning_item_id };
+}
+
+export async function createPlanningTaskDependencyAction(input: unknown): Promise<PlanningActionResult> {
+  try {
+    const user = await ensureUser();
+    const parsed = taskDependencySchema.safeParse(input);
+    if (!parsed.success) {
+      return {
+        success: false,
+        message: "Dependency reference is invalid.",
+        fieldErrors: zodFieldErrors(parsed.error)
+      };
+    }
+
+    const ownershipError = await ensureOwnsParentItemOfTask(user.id, user.role, user.venueId, parsed.data.taskId);
+    if (ownershipError) return ownershipError;
+
+    const validation = await validatePlanningTaskDependency(parsed.data.taskId, parsed.data.dependsOnTaskId);
+    if (!validation.success) return validation;
+
+    const db = createSupabaseAdminClient();
+    const { error } = await db
+      .from("planning_task_dependencies")
+      .insert({
+        task_id: parsed.data.taskId,
+        depends_on_task_id: parsed.data.dependsOnTaskId
+      });
+
+    if (error && error.code !== "23505") {
+      throw new Error(error.message);
+    }
+
+    await refreshPlanningTaskBlockedStatus(parsed.data.taskId);
+    recordAuditLogEntry({
+      entity: "planning_task",
+      entityId: parsed.data.taskId,
+      action: "planning_task.dependency_added",
+      actorId: user.id,
+      meta: { depends_on_task_id: parsed.data.dependsOnTaskId }
+    }).catch(() => {});
+    revalidatePath("/planning");
+    revalidatePath(`/planning/${validation.planningItemId}`);
+    revalidatePath("/");
+    return { success: true, message: error?.code === "23505" ? "Dependency already exists." : "Dependency added." };
+  } catch (error) {
+    console.error("Failed to create planning task dependency", error);
+    return { success: false, message: "Could not add dependency." };
+  }
+}
+
+export async function deletePlanningTaskDependencyAction(input: unknown): Promise<PlanningActionResult> {
+  try {
+    const user = await ensureUser();
+    const parsed = taskDependencySchema.safeParse(input);
+    if (!parsed.success) {
+      return {
+        success: false,
+        message: "Dependency reference is invalid.",
+        fieldErrors: zodFieldErrors(parsed.error)
+      };
+    }
+
+    const ownershipError = await ensureOwnsParentItemOfTask(user.id, user.role, user.venueId, parsed.data.taskId);
+    if (ownershipError) return ownershipError;
+
+    const db = createSupabaseAdminClient();
+    const { data: task, error: taskError } = await db
+      .from("planning_tasks")
+      .select("planning_item_id")
+      .eq("id", parsed.data.taskId)
+      .maybeSingle();
+
+    if (taskError) throw new Error(taskError.message);
+    if (!task) return { success: false, message: "Task not found." };
+
+    const { error } = await db
+      .from("planning_task_dependencies")
+      .delete()
+      .eq("task_id", parsed.data.taskId)
+      .eq("depends_on_task_id", parsed.data.dependsOnTaskId);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    await refreshPlanningTaskBlockedStatus(parsed.data.taskId);
+    recordAuditLogEntry({
+      entity: "planning_task",
+      entityId: parsed.data.taskId,
+      action: "planning_task.dependency_removed",
+      actorId: user.id,
+      meta: { depends_on_task_id: parsed.data.dependsOnTaskId }
+    }).catch(() => {});
+    revalidatePath("/planning");
+    revalidatePath(`/planning/${task.planning_item_id}`);
+    revalidatePath("/");
+    return { success: true, message: "Dependency removed." };
+  } catch (error) {
+    console.error("Failed to delete planning task dependency", error);
+    return { success: false, message: "Could not remove dependency." };
+  }
+}
+
 export async function updatePlanningTaskAction(input: unknown): Promise<PlanningActionResult> {
   try {
     const user = await ensureUser();
@@ -676,6 +914,20 @@ export async function updatePlanningTaskAction(input: unknown): Promise<Planning
     // Ownership check: non-admins can only update tasks on their own planning items
     const ownershipError = await ensureOwnsParentItemOfTask(user.id, user.role, user.venueId, parsed.data.taskId);
     if (ownershipError) return ownershipError;
+
+    if (parsed.data.status && parsed.data.status !== "open") {
+      const db = createSupabaseAdminClient();
+      const { data: task, error: taskError } = await db
+        .from("planning_tasks")
+        .select("is_blocked")
+        .eq("id", parsed.data.taskId)
+        .maybeSingle();
+
+      if (taskError) throw new Error(taskError.message);
+      if (task?.is_blocked) {
+        return { success: false, message: "Complete the blocking tasks first." };
+      }
+    }
 
     await updatePlanningTask(parsed.data.taskId, {
       title: parsed.data.title,
@@ -730,6 +982,20 @@ export async function togglePlanningTaskStatusAction(input: unknown): Promise<Pl
     const ownershipError = await ensureOwnsParentItemOfTask(user.id, user.role, user.venueId, parsed.data.taskId);
     if (ownershipError) return ownershipError;
 
+    if (parsed.data.status !== "open") {
+      const db = createSupabaseAdminClient();
+      const { data: task, error: taskError } = await db
+        .from("planning_tasks")
+        .select("is_blocked")
+        .eq("id", parsed.data.taskId)
+        .maybeSingle();
+
+      if (taskError) throw new Error(taskError.message);
+      if (task?.is_blocked) {
+        return { success: false, message: "Complete the blocking tasks first." };
+      }
+    }
+
     await togglePlanningTaskStatus(parsed.data.taskId, parsed.data.status, user.id);
     recordAuditLogEntry({
       entity: "planning_task",
@@ -739,6 +1005,9 @@ export async function togglePlanningTaskStatusAction(input: unknown): Promise<Pl
       meta: { new_status: parsed.data.status }
     }).catch(() => {});
     try {
+      if (parsed.data.status === "open") {
+        await refreshPlanningTaskBlockedStatus(parsed.data.taskId);
+      }
       await updateBlockedStatus(parsed.data.taskId, parsed.data.status);
     } catch (blockErr) {
       console.error("Failed to update blocked status:", blockErr);
