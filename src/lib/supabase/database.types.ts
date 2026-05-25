@@ -109,7 +109,9 @@ export type Database = {
           expires_at: string | null
           ip_address: string | null
           last_activity_at: string
+          previous_session_token_hash: string | null
           session_id: string
+          session_token_hash: string | null
           user_agent: string | null
           user_id: string
         }
@@ -118,7 +120,9 @@ export type Database = {
           expires_at?: string | null
           ip_address?: string | null
           last_activity_at?: string
+          previous_session_token_hash?: string | null
           session_id?: string
+          session_token_hash?: string | null
           user_agent?: string | null
           user_id: string
         }
@@ -127,7 +131,9 @@ export type Database = {
           expires_at?: string | null
           ip_address?: string | null
           last_activity_at?: string
+          previous_session_token_hash?: string | null
           session_id?: string
+          session_token_hash?: string | null
           user_agent?: string | null
           user_id?: string
         }

@@ -63,13 +63,20 @@ export async function updateUserAction(
       venueId: parsed.data.venueId ? parsed.data.venueId : null
     });
 
-    // Destroy all sessions for the user when their role changes.
-    // This prevents demoted users from retaining elevated access in active sessions.
-    try {
-      await destroyAllSessionsForUser(parsed.data.userId);
-    } catch (sessionError) {
-      console.error("Failed to destroy sessions after role update:", sessionError);
-      // Non-fatal: the role change in DB is authoritative
+    const nextVenueId = parsed.data.venueId ? parsed.data.venueId : null;
+    const accessChanged =
+      (currentUserData?.role ?? null) !== parsed.data.role ||
+      (currentUserData?.venue_id ?? null) !== nextVenueId;
+
+    // Destroy sessions only when authorization-relevant access changes.
+    // Full-name edits should not interrupt active users.
+    if (accessChanged) {
+      try {
+        await destroyAllSessionsForUser(parsed.data.userId);
+      } catch (sessionError) {
+        console.error("Failed to destroy sessions after access update:", sessionError);
+        // Non-fatal: the DB role/venue change is authoritative
+      }
     }
 
     await logAuthEvent({
@@ -80,14 +87,15 @@ export async function updateUserAction(
         oldRole: currentUserData?.role ?? "unknown",
         newRole: parsed.data.role,
         oldVenueId: currentUserData?.venue_id ?? null,
-        newVenueId: parsed.data.venueId ? parsed.data.venueId : null
+        newVenueId: nextVenueId,
+        sessionsRevoked: accessChanged
       }
     });
 
     // Capture all field changes (not just role) so non-role edits are auditable.
     const changedFields: string[] = [];
     if ((currentUserData?.role ?? null) !== parsed.data.role) changedFields.push("role");
-    if ((currentUserData?.venue_id ?? null) !== (parsed.data.venueId || null)) changedFields.push("venue_id");
+    if ((currentUserData?.venue_id ?? null) !== nextVenueId) changedFields.push("venue_id");
     if (parsed.data.fullName !== undefined) changedFields.push("full_name");
 
     await recordAuditLogEntry({

@@ -17,7 +17,8 @@ vi.mock("@supabase/ssr", () => ({
 const mockValidateSession = vi.fn();
 vi.mock("@/lib/auth/session", () => ({
   SESSION_COOKIE_NAME: "app-session-id",
-  validateSession: (...args: unknown[]) => mockValidateSession(...args),
+  makeSessionCookieOptions: vi.fn().mockReturnValue({ httpOnly: true, sameSite: "strict", path: "/" }),
+  validateSessionWithRotation: (...args: unknown[]) => mockValidateSession(...args),
 }));
 
 const mockAdminFrom = vi.fn();
@@ -60,17 +61,20 @@ describe("GET /api/auth/session-check", () => {
       name === "app-session-id" ? { value: "session-abc" } : undefined
     );
     mockValidateSession.mockResolvedValue({
-      sessionId: "session-abc",
-      userId: "user-123",
-      createdAt: new Date(),
-      lastActivityAt: new Date(),
-      metadata: {},
+      session: {
+        sessionId: "session-abc",
+        userId: "user-123",
+        createdAt: new Date(),
+        lastActivityAt: new Date(),
+        metadata: {},
+      },
     });
 
     const response = await GET();
     const body = await response.json();
 
     expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
     expect(body).toEqual({ valid: true });
   });
 
@@ -115,11 +119,13 @@ describe("GET /api/auth/session-check", () => {
       name === "app-session-id" ? { value: "session-abc" } : undefined
     );
     mockValidateSession.mockResolvedValue({
-      sessionId: "session-abc",
-      userId: "different-user-456",
-      createdAt: new Date(),
-      lastActivityAt: new Date(),
-      metadata: {},
+      session: {
+        sessionId: "session-abc",
+        userId: "different-user-456",
+        createdAt: new Date(),
+        lastActivityAt: new Date(),
+        metadata: {},
+      },
     });
 
     const response = await GET();
@@ -127,6 +133,30 @@ describe("GET /api/auth/session-check", () => {
 
     expect(response.status).toBe(401);
     expect(body).toEqual({ valid: false });
+  });
+
+  it("should set a rotated app-session cookie without changing the response body", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: "user-123" } } });
+    mockCookieGet.mockImplementation((name: string) =>
+      name === "app-session-id" ? { value: "11111111-1111-4111-8111-111111111111" } : undefined
+    );
+    mockValidateSession.mockResolvedValue({
+      session: {
+        sessionId: "11111111-1111-4111-8111-111111111111",
+        userId: "user-123",
+        createdAt: new Date(),
+        lastActivityAt: new Date(),
+        metadata: {},
+      },
+      rotatedToken: "rotated-opaque-token",
+    });
+
+    const response = await GET();
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({ valid: true });
+    expect(response.headers.get("set-cookie")).toContain("app-session-id=rotated-opaque-token");
   });
 
   it("should return 503 when environment variables are missing", async () => {
@@ -137,6 +167,7 @@ describe("GET /api/auth/session-check", () => {
     const body = await response.json();
 
     expect(response.status).toBe(503);
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
     expect(body).toEqual({ valid: false });
   });
 });

@@ -9,14 +9,8 @@ export async function createSupabaseReadonlyClient(): Promise<SupabaseClient> {
 
   return createServerClient(NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, {
     cookies: {
-      get(name: string) {
-        return store.get(name)?.value;
-      },
-      set() {
-        // no-op in read contexts
-      },
-      remove() {
-        // no-op in read contexts
+      getAll() {
+        return store.getAll().map(({ name, value }) => ({ name, value }));
       }
     },
     cookieOptions: {
@@ -35,18 +29,15 @@ export async function createSupabaseActionClient(): Promise<SupabaseClient> {
 
   return createServerClient(NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, {
     cookies: {
-      get(name: string) {
-        return store.get(name)?.value;
+      getAll() {
+        return store.getAll().map(({ name, value }) => ({ name, value }));
       },
-      set(name: string, value: string, options) {
-        (store as unknown as { set: (args: { name: string; value: string } & Record<string, unknown>) => void }).set(
-          { name, value, ...options }
-        );
-      },
-      remove(name: string, options) {
-        (store as unknown as { set: (args: { name: string; value: string } & Record<string, unknown>) => void }).set(
-          { name, value: "", ...options, maxAge: 0 }
-        );
+      setAll(cookiesToSet) {
+        cookiesToSet.forEach(({ name, value, options }) => {
+          (store as unknown as { set: (args: { name: string; value: string } & Record<string, unknown>) => void }).set(
+            { name, value, ...options }
+          );
+        });
       }
     },
     cookieOptions: {

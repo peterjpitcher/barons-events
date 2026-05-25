@@ -39,6 +39,8 @@ function makeSessionRow(overrides: Partial<{
   expires_at: string;
   user_agent: string | null;
   ip_address: string | null;
+  session_token_hash: string | null;
+  previous_session_token_hash: string | null;
 }> = {}) {
   const now = new Date();
   const expires = new Date(now.getTime() + 24 * 3600 * 1000);
@@ -50,8 +52,18 @@ function makeSessionRow(overrides: Partial<{
     expires_at: expires.toISOString(),
     user_agent: null,
     ip_address: null,
+    session_token_hash: null,
+    previous_session_token_hash: null,
     ...overrides
   };
+}
+
+async function hashSessionTokenForTest(token: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const digest = await crypto.subtle.digest("SHA-256", encoder.encode(`app-session:${token}`));
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 // ─── Setup ────────────────────────────────────────────────────────────────────
@@ -61,8 +73,8 @@ beforeEach(() => {
   vi.useRealTimers();
   mockFromImpl = () => ({
     select: vi.fn(() => ({
-      eq: vi.fn(() => ({
-        single: vi.fn(() => Promise.resolve({ data: null, error: null }))
+      or: vi.fn(() => ({
+        maybeSingle: vi.fn(() => Promise.resolve({ data: null, error: null }))
       }))
     }))
   });
@@ -78,8 +90,8 @@ describe("validateSession — fail-closed behaviour", () => {
   it("should return null when the DB query returns an error", async () => {
     mockFromImpl = () => ({
       select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          single: vi.fn(() => Promise.resolve({
+        or: vi.fn(() => ({
+          maybeSingle: vi.fn(() => Promise.resolve({
             data: null,
             error: { message: "Connection refused" }
           }))
@@ -95,8 +107,8 @@ describe("validateSession — fail-closed behaviour", () => {
   it("should return null when the DB query returns null data (no matching session)", async () => {
     mockFromImpl = () => ({
       select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          single: vi.fn(() => Promise.resolve({ data: null, error: null }))
+        or: vi.fn(() => ({
+          maybeSingle: vi.fn(() => Promise.resolve({ data: null, error: null }))
         }))
       }))
     });
@@ -109,8 +121,8 @@ describe("validateSession — fail-closed behaviour", () => {
   it("should return null when an exception is thrown during validation", async () => {
     mockFromImpl = () => ({
       select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          single: vi.fn(() => Promise.reject(new Error("Unexpected crash")))
+        or: vi.fn(() => ({
+          maybeSingle: vi.fn(() => Promise.reject(new Error("Unexpected crash")))
         }))
       }))
     });
@@ -149,6 +161,7 @@ describe("validateSession — input guards", () => {
 
 describe("validateSession — correct field mapping from DB row", () => {
   it("should map snake_case DB columns to camelCase SessionRecord fields", async () => {
+    const token = "valid-opaque-session-token";
     const row = makeSessionRow({
       session_id: "session-abc",
       user_id: "user-xyz",
@@ -156,13 +169,14 @@ describe("validateSession — correct field mapping from DB row", () => {
       last_activity_at: "2026-01-10T11:50:00.000Z",
       expires_at: "2026-01-11T10:00:00.000Z",
       user_agent: "Mozilla/5.0",
-      ip_address: "192.168.1.1"
+      ip_address: "192.168.1.1",
+      session_token_hash: await hashSessionTokenForTest(token)
     });
 
     mockFromImpl = () => ({
       select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          single: vi.fn(() => Promise.resolve({ data: row, error: null }))
+        or: vi.fn(() => ({
+          maybeSingle: vi.fn(() => Promise.resolve({ data: row, error: null }))
         }))
       })),
       delete: vi.fn(() => ({
@@ -176,7 +190,7 @@ describe("validateSession — correct field mapping from DB row", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-10T12:00:00.000Z")); // before expiry, 10 min idle (under 30 min threshold)
 
-    const result = await validateSession("session-abc");
+    const result = await validateSession(token);
 
     expect(result).not.toBeNull();
     expect(result?.sessionId).toBe("session-abc");

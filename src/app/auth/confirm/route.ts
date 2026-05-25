@@ -12,6 +12,12 @@ import { logAuthEvent } from "@/lib/audit-log";
  * All Supabase email links should redirect to this route with:
  *   ?token_hash=<hash>&type=<invite|recovery|signup>
  */
+function redirectNoStore(url: string): NextResponse {
+  const response = NextResponse.redirect(url);
+  response.headers.set("Cache-Control", "private, no-store");
+  return response;
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
   const tokenHash = searchParams.get("token_hash");
@@ -33,7 +39,7 @@ export async function GET(req: NextRequest) {
       const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type });
       if (error) {
         console.error("Token verification failed:", error);
-        return NextResponse.redirect(
+        return redirectNoStore(
           `${baseUrl}/login?error=invalid_token`
         );
       }
@@ -53,12 +59,12 @@ export async function GET(req: NextRequest) {
       const { error } = await supabase.auth.exchangeCodeForSession(code);
       if (error) {
         console.error("Code exchange failed:", error);
-        return NextResponse.redirect(
+        return redirectNoStore(
           `${baseUrl}/login?error=invalid_token`
         );
       }
     } else {
-      return NextResponse.redirect(`${baseUrl}/login?error=missing_token`);
+      return redirectNoStore(`${baseUrl}/login?error=missing_token`);
     }
 
     // Check if the user is deactivated — block them from completing any auth flow
@@ -72,7 +78,7 @@ export async function GET(req: NextRequest) {
         .single();
 
       if (userStatus?.deactivated_at) {
-        return NextResponse.redirect(`${baseUrl}/deactivated`);
+        return redirectNoStore(`${baseUrl}/deactivated`);
       }
     }
 
@@ -90,12 +96,12 @@ export async function GET(req: NextRequest) {
         path: "/",
         maxAge: 600
       });
-      return NextResponse.redirect(`${baseUrl}/reset-password`);
+      return redirectNoStore(`${baseUrl}/reset-password`);
     }
 
-    return NextResponse.redirect(`${baseUrl}${nextPath}`);
+    return redirectNoStore(`${baseUrl}${nextPath}`);
   } catch (error) {
     console.error("Auth confirm error:", error);
-    return NextResponse.redirect(`${baseUrl}/login?error=server_error`);
+    return redirectNoStore(`${baseUrl}/login?error=server_error`);
   }
 }

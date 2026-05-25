@@ -68,10 +68,11 @@ function createConfigurableMockDb() {
           // Awaited directly — resolve terminal
           return Promise.resolve(terminalResult).then.bind(Promise.resolve(terminalResult));
         }
-        if (prop === "single") {
+        if (prop === "single" || prop === "maybeSingle") {
           return () => {
             const key = `${opKey}:single`;
-            const r = results.get(key) ?? results.get(opKey) ?? terminalResult;
+            const maybeKey = `${opKey}:${String(prop)}`;
+            const r = results.get(maybeKey) ?? results.get(key) ?? results.get(opKey) ?? terminalResult;
             return Promise.resolve(r);
           };
         }
@@ -108,6 +109,7 @@ vi.mock("@/lib/supabase/admin", () => ({
 import {
   createSession,
   validateSession,
+  validateSessionWithRotation,
   destroySession,
   destroyAllSessionsForUser,
   cleanupExpiredSessions,
@@ -128,6 +130,8 @@ function makeSessionRow(overrides: Partial<{
   expires_at: string;
   user_agent: string | null;
   ip_address: string | null;
+  session_token_hash: string | null;
+  previous_session_token_hash: string | null;
 }> = {}) {
   const now = new Date();
   const expires = new Date(now.getTime() + 24 * 3600 * 1000);
@@ -139,8 +143,18 @@ function makeSessionRow(overrides: Partial<{
     expires_at: expires.toISOString(),
     user_agent: null,
     ip_address: null,
+    session_token_hash: null,
+    previous_session_token_hash: null,
     ...overrides
   };
+}
+
+async function hashSessionTokenForTest(token: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const digest = await crypto.subtle.digest("SHA-256", encoder.encode(`app-session:${token}`));
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -154,7 +168,7 @@ beforeEach(() => {
 // ── createSession ─────────────────────────────────────────────────────────────
 
 describe("createSession", () => {
-  it("returns a UUID string sessionId", async () => {
+  it("returns an opaque token and stores only its hash", async () => {
     const fakeUuid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
     // Spy on randomUUID only — leaves crypto.subtle intact
     const uuidSpy = vi.spyOn(crypto, "randomUUID").mockReturnValue(fakeUuid);
@@ -164,16 +178,30 @@ describe("createSession", () => {
         order: vi.fn(() => Promise.resolve({ data: [], error: null }))
       }))
     }));
-    const insertFn = vi.fn(() => Promise.resolve({ data: null, error: null }));
+    const insertFn = vi.fn((_payload: Record<string, unknown>) =>
+      Promise.resolve({ data: null, error: null })
+    );
 
     mockAdminClient.fromSpy.mockImplementation(() => ({
       select: selectFn,
       insert: insertFn
     }));
 
-    const sessionId = await createSession("user-1");
+    const sessionToken = await createSession("user-1");
 
-    expect(sessionId).toBe(fakeUuid);
+    expect(sessionToken).not.toBe(fakeUuid);
+    expect(sessionToken).toMatch(/^[A-Za-z0-9_-]{40,}$/);
+    expect(insertFn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        session_id: fakeUuid,
+        session_token_hash: expect.any(String),
+        previous_session_token_hash: null,
+        user_id: "user-1"
+      })
+    );
+    const inserted = insertFn.mock.calls[0]?.[0] as { session_token_hash: string };
+    expect(inserted.session_token_hash).toHaveLength(64);
+    expect(inserted.session_token_hash).not.toBe(sessionToken);
     uuidSpy.mockRestore();
   });
 
@@ -211,7 +239,12 @@ describe("createSession", () => {
     expect(inSpy).toHaveBeenCalledWith("session_id", ["session-0"]);
     // insert should have been called with the new session
     expect(insertFn).toHaveBeenCalledWith(
-      expect.objectContaining({ session_id: fakeUuid, user_id: "user-with-5-sessions" })
+      expect.objectContaining({
+        session_id: fakeUuid,
+        session_token_hash: expect.any(String),
+        previous_session_token_hash: null,
+        user_id: "user-with-5-sessions"
+      })
     );
 
     uuidSpy.mockRestore();
@@ -253,30 +286,20 @@ describe("validateSession", () => {
   });
 
   it("returns null if DB returns no data", async () => {
-    mockAdminClient.fromSpy.mockImplementation(() => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          single: vi.fn(() => Promise.resolve({ data: null, error: null }))
-        }))
-      }))
-    }));
+    mockAdminClient.setResult("app_sessions:select:or:maybeSingle", { data: null, error: null });
 
     expect(await validateSession("some-session-id")).toBeNull();
   });
 
-  it("returns SessionRecord for a valid, non-expired session", async () => {
-    const row = makeSessionRow();
+  it("returns SessionRecord for a valid hashed session token", async () => {
+    const token = "opaque-session-token";
+    const row = makeSessionRow({
+      session_token_hash: await hashSessionTokenForTest(token)
+    });
 
-    mockAdminClient.fromSpy.mockImplementation(() => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          single: vi.fn(() => Promise.resolve({ data: row, error: null }))
-        }))
-      })),
-      delete: vi.fn(() => ({ eq: vi.fn(() => Promise.resolve({ data: null, error: null })) }))
-    }));
+    mockAdminClient.setResult("app_sessions:select:or:maybeSingle", { data: row, error: null });
 
-    const result = await validateSession("test-session-id");
+    const result = await validateSession(token);
 
     expect(result).not.toBeNull();
     expect(result?.sessionId).toBe(row.session_id);
@@ -285,16 +308,66 @@ describe("validateSession", () => {
     expect(result?.metadata).toEqual({ userAgent: null, ipAddress: null });
   });
 
+  it("keeps a legacy UUID cookie valid without rotation", async () => {
+    const legacySessionId = "11111111-1111-4111-8111-111111111111";
+    const row = makeSessionRow({ session_id: legacySessionId });
+
+    mockAdminClient.setResult("app_sessions:select:or:maybeSingle", { data: null, error: null });
+    mockAdminClient.setResult("app_sessions:select:eq:maybeSingle", { data: row, error: null });
+
+    const result = await validateSession(legacySessionId);
+
+    expect(result).not.toBeNull();
+    expect(result?.sessionId).toBe(legacySessionId);
+    expect(mockAdminClient.getCalls().some((call) => call.method === "update")).toBe(false);
+  });
+
+  it("silently rotates a legacy UUID cookie when validation requests rotation", async () => {
+    const legacySessionId = "22222222-2222-4222-8222-222222222222";
+    const row = makeSessionRow({ session_id: legacySessionId });
+
+    mockAdminClient.setResult("app_sessions:select:or:maybeSingle", { data: null, error: null });
+    mockAdminClient.setResult("app_sessions:select:eq:maybeSingle", { data: row, error: null });
+
+    const result = await validateSessionWithRotation(legacySessionId);
+
+    expect(result?.session.sessionId).toBe(legacySessionId);
+    expect(result?.rotatedToken).toBeTruthy();
+    expect(result?.rotatedToken).not.toBe(legacySessionId);
+    const updateCall = mockAdminClient.getCalls().find((call) => call.method === "update");
+    expect(updateCall?.args[0]).toEqual(
+      expect.objectContaining({
+        session_token_hash: expect.any(String),
+        previous_session_token_hash: await hashSessionTokenForTest(legacySessionId),
+        last_activity_at: expect.any(String)
+      })
+    );
+  });
+
+  it("clears the previous legacy hash after the rotated token is used", async () => {
+    const token = "current-opaque-session-token";
+    const row = makeSessionRow({
+      session_token_hash: await hashSessionTokenForTest(token),
+      previous_session_token_hash: await hashSessionTokenForTest("33333333-3333-4333-8333-333333333333")
+    });
+
+    mockAdminClient.setResult("app_sessions:select:or:maybeSingle", { data: row, error: null });
+
+    const result = await validateSessionWithRotation(token);
+
+    expect(result?.session.sessionId).toBe(row.session_id);
+    expect(result?.rotatedToken).toBeUndefined();
+    const updateCall = mockAdminClient.getCalls().find((call) => call.method === "update");
+    expect(updateCall?.args[0]).toEqual({ previous_session_token_hash: null });
+  });
+
   // Note: absolute timeout test removed — sessions no longer expire.
 
   it("returns null on DB error (fail-closed)", async () => {
-    mockAdminClient.fromSpy.mockImplementation(() => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          single: vi.fn(() => Promise.resolve({ data: null, error: { message: "Connection refused" } }))
-        }))
-      }))
-    }));
+    mockAdminClient.setResult("app_sessions:select:or:maybeSingle", {
+      data: null,
+      error: { message: "Connection refused" }
+    });
 
     const result = await validateSession("any-session-id");
 
@@ -305,16 +378,19 @@ describe("validateSession", () => {
 // ── destroySession ────────────────────────────────────────────────────────────
 
 describe("destroySession", () => {
-  it("calls delete on app_sessions with the correct session_id", async () => {
-    const eqFn = vi.fn(() => Promise.resolve({ data: null, error: null }));
-    const deleteFn = vi.fn(() => ({ eq: eqFn }));
+  it("deletes app_sessions by hashed token and legacy UUID fallback", async () => {
+    const orFn = vi.fn(() => Promise.resolve({ data: null, error: null }));
+    const deleteFn = vi.fn(() => ({ or: orFn }));
 
     mockAdminClient.fromSpy.mockImplementation(() => ({ delete: deleteFn }));
 
-    await destroySession("session-to-destroy");
+    await destroySession("44444444-4444-4444-8444-444444444444");
 
     expect(deleteFn).toHaveBeenCalled();
-    expect(eqFn).toHaveBeenCalledWith("session_id", "session-to-destroy");
+    expect(orFn).toHaveBeenCalledWith(
+      expect.stringContaining("session_id.eq.44444444-4444-4444-8444-444444444444")
+    );
+    expect(orFn).toHaveBeenCalledWith(expect.stringContaining("session_token_hash.eq."));
   });
 });
 

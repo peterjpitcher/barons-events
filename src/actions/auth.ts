@@ -27,6 +27,8 @@ const credentialsSchema = z.object({
   password: z.string().min(8, { message: "Password must be at least 8 characters" })
 });
 
+const APP_ROLES = new Set(["administrator", "office_worker", "executive"]);
+
 const emailOnlySchema = z.object({
   email: z.string().email({ message: "Enter a valid email" })
 });
@@ -156,19 +158,28 @@ export async function signInAction(_: SignInState | undefined, formData: FormDat
   const adminClient = createSupabaseAdminClient();
   const { data: userRow } = await adminClient
     .from("users")
-    .select("deactivated_at")
+    .select("role,deactivated_at")
     .eq("id", data.user.id)
-    .single();
+    .maybeSingle();
 
-  if (userRow?.deactivated_at) {
+  if (!userRow || userRow.deactivated_at || !APP_ROLES.has(String(userRow.role))) {
     await logAuthEvent({
       event: "auth.login.failure",
       userId: data.user.id,
       ipAddress: ip,
-      meta: { reason: "account_deactivated" }
+      meta: {
+        reason: userRow?.deactivated_at
+          ? "account_deactivated"
+          : "missing_or_invalid_profile"
+      }
     });
     await supabase.auth.signOut();
-    return { success: false, message: "Your account has been deactivated. Contact your administrator." };
+    return {
+      success: false,
+      message: userRow?.deactivated_at
+        ? "Your account has been deactivated. Contact your administrator."
+        : "Your account is not fully set up. Contact your administrator."
+    };
   }
 
   // Clear lockout counter for this IP on successful sign-in

@@ -1,6 +1,8 @@
 import { cache } from "react";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { createSupabaseReadonlyClient } from "./supabase/server";
+import { SESSION_COOKIE_NAME, validateSession } from "./auth/session";
 import type { AppUser, UserRole } from "./types";
 
 /**
@@ -46,6 +48,11 @@ export async function getSession() {
 
 export const getCurrentUser = cache(async function getCurrentUser(): Promise<AppUser | null> {
   const supabase = await createSupabaseReadonlyClient();
+  const cookieStore = await cookies();
+  const appSessionToken = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  if (!appSessionToken) {
+    return null;
+  }
 
   // Always validate the session server-side — never trust client-injectable headers.
   const {
@@ -56,6 +63,10 @@ export const getCurrentUser = cache(async function getCurrentUser(): Promise<App
   }
 
   const userId = user.id;
+  const appSession = await validateSession(appSessionToken);
+  if (!appSession || appSession.userId !== userId) {
+    return null;
+  }
 
   const { data: profile } = await supabase
     .from("users")

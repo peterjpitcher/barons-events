@@ -20,6 +20,17 @@ vi.mock("next/navigation", () => ({
   })
 }));
 
+const mockCookieGet = vi.fn();
+vi.mock("next/headers", () => ({
+  cookies: vi.fn(async () => ({ get: mockCookieGet }))
+}));
+
+const mockValidateSession = vi.fn();
+vi.mock("@/lib/auth/session", () => ({
+  SESSION_COOKIE_NAME: "app-session-id",
+  validateSession: (...args: unknown[]) => mockValidateSession(...args)
+}));
+
 // ─── Mock: @/lib/supabase/server ─────────────────────────────────────────────
 vi.mock("@/lib/supabase/server", () => ({
   createSupabaseReadonlyClient: vi.fn()
@@ -88,6 +99,18 @@ function makeSupabaseClient(
     deactivated_at: string | null;
   } | null
 ) {
+  if (authUser) {
+    mockValidateSession.mockResolvedValue({
+      sessionId: "app-session-1",
+      userId: authUser.id,
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      lastActivityAt: new Date("2026-01-01T00:00:00.000Z"),
+      metadata: {}
+    });
+  } else {
+    mockValidateSession.mockResolvedValue(null);
+  }
+
   // Chain: supabase.from('users').select(...).eq(...).maybeSingle()
   const maybeSingle = vi.fn().mockResolvedValue({ data: dbProfile });
   const eq = vi.fn().mockReturnValue({ maybeSingle });
@@ -147,11 +170,26 @@ function makeCSRFRequest(
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockCookieGet.mockImplementation((name: string) =>
+    name === "app-session-id" ? { value: "app-session-token" } : undefined
+  );
 });
 
 // ─── getCurrentUser ───────────────────────────────────────────────────────────
 
 describe("getCurrentUser", () => {
+  it("returns null when the app-session cookie is missing", async () => {
+    mockCookieGet.mockReturnValue(undefined);
+    mockCreateClient.mockResolvedValue(
+      makeSupabaseClient({ id: "user-1" }, validAdminProfile)
+    );
+
+    const result = await getCurrentUser();
+
+    expect(result).toBeNull();
+    expect(mockValidateSession).not.toHaveBeenCalled();
+  });
+
   it("returns null when supabase auth returns no user", async () => {
     mockCreateClient.mockResolvedValue(makeSupabaseClient(null, null));
 
@@ -164,6 +202,23 @@ describe("getCurrentUser", () => {
     mockCreateClient.mockResolvedValue(
       makeSupabaseClient({ id: "user-1" }, null)
     );
+
+    const result = await getCurrentUser();
+
+    expect(result).toBeNull();
+  });
+
+  it("returns null when the app session belongs to a different Supabase user", async () => {
+    mockCreateClient.mockResolvedValue(
+      makeSupabaseClient({ id: "user-1" }, validAdminProfile)
+    );
+    mockValidateSession.mockResolvedValue({
+      sessionId: "app-session-1",
+      userId: "different-user",
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      lastActivityAt: new Date("2026-01-01T00:00:00.000Z"),
+      metadata: {}
+    });
 
     const result = await getCurrentUser();
 

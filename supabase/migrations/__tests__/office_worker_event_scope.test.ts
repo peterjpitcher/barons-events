@@ -17,6 +17,8 @@
  *   SUPABASE_OW_JWT              (JWT for an office_worker WITH a venue_id)
  *   SUPABASE_OTHER_OW_JWT        (JWT for a different office_worker at a different venue)
  *   SUPABASE_OW_NO_VENUE_JWT     (JWT for an office_worker WITHOUT a venue_id)
+ *   NEXT_PUBLIC_SUPABASE_ANON_KEY (required for anon direct-read assertions)
+ *   SUPABASE_EXECUTIVE_JWT        (optional JWT for executive read-deny assertions)
  *
  * All other fixtures (users, venues, pending event) are created in beforeAll
  * using the service-role client and cleaned up in afterAll.
@@ -30,6 +32,8 @@ const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
 const OW_JWT = process.env.SUPABASE_OW_JWT ?? "";
 const OTHER_OW_JWT = process.env.SUPABASE_OTHER_OW_JWT ?? "";
 const OW_NO_VENUE_JWT = process.env.SUPABASE_OW_NO_VENUE_JWT ?? "";
+const EXECUTIVE_JWT = process.env.SUPABASE_EXECUTIVE_JWT ?? "";
+const EXPLICIT_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
 const RUN_FLAG =
   process.env.RUN_SUPABASE_MIGRATION_TESTS === "1" ||
   process.env.RUN_MIGRATION_INTEGRATION_TESTS === "1";
@@ -44,7 +48,7 @@ const shouldRun =
 
 // Anon key is only used for authenticated-session client construction; any valid
 // anon key works for JWT-auth headers since the bearer token overrides it.
-const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? SERVICE_ROLE;
+const ANON_KEY = EXPLICIT_ANON_KEY || SERVICE_ROLE;
 
 function serviceRoleClient(): SupabaseClient {
   return createClient(SUPABASE_URL, SERVICE_ROLE, {
@@ -59,6 +63,12 @@ function jwtClient(jwt: string): SupabaseClient {
   });
 }
 
+function anonymousClient(): SupabaseClient {
+  return createClient(SUPABASE_URL, EXPLICIT_ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
 type Fixture = {
   venueA: string;
   venueB: string;
@@ -66,6 +76,7 @@ type Fixture = {
   owId: string; // office_worker at venueA (has the SUPABASE_OW_JWT)
   otherOwId: string; // office_worker at venueB (has the SUPABASE_OTHER_OW_JWT)
   owNoVenueId: string; // office_worker with venue_id = null
+  executiveId: string | null;
   pendingEventId: string; // event in pending_approval for reject RPC test
   createdEventIds: string[];
   createdPlanningItemIds: string[];
@@ -73,6 +84,11 @@ type Fixture = {
 };
 
 const describeFn = shouldRun ? describe : describe.skip;
+
+function expectNoRows(result: { data: unknown[] | null; error: { message?: string } | null }) {
+  expect(result.error).toBeNull();
+  expect(result.data ?? []).toHaveLength(0);
+}
 
 describeFn("migration: office_worker_event_scope", () => {
   let admin: SupabaseClient;
@@ -83,6 +99,7 @@ describeFn("migration: office_worker_event_scope", () => {
     owId: "",
     otherOwId: "",
     owNoVenueId: "",
+    executiveId: null,
     pendingEventId: "",
     createdEventIds: [],
     createdPlanningItemIds: [],
@@ -114,6 +131,13 @@ describeFn("migration: office_worker_event_scope", () => {
     fx.owId = owUser.data.user.id;
     fx.otherOwId = otherOwUser.data.user.id;
     fx.owNoVenueId = noVenueOwUser.data.user.id;
+    if (EXECUTIVE_JWT) {
+      const executiveUser = await admin.auth.getUser(EXECUTIVE_JWT);
+      if (executiveUser.error || !executiveUser.data.user) {
+        throw new Error(`SUPABASE_EXECUTIVE_JWT is invalid: ${executiveUser.error?.message ?? "no user"}`);
+      }
+      fx.executiveId = executiveUser.data.user.id;
+    }
 
     // --- Look up / verify venues for both OWs ------------------------------
     const { data: owRow, error: owRowErr } = await admin
@@ -151,6 +175,20 @@ describeFn("migration: office_worker_event_scope", () => {
     }
     if (noVenueRow.role !== "office_worker" || noVenueRow.venue_id) {
       throw new Error("SUPABASE_OW_NO_VENUE_JWT must be for an office_worker WITHOUT a venue_id");
+    }
+
+    if (fx.executiveId) {
+      const { data: executiveRow, error: executiveRowErr } = await admin
+        .from("users")
+        .select("role")
+        .eq("id", fx.executiveId)
+        .single();
+      if (executiveRowErr || !executiveRow) {
+        throw new Error(`Cannot load executive user row: ${executiveRowErr?.message}`);
+      }
+      if (executiveRow.role !== "executive") {
+        throw new Error("SUPABASE_EXECUTIVE_JWT must be for an executive user");
+      }
     }
 
     // --- Soft-deleted venue fixture ---------------------------------------
@@ -354,6 +392,339 @@ describeFn("migration: office_worker_event_scope", () => {
   // ─────────────────────────────────────────────────────────────────────
   // RLS: SELECT + UPDATE
   // ─────────────────────────────────────────────────────────────────────
+
+  it("anon cannot directly read public API base tables", async () => {
+    if (!EXPLICIT_ANON_KEY) {
+      console.warn("Skipping anon base-table RLS assertion: NEXT_PUBLIC_SUPABASE_ANON_KEY is not set");
+      return;
+    }
+
+    const { data: event, error: eventErr } = await admin
+      .from("events")
+      .insert({
+        title: "anon-deny-event",
+        venue_id: fx.venueA,
+        created_by: fx.owId,
+        status: "approved",
+        start_at: new Date(Date.now() + 86_400_000).toISOString(),
+      })
+      .select("id")
+      .single();
+    expect(eventErr).toBeNull();
+    fx.createdEventIds.push(event!.id as string);
+
+    const eventTypeLabel = `RBAC anon fixture ${Date.now()}`;
+    const { data: eventType, error: eventTypeErr } = await admin
+      .from("event_types")
+      .insert({ label: eventTypeLabel })
+      .select("id")
+      .single();
+    expect(eventTypeErr).toBeNull();
+
+    const serviceName = `RBAC anon service ${Date.now()}`;
+    const { data: serviceType, error: serviceTypeErr } = await admin
+      .from("venue_service_types")
+      .insert({ name: serviceName, display_order: 9999 })
+      .select("id")
+      .single();
+    expect(serviceTypeErr).toBeNull();
+
+    const { data: openingHour, error: openingHourErr } = await admin
+      .from("venue_opening_hours")
+      .insert({
+        venue_id: fx.venueA,
+        service_type_id: serviceType!.id,
+        day_of_week: 0,
+        open_time: "10:00",
+        close_time: "22:00",
+      })
+      .select("id")
+      .single();
+    expect(openingHourErr).toBeNull();
+
+    const { error: venueServiceErr } = await admin
+      .from("venue_services")
+      .insert({
+        venue_id: fx.venueA,
+        service_type_id: serviceType!.id,
+      });
+    expect(venueServiceErr).toBeNull();
+
+    const { data: override, error: overrideErr } = await admin
+      .from("venue_opening_overrides")
+      .insert({
+        override_date: new Date(Date.now() + 86_400_000).toISOString().slice(0, 10),
+        service_type_id: serviceType!.id,
+        is_closed: true,
+        note: "RBAC anon fixture",
+      })
+      .select("id")
+      .single();
+    expect(overrideErr).toBeNull();
+
+    const { error: overrideVenueErr } = await admin
+      .from("venue_opening_override_venues")
+      .insert({
+        override_id: override!.id,
+        venue_id: fx.venueA,
+      });
+    expect(overrideVenueErr).toBeNull();
+
+    try {
+      const anon = anonymousClient();
+      const checks = await Promise.all([
+        anon.from("events").select("id, notes").eq("id", event!.id),
+        anon.from("venues").select("id, name").eq("id", fx.venueA),
+        anon.from("event_types").select("id, label").eq("id", eventType!.id),
+        anon.from("venue_service_types").select("id, name").eq("id", serviceType!.id),
+        anon.from("venue_services").select("venue_id, service_type_id").eq("service_type_id", serviceType!.id),
+        anon.from("venue_opening_hours").select("id").eq("id", openingHour!.id),
+        anon.from("venue_opening_overrides").select("id").eq("id", override!.id),
+        anon.from("venue_opening_override_venues").select("override_id").eq("override_id", override!.id),
+      ]);
+
+      for (const result of checks) {
+        expect(result.error || (result.data ?? []).length === 0).toBeTruthy();
+      }
+    } finally {
+      await admin.from("event_types").delete().eq("id", eventType!.id);
+      await admin.from("venue_service_types").delete().eq("id", serviceType!.id);
+    }
+  });
+
+  it("event child table reads follow parent event visibility", async () => {
+    const { data: event, error: eventErr } = await admin
+      .from("events")
+      .insert({
+        title: "child-visibility-other-venue",
+        venue_id: fx.venueB,
+        created_by: fx.otherOwId,
+        manager_responsible_id: fx.otherOwId,
+        status: "approved",
+        start_at: new Date(Date.now() + 86_400_000).toISOString(),
+      })
+      .select("id")
+      .single();
+    expect(eventErr).toBeNull();
+    fx.createdEventIds.push(event!.id as string);
+
+    const { error: versionErr } = await admin.from("event_versions").insert({
+      event_id: event!.id,
+      version: 1,
+      payload: { title: "child-visibility-other-venue" },
+      submitted_by: fx.otherOwId,
+    });
+    expect(versionErr).toBeNull();
+
+    const { error: approvalErr } = await admin.from("approvals").insert({
+      event_id: event!.id,
+      reviewer_id: fx.otherOwId,
+      decision: "approved",
+      feedback_text: "fixture",
+    });
+    expect(approvalErr).toBeNull();
+
+    const { error: debriefErr } = await admin.from("debriefs").insert({
+      event_id: event!.id,
+      attendance: 42,
+      submitted_by: fx.otherOwId,
+    });
+    expect(debriefErr).toBeNull();
+
+    const { data: artist, error: artistErr } = await admin
+      .from("artists")
+      .insert({
+        name: `RBAC child artist ${Date.now()}`,
+        created_by: fx.otherOwId,
+      })
+      .select("id")
+      .single();
+    expect(artistErr).toBeNull();
+
+    const { error: eventArtistErr } = await admin.from("event_artists").insert({
+      event_id: event!.id,
+      artist_id: artist!.id,
+      created_by: fx.otherOwId,
+    });
+    expect(eventArtistErr).toBeNull();
+
+    try {
+      const assignedOw = jwtClient(OW_JWT);
+      expectNoRows(await assignedOw.from("event_versions").select("id").eq("event_id", event!.id));
+      expectNoRows(await assignedOw.from("approvals").select("id").eq("event_id", event!.id));
+      expectNoRows(await assignedOw.from("debriefs").select("id").eq("event_id", event!.id));
+      expectNoRows(await assignedOw.from("event_artists").select("id").eq("event_id", event!.id));
+
+      const noVenueOw = jwtClient(OW_NO_VENUE_JWT);
+      for (const table of ["event_versions", "approvals", "debriefs", "event_artists"] as const) {
+        const { data, error } = await noVenueOw.from(table).select("id").eq("event_id", event!.id);
+        expect(error).toBeNull();
+        expect(data ?? []).toHaveLength(1);
+      }
+
+      if (EXECUTIVE_JWT) {
+        const executive = jwtClient(EXECUTIVE_JWT);
+        for (const table of ["event_versions", "approvals", "debriefs", "event_artists"] as const) {
+          const { data, error } = await executive.from(table).select("id").eq("event_id", event!.id);
+          expect(error).toBeNull();
+          expect(data ?? []).toHaveLength(1);
+        }
+      }
+    } finally {
+      await admin.from("artists").delete().eq("id", artist!.id);
+    }
+  });
+
+  it("planning child table reads follow parent planning item visibility", async () => {
+    const { data: item, error: itemErr } = await admin
+      .from("planning_items")
+      .insert({
+        title: "planning-child-other-venue",
+        type_label: "Campaign",
+        venue_id: fx.venueB,
+        target_date: new Date(Date.now() + 86_400_000).toISOString().slice(0, 10),
+        status: "planned",
+        created_by: fx.otherOwId,
+      })
+      .select("id")
+      .single();
+    expect(itemErr).toBeNull();
+    fx.createdPlanningItemIds.push(item!.id as string);
+
+    const dueDate = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+    const { data: taskA, error: taskAErr } = await admin
+      .from("planning_tasks")
+      .insert({
+        planning_item_id: item!.id,
+        title: "Child task A",
+        assignee_id: fx.otherOwId,
+        due_date: dueDate,
+        created_by: fx.otherOwId,
+      })
+      .select("id")
+      .single();
+    expect(taskAErr).toBeNull();
+
+    const { data: taskB, error: taskBErr } = await admin
+      .from("planning_tasks")
+      .insert({
+        planning_item_id: item!.id,
+        title: "Child task B",
+        assignee_id: fx.otherOwId,
+        due_date: dueDate,
+        created_by: fx.otherOwId,
+      })
+      .select("id")
+      .single();
+    expect(taskBErr).toBeNull();
+
+    const { error: assigneeErr } = await admin.from("planning_task_assignees").insert({
+      task_id: taskA!.id,
+      user_id: fx.otherOwId,
+    });
+    expect(assigneeErr).toBeNull();
+
+    const { error: dependencyErr } = await admin.from("planning_task_dependencies").insert({
+      task_id: taskA!.id,
+      depends_on_task_id: taskB!.id,
+    });
+    expect(dependencyErr).toBeNull();
+
+    const assignedOw = jwtClient(OW_JWT);
+    expectNoRows(await assignedOw.from("planning_task_assignees").select("id").eq("task_id", taskA!.id));
+    expectNoRows(await assignedOw.from("planning_task_dependencies").select("id").eq("task_id", taskA!.id));
+
+    const noVenueOw = jwtClient(OW_NO_VENUE_JWT);
+    const assignees = await noVenueOw.from("planning_task_assignees").select("id").eq("task_id", taskA!.id);
+    expect(assignees.error).toBeNull();
+    expect(assignees.data ?? []).toHaveLength(1);
+    const dependencies = await noVenueOw.from("planning_task_dependencies").select("id").eq("task_id", taskA!.id);
+    expect(dependencies.error).toBeNull();
+    expect(dependencies.data ?? []).toHaveLength(1);
+
+    if (EXECUTIVE_JWT) {
+      const executive = jwtClient(EXECUTIVE_JWT);
+      const executiveAssignees = await executive.from("planning_task_assignees").select("id").eq("task_id", taskA!.id);
+      expect(executiveAssignees.error).toBeNull();
+      expect(executiveAssignees.data ?? []).toHaveLength(1);
+      const executiveDependencies = await executive.from("planning_task_dependencies").select("id").eq("task_id", taskA!.id);
+      expect(executiveDependencies.error).toBeNull();
+      expect(executiveDependencies.data ?? []).toHaveLength(1);
+    }
+  });
+
+  it("payment rows are readable to office workers but not executives", async () => {
+    const { data: event, error: eventErr } = await admin
+      .from("events")
+      .insert({
+        title: "payment-rbac-event",
+        venue_id: fx.venueB,
+        created_by: fx.otherOwId,
+        status: "approved",
+        start_at: new Date(Date.now() + 86_400_000).toISOString(),
+      })
+      .select("id")
+      .single();
+    expect(eventErr).toBeNull();
+    fx.createdEventIds.push(event!.id as string);
+
+    const { data: booking, error: bookingErr } = await admin
+      .from("event_bookings")
+      .insert({
+        event_id: event!.id,
+        first_name: "RBAC",
+        mobile: "+447700900000",
+        ticket_count: 1,
+      })
+      .select("id")
+      .single();
+    expect(bookingErr).toBeNull();
+
+    const unique = Date.now();
+    const { data: transaction, error: transactionErr } = await admin
+      .from("payment_transactions")
+      .insert({
+        booking_id: booking!.id,
+        event_id: event!.id,
+        stripe_checkout_session_id: `cs_test_rbac_${unique}`,
+        amount_pence: 1000,
+        idempotency_key: `rbac-payment-${unique}`,
+      })
+      .select("id")
+      .single();
+    expect(transactionErr).toBeNull();
+
+    const { data: refund, error: refundErr } = await admin
+      .from("payment_refunds")
+      .insert({
+        transaction_id: transaction!.id,
+        booking_id: booking!.id,
+        event_id: event!.id,
+        stripe_refund_id: `re_test_rbac_${unique}`,
+        amount_pence: 100,
+        idempotency_key: `rbac-refund-${unique}`,
+      })
+      .select("id")
+      .single();
+    expect(refundErr).toBeNull();
+
+    const assignedOw = jwtClient(OW_JWT);
+    const owTransactions = await assignedOw.from("payment_transactions").select("id").eq("id", transaction!.id);
+    expect(owTransactions.error).toBeNull();
+    expect(owTransactions.data ?? []).toHaveLength(1);
+    const owRefunds = await assignedOw.from("payment_refunds").select("id").eq("id", refund!.id);
+    expect(owRefunds.error).toBeNull();
+    expect(owRefunds.data ?? []).toHaveLength(1);
+
+    if (!EXECUTIVE_JWT) {
+      console.warn("Skipping executive payment RLS assertion: SUPABASE_EXECUTIVE_JWT is not set");
+      return;
+    }
+
+    const executive = jwtClient(EXECUTIVE_JWT);
+    expectNoRows(await executive.from("payment_transactions").select("id").eq("id", transaction!.id));
+    expectNoRows(await executive.from("payment_refunds").select("id").eq("id", refund!.id));
+  });
 
   it("venue-assigned OW cannot SELECT an event linked only to another venue", async () => {
     const { data: event, error: insErr } = await admin

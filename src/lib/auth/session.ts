@@ -6,6 +6,9 @@ export const SESSION_COOKIE_NAME = "app-session-id";
 const MAX_SESSIONS_PER_USER = 5;
 const STALE_SESSION_DAYS = 90;
 const COOKIE_MAX_AGE_SECONDS = 365 * 24 * 3600; // 1 year
+const SESSION_TOKEN_BYTES = 32;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const APP_SESSION_SELECT = "session_id,user_id,created_at,last_activity_at,user_agent,ip_address,session_token_hash,previous_session_token_hash";
 
 export type SessionRecord = {
   sessionId: string;
@@ -18,6 +21,11 @@ export type SessionRecord = {
   };
 };
 
+export type SessionValidationResult = {
+  session: SessionRecord;
+  rotatedToken?: string;
+};
+
 export function makeSessionCookieOptions() {
   return {
     httpOnly: true,
@@ -26,6 +34,75 @@ export function makeSessionCookieOptions() {
     maxAge: COOKIE_MAX_AGE_SECONDS,
     path: "/"
   };
+}
+
+function base64UrlEncode(bytes: Uint8Array): string {
+  let binary = "";
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function generateSessionToken(): string {
+  const bytes = new Uint8Array(SESSION_TOKEN_BYTES);
+  crypto.getRandomValues(bytes);
+  return base64UrlEncode(bytes);
+}
+
+async function hashSessionToken(token: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const digest = await crypto.subtle.digest("SHA-256", encoder.encode(`app-session:${token}`));
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+type SessionRow = {
+  session_id: string;
+  user_id: string;
+  created_at: string;
+  last_activity_at: string;
+  user_agent: string | null;
+  ip_address: string | null;
+  session_token_hash?: string | null;
+  previous_session_token_hash?: string | null;
+};
+
+function toSessionRecord(data: SessionRow): SessionRecord {
+  return {
+    sessionId: data.session_id,
+    userId: data.user_id,
+    createdAt: new Date(data.created_at),
+    lastActivityAt: new Date(data.last_activity_at),
+    metadata: {
+      userAgent: data.user_agent,
+      ipAddress: data.ip_address
+    }
+  };
+}
+
+async function touchSession(
+  db: ReturnType<typeof createSupabaseAdminClient>,
+  row: SessionRow,
+  options?: { clearPreviousToken?: boolean }
+): Promise<void> {
+  const now = new Date();
+  const lastActivity = new Date(row.last_activity_at);
+  const idleMs = now.getTime() - lastActivity.getTime();
+  const throttle = 15 * 60 * 1000; // 15 minutes
+
+  const updatePayload: Record<string, string | null> = {};
+  if (idleMs > throttle) {
+    updatePayload.last_activity_at = now.toISOString();
+  }
+  if (options?.clearPreviousToken) {
+    updatePayload.previous_session_token_hash = null;
+  }
+
+  if (Object.keys(updatePayload).length > 0) {
+    await db.from("app_sessions").update(updatePayload).eq("session_id", row.session_id);
+  }
 }
 
 /**
@@ -38,6 +115,8 @@ export async function createSession(
 ): Promise<string> {
   const db = createSupabaseAdminClient();
   const sessionId = crypto.randomUUID();
+  const sessionToken = generateSessionToken();
+  const sessionTokenHash = await hashSessionToken(sessionToken);
   const now = new Date();
 
   // Evict least-recently-active sessions if at limit
@@ -55,6 +134,8 @@ export async function createSession(
 
   const { error } = await db.from("app_sessions").insert({
     session_id: sessionId,
+    session_token_hash: sessionTokenHash,
+    previous_session_token_hash: null,
     user_id: userId,
     created_at: now.toISOString(),
     last_activity_at: now.toISOString(),
@@ -67,49 +148,97 @@ export async function createSession(
     throw new Error(`Failed to create session: ${error.message}`);
   }
 
-  return sessionId;
+  return sessionToken;
 }
 
 /**
  * Validates an app session. Returns the session record or null if invalid/expired.
  * Fail-closed: any DB error returns null (treated as invalid session).
  */
-export async function validateSession(sessionId: string): Promise<SessionRecord | null> {
-  if (!sessionId) return null;
+export async function validateSession(sessionToken: string): Promise<SessionRecord | null> {
+  const result = await validateSessionToken(sessionToken, { rotateLegacy: false });
+  return result?.session ?? null;
+}
+
+/**
+ * Validates an app session and, when possible, silently upgrades a legacy UUID
+ * cookie to a random opaque token. Callers that receive rotatedToken must write
+ * it back to the app-session cookie on the same response.
+ */
+export async function validateSessionWithRotation(sessionToken: string): Promise<SessionValidationResult | null> {
+  return validateSessionToken(sessionToken, { rotateLegacy: true });
+}
+
+async function validateSessionToken(
+  sessionToken: string,
+  options: { rotateLegacy: boolean }
+): Promise<SessionValidationResult | null> {
+  if (!sessionToken || typeof sessionToken !== "string") return null;
 
   try {
     const db = createSupabaseAdminClient();
-    const { data, error } = await db
+    const tokenHash = await hashSessionToken(sessionToken);
+
+    const { data: hashedRow, error: hashedError } = await db
       .from("app_sessions")
-      .select("*")
-      .eq("session_id", sessionId)
-      .single();
+      .select(APP_SESSION_SELECT)
+      .or(`session_token_hash.eq.${tokenHash},previous_session_token_hash.eq.${tokenHash}`)
+      .maybeSingle();
 
-    if (error || !data) return null;
+    if (hashedError) return null;
 
-    const now = new Date();
+    if (hashedRow) {
+      const row = hashedRow as SessionRow;
+      const matchedCurrent = row.session_token_hash === tokenHash;
+      const matchedPrevious = row.previous_session_token_hash === tokenHash;
 
-    // Throttled activity update: only update if >15 min since last update
-    const lastActivity = new Date(data.last_activity_at);
-    const idleMs = now.getTime() - lastActivity.getTime();
-    const throttle = 15 * 60 * 1000; // 15 minutes
-    if (idleMs > throttle) {
-      db.from("app_sessions")
-        .update({ last_activity_at: now.toISOString() })
-        .eq("session_id", sessionId)
-        .then(() => {});
+      if (!matchedCurrent && !matchedPrevious) return null;
+
+      await touchSession(db, row, {
+        clearPreviousToken: matchedCurrent && Boolean(row.previous_session_token_hash)
+      });
+
+      return { session: toSessionRecord(row) };
     }
 
-    return {
-      sessionId: data.session_id,
-      userId: data.user_id,
-      createdAt: new Date(data.created_at),
-      lastActivityAt: new Date(data.last_activity_at),
-      metadata: {
-        userAgent: data.user_agent,
-        ipAddress: data.ip_address
+    if (!UUID_PATTERN.test(sessionToken)) return null;
+
+    const { data: legacyRow, error: legacyError } = await db
+      .from("app_sessions")
+      .select(APP_SESSION_SELECT)
+      .eq("session_id", sessionToken)
+      .maybeSingle();
+
+    if (legacyError || !legacyRow) return null;
+
+    const row = legacyRow as SessionRow;
+    if (row.session_token_hash) {
+      // The legacy UUID was already retired after a successful opaque-token use.
+      return null;
+    }
+
+    let rotatedToken: string | undefined;
+    if (options.rotateLegacy) {
+      const nextToken = generateSessionToken();
+      const nextTokenHash = await hashSessionToken(nextToken);
+      const { error: rotateError } = await db
+        .from("app_sessions")
+        .update({
+          session_token_hash: nextTokenHash,
+          previous_session_token_hash: tokenHash,
+          last_activity_at: new Date().toISOString()
+        })
+        .eq("session_id", row.session_id)
+        .is("session_token_hash", null);
+
+      if (!rotateError) {
+        rotatedToken = nextToken;
       }
-    };
+    } else {
+      await touchSession(db, row);
+    }
+
+    return { session: toSessionRecord(row), rotatedToken };
   } catch (error) {
     console.error("Session validation error (fail-closed):", error);
     return null;
@@ -120,8 +249,17 @@ export async function validateSession(sessionId: string): Promise<SessionRecord 
  * Destroys a single session. Called on sign-out.
  */
 export async function destroySession(sessionId: string): Promise<void> {
+  if (!sessionId) return;
   const db = createSupabaseAdminClient();
-  await db.from("app_sessions").delete().eq("session_id", sessionId);
+  const tokenHash = await hashSessionToken(sessionId);
+  const filters = [
+    `session_token_hash.eq.${tokenHash}`,
+    `previous_session_token_hash.eq.${tokenHash}`,
+  ];
+  if (UUID_PATTERN.test(sessionId)) {
+    filters.push(`session_id.eq.${sessionId}`);
+  }
+  await db.from("app_sessions").delete().or(filters.join(","));
 }
 
 /**

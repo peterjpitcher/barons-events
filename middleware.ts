@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
-import { validateSession, SESSION_COOKIE_NAME, makeSessionCookieOptions } from "@/lib/auth/session";
+import { validateSessionWithRotation, SESSION_COOKIE_NAME, makeSessionCookieOptions } from "@/lib/auth/session";
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
@@ -75,6 +75,10 @@ function applySecurityHeaders(response: NextResponse, nonce: string): void {
       ].join("; ")
     );
   }
+}
+
+function applyNoStoreHeaders(response: NextResponse): void {
+  response.headers.set("Cache-Control", "private, no-store");
 }
 
 // ─── Nonce / CSRF helpers ──────────────────────────────────────────────────────
@@ -191,14 +195,16 @@ export async function middleware(req: NextRequest) {
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
-      get(name) {
-        return req.cookies.get(name)?.value;
+      getAll() {
+        return req.cookies.getAll().map(({ name, value }) => ({ name, value }));
       },
-      set(name, value, options) {
-        res.cookies.set({ name, value, ...options });
-      },
-      remove(name, options) {
-        res.cookies.set({ name, value: "", ...options, maxAge: 0 });
+      setAll(cookiesToSet, headersToSet) {
+        cookiesToSet.forEach(({ name, value, options }) => {
+          res.cookies.set({ name, value, ...options });
+        });
+        Object.entries(headersToSet).forEach(([name, value]) => {
+          res.headers.set(name, value);
+        });
       }
     }
   });
@@ -216,6 +222,7 @@ export async function middleware(req: NextRequest) {
     redirectUrl.searchParams.set("redirectedFrom", originalPath);
     const redirectRes = NextResponse.redirect(redirectUrl);
     applySecurityHeaders(redirectRes, nonce);
+    applyNoStoreHeaders(redirectRes);
     return redirectRes;
   }
 
@@ -239,12 +246,13 @@ export async function middleware(req: NextRequest) {
       redirectRes.headers.append("set-cookie", cookie);
     }
     applySecurityHeaders(redirectRes, nonce);
+    applyNoStoreHeaders(redirectRes);
     return redirectRes;
   }
 
-  const session = await validateSession(appSessionId);
+  const sessionResult = await validateSessionWithRotation(appSessionId);
 
-  if (!session) {
+  if (!sessionResult) {
     // Session is expired, invalid, or DB unavailable. Fail closed.
     // Sign out the stale Supabase session to prevent redirect loops.
     await supabase.auth.signOut({ scope: "local" });
@@ -263,8 +271,11 @@ export async function middleware(req: NextRequest) {
       redirectRes.headers.append("set-cookie", cookie);
     }
     applySecurityHeaders(redirectRes, nonce);
+    applyNoStoreHeaders(redirectRes);
     return redirectRes;
   }
+
+  const { session, rotatedToken } = sessionResult;
 
   // Verify the app session belongs to the same user as the Supabase JWT.
   // Prevents session fixation where a stolen session cookie is used by a different account.
@@ -286,7 +297,12 @@ export async function middleware(req: NextRequest) {
       redirectRes.headers.append("set-cookie", cookie);
     }
     applySecurityHeaders(redirectRes, nonce);
+    applyNoStoreHeaders(redirectRes);
     return redirectRes;
+  }
+
+  if (rotatedToken) {
+    res.cookies.set(SESSION_COOKIE_NAME, rotatedToken, makeSessionCookieOptions());
   }
 
   // Step 6: Deactivation check — block deactivated users from accessing protected routes
@@ -314,6 +330,7 @@ export async function middleware(req: NextRequest) {
         deactivatedRes.headers.append("set-cookie", cookie);
       }
       applySecurityHeaders(deactivatedRes, nonce);
+      applyNoStoreHeaders(deactivatedRes);
       return deactivatedRes;
     }
   }
@@ -332,6 +349,7 @@ export async function middleware(req: NextRequest) {
   // NOTE: /api/* routes are excluded from middleware by the matcher config below.
   // API routes handle their own auth via withAuth()/withAdminAuth() wrappers.
 
+  applyNoStoreHeaders(res);
   return res;
 }
 

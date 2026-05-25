@@ -65,6 +65,41 @@ export function canEditEvent(
   return true;
 }
 
+/** Context a debrief submit/edit check needs about the parent event. */
+export type EventDebriefContext = {
+  venueId: string | null;
+  venueIds?: string[];
+  managerResponsibleId: string | null;
+  createdBy: string | null;
+  status: string | null;
+  deletedAt?: string | null;
+};
+
+/** Can submit or edit the debrief for a specific event. */
+export function canSubmitDebriefForEvent(
+  role: UserRole,
+  userId: string,
+  userVenueId: string | null,
+  event: EventDebriefContext,
+): boolean {
+  if (event.deletedAt) return false;
+  if (event.status !== "approved" && event.status !== "completed") return false;
+
+  if (role === "administrator") return true;
+  if (!canCreateDebriefs(role, userVenueId)) return false;
+
+  const linkedVenueIds = new Set<string>();
+  if (event.venueId) linkedVenueIds.add(event.venueId);
+  for (const venueId of event.venueIds ?? []) {
+    if (venueId) linkedVenueIds.add(venueId);
+  }
+  if (linkedVenueIds.size > 0 && (!userVenueId || !linkedVenueIds.has(userVenueId))) {
+    return false;
+  }
+
+  return event.managerResponsibleId === userId || (!event.managerResponsibleId && event.createdBy === userId);
+}
+
 /** Can view events (all roles) */
 export function canViewEvents(role: UserRole): boolean {
   return true;

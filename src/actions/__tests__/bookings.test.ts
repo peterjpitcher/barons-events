@@ -77,7 +77,7 @@ function eligibleEventRow(overrides: Record<string, unknown> = {}) {
 describe("createBookingAction", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.SUPABASE_SERVICE_ROLE_KEY = "test-booking-update-secret";
+    process.env.BOOKING_UPDATE_TOKEN_SECRET = "test-booking-update-secret-with-32-chars";
     mockVerifyTurnstile.mockResolvedValue(true);
     mockCheckBookingRateLimit.mockResolvedValue({ allowed: true, remaining: 9, resetAt: Date.now() + 60000 });
 
@@ -317,7 +317,7 @@ describe("createBookingAction", () => {
 describe("updateExistingBookingAction", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.SUPABASE_SERVICE_ROLE_KEY = "test-booking-update-secret";
+    process.env.BOOKING_UPDATE_TOKEN_SECRET = "test-booking-update-secret-with-32-chars";
     mockCheckBookingRateLimit.mockResolvedValue({ allowed: true, remaining: 9, resetAt: Date.now() + 60000 });
   });
 
@@ -718,7 +718,7 @@ describe("customer upsert", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.SUPABASE_SERVICE_ROLE_KEY = "test-booking-update-secret";
+    process.env.BOOKING_UPDATE_TOKEN_SECRET = "test-booking-update-secret-with-32-chars";
     mockCheckBookingRateLimit.mockResolvedValue({ allowed: true, remaining: 9, resetAt: Date.now() + 60000 });
     mockVerifyTurnstile.mockResolvedValue(true);
     mockCreateBookingAtomic.mockResolvedValue({ ok: true, bookingId: "booking-uuid" });
@@ -856,7 +856,7 @@ describe("cancelBookingAction", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.SUPABASE_SERVICE_ROLE_KEY = "test-booking-update-secret";
+    process.env.BOOKING_UPDATE_TOKEN_SECRET = "test-booking-update-secret-with-32-chars";
     mockCheckBookingRateLimit.mockResolvedValue({ allowed: true, remaining: 9, resetAt: Date.now() + 60000 });
   });
 

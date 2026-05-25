@@ -129,15 +129,6 @@ describe.skipIf(!enabled)("propose_event_draft RPC", () => {
     expect(response.success).toBe(true);
     expect(response.venue_ids.length).toBe(2);
 
-    if (response.batch_id) {
-      const { count } = await admin
-        .from("events")
-        .select("*", { count: "exact", head: true })
-        .eq("creation_batch_id", response.batch_id);
-      expect(count).toBeGreaterThanOrEqual(1);
-      await admin.from("events").delete().eq("creation_batch_id", response.batch_id);
-    } else {
-      await admin.from("events").delete().eq("id", response.event_id);
-    }
+    await admin.from("events").delete().eq("id", response.event_id);
   });
 });

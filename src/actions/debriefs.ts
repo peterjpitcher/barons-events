@@ -11,7 +11,7 @@ import { sendPostEventDigestEmail, sendDebriefSubmittedToSltEmail } from "@/lib/
 import { recordAuditLogEntry } from "@/lib/audit-log";
 import type { ActionResult } from "@/lib/types";
 import { normaliseOptionalText as normaliseText } from "@/lib/normalise";
-import { canCreateDebriefs } from "@/lib/roles";
+import { canCreateDebriefs, canSubmitDebriefForEvent } from "@/lib/roles";
 
 function changedDebriefFields(previous: Record<string, unknown> | null, next: Record<string, unknown>): string[] {
   const fields: Array<[key: string, label: string]> = [
@@ -79,7 +79,7 @@ export async function submitDebriefAction(
     const supabase = await createSupabaseActionClient();
     const { data: event, error: eventError } = await supabase
       .from("events")
-      .select("id, created_by, status, manager_responsible_id")
+      .select("id, venue_id, created_by, status, manager_responsible_id, deleted_at, event_venues(venue_id)")
       .eq("id", values.eventId)
       .maybeSingle();
 
@@ -90,17 +90,19 @@ export async function submitDebriefAction(
       return { success: false, message: "Event not found." };
     }
 
-    // Manager responsible check with creator fallback
-    if (user.role !== "administrator") {
-      const isManager = event.manager_responsible_id === user.id;
-      const isCreatorFallback = !event.manager_responsible_id && event.created_by === user.id;
-      if (!isManager && !isCreatorFallback) {
-        return { success: false, message: "You do not have permission to submit this debrief." };
-      }
-    }
-
     if (!["approved", "completed"].includes(event.status)) {
       return { success: false, message: "Debriefs are available after an event is approved." };
+    }
+
+    if (!canSubmitDebriefForEvent(user.role, user.id, user.venueId, {
+      venueId: event.venue_id,
+      venueIds: (event.event_venues ?? []).map((link: { venue_id: string | null }) => link.venue_id).filter(Boolean) as string[],
+      managerResponsibleId: event.manager_responsible_id,
+      createdBy: event.created_by,
+      status: event.status,
+      deletedAt: event.deleted_at,
+    })) {
+      return { success: false, message: "You do not have permission to submit this debrief." };
     }
 
     const { data: previousDebriefData } = await supabase

@@ -4,6 +4,7 @@ import { DebriefForm } from "@/components/events/debrief-form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCurrentUser } from "@/lib/auth";
 import { getEventDetail } from "@/lib/events";
+import { canSubmitDebriefForEvent, canViewDebriefs } from "@/lib/roles";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 // Form accepts a slightly wider defaults shape (with labour_hours) than
@@ -24,10 +25,15 @@ export default async function DebriefPage({ params }: { params: Promise<{ eventI
     notFound();
   }
 
-  const isManager = event.manager_responsible_id === user.id;
-  const isCreatorFallback = !event.manager_responsible_id && event.created_by === user.id;
-  const canEdit = user.role === "administrator" || isManager || isCreatorFallback;
-  const canView = canEdit || user.role === "office_worker";
+  const canEdit = canSubmitDebriefForEvent(user.role, user.id, user.venueId, {
+    venueId: event.venue_id,
+    venueIds: event.venues.map((venue) => venue.id),
+    managerResponsibleId: event.manager_responsible_id,
+    createdBy: event.created_by,
+    status: event.status,
+    deletedAt: event.deleted_at,
+  });
+  const canView = canViewDebriefs(user.role);
 
   if (!canView) {
     redirect("/unauthorized");

@@ -39,11 +39,16 @@ async function checkPublicBookingAttemptLimit(): Promise<boolean> {
 }
 
 function bookingUpdateTokenSecret(): string {
-  const secret = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.BARONSHUB_WEBSITE_API_KEY;
-  if (!secret) {
-    throw new Error("Booking update token secret is not configured");
+  const secret = process.env.BOOKING_UPDATE_TOKEN_SECRET;
+  if (secret && secret.length >= 32) {
+    return secret;
   }
-  return secret;
+
+  if (process.env.NODE_ENV !== "production" && process.env.BARONSHUB_WEBSITE_API_KEY) {
+    return process.env.BARONSHUB_WEBSITE_API_KEY;
+  }
+
+  throw new Error("BOOKING_UPDATE_TOKEN_SECRET must be configured with at least 32 characters");
 }
 
 function signBookingUpdateToken(payload: BookingUpdateTokenPayload): string {

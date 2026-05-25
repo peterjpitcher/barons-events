@@ -248,6 +248,8 @@ export interface Database {
           expires_at: string | null;
           user_agent: string | null;
           ip_address: string | null;
+          session_token_hash: string | null;
+          previous_session_token_hash: string | null;
         };
       };
       login_attempts: {

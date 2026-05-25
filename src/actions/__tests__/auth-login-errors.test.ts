@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const mockSignInWithPassword = vi.fn();
 const mockSignOut = vi.fn().mockResolvedValue({ error: null });
 const mockGetUser = vi.fn().mockResolvedValue({ data: { user: null } });
+const mockAdminFrom = vi.fn();
 
 vi.mock("@/lib/supabase/server", () => ({
   createSupabaseActionClient: vi.fn().mockResolvedValue({
@@ -55,6 +56,7 @@ vi.mock("@/lib/notifications", () => ({
 vi.mock("@/lib/supabase/admin", () => ({
   createSupabaseAdminClient: vi.fn().mockReturnValue({
     auth: { admin: { generateLink: vi.fn().mockResolvedValue({ data: null, error: null }) } },
+    from: (...args: unknown[]) => mockAdminFrom(...args),
   }),
 }));
 
@@ -88,6 +90,18 @@ describe("signInAction — service error vs credential failure", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockIsLockedOut.mockResolvedValue(false);
+    mockSignOut.mockResolvedValue({ error: null });
+    mockCreateSession.mockResolvedValue("session-id");
+    mockAdminFrom.mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          maybeSingle: vi.fn().mockResolvedValue({
+            data: { role: "administrator", deactivated_at: null },
+            error: null,
+          }),
+        }),
+      }),
+    });
   });
 
   function makeFormData(email: string, password: string): FormData {
@@ -131,5 +145,77 @@ describe("signInAction — service error vs credential failure", () => {
         event: "auth.login.failure",
       })
     );
+  });
+
+  it("should reject sign-in when the public user profile is missing", async () => {
+    mockSignInWithPassword.mockResolvedValue({
+      data: { user: { id: "user-without-profile" } },
+      error: null,
+    });
+    mockAdminFrom.mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+        }),
+      }),
+    });
+
+    const { signInAction } = await import("@/actions/auth");
+    const result = await signInAction(undefined, makeFormData("user@example.com", "password1234"));
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain("not fully set up");
+    expect(mockSignOut).toHaveBeenCalled();
+    expect(mockCreateSession).not.toHaveBeenCalled();
+  });
+
+  it("should reject sign-in when the public user role is unrecognised", async () => {
+    mockSignInWithPassword.mockResolvedValue({
+      data: { user: { id: "user-invalid-role" } },
+      error: null,
+    });
+    mockAdminFrom.mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          maybeSingle: vi.fn().mockResolvedValue({
+            data: { role: "super_admin", deactivated_at: null },
+            error: null,
+          }),
+        }),
+      }),
+    });
+
+    const { signInAction } = await import("@/actions/auth");
+    const result = await signInAction(undefined, makeFormData("user@example.com", "password1234"));
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain("not fully set up");
+    expect(mockSignOut).toHaveBeenCalled();
+    expect(mockCreateSession).not.toHaveBeenCalled();
+  });
+
+  it("should reject sign-in when the public user is deactivated", async () => {
+    mockSignInWithPassword.mockResolvedValue({
+      data: { user: { id: "deactivated-user" } },
+      error: null,
+    });
+    mockAdminFrom.mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          maybeSingle: vi.fn().mockResolvedValue({
+            data: { role: "administrator", deactivated_at: "2026-01-01T00:00:00.000Z" },
+            error: null,
+          }),
+        }),
+      }),
+    });
+
+    const { signInAction } = await import("@/actions/auth");
+    const result = await signInAction(undefined, makeFormData("user@example.com", "password1234"));
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain("deactivated");
+    expect(mockSignOut).toHaveBeenCalled();
+    expect(mockCreateSession).not.toHaveBeenCalled();
   });
 });
