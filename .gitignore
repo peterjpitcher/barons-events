@@ -33,3 +33,4 @@ docs/architecture/.section-hashes.json
 # Playwright
 playwright-report/
 test-results/
+.playwright-mcp/

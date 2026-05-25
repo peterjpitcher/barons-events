@@ -74,6 +74,7 @@ export async function GET(request: Request) {
   const venuesQuery = supabase
     .from("venues")
     .select("id, name")
+    .eq("is_internal", false)
     .order("name", { ascending: true });
 
   const [venuesResult, serviceTypesResult, venueServicesResult, weeklyHoursResult, overridesResult] =

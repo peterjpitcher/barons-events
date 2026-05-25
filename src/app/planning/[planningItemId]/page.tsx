@@ -52,7 +52,7 @@ export default async function PlanningItemDetailPage({
   const planningVenues = visibleVenueRows.map((venue) => {
      
     const category: "pub" | "cafe" = (venue as any).category === "cafe" ? "cafe" : "pub";
-    return { id: venue.id, name: venue.name, category };
+    return { id: venue.id, name: venue.name, category, isInternal: Boolean((venue as any).is_internal) };
   });
 
   return (

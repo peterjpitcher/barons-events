@@ -55,6 +55,8 @@ type PaymentTransactionRow = {
   refunded_amount_pence: number;
 };
 
+const STALE_WEBHOOK_PROCESSING_MS = 15 * 60 * 1000;
+
 type BookingPaymentView = {
   bookingId: string;
   eventId: string;
@@ -135,7 +137,7 @@ async function fetchPaidEvent(eventId: string): Promise<{
     .from("events")
     .select(`
       id, title, public_title, booking_type, booking_url, ticket_price, booking_enabled, status, deleted_at, start_at,
-      venue:venues!events_venue_id_fkey(name)
+      venue:venues!events_venue_id_fkey(name, is_internal)
     `)
     .eq("id", eventId)
     .maybeSingle();
@@ -157,6 +159,10 @@ async function fetchPaidEvent(eventId: string): Promise<{
   const venueRaw = Array.isArray(row.venue)
     ? row.venue[0] as Record<string, unknown> | undefined
     : row.venue as Record<string, unknown> | undefined;
+
+  if (!venueRaw || venueRaw.is_internal === true) {
+    return null;
+  }
 
   return {
     id: row.id as string,
@@ -597,20 +603,57 @@ async function claimWebhookEvent(event: Stripe.Event): Promise<"claimed" | "dupl
 
   if (!error) return "claimed";
 
-  const { data: existing } = await db
+  if ((error as { code?: string }).code !== "23505") {
+    throw new Error(`payment_webhooks claim failed: ${error.message}`);
+  }
+
+  const { data: existing, error: readError } = await db
     .from("payment_webhooks")
-    .select("id, status, attempts")
+    .select("id, status, attempts, received_at")
     .eq("stripe_event_id", event.id)
     .maybeSingle();
 
-  if (existing) {
-    await db
-      .from("payment_webhooks")
-      .update({ attempts: ((existing as { attempts?: number }).attempts ?? 1) + 1 })
-      .eq("stripe_event_id", event.id);
+  if (readError) {
+    throw new Error(`payment_webhooks duplicate lookup failed: ${readError.message}`);
+  }
+  if (!existing) {
+    throw new Error(`payment_webhooks duplicate row not found for ${event.id}`);
   }
 
-  return "duplicate";
+  const row = existing as {
+    status?: string;
+    attempts?: number;
+    received_at?: string | null;
+  };
+  const attempts = row.attempts ?? 1;
+  const receivedAtMs = row.received_at ? Date.parse(row.received_at) : NaN;
+  const isStaleProcessing =
+    row.status === "processing" &&
+    Number.isFinite(receivedAtMs) &&
+    Date.now() - receivedAtMs > STALE_WEBHOOK_PROCESSING_MS;
+
+  if (row.status === "failed" || isStaleProcessing) {
+    const { error: reclaimError } = await db
+      .from("payment_webhooks")
+      .update({
+        status: "processing",
+        attempts: attempts + 1,
+        error_message: null,
+        processed_at: null,
+        received_at: new Date().toISOString(),
+      })
+      .eq("stripe_event_id", event.id);
+    if (reclaimError) {
+      throw new Error(`payment_webhooks reclaim failed: ${reclaimError.message}`);
+    }
+    return "claimed";
+  }
+
+  if (row.status === "processed" || row.status === "ignored" || row.status === "processing") {
+    return "duplicate";
+  }
+
+  throw new Error(`payment_webhooks duplicate row has unknown status: ${row.status ?? "unknown"}`);
 }
 
 async function completeWebhook(event: Stripe.Event, status: "processed" | "ignored", errorMessage?: string): Promise<void> {

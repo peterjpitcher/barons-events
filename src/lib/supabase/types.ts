@@ -15,6 +15,8 @@ export interface Database {
           email: string;
           full_name: string | null;
           role: string;
+          todo_digest_frequency: string;
+          todo_digest_last_sent_on: string | null;
           venue_id: string | null;
           created_at: string;
           updated_at: string;
@@ -29,6 +31,7 @@ export interface Database {
           default_approver_id: string | null;
           default_manager_responsible_id: string | null;
           google_review_url: string | null;
+          is_internal: boolean;
           created_at: string;
           updated_at: string;
         };

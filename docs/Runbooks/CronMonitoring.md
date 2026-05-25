@@ -15,6 +15,7 @@ Monitor and manually verify BaronsHub cron routes:
 - `/api/cron/weekly-digest`
 
 All cron routes require `Authorization: Bearer <CRON_SECRET>`.
+The todo digest route is scheduled every weekday; individual users can choose every weekday, twice weekly, weekly, every two weeks, or no digest from `/account`.
 
 ## Staging Smoke
 
@@ -34,8 +35,9 @@ Expected:
 
 - Confirm Vercel Cron schedule matches intended cadence.
 - Confirm `CRON_SECRET` exists in every deployed environment and differs from local examples.
+- Confirm `RESEND_API_KEY` is configured and `BARONSHUB_OPERATIONAL_EMAILS_ENABLED=true` in environments that should send staff todo digests.
 - Check Vercel logs for non-2xx responses after each deploy.
-- Check Supabase tables touched by the route: SMS sends, inbound messages, weekly digest logs, approval expiry audit entries, and attachment cleanup.
+- Check Supabase tables touched by the route: SMS sends, inbound messages, `audit_log` digest rows, user `todo_digest_last_sent_on`, approval expiry audit entries, and attachment cleanup.
 - For email/SMS routes, verify provider dashboards show only staging-safe sends during staging tests.
 
 ## Incident Response

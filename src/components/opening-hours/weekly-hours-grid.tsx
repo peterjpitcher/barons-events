@@ -95,6 +95,9 @@ export function WeeklyHoursGrid({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [grid, setGrid] = useState<GridState>(() => buildInitialState(serviceTypes, openingHours));
+  const [includedServiceTypeIds, setIncludedServiceTypeIds] = useState<Set<string>>(
+    () => new Set(serviceTypes.map((serviceType) => serviceType.id))
+  );
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const venueIds = venues.map((v) => v.id);
@@ -125,7 +128,23 @@ export function WeeklyHoursGrid({
     }));
   }, []);
 
+  const updateServiceIncluded = useCallback((serviceTypeId: string, included: boolean) => {
+    setIncludedServiceTypeIds((prev) => {
+      const next = new Set(prev);
+      if (included) {
+        next.add(serviceTypeId);
+      } else {
+        next.delete(serviceTypeId);
+      }
+      return next;
+    });
+  }, []);
+
   function handleSaveClick() {
+    if (includedServiceTypeIds.size === 0) {
+      toast.error("Select at least one service type to save.");
+      return;
+    }
     setConfirmOpen(true);
   }
 
@@ -153,7 +172,10 @@ export function WeeklyHoursGrid({
     });
 
     startTransition(async () => {
-      const result = await upsertMultiVenueOpeningHoursAction(venueIds, rows);
+      const serviceTypeIds = serviceTypes
+        .filter((serviceType) => includedServiceTypeIds.has(serviceType.id))
+        .map((serviceType) => serviceType.id);
+      const result = await upsertMultiVenueOpeningHoursAction(venueIds, rows, serviceTypeIds);
       if (result.success) {
         toast.success(result.message ?? "Opening hours saved.");
         router.refresh();
@@ -163,7 +185,8 @@ export function WeeklyHoursGrid({
     });
   }
 
-  const confirmDescription = buildConfirmDescription(venues);
+  const includedServiceTypes = serviceTypes.filter((serviceType) => includedServiceTypeIds.has(serviceType.id));
+  const confirmDescription = buildConfirmDescription(venues, includedServiceTypes.map((serviceType) => serviceType.name));
 
   return (
     <div className="space-y-4">
@@ -199,6 +222,16 @@ export function WeeklyHoursGrid({
                         className="h-3.5 w-3.5"
                       />
                       Has service
+                    </label>
+                    <label className="flex items-center gap-1.5 text-xs font-normal text-subtle">
+                      <input
+                        type="checkbox"
+                        checked={includedServiceTypeIds.has(st.id)}
+                        disabled={!canEdit}
+                        onChange={(e) => updateServiceIncluded(st.id, e.target.checked)}
+                        className="h-3.5 w-3.5"
+                      />
+                      Include in save
                     </label>
                   </div>
                 </td>
@@ -236,7 +269,7 @@ export function WeeklyHoursGrid({
           <Button
             type="button"
             variant="primary"
-            disabled={isPending}
+            disabled={isPending || includedServiceTypeIds.size === 0}
             onClick={handleSaveClick}
           >
             {isPending ? "Saving…" : "Save weekly hours"}
@@ -258,9 +291,16 @@ export function WeeklyHoursGrid({
   );
 }
 
-function buildConfirmDescription(venues: VenueOption[]): string {
+function buildConfirmDescription(venues: VenueOption[], serviceTypeNames: string[]): string {
+  const serviceScope =
+    serviceTypeNames.length === 1
+      ? serviceTypeNames[0]
+      : serviceTypeNames.length === 2
+        ? `${serviceTypeNames[0]} and ${serviceTypeNames[1]}`
+        : `${serviceTypeNames.slice(0, -1).join(", ")}, and ${serviceTypeNames[serviceTypeNames.length - 1]}`;
+
   if (venues.length === 1) {
-    return `This will permanently overwrite all existing standard weekly hours for ${venues[0].name}. The current schedule will be replaced with what you have entered above. This cannot be undone.`;
+    return `This will permanently overwrite the ${serviceScope} standard weekly hours for ${venues[0].name}. Other service types will be left unchanged. This cannot be undone.`;
   }
 
   const names = venues.map((v) => v.name);
@@ -269,7 +309,7 @@ function buildConfirmDescription(venues: VenueOption[]): string {
       ? `${names[0]} and ${names[1]}`
       : `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
 
-  return `This will permanently overwrite all existing standard weekly hours for ${venues.length} venues: ${listed}. Every venue's current schedule will be replaced with what you have entered above. This cannot be undone.`;
+  return `This will permanently overwrite the ${serviceScope} standard weekly hours for ${venues.length} venues: ${listed}. Other service types at those venues will be left unchanged. This cannot be undone.`;
 }
 
 function HoursCell({

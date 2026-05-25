@@ -49,6 +49,7 @@ type RawVenue = {
   name: string;
   address: string | null;
   capacity: number | null;
+  is_internal?: boolean | null;
 };
 
 type RawEventRow = {
@@ -163,7 +164,8 @@ function normaliseVenue(value: unknown): RawVenue | null {
     id,
     name,
     address: typeof value.address === "string" ? value.address : null,
-    capacity: typeof value.capacity === "number" && Number.isFinite(value.capacity) ? value.capacity : null
+    capacity: typeof value.capacity === "number" && Number.isFinite(value.capacity) ? value.capacity : null,
+    is_internal: value.is_internal === true
   };
 }
 
@@ -176,6 +178,9 @@ export function toPublicEvent(row: RawEventRow): PublicEvent {
   const venue = normaliseVenue(row.venue);
   if (!venue) {
     throw new Error(`Missing venue data for event ${row.id}`);
+  }
+  if (venue.is_internal) {
+    throw new Error(`Event ${row.id} is internal and not public`);
   }
 
   const status = normaliseStatus(row.status);

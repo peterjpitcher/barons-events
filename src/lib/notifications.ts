@@ -4,6 +4,8 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/types";
 import { formatSpacesLabel } from "@/lib/venue-spaces";
 import { getTodayLondonIsoDate, formatInLondon } from "@/lib/datetime";
+import { addDays } from "@/lib/planning/utils";
+import { normaliseTodoDigestFrequency, shouldSendTodoDigestToday } from "@/lib/communication-preferences";
 import {
   buildMonthlySalesReportAttachments,
   renderMonthlySalesReportEmail,
@@ -1272,7 +1274,8 @@ export async function sendDebriefSubmittedToSltEmail(eventId: string): Promise<v
 }
 
 /**
- * Sends a twice-weekly digest email to all active users who have open planning tasks.
+ * Sends a todo digest email to active users who have open planning tasks and are due
+ * based on their communication preferences.
  *
  * Content:
  * 1. Open tasks grouped by planning item (with event title as context if linked)
@@ -1311,107 +1314,227 @@ export async function sendWeeklyDigestEmail(): Promise<{ sent: number; failed: n
   const nowIso = new Date().toISOString();
   const fourDaysFromNow = new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString();
 
-  const [tasksResult, eventsResult, usersResult] = await Promise.all([
-    db
-      .from("planning_tasks")
-      .select("id, title, due_date, assignee_id, planning_item:planning_items!inner(id, title, event:events(id, title, venue_id))")
-      .eq("status", "open")
-      .lte("due_date", todayLondon)
-      .not("assignee_id", "is", null),
-    db
-      .from("events")
-      .select("id, title, start_at, end_at, venue_id, venue:venues!events_venue_id_fkey(name)")
-      .gte("start_at", nowIso)
-      .lt("start_at", fourDaysFromNow)
-      .in("status", ["approved", "submitted"])
-      .is("deleted_at", null)
-      .order("start_at", { ascending: true }),
-    db
-      .from("users")
-      .select("id, email, full_name, venue_id")
-      .is("deactivated_at", null)
-  ]);
+  async function fetchDigestRows<T>(label: string, buildQuery: () => any): Promise<T[]> {
+    const pageSize = 1000;
+    const rows: T[] = [];
 
-  if (tasksResult.error) throw new Error(`Failed to fetch planning tasks: ${tasksResult.error.message}`);
-  if (eventsResult.error) throw new Error(`Failed to fetch upcoming events: ${eventsResult.error.message}`);
-  if (usersResult.error) throw new Error(`Failed to fetch users: ${usersResult.error.message}`);
+    for (let from = 0; ; from += pageSize) {
+      const query = buildQuery();
+      const canPage = typeof query.range === "function";
+      const result =
+        canPage
+          ? await query.range(from, from + pageSize - 1)
+          : await query;
 
-  const tasks = tasksResult.data ?? [];
-  const upcomingEvents = eventsResult.data ?? [];
-  const users = usersResult.data ?? [];
+      if (result.error) {
+        throw new Error(`Failed to fetch ${label}: ${result.error.message}`);
+      }
 
-  // Build user lookup
-  type DigestUser = { email: string; fullName: string | null; venueId: string | null };
-  const userMap = new Map<string, DigestUser>();
-  for (const u of users) {
-    userMap.set(u.id, { email: u.email, fullName: u.full_name, venueId: u.venue_id });
+      const page = (result.data ?? []) as T[];
+      rows.push(...page);
+      if (!canPage || page.length < pageSize) return rows;
+    }
   }
 
-  // Group tasks by assignee
-  type TaskWithContext = typeof tasks[number];
-  const tasksByAssignee = new Map<string, TaskWithContext[]>();
+  const [assignedTaskRows, legacyTasks, upcomingEvents, users] = await Promise.all([
+    fetchDigestRows<Record<string, unknown>>("planning task assignees", () =>
+      db
+        .from("planning_task_assignees")
+        .select(`
+          user_id,
+          planning_task:planning_tasks!inner(
+            id, title, due_date, assignee_id, status,
+            planning_item:planning_items!inner(id, title, event:events(id, title, venue_id))
+          )
+        `)
+        .not("user_id", "is", null)
+    ),
+    fetchDigestRows<Record<string, unknown>>("planning tasks", () =>
+      db
+        .from("planning_tasks")
+        .select(`
+          id, title, due_date, assignee_id, status,
+          planning_item:planning_items!inner(id, title, event:events(id, title, venue_id))
+        `)
+        .eq("status", "open")
+        .not("assignee_id", "is", null)
+    ),
+    fetchDigestRows<Record<string, unknown>>("upcoming events", () =>
+      db
+        .from("events")
+        .select("id, title, start_at, end_at, venue_id, venue:venues!events_venue_id_fkey(name, is_internal)")
+        .gte("start_at", nowIso)
+        .lt("start_at", fourDaysFromNow)
+        .in("status", ["approved", "submitted"])
+        .is("deleted_at", null)
+        .order("start_at", { ascending: true })
+    ),
+    fetchDigestRows<{
+      id: string;
+      email: string;
+      full_name: string | null;
+      venue_id: string | null;
+      todo_digest_frequency: string | null;
+      todo_digest_last_sent_on: string | null;
+    }>("users", () =>
+      db
+        .from("users")
+        .select("id, email, full_name, venue_id, todo_digest_frequency, todo_digest_last_sent_on")
+        .is("deactivated_at", null)
+    )
+  ]);
+
+  type DigestPlanningItem = {
+    id: string;
+    title: string;
+    event: { id: string; title: string; venue_id: string | null } | null;
+  };
+  type DigestTask = {
+    id: string;
+    title: string;
+    dueDate: string | null;
+    planningItem: DigestPlanningItem;
+  };
+
+  // Build user lookup
+  type DigestUser = {
+    email: string;
+    fullName: string | null;
+    venueId: string | null;
+    todoDigestFrequency: ReturnType<typeof normaliseTodoDigestFrequency>;
+    todoDigestLastSentOn: string | null;
+  };
+  const userMap = new Map<string, DigestUser>();
+  for (const u of users) {
+    userMap.set(u.id, {
+      email: u.email,
+      fullName: u.full_name,
+      venueId: u.venue_id,
+      todoDigestFrequency: normaliseTodoDigestFrequency(u.todo_digest_frequency),
+      todoDigestLastSentOn: u.todo_digest_last_sent_on,
+    });
+  }
+
+  const tasksByAssignee = new Map<string, Map<string, DigestTask>>();
+  const taskIdsWithAssigneeRows = new Set<string>();
   let skippedAssignees = 0;
 
-  for (const task of tasks) {
-    const assigneeId = task.assignee_id as string;
+  function firstRelation<T>(value: T | T[] | null | undefined): T | null {
+    return Array.isArray(value) ? value[0] ?? null : value ?? null;
+  }
+
+  function normaliseDigestTask(rawTask: unknown): DigestTask | null {
+    const task = firstRelation(rawTask as Record<string, unknown> | Array<Record<string, unknown>> | null);
+    if (!task || (task.status && task.status !== "open")) return null;
+    const planningItem = firstRelation(
+      task.planning_item as Record<string, unknown> | Array<Record<string, unknown>> | null
+    );
+    if (!planningItem) return null;
+    const event = firstRelation(
+      planningItem.event as Record<string, unknown> | Array<Record<string, unknown>> | null
+    );
+
+    return {
+      id: String(task.id),
+      title: String(task.title ?? "Untitled task"),
+      dueDate: typeof task.due_date === "string" ? task.due_date : null,
+      planningItem: {
+        id: String(planningItem.id),
+        title: String(planningItem.title ?? "Untitled planning item"),
+        event: event
+          ? {
+              id: String(event.id),
+              title: String(event.title ?? "Untitled event"),
+              venue_id: typeof event.venue_id === "string" ? event.venue_id : null
+            }
+          : null
+      }
+    };
+  }
+
+  function addTaskForAssignee(assigneeId: string | null | undefined, task: DigestTask | null): void {
+    if (!assigneeId || !task) return;
     if (!userMap.has(assigneeId)) {
       skippedAssignees++;
-      continue;
+      return;
     }
-    const existing = tasksByAssignee.get(assigneeId);
-    if (existing) {
-      existing.push(task);
-    } else {
-      tasksByAssignee.set(assigneeId, [task]);
-    }
+    const existing = tasksByAssignee.get(assigneeId) ?? new Map<string, DigestTask>();
+    existing.set(task.id, task);
+    tasksByAssignee.set(assigneeId, existing);
+  }
+
+  for (const row of assignedTaskRows) {
+    const task = normaliseDigestTask(row.planning_task ?? row.planning_tasks);
+    if (task) taskIdsWithAssigneeRows.add(task.id);
+    addTaskForAssignee(
+      typeof row.user_id === "string" ? row.user_id : null,
+      task
+    );
+  }
+
+  for (const rawTask of legacyTasks) {
+    const task = normaliseDigestTask(rawTask);
+    if (task && taskIdsWithAssigneeRows.has(task.id)) continue;
+    addTaskForAssignee(
+      typeof rawTask.assignee_id === "string" ? rawTask.assignee_id : null,
+      task
+    );
   }
 
   let sent = 0;
   let failed = 0;
 
-  for (const [assigneeId, assigneeTasks] of tasksByAssignee) {
+  for (const [assigneeId, assigneeTaskMap] of tasksByAssignee) {
     try {
       const user = userMap.get(assigneeId)!;
+      if (!shouldSendTodoDigestToday(user.todoDigestFrequency, todayLondon, user.todoDigestLastSentOn)) {
+        continue;
+      }
+
+      const assigneeTasks = Array.from(assigneeTaskMap.values());
 
       // Group tasks by planning item
       type PlanningGroup = {
         planningItemId: string;
         heading: string;
-        tasks: { title: string; dueDate: string; overdue: boolean }[];
+        tasks: { title: string; dueDate: string | null; urgency: "overdue" | "due_soon" | "later" }[];
         earliestDue: string;
       };
       const groupMap = new Map<string, PlanningGroup>();
 
       for (const task of assigneeTasks) {
-        const pi = task.planning_item as unknown as {
-          id: string;
-          title: string;
-          event: { id: string; title: string; venue_id: string | null } | null;
-        };
+        const pi = task.planningItem;
         const piId = pi.id;
 
         if (!groupMap.has(piId)) {
-          let heading = escapeHtml(pi.title);
+          let heading = pi.title;
           if (pi.event) {
-            heading += ` \u2014 for ${escapeHtml(pi.event.title)}`;
+            heading += ` \u2014 for ${pi.event.title}`;
           }
           groupMap.set(piId, {
             planningItemId: piId,
             heading,
             tasks: [],
-            earliestDue: task.due_date as string
+            earliestDue: task.dueDate ?? "9999-12-31"
           });
         }
 
         const group = groupMap.get(piId)!;
-        const isOverdue = (task.due_date as string) < todayLondon;
+        const dueDate = task.dueDate;
+        const urgency = dueDate
+          ? dueDate < todayLondon
+            ? "overdue"
+            : dueDate <= addDays(todayLondon, 7)
+              ? "due_soon"
+              : "later"
+          : "later";
         group.tasks.push({
           title: task.title,
-          dueDate: task.due_date as string,
-          overdue: isOverdue
+          dueDate,
+          urgency
         });
-        if ((task.due_date as string) < group.earliestDue) {
-          group.earliestDue = task.due_date as string;
+        if (dueDate && dueDate < group.earliestDue) {
+          group.earliestDue = dueDate;
         }
       }
 
@@ -1423,8 +1546,13 @@ export async function sendWeeklyDigestEmail(): Promise<{ sent: number; failed: n
       // Sort tasks within each group: overdue first, then by due date
       for (const group of sortedGroups) {
         group.tasks.sort((a, b) => {
-          if (a.overdue !== b.overdue) return a.overdue ? -1 : 1;
-          return a.dueDate.localeCompare(b.dueDate);
+          const urgencyOrder = { overdue: 0, due_soon: 1, later: 2 };
+          const urgencyDiff = urgencyOrder[a.urgency] - urgencyOrder[b.urgency];
+          if (urgencyDiff !== 0) return urgencyDiff;
+          if (a.dueDate && b.dueDate) return a.dueDate.localeCompare(b.dueDate);
+          if (a.dueDate) return -1;
+          if (b.dueDate) return 1;
+          return a.title.localeCompare(b.title);
         });
       }
 
@@ -1445,9 +1573,12 @@ export async function sendWeeklyDigestEmail(): Promise<{ sent: number; failed: n
             capped = true;
             break;
           }
-          const { date: formattedDate } = formatInLondon(task.dueDate + "T00:00:00Z");
-          const marker = task.overdue ? "\u26a0\ufe0f " : "";
-          body.push(`  \u2022 ${escapeHtml(task.title)} \u2014 due ${formattedDate}${marker ? ` ${marker}overdue` : ""}`);
+          const formattedDate = task.dueDate
+            ? formatInLondon(task.dueDate + "T00:00:00Z").date
+            : "TBD";
+          const urgencyLabel =
+            task.urgency === "overdue" ? " overdue" : task.urgency === "due_soon" ? " due soon" : "";
+          body.push(`  \u2022 ${task.title} \u2014 due ${formattedDate}${urgencyLabel}`);
           taskCount++;
         }
       }
@@ -1458,6 +1589,8 @@ export async function sendWeeklyDigestEmail(): Promise<{ sent: number; failed: n
 
       // Filter upcoming events by venue scope
       const recipientEvents = upcomingEvents.filter((evt) => {
+        const venue = firstRelation((evt as unknown as { venue?: unknown }).venue as Record<string, unknown> | Array<Record<string, unknown>> | null);
+        if (venue?.is_internal === true) return false;
         if (!user.venueId) return true;
         return (evt as unknown as { venue_id: string | null }).venue_id === user.venueId;
       });
@@ -1466,26 +1599,36 @@ export async function sendWeeklyDigestEmail(): Promise<{ sent: number; failed: n
         body.push("", "Coming up in the next 4 days:");
         for (const evt of recipientEvents) {
           const when = formatEventWindow(evt as unknown as EventRow);
-          const venueName = (evt as unknown as { venue: { name: string } | null }).venue?.name ?? "Unknown venue";
-          body.push(`  \u2022 ${escapeHtml(evt.title)} \u2014 ${escapeHtml(venueName)}, ${when}`);
+          const venue = firstRelation((evt as unknown as { venue?: unknown }).venue as Record<string, unknown> | Array<Record<string, unknown>> | null);
+          const venueName = typeof venue?.name === "string" ? venue.name : "Unknown venue";
+          body.push(`  \u2022 ${evt.title} \u2014 ${venueName}, ${when}`);
         }
       }
 
       const { html, text } = renderEmailTemplate({
-        headline: "Your weekly digest",
+        headline: "Your todo digest",
         intro: "Here\u2019s what needs your attention this week.",
         body,
         button: { label: "Open BaronsHub", url: plannerDashboardLink() },
-        footerNote: "You\u2019re receiving this because you have open tasks in BaronsHub."
+        footerNote: `Manage todo email frequency: ${APP_BASE_URL}/account`
       });
 
       await resend.emails.send({
         from: RESEND_FROM_ADDRESS,
         to: [user.email],
-        subject: `Your BaronsHub digest \u2014 ${totalTasks} open task${totalTasks === 1 ? "" : "s"}`,
+        subject: `Your BaronsHub todo digest \u2014 ${totalTasks} open task${totalTasks === 1 ? "" : "s"}`,
         html,
         text
       });
+
+      const { error: sentUpdateError } = await db
+        .from("users")
+        .update({ todo_digest_last_sent_on: todayLondon })
+        .eq("id", assigneeId);
+
+      if (sentUpdateError) {
+        console.error(`sendWeeklyDigestEmail: failed to record sent date for ${assigneeId}`, sentUpdateError);
+      }
 
       sent++;
     } catch (error) {
@@ -1493,7 +1636,6 @@ export async function sendWeeklyDigestEmail(): Promise<{ sent: number; failed: n
       failed++;
     }
   }
-
   // Record idempotency audit entry
   try {
     await db.from("audit_log").insert({

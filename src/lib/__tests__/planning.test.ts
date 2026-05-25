@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   bucketForDayOffset,
   computeMovedTargetDate,
-  generateOccurrenceDates
+  generateOccurrenceDates,
+  planningItemsToTodoItems
 } from "@/lib/planning/utils";
+import type { PlanningItem, PlanningTask } from "@/lib/planning/types";
 
 describe("planning recurrence generation", () => {
   it("generates daily occurrences for interval 2", () => {
@@ -98,5 +100,110 @@ describe("planning buckets and move logic", () => {
 
     // source offset is +30 days, clamped to +29 within the 31-60 window
     expect(moved).toBe("2026-04-30");
+  });
+});
+
+const baseTask: PlanningTask = {
+  id: "task-1",
+  planningItemId: "item-1",
+  title: "Base task",
+  assigneeId: "user-1",
+  assigneeName: "Planner",
+  dueDate: "2026-05-25",
+  status: "open",
+  completedAt: null,
+  sortOrder: 0,
+  assignees: [{ id: "user-1", name: "Planner", email: "planner@example.com" }],
+  completedBy: null,
+  sopSection: null,
+  sopTemplateTaskId: null,
+  isBlocked: false,
+  dueDateManuallyOverridden: false,
+  manuallyAssigned: false,
+  dependsOnTaskIds: [],
+  notes: null,
+  attachments: []
+};
+
+function task(overrides: Partial<PlanningTask>): PlanningTask {
+  return { ...baseTask, ...overrides };
+}
+
+function item(overrides: Partial<PlanningItem>): PlanningItem {
+  return {
+    id: "item-1",
+    source: "planning",
+    seriesId: null,
+    occurrenceOn: null,
+    isException: false,
+    title: "Planning item",
+    description: null,
+    typeLabel: "Campaign",
+    venueId: null,
+    venueName: null,
+    venues: [],
+    ownerId: null,
+    ownerName: null,
+    targetDate: "2026-05-25",
+    status: "planned",
+    createdBy: "user-1",
+    tasks: [],
+    ...overrides
+  };
+}
+
+describe("planning todo conversion", () => {
+  it("defaults to open tasks due today or overdue", () => {
+    const todos = planningItemsToTodoItems(
+      [
+        item({
+          tasks: [
+            task({ id: "overdue", title: "Overdue", dueDate: "2026-05-24" }),
+            task({ id: "today", title: "Today", dueDate: "2026-05-25" }),
+            task({ id: "future", title: "Future", dueDate: "2026-05-26" }),
+            task({ id: "done", title: "Done", dueDate: "2026-05-24", status: "done" })
+          ]
+        })
+      ],
+      "2026-05-25",
+      true,
+      "user-1"
+    );
+
+    expect(todos.map((todo) => todo.title)).toEqual(["Overdue", "Today"]);
+  });
+
+  it("applies planning alert filters to the todo list", () => {
+    const planningItems = [
+      item({
+        id: "overdue-item",
+        title: "Overdue item",
+        targetDate: "2026-05-20",
+        tasks: [task({ id: "future-on-overdue-item", title: "Future on overdue item", dueDate: "2026-06-02" })]
+      }),
+      item({
+        id: "current-item",
+        title: "Current item",
+        targetDate: "2026-05-25",
+        tasks: [
+          task({ id: "overdue-task", title: "Overdue task", dueDate: "2026-05-24" }),
+          task({ id: "soon-task", title: "Soon task", dueDate: "2026-05-30" }),
+          task({ id: "later-task", title: "Later task", dueDate: "2026-06-03" })
+        ]
+      })
+    ];
+
+    expect(
+      planningItemsToTodoItems(planningItems, "2026-05-25", true, "user-1", "overdue_items")
+        .map((todo) => todo.title)
+    ).toEqual(["Future on overdue item"]);
+    expect(
+      planningItemsToTodoItems(planningItems, "2026-05-25", true, "user-1", "overdue_tasks")
+        .map((todo) => todo.title)
+    ).toEqual(["Overdue task"]);
+    expect(
+      planningItemsToTodoItems(planningItems, "2026-05-25", true, "user-1", "due_soon_tasks")
+        .map((todo) => todo.title)
+    ).toEqual(["Soon task"]);
   });
 });

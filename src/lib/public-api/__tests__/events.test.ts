@@ -209,4 +209,44 @@ describe("public-api events helpers", () => {
       })
     ).toThrow(/not public/i);
   });
+
+  it("rejects events at internal venues", () => {
+    expect(() =>
+      toPublicEvent({
+        id: "aaaaaaa1-0000-4000-8000-000000000001",
+        title: "Staff planning day",
+        public_title: null,
+        public_teaser: null,
+        public_description: null,
+        public_highlights: null,
+        booking_type: null,
+        ticket_price: null,
+        check_in_cutoff_minutes: null,
+        age_policy: null,
+        accessibility_notes: null,
+        cancellation_window_hours: null,
+        terms_and_conditions: null,
+        booking_url: null,
+        event_image_path: null,
+        seo_title: null,
+        seo_description: null,
+        seo_slug: null,
+        event_type: "Internal",
+        status: "approved",
+        start_at: "2025-04-18T18:00:00.000Z",
+        end_at: "2025-04-18T22:00:00.000Z",
+        venue_space: "Office",
+        wet_promo: null,
+        food_promo: null,
+        updated_at: "2025-04-01T12:00:00.000Z",
+        venue: {
+          id: "9f9c5da2-8a6e-4db0-84b7-8ae0b25177e7",
+          name: "Internal",
+          address: null,
+          capacity: null,
+          is_internal: true
+        }
+      })
+    ).toThrow(/internal and not public/i);
+  });
 });

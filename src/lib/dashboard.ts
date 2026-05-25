@@ -62,7 +62,8 @@ export async function getDashboardTodoItems(
   try {
     const planningItems = await fetchUserPlanningTasks(user, today);
     items.push(...planningItems);
-  } catch {
+  } catch (error) {
+    console.error("Dashboard todos: failed to load planning tasks", error);
     errors.push("planning", "sop");
   }
 
@@ -71,7 +72,8 @@ export async function getDashboardTodoItems(
     try {
       const reviewItems = await fetchReviewQueueTodos(user, today);
       items.push(...reviewItems);
-    } catch {
+    } catch (error) {
+      console.error("Dashboard todos: failed to load review queue", error);
       errors.push("review");
     }
   }
@@ -80,7 +82,8 @@ export async function getDashboardTodoItems(
   try {
     const revisionItems = await fetchRevisionTodos(user, today);
     items.push(...revisionItems);
-  } catch {
+  } catch (error) {
+    console.error("Dashboard todos: failed to load revision tasks", error);
     errors.push("revision");
   }
 
@@ -89,7 +92,8 @@ export async function getDashboardTodoItems(
     try {
       const debriefItems = await fetchDebriefTodos(user, today);
       items.push(...debriefItems);
-    } catch {
+    } catch (error) {
+      console.error("Dashboard todos: failed to load debrief tasks", error);
       errors.push("debrief");
     }
   }
@@ -125,7 +129,7 @@ async function fetchUserPlanningTasks(user: AppUser, today: string): Promise<Tod
         sop_section, sop_template_task_id, planning_item_id,
         planning_items!inner (
           id, title, owner_id, venue_id,
-          venues ( name )
+          venue:venues!planning_items_venue_id_fkey ( name )
         )
       )
     `)
@@ -141,7 +145,7 @@ async function fetchUserPlanningTasks(user: AppUser, today: string): Promise<Tod
       sop_section, sop_template_task_id, planning_item_id,
       planning_items!inner (
         id, title, owner_id, venue_id,
-        venues ( name )
+        venue:venues!planning_items_venue_id_fkey ( name )
       )
     `)
     .eq("assignee_id", user.id)
@@ -165,7 +169,8 @@ async function fetchUserPlanningTasks(user: AppUser, today: string): Promise<Tod
     if (!task || task.status !== "open") return;
     if (taskMap.has(task.id)) return;
 
-    const item = task.planning_items;
+    const item = Array.isArray(task.planning_items) ? task.planning_items[0] : task.planning_items;
+    const venue = Array.isArray(item?.venue) ? item.venue[0] : item?.venue;
     const isSop = Boolean(task.sop_section || task.sop_template_task_id);
     const source: TodoSource = isSop ? "sop" : "planning";
 
@@ -173,13 +178,13 @@ async function fetchUserPlanningTasks(user: AppUser, today: string): Promise<Tod
       id: task.id,
       source,
       title: task.title,
-      subtitle: `${isSop ? "SOP Task" : "Planning Task"} \u00B7 ${item?.venues?.name ?? "No venue"} \u00B7 Due ${task.due_date ?? "TBD"}`,
+      subtitle: `${isSop ? "SOP Task" : "Planning Task"} \u00B7 ${venue?.name ?? "No venue"} \u00B7 Due ${task.due_date ?? "TBD"}`,
       dueDate: task.due_date ?? null,
       urgency: classifyTodoUrgency(task.due_date ?? null, today),
       canToggle: canToggleForUser(ownerId),
       linkHref: "/planning",
       parentTitle: item?.title ?? undefined,
-      venueName: item?.venues?.name ?? undefined,
+      venueName: venue?.name ?? undefined,
       planningTaskId: task.id,
       planningItemId: item?.id ?? undefined,
     });
@@ -210,7 +215,7 @@ async function fetchReviewQueueTodos(user: AppUser, today: string): Promise<Todo
   const db = createSupabaseAdminClient();
   let query = db
     .from("events")
-    .select("id, title, start_at, venue_id, venues!inner(name)")
+    .select("id, title, start_at, venue_id, venue:venues!events_venue_id_fkey(name)")
     .is("deleted_at", null)
     .in("status", ["submitted", "needs_revisions"])
     .order("start_at", { ascending: true })
@@ -225,7 +230,7 @@ async function fetchReviewQueueTodos(user: AppUser, today: string): Promise<Todo
    
   return (data ?? []).map((event: any) => {
     const startDate = event.start_at?.slice(0, 10) ?? null;
-    const venue = Array.isArray(event.venues) ? event.venues[0] : event.venues;
+    const venue = Array.isArray(event.venue) ? event.venue[0] : event.venue;
     return {
       id: `review-${event.id}`,
       source: "review" as TodoSource,
@@ -245,7 +250,7 @@ async function fetchRevisionTodos(user: AppUser, today: string): Promise<TodoIte
   const db = createSupabaseAdminClient();
   const { data, error } = await db
     .from("events")
-    .select("id, title, start_at, venue_id, venues!inner(name)")
+    .select("id, title, start_at, venue_id, venue:venues!events_venue_id_fkey(name)")
     .eq("created_by", user.id)
     .eq("status", "needs_revisions")
     .is("deleted_at", null)
@@ -257,7 +262,7 @@ async function fetchRevisionTodos(user: AppUser, today: string): Promise<TodoIte
    
   return (data ?? []).map((event: any) => {
     const startDate = event.start_at?.slice(0, 10) ?? null;
-    const venue = Array.isArray(event.venues) ? event.venues[0] : event.venues;
+    const venue = Array.isArray(event.venue) ? event.venue[0] : event.venue;
     return {
       id: `revision-${event.id}`,
       source: "revision" as TodoSource,
@@ -279,7 +284,7 @@ async function fetchDebriefTodos(user: AppUser, today: string): Promise<TodoItem
   // Events that are approved, past end_at, and have no debrief
   let query = db
     .from("events")
-    .select("id, title, end_at, venue_id, venues!inner(name), debriefs(id)")
+    .select("id, title, end_at, venue_id, venue:venues!events_venue_id_fkey(name), debriefs(id)")
     .eq("status", "approved")
     .lt("end_at", new Date().toISOString())
     .is("deleted_at", null)
@@ -301,16 +306,17 @@ async function fetchDebriefTodos(user: AppUser, today: string): Promise<TodoItem
    
   return eventsWithoutDebrief.map((event: any) => {
     const endDate = event.end_at?.slice(0, 10) ?? null;
+    const venue = Array.isArray(event.venue) ? event.venue[0] : event.venue;
     return {
       id: `debrief-${event.id}`,
       source: "debrief" as TodoSource,
       title: `Submit debrief for ${event.title}`,
-      subtitle: `Debrief \u00B7 ${event.venues?.name ?? "No venue"} \u00B7 Ended ${endDate ?? "unknown"}`,
+      subtitle: `Debrief \u00B7 ${venue?.name ?? "No venue"} \u00B7 Ended ${endDate ?? "unknown"}`,
       dueDate: endDate,
       urgency: classifyTodoUrgency(endDate, today, "debrief"),
       canToggle: false,
       linkHref: `/debriefs/${event.id}`,
-      venueName: event.venues?.name ?? undefined,
+      venueName: venue?.name ?? undefined,
       eventDate: endDate ?? undefined,
     };
   });
@@ -332,7 +338,7 @@ export async function getDebriefsDue(user: AppUser): Promise<Array<{
   const db = createSupabaseAdminClient();
   let query = db
     .from("events")
-    .select("id, title, end_at, venues!inner(name), debriefs(id)")
+    .select("id, title, end_at, venue:venues!events_venue_id_fkey(name), debriefs(id)")
     .eq("status", "approved")
     .lt("end_at", new Date().toISOString())
     .is("deleted_at", null)
@@ -353,7 +359,7 @@ export async function getDebriefsDue(user: AppUser): Promise<Array<{
       id: e.id,
       title: e.title,
       endAt: e.end_at?.slice(0, 10) ?? "",
-      venueName: e.venues?.name ?? "",
+      venueName: (Array.isArray(e.venue) ? e.venue[0]?.name : e.venue?.name) ?? "",
     }));
 }
 

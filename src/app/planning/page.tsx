@@ -50,7 +50,8 @@ export default async function PlanningPage() {
         id: venue.id,
         name: venue.name,
          
-        category: (venue as any).category === "cafe" ? "cafe" : "pub"
+        category: (venue as any).category === "cafe" ? "cafe" : "pub",
+        isInternal: Boolean((venue as any).is_internal)
       }))}
       canApproveEvents={canReviewEvents(user.role)}
       userRole={user.role}

@@ -1,4 +1,4 @@
-import type { PlanningBucketKey, PlanningItem, RecurrenceFrequency } from "@/lib/planning/types";
+import type { PlanningBucketKey, PlanningItem, PlanningTask, RecurrenceFrequency, TodoAlertFilter } from "@/lib/planning/types";
 import type { TodoItem, TodoSource, TodoUrgency } from "@/components/todos/todo-item-types";
 import { DISPLAY_TIMEZONE } from "@/lib/datetime";
 
@@ -287,6 +287,29 @@ function classifyUrgency(dueDate: string | null, today: string): TodoUrgency {
   return "later";
 }
 
+function shouldIncludeTodoTask(
+  item: PlanningItem,
+  task: PlanningTask,
+  today: string,
+  alertFilter?: TodoAlertFilter | null
+): boolean {
+  const dueDate = task.dueDate ?? null;
+  const sevenDaysFromNow = addDays(today, 7);
+
+  switch (alertFilter) {
+    case "overdue_items":
+      return item.targetDate < today;
+    case "overdue_tasks":
+      return Boolean(dueDate && dueDate < today);
+    case "due_soon_items":
+      return item.targetDate >= today && item.targetDate <= sevenDaysFromNow;
+    case "due_soon_tasks":
+      return Boolean(dueDate && dueDate >= today && dueDate <= sevenDaysFromNow);
+    default:
+      return Boolean(dueDate && dueDate <= today);
+  }
+}
+
 /**
  * Convert PlanningItem[] (with nested tasks) into TodoItem[] for the
  * UnifiedTodoList component.
@@ -295,15 +318,15 @@ export function planningItemsToTodoItems(
   items: PlanningItem[],
   today: string,
   canManageAll: boolean,
-  currentUserId: string
+  currentUserId: string,
+  alertFilter?: TodoAlertFilter | null
 ): TodoItem[] {
   const result: TodoItem[] = [];
 
   for (const item of items) {
     for (const task of item.tasks) {
       if (task.status !== "open") continue;
-      // Only show tasks that are due today or earlier — not future-dated items
-      if (task.dueDate && task.dueDate > today) continue;
+      if (!shouldIncludeTodoTask(item, task, today, alertFilter)) continue;
 
       const isSop = Boolean(task.sopSection || task.sopTemplateTaskId);
       const source: TodoSource = isSop ? "sop" : "planning";

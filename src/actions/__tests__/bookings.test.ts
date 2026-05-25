@@ -60,6 +60,20 @@ const VALID_INPUT = {
   turnstileToken: "valid-token",
 } as const;
 
+function eligibleEventRow(overrides: Record<string, unknown> = {}) {
+  return {
+    booking_enabled: true,
+    booking_type: "free_seated",
+    booking_url: null,
+    status: "approved",
+    deleted_at: null,
+    total_capacity: 10,
+    max_tickets_per_booking: 5,
+    venue: { is_internal: false },
+    ...overrides,
+  };
+}
+
 describe("createBookingAction", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -70,18 +84,29 @@ describe("createBookingAction", () => {
     // Default admin client mock — returns "no existing customer / booking" so
     // the dedup short-circuit doesn't trigger. Tests that exercise the dedup
     // path override this with a mock that returns existing data.
-    const defaultSingle = vi.fn().mockResolvedValue({ data: null, error: null });
-    const defaultEq = vi.fn().mockReturnValue({
-      eq: vi.fn().mockReturnValue({
-        eq: vi.fn().mockReturnValue({ maybeSingle: defaultSingle }),
-        maybeSingle: defaultSingle
-      }),
-      maybeSingle: defaultSingle
-    });
-    const defaultSelect = vi.fn().mockReturnValue({ eq: defaultEq });
-    const defaultFrom = vi.fn().mockReturnValue({
-      select: defaultSelect,
-      update: vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({ error: null }) })
+    const defaultNullMaybeSingle = vi.fn().mockResolvedValue({ data: null, error: null });
+    const defaultFrom = vi.fn((table: string) => {
+      if (table === "events") {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              maybeSingle: vi.fn().mockResolvedValue({ data: eligibleEventRow(), error: null })
+            })
+          })
+        };
+      }
+      return {
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({ maybeSingle: defaultNullMaybeSingle }),
+              maybeSingle: defaultNullMaybeSingle
+            }),
+            maybeSingle: defaultNullMaybeSingle
+          }),
+        }),
+        update: vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({ error: null }) })
+      };
     });
     mockCreateSupabaseAdminClient.mockReturnValue({ from: defaultFrom } as never);
   });
@@ -174,7 +199,7 @@ describe("createBookingAction", () => {
 
   it("rejects crafted paid-format submissions from the free booking action", async () => {
     const eventMaybeSingle = vi.fn().mockResolvedValue({
-      data: { booking_type: "paid_standing" },
+      data: eligibleEventRow({ booking_type: "paid_standing" }),
       error: null,
     });
     mockCreateSupabaseAdminClient.mockReturnValue({
@@ -194,6 +219,31 @@ describe("createBookingAction", () => {
 
     expect(result.success).toBe(false);
     if (!result.success) expect(result.error).toMatch(/payment flow/i);
+    expect(mockCreateBookingAtomic).not.toHaveBeenCalled();
+  });
+
+  it("rejects internal venue events from the free booking action", async () => {
+    const eventMaybeSingle = vi.fn().mockResolvedValue({
+      data: eligibleEventRow({ venue: { is_internal: true } }),
+      error: null,
+    });
+    mockCreateSupabaseAdminClient.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "events") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({ maybeSingle: eventMaybeSingle }),
+            }),
+          };
+        }
+        return {};
+      }),
+    } as never);
+
+    const result = await createBookingAction(VALID_INPUT);
+
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error).toBe("not_found");
     expect(mockCreateBookingAtomic).not.toHaveBeenCalled();
   });
 
@@ -222,6 +272,15 @@ describe("createBookingAction", () => {
       error: null
     });
     const from = vi.fn((table: string) => {
+      if (table === "events") {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              maybeSingle: vi.fn().mockResolvedValue({ data: eligibleEventRow(), error: null })
+            })
+          })
+        };
+      }
       if (table === "customers") {
         return {
           select: vi.fn().mockReturnValue({
@@ -274,6 +333,15 @@ describe("updateExistingBookingAction", () => {
     });
     mockCreateSupabaseAdminClient.mockReturnValue({
       from: vi.fn((table: string) => {
+        if (table === "events") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({ data: eligibleEventRow(), error: null })
+              })
+            })
+          };
+        }
         if (table === "customers") {
           return {
             select: vi.fn().mockReturnValue({
@@ -353,7 +421,7 @@ describe("updateExistingBookingAction", () => {
           select: vi.fn().mockReturnValue({
             eq: vi.fn().mockReturnValue({
               maybeSingle: vi.fn().mockResolvedValue({
-                data: { total_capacity: 10, max_tickets_per_booking: 5 },
+                data: eligibleEventRow({ total_capacity: 10, max_tickets_per_booking: 5 }),
                 error: null
               })
             })
@@ -411,7 +479,7 @@ describe("updateExistingBookingAction", () => {
         return {
           select: vi.fn().mockReturnValue({
             eq: vi.fn().mockReturnValue({
-              maybeSingle: vi.fn().mockResolvedValue({ data: { total_capacity: 10 }, error: null })
+              maybeSingle: vi.fn().mockResolvedValue({ data: eligibleEventRow({ total_capacity: 10 }), error: null })
             })
           })
         };
@@ -468,7 +536,7 @@ describe("updateExistingBookingAction", () => {
           select: vi.fn().mockReturnValue({
             eq: vi.fn().mockReturnValue({
               maybeSingle: vi.fn().mockResolvedValue({
-                data: { total_capacity: 10, max_tickets_per_booking: 3 },
+                data: eligibleEventRow({ total_capacity: 10, max_tickets_per_booking: 3 }),
                 error: null
               })
             })
@@ -487,6 +555,66 @@ describe("updateExistingBookingAction", () => {
 
     expect(result.success).toBe(false);
     if (!result.success) expect(result.error).toBe("too_many_tickets");
+    expect(updateEq).not.toHaveBeenCalled();
+  });
+
+  it("rejects amendments when the event is internal", async () => {
+    const token = await issueUpdateToken(3);
+    const updateEq = vi.fn().mockResolvedValue({ error: null });
+    const from = vi.fn((table: string) => {
+      if (table === "event_bookings") {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn((field: string) => {
+              if (field === "id") {
+                return {
+                  maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                      id: "22222222-2222-4222-8222-222222222222",
+                      event_id: VALID_INPUT.eventId,
+                      customer_id: "11111111-1111-4111-8111-111111111111",
+                      ticket_count: 1,
+                      status: "confirmed"
+                    },
+                    error: null
+                  })
+                };
+              }
+              return {
+                eq: vi.fn().mockResolvedValue({
+                  data: [{ ticket_count: 1 }],
+                  error: null
+                })
+              };
+            })
+          }),
+          update: vi.fn().mockReturnValue({ eq: updateEq })
+        };
+      }
+      if (table === "events") {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              maybeSingle: vi.fn().mockResolvedValue({
+                data: eligibleEventRow({ venue: { is_internal: true } }),
+                error: null
+              })
+            })
+          })
+        };
+      }
+      return {};
+    });
+    mockCreateSupabaseAdminClient.mockReturnValue({ from } as never);
+
+    const result = await updateExistingBookingAction({
+      bookingId: "22222222-2222-4222-8222-222222222222",
+      ticketCount: 4,
+      updateToken: token
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error).toMatch(/not found/i);
     expect(updateEq).not.toHaveBeenCalled();
   });
 
@@ -539,6 +667,15 @@ describe("customer upsert", () => {
 
     const db = {
       from: vi.fn((table: string) => {
+        if (table === "events") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({ data: eligibleEventRow(), error: null })
+              })
+            })
+          };
+        }
         if (table === "customers") {
           return {
             select: dedupCustomerSelect,
@@ -555,6 +692,19 @@ describe("customer upsert", () => {
             update: vi.fn().mockReturnValue({
               eq: vi.fn().mockResolvedValue({ error: null }),
             }),
+          };
+        }
+        if (table === "sms_campaign_sends") {
+          return {
+            update: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                eq: vi.fn().mockReturnValue({
+                  eq: vi.fn().mockReturnValue({
+                    is: vi.fn().mockResolvedValue({ error: null })
+                  })
+                })
+              })
+            })
           };
         }
         return {};
@@ -589,13 +739,14 @@ describe("customer upsert", () => {
   });
 
   it("should NOT downgrade marketing_opt_in from true to false on re-booking", async () => {
-    const { updateMock } = makeDbMock({ upsertedRow: { id: "customer-uuid", marketing_opt_in: true } });
+    const { updateMock, insertMock } = makeDbMock({ upsertedRow: { id: "customer-uuid", marketing_opt_in: true } });
 
     await createBookingAction({ ...VALID_INPUT, marketingOptIn: false });
 
     // update({ marketing_opt_in: true }) must NOT have been called
     const updateCallArgs = updateMock.mock.calls.map((call) => call[0]);
     expect(updateCallArgs).not.toContainEqual(expect.objectContaining({ marketing_opt_in: true }));
+    expect(insertMock).not.toHaveBeenCalledWith(expect.objectContaining({ event_type: "opt_out" }));
   });
 
   it("should upgrade marketing_opt_in from false to true when opted in", async () => {
@@ -622,9 +773,42 @@ describe("customer upsert", () => {
   });
 
   it("should succeed and return bookingId even if customer upsert throws", async () => {
-    mockCreateSupabaseAdminClient.mockImplementation(() => {
-      throw new Error("DB unavailable");
-    });
+    const dedupMaybeSingle = vi.fn().mockResolvedValue({ data: null, error: null });
+    mockCreateSupabaseAdminClient.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "events") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({ data: eligibleEventRow(), error: null })
+              })
+            })
+          };
+        }
+        if (table === "customers") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({ maybeSingle: dedupMaybeSingle })
+            }),
+            upsert: vi.fn(() => {
+              throw new Error("DB unavailable");
+            })
+          };
+        }
+        if (table === "event_bookings") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                eq: vi.fn().mockReturnValue({
+                  eq: vi.fn().mockReturnValue({ maybeSingle: dedupMaybeSingle })
+                })
+              })
+            })
+          };
+        }
+        return {};
+      })
+    } as never);
 
     const result = await createBookingAction({ ...VALID_INPUT, marketingOptIn: false });
 

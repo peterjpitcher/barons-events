@@ -288,7 +288,8 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                       venues={venues.map((venue) => ({
                         id: venue.id,
                         name: venue.name,
-                        category: venue.category ?? "pub"
+                        category: venue.category ?? "pub",
+                        isInternal: venue.isInternal
                       } satisfies VenueOption))}
                       selectedIds={itemVenueIds}
                       onChange={setItemVenueIds}

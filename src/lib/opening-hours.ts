@@ -55,6 +55,10 @@ export type UpsertHoursInput = {
   has_service: boolean;
 };
 
+export type UpsertOpeningHoursOptions = {
+  serviceTypeIds?: string[];
+};
+
 export type CreateOverrideInput = {
   override_date: string;
   service_type_id: string;
@@ -194,13 +198,20 @@ function normaliseTimeForStorage(value: string | null): string | null {
 
 export async function upsertVenueOpeningHours(
   venueId: string,
-  rows: UpsertHoursInput[]
+  rows: UpsertHoursInput[],
+  options: UpsertOpeningHoursOptions = {}
 ): Promise<void> {
   const supabase = await createSupabaseActionClient();
+  const scopedServiceTypeSet = options.serviceTypeIds?.length
+    ? new Set(options.serviceTypeIds)
+    : null;
+  const rowsToSave = scopedServiceTypeSet
+    ? rows.filter((row) => scopedServiceTypeSet.has(row.service_type_id))
+    : rows;
 
   const offeredServiceIds = Array.from(
     new Set(
-      rows
+      rowsToSave
         .filter((row) => {
           const openTime = normaliseTimeForStorage(row.open_time);
           const closeTime = normaliseTimeForStorage(row.close_time);
@@ -211,7 +222,7 @@ export async function upsertVenueOpeningHours(
   );
   const offeredServiceSet = new Set(offeredServiceIds);
 
-  const records = rows
+  const records = rowsToSave
     .filter((row) => offeredServiceSet.has(row.service_type_id))
     .map((row) => {
       const openTime = normaliseTimeForStorage(row.open_time);
@@ -235,19 +246,27 @@ export async function upsertVenueOpeningHours(
       };
     });
 
-  const { error: deleteHoursError } = await supabase
+  let deleteHoursQuery = supabase
     .from("venue_opening_hours")
     .delete()
     .eq("venue_id", venueId);
+  if (scopedServiceTypeSet) {
+    deleteHoursQuery = deleteHoursQuery.in("service_type_id", Array.from(scopedServiceTypeSet));
+  }
+  const { error: deleteHoursError } = await deleteHoursQuery;
 
   if (deleteHoursError) {
     throw new Error(`Could not replace opening hours: ${deleteHoursError.message}`);
   }
 
-  const { error: deleteServicesError } = await supabase
+  let deleteServicesQuery = supabase
     .from("venue_services")
     .delete()
     .eq("venue_id", venueId);
+  if (scopedServiceTypeSet) {
+    deleteServicesQuery = deleteServicesQuery.in("service_type_id", Array.from(scopedServiceTypeSet));
+  }
+  const { error: deleteServicesError } = await deleteServicesQuery;
 
   if (deleteServicesError) {
     throw new Error(`Could not replace venue services: ${deleteServicesError.message}`);

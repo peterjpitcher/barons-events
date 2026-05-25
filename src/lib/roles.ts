@@ -25,6 +25,7 @@ export function canProposeEvents(role: UserRole): boolean {
 /** Context an edit check needs about the event being edited. */
 export type EventEditContext = {
   venueId: string | null;
+  venueIds?: string[];
   managerResponsibleId: string | null;
   createdBy: string | null;
   status: string | null;
@@ -53,7 +54,12 @@ export function canEditEvent(
   }
 
   if (!userVenueId) return false;
-  if (event.venueId !== userVenueId) return false;
+  const linkedVenueIds = new Set<string>();
+  if (event.venueId) linkedVenueIds.add(event.venueId);
+  for (const venueId of event.venueIds ?? []) {
+    if (venueId) linkedVenueIds.add(venueId);
+  }
+  if (!linkedVenueIds.has(userVenueId)) return false;
   if (event.managerResponsibleId !== userId) return false;
   if (event.status !== "approved" && event.status !== "cancelled") return false;
   return true;

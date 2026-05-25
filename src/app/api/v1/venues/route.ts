@@ -30,6 +30,7 @@ export async function GET(request: Request) {
       capacity
     `
     )
+    .eq("is_internal", false)
     .order("name", { ascending: true });
 
   if (error) {

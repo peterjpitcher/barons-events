@@ -47,7 +47,8 @@ const venueSchema = z.object({
   defaultApproverId: uuidOrUndefined,
   defaultManagerResponsibleId: uuidOrUndefined,
   googleReviewUrl: z.string().url("Enter a valid URL").optional().or(z.literal("")),
-  category: z.enum(["pub", "cafe"]).optional()
+  category: z.enum(["pub", "cafe"]).optional(),
+  isInternal: z.boolean().optional()
 });
 
 export async function createVenueAction(
@@ -66,7 +67,8 @@ export async function createVenueAction(
     name: typeof formData.get("name") === "string" ? formData.get("name") : "",
     defaultApproverId: typeof formData.get("defaultApproverId") === "string" ? formData.get("defaultApproverId") : "",
     defaultManagerResponsibleId: typeof formData.get("defaultManagerResponsibleId") === "string" ? formData.get("defaultManagerResponsibleId") : "",
-    category: typeof formData.get("category") === "string" ? formData.get("category") : "pub"
+    category: typeof formData.get("category") === "string" ? formData.get("category") : "pub",
+    isInternal: formData.get("isInternal") === "on"
   });
 
   if (!parsed.success) {
@@ -82,20 +84,18 @@ export async function createVenueAction(
       name: parsed.data.name,
       defaultApproverId: parsed.data.defaultApproverId ?? null,
       defaultManagerResponsibleId: parsed.data.defaultManagerResponsibleId || null,
-      category: parsed.data.category ?? "pub"
+      category: parsed.data.category ?? "pub",
+      isInternal: parsed.data.isInternal ?? false
     });
-    const newVenueId =
-      typeof created === "object" && created !== null && "id" in created
-        ? (created as { id: string }).id
-        : "unknown";
+    const newVenueId = created.id;
     recordAuditLogEntry({
       entity: "venue",
       entityId: newVenueId,
       action: "venue.created",
       actorId: user.id,
-      meta: { name: parsed.data.name, category: parsed.data.category ?? "pub" }
+      meta: { name: parsed.data.name, category: parsed.data.category ?? "pub", isInternal: parsed.data.isInternal ?? false }
     }).catch(() => {});
-    if (newVenueId !== "unknown") {
+    if (newVenueId !== "unknown" && !parsed.data.isInternal) {
       await queueCascadeBackfill(newVenueId);
     }
     revalidatePath("/venues");
@@ -124,7 +124,8 @@ export async function updateVenueAction(
     defaultApproverId: typeof formData.get("defaultApproverId") === "string" ? formData.get("defaultApproverId") : "",
     defaultManagerResponsibleId: typeof formData.get("defaultManagerResponsibleId") === "string" ? formData.get("defaultManagerResponsibleId") : "",
     googleReviewUrl: typeof formData.get("googleReviewUrl") === "string" ? formData.get("googleReviewUrl") : "",
-    category: typeof formData.get("category") === "string" ? formData.get("category") : undefined
+    category: typeof formData.get("category") === "string" ? formData.get("category") : undefined,
+    isInternal: formData.get("isInternal") === "on"
   });
 
   if (!parsed.success) {
@@ -154,19 +155,20 @@ export async function updateVenueAction(
       defaultApproverId: parsed.data.defaultApproverId ?? null,
       defaultManagerResponsibleId: parsed.data.defaultManagerResponsibleId || null,
       googleReviewUrl: parsed.data.googleReviewUrl || null,
-      category: parsed.data.category
+      category: parsed.data.category,
+      isInternal: parsed.data.isInternal ?? false
     });
     recordAuditLogEntry({
       entity: "venue",
       entityId: parsed.data.venueId,
       action: "venue.updated",
       actorId: user.id,
-      meta: { name: parsed.data.name, category: parsed.data.category ?? previousCategory }
+      meta: { name: parsed.data.name, category: parsed.data.category ?? previousCategory, isInternal: parsed.data.isInternal ?? false }
     }).catch(() => {});
 
     // Log category change + queue a cascade backfill so newly matching
     // per-venue masters pick up this venue.
-    if (parsed.data.category && previousCategory && parsed.data.category !== previousCategory) {
+    if (parsed.data.category && previousCategory && parsed.data.category !== previousCategory && !parsed.data.isInternal) {
       recordAuditLogEntry({
         entity: "venue",
         entityId: parsed.data.venueId,

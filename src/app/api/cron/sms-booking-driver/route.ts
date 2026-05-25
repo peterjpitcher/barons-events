@@ -32,9 +32,10 @@ export async function GET(request: Request): Promise<NextResponse> {
     .select(`
       id, public_title, event_type, booking_type, venue_id, start_at,
       ticket_price, total_capacity, booking_url, seo_slug, max_tickets_per_booking,
-      venues ( name )
+      venue:venues!events_venue_id_fkey!inner ( name )
     `)
     .in("status", ["approved", "completed"])
+    .eq("venue.is_internal", false)
     .eq("sms_promo_enabled", true)
     .eq("booking_enabled", true)
     .gt("start_at", new Date().toISOString())
@@ -65,7 +66,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       continue;
     }
 
-    const venue = (row.venues as unknown as Record<string, unknown>) ?? {};
+    const venue = (row.venue as unknown as Record<string, unknown>) ?? {};
     const campaignEvent: CampaignEvent = {
       id: row.id as string,
       publicTitle: (row.public_title as string) || "Event",

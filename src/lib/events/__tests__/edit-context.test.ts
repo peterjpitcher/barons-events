@@ -25,6 +25,7 @@ describe("loadEventEditContext", () => {
         created_by: "u2",
         status: "approved",
         deleted_at: null,
+        event_venues: [{ venue_id: "v1" }, { venue_id: "v2" }],
       },
       error: null,
     });
@@ -36,9 +37,10 @@ describe("loadEventEditContext", () => {
       createdBy: "u2",
       status: "approved",
       deletedAt: null,
+      venueIds: ["v1", "v2"],
     });
     expect(selectMock).toHaveBeenCalledWith(
-      "id, venue_id, manager_responsible_id, created_by, status, deleted_at",
+      "id, venue_id, manager_responsible_id, created_by, status, deleted_at, event_venues(venue_id)",
     );
   });
 

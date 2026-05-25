@@ -5,6 +5,7 @@ import type { UserRole } from "@/lib/types";
 export type EventRowForEdit = {
   id: string;
   venue_id: string | null;
+  event_venues?: Array<{ venue_id: string | null }> | null;
   manager_responsible_id: string | null;
   created_by: string | null;
   status: string | null;
@@ -23,7 +24,7 @@ export async function loadEventEditContext(
   const db = createSupabaseAdminClient();
   const { data, error } = await db
     .from("events")
-    .select("id, venue_id, manager_responsible_id, created_by, status, deleted_at")
+    .select("id, venue_id, manager_responsible_id, created_by, status, deleted_at, event_venues(venue_id)")
     .eq("id", eventId)
     .maybeSingle();
 
@@ -35,6 +36,12 @@ export async function loadEventEditContext(
 
   return {
     venueId: data.venue_id,
+    venueIds: [
+      ...new Set(
+        [data.venue_id, ...((data as EventRowForEdit).event_venues ?? []).map((link) => link.venue_id)]
+          .filter((venueId): venueId is string => typeof venueId === "string" && venueId.length > 0)
+      )
+    ],
     managerResponsibleId: data.manager_responsible_id,
     createdBy: data.created_by,
     status: data.status,
@@ -49,6 +56,12 @@ export function canEditEventFromRow(
 ): boolean {
   return canEditEvent(user.role, user.id, user.venueId, {
     venueId: row.venue_id,
+    venueIds: [
+      ...new Set(
+        [row.venue_id, ...(row.event_venues ?? []).map((link) => link.venue_id)]
+          .filter((venueId): venueId is string => typeof venueId === "string" && venueId.length > 0)
+      )
+    ],
     managerResponsibleId: row.manager_responsible_id,
     createdBy: row.created_by,
     status: row.status,

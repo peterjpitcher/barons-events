@@ -63,16 +63,18 @@ export async function GET(request: NextRequest, context: { params: Promise<{ eve
       wet_promo,
       food_promo,
       updated_at,
-      venue:venues!events_venue_id_fkey(
+      venue:venues!events_venue_id_fkey!inner(
         id,
         name,
         address,
-        capacity
+        capacity,
+        is_internal
       )
     `
     )
     .eq("id", eventId)
     .in("status", [...PUBLIC_EVENT_STATUSES])
+    .eq("venue.is_internal", false)
     .is("deleted_at", null)
     .maybeSingle();
 

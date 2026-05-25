@@ -2190,6 +2190,8 @@ export type Database = {
           id: string
           previous_role: string | null
           role: string
+          todo_digest_frequency: string
+          todo_digest_last_sent_on: string | null
           updated_at: string
           venue_id: string | null
         }
@@ -2202,6 +2204,8 @@ export type Database = {
           id: string
           previous_role?: string | null
           role: string
+          todo_digest_frequency?: string
+          todo_digest_last_sent_on?: string | null
           updated_at?: string
           venue_id?: string | null
         }
@@ -2214,6 +2218,8 @@ export type Database = {
           id?: string
           previous_role?: string | null
           role?: string
+          todo_digest_frequency?: string
+          todo_digest_last_sent_on?: string | null
           updated_at?: string
           venue_id?: string | null
         }
@@ -2457,6 +2463,7 @@ export type Database = {
           default_manager_responsible_id: string | null
           google_review_url: string | null
           id: string
+          is_internal: boolean
           name: string
           updated_at: string
         }
@@ -2469,6 +2476,7 @@ export type Database = {
           default_manager_responsible_id?: string | null
           google_review_url?: string | null
           id?: string
+          is_internal?: boolean
           name: string
           updated_at?: string
         }
@@ -2481,6 +2489,7 @@ export type Database = {
           default_manager_responsible_id?: string | null
           google_review_url?: string | null
           id?: string
+          is_internal?: boolean
           name?: string
           updated_at?: string
         }

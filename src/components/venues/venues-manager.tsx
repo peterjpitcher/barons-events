@@ -61,7 +61,7 @@ function VenueCreateForm({ reviewers, users }: { reviewers: ReviewerOption[]; us
         <CardDescription>Manage your venues in a table so updates stay consistent and quick.</CardDescription>
       </CardHeader>
       <CardContent>
-        <form ref={formRef} action={formAction} className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,2fr)_minmax(0,2fr)_auto]" noValidate>
+        <form ref={formRef} action={formAction} className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,1.2fr)_minmax(0,2fr)_minmax(0,2fr)_auto]" noValidate>
           <div className="space-y-2">
             <Label htmlFor="new-venue-name">Venue name</Label>
             <Input
@@ -81,6 +81,12 @@ function VenueCreateForm({ reviewers, users }: { reviewers: ReviewerOption[]; us
               <option value="pub">🍺 Pub</option>
               <option value="cafe">☕ Cafe</option>
             </Select>
+          </div>
+          <div className="flex items-end pb-2">
+            <label className="flex items-center gap-2 text-sm text-[var(--color-text)]">
+              <input type="checkbox" name="isInternal" className="h-4 w-4" />
+              Internal
+            </label>
           </div>
           <div className="space-y-2">
             <Label htmlFor="new-venue-default-manager">Default manager responsible</Label>
@@ -134,6 +140,7 @@ function VenueTable({ venues, reviewers, users }: VenuesManagerProps) {
           <tr className="bg-[var(--color-muted-surface)] text-left text-xs font-semibold uppercase tracking-[0.14em] text-subtle">
             <th scope="col" className="px-4 py-3">Venue</th>
             <th scope="col" className="px-4 py-3">Category</th>
+            <th scope="col" className="px-4 py-3">Internal</th>
             <th scope="col" className="px-4 py-3">Manager Responsible</th>
             <th scope="col" className="px-4 py-3">Default Reviewer</th>
             <th scope="col" className="px-4 py-3">Google Review URL</th>
@@ -182,8 +189,8 @@ function VenueRowEditor({ venue, reviewers, users }: { venue: VenueRow; reviewer
 
   return (
     <tr className="border-t border-[var(--color-border)]">
-      <td colSpan={7} className="px-4 py-3">
-        <div className="grid gap-3 md:grid-cols-[minmax(0,16fr)_minmax(0,10fr)_minmax(0,16fr)_minmax(0,14fr)_minmax(0,24fr)_auto_auto] md:items-start">
+      <td colSpan={8} className="px-4 py-3">
+        <div className="grid gap-3 md:grid-cols-[minmax(0,16fr)_minmax(0,10fr)_minmax(0,8fr)_minmax(0,16fr)_minmax(0,14fr)_minmax(0,24fr)_auto_auto] md:items-start">
           <form id={`venue-form-${venue.id}`} action={formAction} className="contents" noValidate>
             <input type="hidden" name="venueId" value={venue.id} />
             <div className="space-y-2">
@@ -214,6 +221,17 @@ function VenueRowEditor({ venue, reviewers, users }: { venue: VenueRow; reviewer
                 <option value="pub">🍺 Pub</option>
                 <option value="cafe">☕ Cafe</option>
               </Select>
+            </div>
+            <div className="flex items-center">
+              <label className="flex items-center gap-2 text-sm text-[var(--color-text)]">
+                <input
+                  type="checkbox"
+                  name="isInternal"
+                  defaultChecked={Boolean((venue as any).is_internal)}
+                  className="h-4 w-4"
+                />
+                Internal
+              </label>
             </div>
             <div className="space-y-2">
               <label className="sr-only" htmlFor={`venue-manager-${venue.id}`}>

@@ -48,6 +48,7 @@ type EventRow = {
   venue: {
     id: string;
     name: string;
+    is_internal?: boolean;
   } | null;
 };
 
@@ -61,7 +62,7 @@ async function getEventBySlug(slug: string): Promise<EventRow | null> {
   const { data, error } = await db
     .from("events")
     .select(
-      "id, title, public_title, public_teaser, public_description, public_highlights, event_image_path, start_at, seo_slug, booking_enabled, booking_type, booking_url, ticket_price, total_capacity, max_tickets_per_booking, status, venue:venues!events_venue_id_fkey(id, name)"
+      "id, title, public_title, public_teaser, public_description, public_highlights, event_image_path, start_at, seo_slug, booking_enabled, booking_type, booking_url, ticket_price, total_capacity, max_tickets_per_booking, status, venue:venues!events_venue_id_fkey(id, name, is_internal)"
     )
     .eq("seo_slug", slug)
     .is("deleted_at", null)
@@ -79,8 +80,10 @@ async function getEventBySlug(slug: string): Promise<EventRow | null> {
   const raw = data as Record<string, unknown>;
   const venueRaw = raw.venue;
   const venue = Array.isArray(venueRaw)
-    ? (venueRaw[0] as { id: string; name: string } | undefined) ?? null
-    : (venueRaw as { id: string; name: string } | null) ?? null;
+    ? (venueRaw[0] as { id: string; name: string; is_internal?: boolean } | undefined) ?? null
+    : (venueRaw as { id: string; name: string; is_internal?: boolean } | null) ?? null;
+
+  if (venue?.is_internal) return null;
 
   return {
     id: raw.id as string,

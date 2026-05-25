@@ -70,10 +70,18 @@ export async function GET(request: Request): Promise<NextResponse> {
        
       const { data: venue } = await (db as any)
         .from("venues")
-        .select("id, name, category, default_manager_responsible_id")
+        .select("id, name, category, default_manager_responsible_id, is_internal")
         .eq("id", row.venue_id)
         .maybeSingle();
       if (!venue) throw new Error("Venue not found");
+      if (venue.is_internal) {
+        await (db as any)
+          .from("pending_cascade_backfill")
+          .update({ processed_at: new Date().toISOString(), error: null })
+          .eq("id", row.id);
+        processed++;
+        continue;
+      }
 
       // Find open masters whose template filter matches this venue.
        

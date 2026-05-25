@@ -26,7 +26,8 @@ export default async function ProposeEventPage() {
     id: v.id,
     name: v.name,
 
-    category: (((v as any).category ?? "pub") === "cafe" ? "cafe" : "pub") as "pub" | "cafe"
+    category: (((v as any).category ?? "pub") === "cafe" ? "cafe" : "pub") as "pub" | "cafe",
+    isInternal: Boolean((v as any).is_internal)
   }));
 
   return (

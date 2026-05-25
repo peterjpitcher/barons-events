@@ -605,7 +605,13 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
       {viewMode === "todos_by_person" ? (
         <UnifiedTodoList
           mode="planning"
-          items={planningItemsToTodoItems(filteredPlanningItems, data.today, userRole ? canManageAllPlanning(userRole) : false, currentUserId ?? "")}
+          items={planningItemsToTodoItems(
+            filteredPlanningItems,
+            data.today,
+            userRole ? canManageAllPlanning(userRole) : false,
+            currentUserId ?? "",
+            todoAlertFilter
+          )}
           currentUserId={currentUserId ?? ""}
           users={data.users}
           alertFilter={todoAlertFilter}

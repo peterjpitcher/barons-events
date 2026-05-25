@@ -108,4 +108,4 @@ All cron routes secured by `CRON_SECRET` Bearer token. See [[overview#API Auth]]
 | `/api/cron/sms-booking-driver` | GET | CRON_SECRET | `src/app/api/cron/sms-booking-driver/route.ts` | Drive SMS booking flow |
 | `/api/cron/sms-post-event` | GET | CRON_SECRET | `src/app/api/cron/sms-post-event/route.ts` | Post-event SMS (daily 10:00 UTC) |
 | `/api/cron/sms-reminders` | GET | CRON_SECRET | `src/app/api/cron/sms-reminders/route.ts` | Event reminder SMS |
-| `/api/cron/weekly-digest` | GET | CRON_SECRET | `src/app/api/cron/weekly-digest/route.ts` | Weekly email digest |
+| `/api/cron/weekly-digest` | GET | CRON_SECRET | `src/app/api/cron/weekly-digest/route.ts` | User-scheduled todo digest emails |

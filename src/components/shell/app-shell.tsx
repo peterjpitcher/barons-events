@@ -27,7 +27,8 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: "Dashboard",
     items: [
-      { label: "Dashboard", href: "/", roles: ["administrator", "office_worker", "executive"] }
+      { label: "Dashboard", href: "/", roles: ["administrator", "office_worker", "executive"] },
+      { label: "Account", href: "/account", roles: ["administrator", "office_worker", "executive"] }
     ]
   },
   {

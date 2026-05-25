@@ -97,13 +97,17 @@ function makeUser(overrides: Partial<{
   full_name: string;
   venue_id: string | null;
   deactivated_at: string | null;
+  todo_digest_frequency: string;
+  todo_digest_last_sent_on: string | null;
 }> = {}) {
   return {
     id: overrides.id ?? "user-1",
     email: overrides.email ?? "alice@example.com",
     full_name: overrides.full_name ?? "Alice Smith",
     venue_id: overrides.venue_id !== undefined ? overrides.venue_id : "venue-1",
-    deactivated_at: overrides.deactivated_at ?? null
+    deactivated_at: overrides.deactivated_at ?? null,
+    todo_digest_frequency: overrides.todo_digest_frequency ?? "weekdays",
+    todo_digest_last_sent_on: overrides.todo_digest_last_sent_on ?? null
   };
 }
 
@@ -229,6 +233,88 @@ describe("sendWeeklyDigestEmail", () => {
     expect(call.to).toEqual(["alice@example.com"]);
     expect(call.subject).toContain("3 open tasks");
     expect(call.html).toBeDefined();
+  });
+
+  it("uses multi-assignee rows as the task source and ignores stale legacy assignee fallback", async () => {
+    const task = makeTask({ id: "shared-task", title: "Confirm staffing", assignee_id: "user-1" });
+    const users = [
+      makeUser({ id: "user-1", email: "alice@example.com" }),
+      makeUser({ id: "user-2", email: "bob@example.com", venue_id: null })
+    ];
+
+    setupMockDb({
+      audit_log: { data: [], error: null },
+      planning_task_assignees: {
+        data: [{ user_id: "user-2", planning_task: task }],
+        error: null
+      },
+      planning_tasks: { data: [task], error: null },
+      events: { data: [], error: null },
+      users: { data: users, error: null }
+    });
+
+    const result = await sendWeeklyDigestEmail();
+
+    expect(result.sent).toBe(1);
+    const call = mockEmailSend.mock.calls[0][0];
+    expect(call.to).toEqual(["bob@example.com"]);
+    expect(call.subject).toContain("1 open task");
+    expect(call.text.match(/Confirm staffing/g)).toHaveLength(1);
+  });
+
+  it("respects per-user todo digest frequency preferences", async () => {
+    const tasks = [
+      makeTask({ id: "t1", assignee_id: "user-1" }),
+      makeTask({ id: "t2", assignee_id: "user-2" }),
+      makeTask({ id: "t3", assignee_id: "user-3" })
+    ];
+    const users = [
+      makeUser({ id: "user-1", email: "daily@example.com", todo_digest_frequency: "weekdays" }),
+      makeUser({ id: "user-2", email: "weekly@example.com", todo_digest_frequency: "weekly" }),
+      makeUser({ id: "user-3", email: "off@example.com", todo_digest_frequency: "off" })
+    ];
+
+    setupMockDb({
+      audit_log: { data: [], error: null },
+      planning_tasks: { data: tasks, error: null },
+      events: { data: [], error: null },
+      users: { data: users, error: null }
+    });
+
+    const result = await sendWeeklyDigestEmail();
+
+    expect(result.sent).toBe(1);
+    expect(mockEmailSend).toHaveBeenCalledTimes(1);
+    expect(mockEmailSend.mock.calls[0][0].to).toEqual(["daily@example.com"]);
+  });
+
+  it("sends twice-weekly preferences on Thursday and skips users already sent today", async () => {
+    const tasks = [
+      makeTask({ id: "t1", assignee_id: "user-1" }),
+      makeTask({ id: "t2", assignee_id: "user-2" })
+    ];
+    const users = [
+      makeUser({ id: "user-1", email: "twice@example.com", todo_digest_frequency: "twice_weekly" }),
+      makeUser({
+        id: "user-2",
+        email: "already@example.com",
+        todo_digest_frequency: "weekdays",
+        todo_digest_last_sent_on: "2026-04-23"
+      })
+    ];
+
+    setupMockDb({
+      audit_log: { data: [], error: null },
+      planning_tasks: { data: tasks, error: null },
+      events: { data: [], error: null },
+      users: { data: users, error: null }
+    });
+
+    const result = await sendWeeklyDigestEmail();
+
+    expect(result.sent).toBe(1);
+    expect(mockEmailSend).toHaveBeenCalledTimes(1);
+    expect(mockEmailSend.mock.calls[0][0].to).toEqual(["twice@example.com"]);
   });
 
   // 2. Venue-scoped user
@@ -536,6 +622,6 @@ describe("sendWeeklyDigestEmail", () => {
 
     expect(result.sent).toBe(1);
     const call = mockEmailSend.mock.calls[0][0];
-    expect(call.subject).toBe("Your BaronsHub digest \u2014 3 open tasks");
+    expect(call.subject).toBe("Your BaronsHub todo digest \u2014 3 open tasks");
   });
 });

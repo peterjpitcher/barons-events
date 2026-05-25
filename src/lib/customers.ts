@@ -184,20 +184,28 @@ export async function upsertCustomerForBooking(
   const previousOptIn = upserted.marketing_opt_in as boolean;
 
   // Step 2: Upgrade-only opt-in — only write when new value is TRUE and old is FALSE
+  let shouldLogOptIn = false;
   if (marketingOptIn && !previousOptIn) {
-    await db
+    const { error: updateError } = await db
       .from("customers")
       .update({ marketing_opt_in: true })
       .eq("id", customerId);
+    if (updateError) {
+      console.error("Customer opt-in update failed:", updateError);
+    } else {
+      shouldLogOptIn = true;
+    }
   }
 
-  // Step 3: Log consent event only when value genuinely changes
-  if (marketingOptIn !== previousOptIn) {
+  // Step 3: Log only confirmed opt-in changes. Leaving the booking checkbox
+  // unticked is not an opt-out because this flow intentionally never
+  // downgrades marketing_opt_in.
+  if (shouldLogOptIn) {
     const { error: consentError } = await db
       .from("customer_consent_events")
       .insert({
         customer_id: customerId,
-        event_type: marketingOptIn ? "opt_in" : "opt_out",
+        event_type: "opt_in",
         consent_wording: MARKETING_CONSENT_WORDING,
         booking_id: bookingId ?? null,
       });

@@ -20,20 +20,31 @@ export async function createVenue(payload: {
   defaultApproverId?: string | null;
   defaultManagerResponsibleId?: string | null;
   category?: "pub" | "cafe";
-}) {
+  isInternal?: boolean;
+}): Promise<VenueRow> {
   const supabase = await createSupabaseActionClient();
    
-  const { error } = await (supabase as any).from("venues").insert({
-    name: payload.name,
-    address: payload.address ?? null,
-    default_approver_id: payload.defaultApproverId ?? null,
-    default_manager_responsible_id: payload.defaultManagerResponsibleId ?? null,
-    category: payload.category ?? "pub",
-  });
+  const { data, error } = await (supabase as any)
+    .from("venues")
+    .insert({
+      name: payload.name,
+      address: payload.address ?? null,
+      default_approver_id: payload.defaultApproverId ?? null,
+      default_manager_responsible_id: payload.defaultManagerResponsibleId ?? null,
+      category: payload.category ?? "pub",
+      is_internal: payload.isInternal ?? false,
+    })
+    .select("*")
+    .single();
 
   if (error) {
     throw new Error(`Could not create venue: ${error.message}`);
   }
+  if (!data) {
+    throw new Error("Could not create venue: missing inserted row");
+  }
+
+  return data as VenueRow;
 }
 
 export async function updateVenue(id: string, updates: {
@@ -43,6 +54,7 @@ export async function updateVenue(id: string, updates: {
   defaultManagerResponsibleId?: string | null;
   googleReviewUrl?: string | null;
   category?: "pub" | "cafe";
+  isInternal?: boolean;
 }) {
   const supabase = await createSupabaseActionClient();
   const updatePayload: {
@@ -52,6 +64,7 @@ export async function updateVenue(id: string, updates: {
     address?: string | null;
     google_review_url?: string | null;
     category?: string;
+    is_internal?: boolean;
   } = {
     name: updates.name,
     default_approver_id: updates.defaultApproverId ?? null,
@@ -71,6 +84,10 @@ export async function updateVenue(id: string, updates: {
 
   if (Object.prototype.hasOwnProperty.call(updates, "category") && updates.category) {
     updatePayload.category = updates.category;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(updates, "isInternal")) {
+    updatePayload.is_internal = updates.isInternal ?? false;
   }
 
    

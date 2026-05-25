@@ -8,6 +8,7 @@ export type VenueOption = {
   id: string;
   name: string;
   category: "pub" | "cafe";
+  isInternal?: boolean;
 };
 
 type VenueMultiSelectProps = {
@@ -44,11 +45,12 @@ export function VenueMultiSelect({
   hiddenFieldName,
   defaultExpanded
 }: VenueMultiSelectProps) {
-  const { pubs, cafes } = useMemo(() => {
+  const { pubs, cafes, internal } = useMemo(() => {
     const sorted = [...venues].sort((a, b) => a.name.localeCompare(b.name));
     return {
-      pubs: sorted.filter((v) => v.category === "pub"),
-      cafes: sorted.filter((v) => v.category === "cafe")
+      pubs: sorted.filter((v) => !v.isInternal && v.category === "pub"),
+      cafes: sorted.filter((v) => !v.isInternal && v.category === "cafe"),
+      internal: sorted.filter((v) => v.isInternal)
     };
   }, [venues]);
 
@@ -70,7 +72,7 @@ export function VenueMultiSelect({
 
   function selectAll() {
     if (disabled) return;
-    onChange(venues.map((v) => v.id));
+    onChange([...pubs, ...cafes].map((v) => v.id));
   }
 
   function selectAllPubs() {
@@ -144,8 +146,8 @@ export function VenueMultiSelect({
       {isExpanded ? (
         <div className="space-y-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] p-2">
           <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" variant="ghost" size="sm" onClick={selectAll} disabled={disabled || venues.length === 0}>
-              Select all ({venues.length})
+            <Button type="button" variant="ghost" size="sm" onClick={selectAll} disabled={disabled || pubs.length + cafes.length === 0}>
+              Select all sites ({pubs.length + cafes.length})
             </Button>
             <Button
               type="button"
@@ -165,6 +167,7 @@ export function VenueMultiSelect({
           <div className="space-y-3">
             {renderGroup("Pubs", pubs)}
             {renderGroup("Cafes", cafes)}
+            {renderGroup("Internal", internal)}
             {venues.length === 0 ? (
               <p className="text-sm text-subtle">No venues configured.</p>
             ) : null}

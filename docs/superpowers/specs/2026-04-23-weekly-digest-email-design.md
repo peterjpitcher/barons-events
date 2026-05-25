@@ -7,7 +7,7 @@
 
 ## Purpose
 
-A twice-weekly operational email that drives action on open tasks and provides awareness of upcoming events. Sent every Monday and Thursday at 8am UTC (9am BST in summer, 8am GMT in winter) to anyone with at least one open, current planning task assigned to them.
+A configurable operational email that drives action on open tasks and provides awareness of upcoming events. The cron runs every weekday at 8am UTC (9am BST in summer, 8am GMT in winter), then sends only to users whose todo digest preference is due that day.
 
 ## Requirements
 
@@ -16,7 +16,7 @@ A twice-weekly operational email that drives action on open tasks and provides a
 - The recipient set is the **intersection** of task assignee IDs and active users: only users present in the `users` table with `deactivated_at IS NULL` and a valid email receive the digest
 - Tasks assigned to deactivated or missing users are silently skipped; the skipped assignee count is logged
 - No role filtering — the task assignment itself determines eligibility
-- No opt-out mechanism — this is an operational email
+- Users manage their own todo digest cadence from `/account`: every weekday, twice weekly, weekly, every two weeks, or no digest
 - Users with zero qualifying tasks on a given send day receive no email
 
 ### Content — Primary: Open Tasks
@@ -54,9 +54,9 @@ Events ordered by `start_at` ascending. Each shows: title, venue name, formatted
 ### Email Layout
 
 ```
-Subject: Your BaronsHub digest — X open tasks
+Subject: Your BaronsHub todo digest — X open tasks
 
-Headline: Your weekly digest
+Headline: Your todo digest
 Intro: Here's what needs your attention this week.
 
 --- Primary: Tasks ---
@@ -87,9 +87,9 @@ Rendered via the existing `renderEmailTemplate({ headline, intro, body, button }
 
 ### Schedule
 
-Two Vercel cron entries: `0 8 * * 1,4` (Monday + Thursday at 8am UTC = 9am BST / 8am GMT).
+Vercel cron entry: `0 8 * * 1-5` (weekdays at 8am UTC = 9am BST / 8am GMT).
 
-Single cron route serves both days — same content logic, no day-of-week variation.
+Single cron route serves all weekdays — per-user preference logic decides who is due.
 
 ### Idempotency
 
@@ -159,7 +159,7 @@ If any of the three queries fail, abort the cron immediately with a non-2xx resp
 |--------|------|-------------|
 | Create | `src/app/api/cron/weekly-digest/route.ts` | GET handler, `verifyCronSecret` auth, calls `sendWeeklyDigestEmail()` |
 | Edit | `src/lib/notifications.ts` | Add `sendWeeklyDigestEmail()`, delete `sendWeeklyPipelineSummaryEmail()` |
-| Edit | `vercel.json` | Add `{ "path": "/api/cron/weekly-digest", "schedule": "0 8 * * 1,4" }` |
+| Edit | `vercel.json` | Add `{ "path": "/api/cron/weekly-digest", "schedule": "0 8 * * 1-5" }` |
 | Create | `src/lib/__tests__/weekly-digest.test.ts` | Tests for grouping logic, venue scoping, empty-state skipping |
 | Create | `supabase/migrations/YYYYMMDD_audit_entity_digest.sql` | Add `digest` to `audit_log.entity` CHECK constraint |
 
@@ -183,7 +183,6 @@ If any of the three queries fail, abort the cron immediately with a non-2xx resp
 
 ## Out of Scope
 
-- Notification preferences / opt-out infrastructure
 - Email open/click tracking
 - Different content for Monday vs Thursday
 - Mobile push notifications

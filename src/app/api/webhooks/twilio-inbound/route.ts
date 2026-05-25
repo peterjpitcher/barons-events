@@ -38,6 +38,15 @@ function emptyTwiml(): NextResponse {
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://baronspubs.com";
 
+function campaignEventVenueIsInternal(campaign: { events?: unknown }): boolean {
+  const event = campaign.events && typeof campaign.events === "object"
+    ? campaign.events as { venues?: unknown }
+    : null;
+  const rawVenue = event?.venues;
+  const venue = Array.isArray(rawVenue) ? rawVenue[0] : rawVenue;
+  return Boolean(venue && typeof venue === "object" && (venue as { is_internal?: unknown }).is_internal === true);
+}
+
 async function updateInboundResult(
   db: ReturnType<typeof createSupabaseAdminClient>,
   messageSid: string,
@@ -133,7 +142,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   // Find the active campaign send
   let campaignQuery = db
     .from("sms_campaign_sends")
-    .select("id, event_id, reply_code, converted_at, events (public_title, start_at, venues (name), max_tickets_per_booking)")
+    .select("id, event_id, reply_code, converted_at, events (public_title, start_at, venues (name, is_internal), max_tickets_per_booking)")
     .eq("customer_id", customer.id)
     .eq("status", "sent")
     .is("converted_at", null)
@@ -145,14 +154,16 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   const { data: campaigns } = await campaignQuery.limit(5);
 
-  if (!campaigns || campaigns.length === 0) {
+  const publicCampaigns = (campaigns ?? []).filter((campaign) => !campaignEventVenueIsInternal(campaign));
+
+  if (publicCampaigns.length === 0) {
     await updateInboundResult(db, messageSid, "error");
     return twiml(`We're not sure which event you're replying about. Book online at ${APP_URL}`);
   }
 
   // Disambiguation: multiple events without reply code
-  if (!replyCode && campaigns.length > 1) {
-    const lines = campaigns.slice(0, 5).map((c) => {
+  if (!replyCode && publicCampaigns.length > 1) {
+    const lines = publicCampaigns.slice(0, 5).map((c) => {
       const evt = c.events as unknown as Record<string, unknown>;
       return `- Reply '${c.reply_code ?? "???"} ${ticketCount}' for ${evt.public_title}`;
     });
@@ -160,7 +171,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     return twiml(`Which event?\n${lines.join("\n")}`);
   }
 
-  const campaignSend = campaigns[0];
+  const campaignSend = publicCampaigns[0];
 
   // Create booking via RPC
   const { data: result, error: rpcError } = await db.rpc("create_booking_from_campaign", {

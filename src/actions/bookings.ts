@@ -15,7 +15,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { upsertCustomerForBooking, linkBookingToCustomer } from "@/lib/customers";
 import { verifyTurnstile } from "@/lib/turnstile";
 import { isLinkedToVenue } from "@/lib/visibility";
-import { isBookingFormat, isPaidBookingFormat } from "@/lib/booking-format";
+import { isBookingFormat, isPaidBookingFormat, type BookingFormat } from "@/lib/booking-format";
 import { processRefund } from "@/lib/payments/service";
 
 const BOOKING_UPDATE_TOKEN_TTL_MS = 10 * 60 * 1000;
@@ -80,20 +80,74 @@ function verifyBookingUpdateToken(token: string): BookingUpdateTokenPayload | nu
   }
 }
 
-async function isPaidInAppBookingEvent(eventId: string): Promise<boolean> {
+type PublicBookingEligibility =
+  | {
+      ok: true;
+      bookingType: BookingFormat;
+      totalCapacity: number | null;
+      maxTicketsPerBooking: number | null;
+    }
+  | { ok: false; reason: "not_found" | "paid_booking" };
+
+function normaliseJoinedVenue(value: unknown): { is_internal?: boolean | null } | null {
+  if (Array.isArray(value)) {
+    return normaliseJoinedVenue(value[0]);
+  }
+  return value && typeof value === "object" ? value as { is_internal?: boolean | null } : null;
+}
+
+async function getPublicBookingEligibility(eventId: string): Promise<PublicBookingEligibility> {
   try {
     const db = createSupabaseAdminClient();
     const { data, error } = await db
       .from("events")
-      .select("booking_type")
+      .select(`
+        booking_enabled,
+        booking_type,
+        booking_url,
+        status,
+        deleted_at,
+        total_capacity,
+        max_tickets_per_booking,
+        venue:venues!events_venue_id_fkey(is_internal)
+      `)
       .eq("id", eventId)
       .maybeSingle();
-    if (error || !data) return false;
-    const bookingType = (data as { booking_type?: unknown }).booking_type;
-    return isBookingFormat(bookingType) && isPaidBookingFormat(bookingType);
+
+    if (error || !data) {
+      if (error) console.warn("Public booking eligibility check failed:", error);
+      return { ok: false, reason: "not_found" };
+    }
+
+    const row = data as Record<string, unknown>;
+    const venue = normaliseJoinedVenue(row.venue);
+    const bookingType = isBookingFormat(row.booking_type) ? row.booking_type : null;
+
+    if (
+      row.booking_enabled !== true ||
+      row.deleted_at !== null ||
+      (row.status !== "approved" && row.status !== "completed") ||
+      !bookingType ||
+      typeof row.booking_url === "string" ||
+      !venue ||
+      venue.is_internal === true
+    ) {
+      return { ok: false, reason: "not_found" };
+    }
+
+    if (isPaidBookingFormat(bookingType)) {
+      return { ok: false, reason: "paid_booking" };
+    }
+
+    return {
+      ok: true,
+      bookingType,
+      totalCapacity: typeof row.total_capacity === "number" ? row.total_capacity : null,
+      maxTicketsPerBooking: typeof row.max_tickets_per_booking === "number" ? row.max_tickets_per_booking : null,
+    };
   } catch (error) {
-    console.warn("Paid booking guard failed:", error);
-    return false;
+    console.warn("Public booking eligibility check failed:", error);
+    return { ok: false, reason: "not_found" };
   }
 }
 
@@ -147,15 +201,23 @@ export async function createBookingAction(
 
   const data = parsed.data;
 
-  if (await isPaidInAppBookingEvent(data.eventId)) {
-    return { success: false, error: "Paid bookings must be completed through the payment flow." };
-  }
-
   // Validate + normalise mobile to E.164
   if (!isValidPhoneNumber(data.mobile, "GB")) {
     return { success: false, error: "Invalid mobile number" };
   }
   const normalisedMobile = parsePhoneNumber(data.mobile, "GB").format("E.164");
+
+  const eligibility = await getPublicBookingEligibility(data.eventId);
+  if (!eligibility.ok) {
+    if (eligibility.reason === "paid_booking") {
+      return { success: false, error: "Paid bookings must be completed through the payment flow." };
+    }
+    return { success: false, error: "not_found" };
+  }
+
+  if (isPaidBookingFormat(eligibility.bookingType)) {
+    return { success: false, error: "Paid bookings must be completed through the payment flow." };
+  }
 
   // Dedup: if this mobile already has a confirmed booking for this event,
   // surface the existing booking so the UI can prompt for update rather than
@@ -332,22 +394,21 @@ export async function updateExistingBookingAction(
 
   const delta = parsed.data.ticketCount - (booking.ticket_count as number);
 
-  const { data: eventRow } = await (db as any)
-    .from("events")
-    .select("total_capacity, max_tickets_per_booking")
-    .eq("id", booking.event_id)
-    .maybeSingle();
+  const eligibility = await getPublicBookingEligibility(booking.event_id as string);
+  if (!eligibility.ok) {
+    return { success: false, error: "Booking not found." };
+  }
 
   if (
-    typeof eventRow?.max_tickets_per_booking === "number" &&
-    parsed.data.ticketCount > eventRow.max_tickets_per_booking
+    typeof eligibility.maxTicketsPerBooking === "number" &&
+    parsed.data.ticketCount > eligibility.maxTicketsPerBooking
   ) {
     return { success: false, error: "too_many_tickets" };
   }
 
   if (delta > 0) {
     // Need to check capacity before growing the booking.
-    if (eventRow?.total_capacity != null) {
+    if (eligibility.totalCapacity != null) {
       const { data: confirmed } = await (db as any)
         .from("event_bookings")
         .select("ticket_count")
@@ -357,7 +418,7 @@ export async function updateExistingBookingAction(
         (sum, row) => sum + (row.ticket_count ?? 0),
         0
       );
-      if (current + delta > eventRow.total_capacity) {
+      if (current + delta > eligibility.totalCapacity) {
         return { success: false, error: "sold_out" };
       }
     }

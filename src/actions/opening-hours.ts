@@ -141,6 +141,7 @@ const openingHoursRowSchema = z.object({
 });
 
 const openingHoursInputSchema = z.array(openingHoursRowSchema);
+const serviceTypeScopeSchema = z.array(z.string().uuid("Invalid service type reference.")).min(1);
 
 export async function upsertVenueOpeningHoursAction(
   _: ActionResult | undefined,
@@ -194,7 +195,8 @@ export async function upsertVenueOpeningHoursAction(
 
 export async function upsertMultiVenueOpeningHoursAction(
   venueIds: string[],
-  rows: UpsertHoursInput[]
+  rows: UpsertHoursInput[],
+  serviceTypeIds?: string[]
 ): Promise<ActionResult> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -219,14 +221,28 @@ export async function upsertMultiVenueOpeningHoursAction(
     return { success: false, message: "Invalid opening hours data." };
   }
 
+  const scopeResult = serviceTypeIds ? serviceTypeScopeSchema.safeParse(serviceTypeIds) : null;
+  if (scopeResult && !scopeResult.success) {
+    return { success: false, message: "Select at least one service type to save." };
+  }
+  const scopedServiceTypeIds = scopeResult?.data;
+
   try {
-    await Promise.all(venueIdResult.data.map((venueId) => upsertVenueOpeningHours(venueId, validated.data)));
+    await Promise.all(
+      venueIdResult.data.map((venueId) =>
+        upsertVenueOpeningHours(venueId, validated.data, { serviceTypeIds: scopedServiceTypeIds })
+      )
+    );
     recordAuditLogEntry({
       entity: "opening_hours",
       entityId: venueIdResult.data[0],
       action: "opening_hours.multi_venue_hours_saved",
       actorId: user.id,
-      meta: { venueIds: venueIdResult.data, venueCount: venueIdResult.data.length }
+      meta: {
+        venueIds: venueIdResult.data,
+        venueCount: venueIdResult.data.length,
+        serviceTypeIds: scopedServiceTypeIds ?? null
+      }
     }).catch(() => {});
     venueIdResult.data.forEach((venueId) => revalidatePath(`/venues/${venueId}/opening-hours`));
     revalidatePath("/opening-hours");

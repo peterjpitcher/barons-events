@@ -751,6 +751,20 @@ describe("roles.ts — final capability functions", () => {
       expect(canEditEvent("office_worker", "user-manager", "venue-B", base)).toBe(false);
     });
 
+    it("office_worker manager can edit when their venue is linked through event_venues", () => {
+      expect(canEditEvent("office_worker", "user-manager", "venue-B", {
+        ...base,
+        venueIds: ["venue-A", "venue-B"],
+      })).toBe(true);
+    });
+
+    it("office_worker manager cannot edit when their venue is not linked through event_venues", () => {
+      expect(canEditEvent("office_worker", "user-manager", "venue-C", {
+        ...base,
+        venueIds: ["venue-A", "venue-B"],
+      })).toBe(false);
+    });
+
     it("office_worker at right venue but not manager_responsible cannot edit", () => {
       expect(canEditEvent("office_worker", "user-other", "venue-A", base)).toBe(false);
     });
