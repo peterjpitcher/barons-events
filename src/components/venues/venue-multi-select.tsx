@@ -1,16 +1,7 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
-import {
-  Building2,
-  Check,
-  ChevronDown,
-  Globe2,
-  MapPin,
-  Search,
-  Store,
-  X
-} from "lucide-react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { Check, ChevronDown, Globe2, MapPin, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -40,12 +31,6 @@ type VenueMultiSelectProps = {
   placeholder?: string;
   /** Marks the primary venue when the first selected venue drives downstream fields. */
   primaryVenueId?: string;
-};
-
-type VenueGroup = {
-  key: string;
-  label: string;
-  venues: VenueOption[];
 };
 
 export function VenueMultiSelect({
@@ -82,43 +67,12 @@ export function VenueMultiSelect({
     [selectedIds, venueById]
   );
 
-  const groupedVenues = useMemo(() => {
+  const filteredVenues = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    const matches = sortedVenues.filter((venue) =>
+    return sortedVenues.filter((venue) =>
       needle ? venue.name.toLowerCase().includes(needle) : true
     );
-
-    return [
-      {
-        key: "pubs",
-        label: "Pubs",
-        venues: matches.filter((venue) => !venue.isInternal && venue.category === "pub")
-      },
-      {
-        key: "cafes",
-        label: "Cafes",
-        venues: matches.filter((venue) => !venue.isInternal && venue.category === "cafe")
-      },
-      {
-        key: "internal",
-        label: "Internal",
-        venues: matches.filter((venue) => venue.isInternal)
-      }
-    ].filter((group) => group.venues.length > 0);
   }, [query, sortedVenues]);
-
-  const pubs = useMemo(
-    () => sortedVenues.filter((venue) => !venue.isInternal && venue.category === "pub"),
-    [sortedVenues]
-  );
-  const cafes = useMemo(
-    () => sortedVenues.filter((venue) => !venue.isInternal && venue.category === "cafe"),
-    [sortedVenues]
-  );
-  const selectableVenues = useMemo(
-    () => sortedVenues.filter((venue) => !venue.isInternal),
-    [sortedVenues]
-  );
 
   useEffect(() => {
     if (!isOpen) return;
@@ -159,9 +113,9 @@ export function VenueMultiSelect({
     emit(selectedIds.filter((selectedId) => selectedId !== id));
   }
 
-  function selectPreset(ids: string[]) {
+  function clearSelection() {
     if (disabled) return;
-    emit(ids);
+    emit([]);
   }
 
   const summary = useMemo(() => {
@@ -173,62 +127,7 @@ export function VenueMultiSelect({
   const primaryId = primaryVenueId ?? selectedIds[0];
   const visibleChips = selectedVenues.slice(0, 5);
   const hiddenChipCount = Math.max(0, selectedVenues.length - visibleChips.length);
-  const noMatches = venues.length > 0 && groupedVenues.length === 0;
-
-  function renderGroup(group: VenueGroup) {
-    return (
-      <section key={group.key} className="space-y-1.5">
-        <div className="flex items-center justify-between gap-2">
-          <h5 className="font-brand-mono text-[0.6rem] font-semibold uppercase tracking-[0.12em] text-[var(--ink-soft)]">
-            {group.label}
-          </h5>
-          <span className="font-brand-mono text-[0.6rem] text-[var(--ink-soft)]">{group.venues.length}</span>
-        </div>
-        <ul className="space-y-1">
-          {group.venues.map((venue) => {
-            const isSelected = selected.has(venue.id);
-            const isPrimary = isSelected && venue.id === primaryId;
-            return (
-              <li key={venue.id}>
-                <label
-                  className={cn(
-                    "flex cursor-pointer items-center gap-2 rounded-[8px] border px-2.5 py-2 text-sm transition has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[var(--mustard)]",
-                    isSelected
-                      ? "border-[var(--mustard)] bg-[var(--mustard-tint)] text-[var(--ink)]"
-                      : "border-[var(--hair)] bg-[var(--paper)] text-[var(--ink)] hover:bg-[var(--paper-tint)]",
-                    disabled && "cursor-not-allowed opacity-60"
-                  )}
-                >
-                  <input
-                    type="checkbox"
-                    className="sr-only"
-                    checked={isSelected}
-                    disabled={disabled}
-                    onChange={() => toggle(venue.id)}
-                  />
-                  <span
-                    className={cn(
-                      "flex h-4 w-4 shrink-0 items-center justify-center rounded border",
-                      isSelected ? "border-[var(--mustard)] bg-[var(--mustard)]" : "border-[var(--hair-strong)] bg-white"
-                    )}
-                    aria-hidden="true"
-                  >
-                    {isSelected ? <Check className="h-3 w-3 text-[var(--ink-on-mustard)]" /> : null}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate">{venue.name}</span>
-                  {isPrimary ? (
-                    <span className="rounded bg-[var(--paper)] px-1.5 py-0.5 font-brand-mono text-[0.58rem] uppercase tracking-[0.06em] text-[var(--ink-muted)]">
-                      Host
-                    </span>
-                  ) : null}
-                </label>
-              </li>
-            );
-          })}
-        </ul>
-      </section>
-    );
-  }
+  const noMatches = venues.length > 0 && filteredVenues.length === 0;
 
   return (
     <div ref={rootRef} className="relative space-y-2">
@@ -238,6 +137,7 @@ export function VenueMultiSelect({
         aria-expanded={isOpen}
         aria-controls={panelId}
         disabled={disabled}
+        aria-haspopup="listbox"
         className={cn(
           "flex min-h-10 w-full items-center gap-2 rounded-[8px] border border-[var(--hair)] bg-[var(--paper)] px-3 py-2 text-left text-sm transition hover:bg-[var(--paper-tint)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mustard)]",
           isOpen && "border-[var(--mustard)] ring-2 ring-[var(--mustard-tint)]",
@@ -255,7 +155,7 @@ export function VenueMultiSelect({
           </span>
           <span className="mt-0.5 block truncate text-xs text-subtle">
             {selectedVenues.length === 0
-              ? allowEmpty ? emptyDescription : "Search or use a preset to choose venues."
+              ? allowEmpty ? emptyDescription : "Search and select one or more venues."
               : selectedVenues.length === venues.length ? "Every configured venue is selected." : "Open picker to adjust selection."}
           </span>
         </span>
@@ -300,7 +200,7 @@ export function VenueMultiSelect({
           id={panelId}
           className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-[10px] border border-[var(--hair)] bg-[var(--paper)] shadow-card"
         >
-          <div className="space-y-2 border-b border-[var(--hair)] p-2.5">
+          <div className="border-b border-[var(--hair)] p-2.5">
             <div className="relative">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--ink-soft)]" aria-hidden="true" />
               <input
@@ -311,61 +211,60 @@ export function VenueMultiSelect({
                 disabled={disabled}
               />
             </div>
-
-            <div className="flex flex-wrap items-center gap-1.5">
-              {allowEmpty ? (
-                <button
-                  type="button"
-                  className={cn(
-                    "inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition",
-                    selectedIds.length === 0
-                      ? "border-[var(--mustard)] bg-[var(--mustard-tint)] text-[var(--mustard-dark)]"
-                      : "border-[var(--hair)] bg-[var(--paper)] text-[var(--ink-muted)] hover:bg-[var(--paper-tint)]"
-                  )}
-                  onClick={() => selectPreset([])}
-                  disabled={disabled}
-                >
-                  <Globe2 className="h-3.5 w-3.5" aria-hidden="true" />
-                  {emptyLabel}
-                </button>
-              ) : null}
-              <PickerPreset
-                icon={<Building2 className="h-3.5 w-3.5" aria-hidden="true" />}
-                label={`All venues (${selectableVenues.length})`}
-                onClick={() => selectPreset(selectableVenues.map((venue) => venue.id))}
-                disabled={disabled || selectableVenues.length === 0}
-              />
-              <PickerPreset
-                icon={<Store className="h-3.5 w-3.5" aria-hidden="true" />}
-                label={`Pubs (${pubs.length})`}
-                onClick={() => selectPreset(pubs.map((venue) => venue.id))}
-                disabled={disabled || pubs.length === 0}
-              />
-              {cafes.length > 0 ? (
-                <PickerPreset
-                  label={`Cafes (${cafes.length})`}
-                  onClick={() => selectPreset(cafes.map((venue) => venue.id))}
-                  disabled={disabled}
-                />
-              ) : null}
-              <button
-                type="button"
-                className="ml-auto inline-flex h-7 items-center rounded-full px-2.5 text-xs font-medium text-[var(--ink-muted)] hover:bg-[var(--paper-tint)] hover:text-[var(--ink)] disabled:opacity-50"
-                onClick={() => selectPreset([])}
-                disabled={disabled || selectedIds.length === 0}
-              >
-                Clear
-              </button>
-            </div>
           </div>
 
-          <div className="max-h-72 space-y-3 overflow-y-auto p-2.5">
+          <div className="max-h-72 overflow-y-auto p-2.5">
             {allowEmpty && selectedIds.length === 0 ? (
-              <div className="rounded-[8px] border border-dashed border-[var(--hair)] bg-[var(--paper-tint)] px-3 py-2 text-xs text-subtle">
+              <div className="mb-2 rounded-[8px] border border-dashed border-[var(--hair)] bg-[var(--paper-tint)] px-3 py-2 text-xs text-subtle">
                 <span className="font-medium text-[var(--ink)]">{emptyLabel}</span> is currently active.
               </div>
             ) : null}
-            {groupedVenues.map(renderGroup)}
+            {filteredVenues.length > 0 ? (
+              <ul className="space-y-1" role="listbox" aria-multiselectable="true">
+                {filteredVenues.map((venue) => {
+                  const isSelected = selected.has(venue.id);
+                  const isPrimary = isSelected && venue.id === primaryId;
+                  return (
+                    <li key={venue.id} role="option" aria-selected={isSelected}>
+                      <label
+                        className={cn(
+                          "flex cursor-pointer items-center gap-2 rounded-[8px] border px-2.5 py-2 text-sm transition has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[var(--mustard)]",
+                          isSelected
+                            ? "border-[var(--mustard)] bg-[var(--mustard-tint)] text-[var(--ink)]"
+                            : "border-[var(--hair)] bg-[var(--paper)] text-[var(--ink)] hover:bg-[var(--paper-tint)]",
+                          disabled && "cursor-not-allowed opacity-60"
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          className="sr-only"
+                          checked={isSelected}
+                          disabled={disabled}
+                          onChange={() => toggle(venue.id)}
+                        />
+                        <span
+                          className={cn(
+                            "flex h-4 w-4 shrink-0 items-center justify-center rounded border",
+                            isSelected
+                              ? "border-[var(--mustard)] bg-[var(--mustard)]"
+                              : "border-[var(--hair-strong)] bg-white"
+                          )}
+                          aria-hidden="true"
+                        >
+                          {isSelected ? <Check className="h-3 w-3 text-[var(--ink-on-mustard)]" /> : null}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate">{venue.name}</span>
+                        {isPrimary ? (
+                          <span className="rounded bg-[var(--paper)] px-1.5 py-0.5 font-brand-mono text-[0.58rem] uppercase tracking-[0.06em] text-[var(--ink-muted)]">
+                            Host
+                          </span>
+                        ) : null}
+                      </label>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : null}
             {noMatches ? (
               <p className="rounded-[8px] border border-[var(--hair)] bg-[var(--paper-tint)] px-3 py-6 text-center text-sm text-subtle">
                 No venues match that search.
@@ -382,9 +281,20 @@ export function VenueMultiSelect({
             <span className="font-brand-mono text-[0.63rem] font-semibold uppercase tracking-[0.08em] text-[var(--ink-soft)]">
               {selectedIds.length === 0 ? (allowEmpty ? emptyLabel : "None selected") : `${selectedIds.length} selected`}
             </span>
-            <Button type="button" variant="subtle" size="sm" onClick={() => setIsOpen(false)}>
-              Done
-            </Button>
+            <div className="flex items-center gap-1.5">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={clearSelection}
+                disabled={disabled || selectedIds.length === 0}
+              >
+                Clear
+              </Button>
+              <Button type="button" variant="subtle" size="sm" onClick={() => setIsOpen(false)}>
+                Done
+              </Button>
+            </div>
           </div>
         </div>
       ) : null}
@@ -397,29 +307,5 @@ export function VenueMultiSelect({
         </>
       ) : null}
     </div>
-  );
-}
-
-function PickerPreset({
-  label,
-  icon,
-  onClick,
-  disabled
-}: {
-  label: string;
-  icon?: ReactNode;
-  onClick: () => void;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      className="inline-flex h-7 items-center gap-1.5 rounded-full border border-[var(--hair)] bg-[var(--paper)] px-2.5 text-xs font-medium text-[var(--ink-muted)] transition hover:bg-[var(--paper-tint)] hover:text-[var(--ink)] disabled:cursor-not-allowed disabled:opacity-50"
-      onClick={onClick}
-      disabled={disabled}
-    >
-      {icon}
-      {label}
-    </button>
   );
 }
