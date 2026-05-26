@@ -7,6 +7,7 @@ import { createPlanningItemAction, createPlanningSeriesAction } from "@/actions/
 import { VenueMultiSelect, type VenueOption } from "@/components/venues/venue-multi-select";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { FieldLabel } from "@/components/ui/field-label";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
@@ -281,7 +282,12 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label htmlFor="planning-item-venue">Venue</Label>
+                <FieldLabel
+                  htmlFor="planning-item-venue"
+                  help="Pick no venues for a global item, or select one or more venues to link this item. Tasks with a one per venue SOP setting fan out automatically."
+                >
+                  Venue
+                </FieldLabel>
                 {isAdmin ? (
                   <div className="rounded-[var(--radius-sm)] border border-[var(--hair)] bg-[var(--paper)] p-2">
                     <VenueMultiSelect
@@ -297,9 +303,6 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                       emptyLabel="Global item"
                       emptyDescription="No venue-specific ownership or rollout."
                     />
-                    <p className="mt-1 text-xs text-subtle">
-                      Pick no venues for a global item, or tick one or more to link this item to those venues. Tasks with a "one per venue" SOP setting will fan out automatically.
-                    </p>
                   </div>
                 ) : (
                   <Select id="planning-item-venue" value={itemVenueId} disabled={isPending} onChange={(event) => setItemVenueId(event.target.value)}>

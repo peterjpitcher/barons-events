@@ -16,6 +16,7 @@ import { SopChecklistView } from "@/components/planning/sop-checklist-view";
 import { VenueMultiSelect, type VenueOption } from "@/components/venues/venue-multi-select";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, ProgressRing, SLAChip } from "@/components/ui/design-primitives";
+import { FieldLabel } from "@/components/ui/field-label";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -624,7 +625,12 @@ export function PlanningItemCard({
         </div>
 
         <div className="rounded-[var(--radius-sm)] border border-[var(--hair)] px-2 py-1.5 text-xs text-subtle">
-          <p className="font-semibold text-[var(--ink)]">Venue</p>
+          <FieldLabel
+            help="Pick no venues for a global item, or select one or more venues to link this item. Tasks with a one per venue SOP setting fan out automatically."
+            className="text-xs font-semibold"
+          >
+            Venue
+          </FieldLabel>
           {editingField === "venueId" ? (
             <div className="mt-0.5 space-y-2">
               <VenueMultiSelect
@@ -640,9 +646,6 @@ export function PlanningItemCard({
                 emptyLabel="Global item"
                 emptyDescription="No venue-specific ownership or rollout."
               />
-              <p className="text-[11px] text-subtle">
-                Pick no venues for a global item, or one or more venues to link this item to. Tasks with a "one per venue" SOP setting will fan out automatically.
-              </p>
               <div className="flex justify-end">
                 <InlineFieldActions field="venueId" />
               </div>

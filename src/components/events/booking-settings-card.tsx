@@ -6,6 +6,7 @@ import { Copy, ExternalLink } from "lucide-react";
 import { updateBookingSettingsAction } from "@/actions/events";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { FieldLabel } from "@/components/ui/field-label";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SubmitButton } from "@/components/ui/submit-button";
@@ -159,7 +160,9 @@ export function BookingSettingsCard({
           {/* Landing page URL — read-only, shown once slug exists and booking is enabled */}
           {bookingEnabled && landingUrl ? (
             <div className="space-y-2">
-              <Label>Landing page URL</Label>
+              <FieldLabel help="Share this link so guests can book tickets.">
+                Landing page URL
+              </FieldLabel>
               <div className="flex items-center gap-2">
                 <code className="flex-1 rounded-[var(--radius)] border border-[var(--hair)] bg-[var(--canvas-2)] px-3 py-2 text-xs font-mono text-[var(--navy)] truncate">
                   {landingUrl}
@@ -185,9 +188,6 @@ export function BookingSettingsCard({
                   </a>
                 </Button>
               </div>
-              <p className="text-xs text-subtle">
-                Share this link so guests can book tickets.
-              </p>
             </div>
           ) : bookingEnabled && !landingUrl ? (
             <p className="rounded-[var(--radius)] bg-[var(--canvas-2)] px-3 py-2 text-xs text-subtle">
@@ -197,7 +197,18 @@ export function BookingSettingsCard({
 
           {/* External booking link — short-circuits the local landing page when set */}
           <div className="space-y-2">
-            <Label htmlFor="bookingUrl">Booking link (optional)</Label>
+            <FieldLabel
+              htmlFor="bookingUrl"
+              help={
+                bookingUrl.trim()
+                  ? "Guests are redirected here instead of the local booking page."
+                  : isPaidFormat
+                    ? "Leave blank to use in-app Stripe Checkout."
+                    : "Leave blank to use the local booking page."
+              }
+            >
+              Booking link (optional)
+            </FieldLabel>
             <Input
               id="bookingUrl"
               type="url"
@@ -205,18 +216,13 @@ export function BookingSettingsCard({
               onChange={(e) => setBookingUrl(e.target.value)}
               placeholder="https://example.com/buy-tickets"
             />
-            <p className="text-xs text-subtle">
-              {bookingUrl.trim()
-                ? "Guests are redirected here instead of the local booking page."
-                : isPaidFormat
-                  ? "Leave blank to use in-app Stripe Checkout."
-                  : "Leave blank to use the local booking page."}
-            </p>
           </div>
 
           {/* Total capacity */}
           <div className="space-y-2">
-            <Label htmlFor="totalCapacity">Total capacity</Label>
+            <FieldLabel htmlFor="totalCapacity" help="Leave blank for unlimited tickets.">
+              Total capacity
+            </FieldLabel>
             <Input
               id="totalCapacity"
               type="number"
@@ -226,12 +232,13 @@ export function BookingSettingsCard({
               onChange={(e) => setTotalCapacity(e.target.value)}
               placeholder="Unlimited"
             />
-            <p className="text-xs text-subtle">Leave blank for unlimited tickets.</p>
           </div>
 
           {/* Max tickets per booking */}
           <div className="space-y-2">
-            <Label htmlFor="maxTicketsPerBooking">Max tickets per booking</Label>
+            <FieldLabel htmlFor="maxTicketsPerBooking" help="Maximum number of tickets a single booking can include.">
+              Max tickets per booking
+            </FieldLabel>
             <Input
               id="maxTicketsPerBooking"
               type="number"
@@ -242,7 +249,6 @@ export function BookingSettingsCard({
               onChange={(e) => setMaxTickets(e.target.value)}
               required
             />
-            <p className="text-xs text-subtle">Maximum number of tickets a single booking can include.</p>
           </div>
 
           <div className="space-y-2">
@@ -265,13 +271,14 @@ export function BookingSettingsCard({
                   }`}
                 />
               </button>
-              <Label htmlFor="bookingNotesEnabled" className="cursor-pointer select-none">
+              <FieldLabel
+                htmlFor="bookingNotesEnabled"
+                help="Adds an optional notes box to the public booking form for this event."
+                className="cursor-pointer select-none"
+              >
                 {bookingNotesEnabled ? "Customer notes enabled" : "Customer notes disabled"}
-              </Label>
+              </FieldLabel>
             </div>
-            <p className="text-xs text-subtle">
-              Adds an optional notes box to the public booking form for this event.
-            </p>
           </div>
 
           {/* Promotional SMS toggle — administrators only */}
@@ -296,13 +303,14 @@ export function BookingSettingsCard({
                     }`}
                   />
                 </button>
-                <Label htmlFor="smsPromoEnabled" className="cursor-pointer select-none">
+                <FieldLabel
+                  htmlFor="smsPromoEnabled"
+                  help="Automatically send booking reminder SMS to past customers."
+                  className="cursor-pointer select-none"
+                >
                   {smsPromoEnabled ? "Promotional SMS enabled" : "Promotional SMS disabled"}
-                </Label>
+                </FieldLabel>
               </div>
-              <p className="text-xs text-subtle">
-                Automatically send booking reminder SMS to past customers.
-              </p>
             </div>
           )}
 

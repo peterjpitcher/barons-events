@@ -14,6 +14,7 @@ import { VenueMultiSelect, type VenueOption } from "@/components/venues/venue-mu
 import { deriveEventFormVenueDefaults } from "@/lib/events/form-defaults";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { Button } from "@/components/ui/button";
+import { FieldLabel } from "@/components/ui/field-label";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -705,7 +706,9 @@ export function EventForm({
   const titleAndVenueFields = (
     <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_260px]">
       <div className="space-y-2">
-        <Label htmlFor="title">Event title</Label>
+        <FieldLabel htmlFor="title" help="This is the headline guests will see on the website and in reviewer dashboards.">
+          Event title
+        </FieldLabel>
         <Input
           id="title"
           name="title"
@@ -722,10 +725,18 @@ export function EventForm({
           )}
         />
         <FieldError id="title-error" message={fieldErrors.title} />
-        <p className="text-xs text-subtle">This is the headline guests will see on the website and in reviewer dashboards.</p>
       </div>
       <div className="space-y-2">
-        <Label htmlFor="venueId">{isMultiCapable ? "Venues" : "Venue"}</Label>
+        <FieldLabel
+          htmlFor="venueId"
+          help={
+            isMultiCapable
+              ? "Pick one or more venues. Tasks marked one per venue on the SOP will fan out automatically."
+              : "Pick the host venue. This controls which spaces appear below."
+          }
+        >
+          {isMultiCapable ? "Venues" : "Venue"}
+        </FieldLabel>
         {isMultiCapable ? (
           <>
             <VenueMultiSelect
@@ -780,18 +791,22 @@ export function EventForm({
           </>
         )}
         <FieldError id="venue-error" message={fieldErrors.venueId} />
-        <p className="text-xs text-subtle">
-          {isMultiCapable
-            ? "Pick one or more venues — the event will be linked to all of them. Tasks marked \"one per venue\" on the SOP will fan out automatically."
-            : "Pick the host venue—this controls which spaces appear below."}
-        </p>
       </div>
     </div>
   );
 
   const eventTypeField = (
     <div className="space-y-2">
-        <Label htmlFor="eventType">Event type</Label>
+        <FieldLabel
+          htmlFor="eventType"
+          help={
+            role === "administrator"
+              ? "Need a new option? Add it in Settings."
+              : "Need a new option? Contact your administrator to add new event types."
+          }
+        >
+          Event type
+        </FieldLabel>
         <Select
           id="eventType"
           name="eventType"
@@ -814,17 +829,14 @@ export function EventForm({
           ))}
         </Select>
         <FieldError id="event-type-error" message={fieldErrors.eventType} />
-        <p className="text-xs text-subtle">
-          {role === "administrator"
-            ? "Need a new option? Add it in Settings."
-            : "Need a new option? Contact your administrator to add new event types."}
-        </p>
     </div>
   );
 
   const notesField = (
     <div className="space-y-2">
-      <Label htmlFor="eventDetails">Event details</Label>
+      <FieldLabel htmlFor="eventDetails" help="Include anything a guest would want to know: what is happening, timings, promos, and key moments.">
+        Event details
+      </FieldLabel>
       <Textarea
         id="eventDetails"
         name="notes"
@@ -841,15 +853,14 @@ export function EventForm({
         )}
       />
       <FieldError id="event-details-error" message={fieldErrors.notes} />
-      <p className="text-xs text-subtle">
-        Include anything a guest would want to know (what&apos;s happening, timings, promos, key moments).
-      </p>
     </div>
   );
 
   const managerResponsibleField = (
     <div className="space-y-2">
-      <Label htmlFor="managerResponsibleId">Manager Responsible</Label>
+      <FieldLabel htmlFor="managerResponsibleId" help="The on-site manager accountable for this event.">
+        Manager Responsible
+      </FieldLabel>
       <select
         id="managerResponsibleId"
         name="managerResponsibleId"
@@ -865,15 +876,14 @@ export function EventForm({
           <option key={u.id} value={u.id}>{u.name}</option>
         ))}
       </select>
-      <p className="text-xs text-subtle">
-        The on-site manager accountable for this event.
-      </p>
     </div>
   );
 
   const artistsField = (
     <div className="space-y-2">
-      <Label htmlFor="artistNames">Artists / bands / hosts</Label>
+      <FieldLabel htmlFor="artistNames" help="Only linked artists are saved. If you are unsure, leave this blank and add them later.">
+        Artists / bands / hosts
+      </FieldLabel>
       <input type="hidden" name="artistIds" value={selectedArtistIds.join(",")} />
       <input type="hidden" name="artistNames" value={selectedArtistNames.join(", ")} />
       <Input
@@ -893,16 +903,15 @@ export function EventForm({
           </Button>
         ) : null}
       </div>
-      <p className="text-xs text-subtle">
-        Only linked artists are saved. If you are unsure about the host/artist, leave it blank and add them later.
-      </p>
     </div>
   );
 
   const timingFields = (
     <div className="grid gap-4 md:grid-cols-2">
       <div className="space-y-2">
-        <Label htmlFor="startAt">Starts</Label>
+        <FieldLabel htmlFor="startAt" help="When guests are expected to arrive or the activity begins.">
+          Starts
+        </FieldLabel>
         <Input
           id="startAt"
           name="startAt"
@@ -919,10 +928,11 @@ export function EventForm({
           )}
         />
         <FieldError id="start-at-error" message={fieldErrors.startAt} />
-        <p className="text-xs text-subtle">When guests are expected to arrive or the activity begins.</p>
       </div>
       <div className="space-y-2">
-        <Label htmlFor="endAt">Ends</Label>
+        <FieldLabel htmlFor="endAt" help="Auto-fills three hours after the start. Adjust if the event runs longer or shorter.">
+          Ends
+        </FieldLabel>
         <Input
           id="endAt"
           name="endAt"
@@ -939,14 +949,15 @@ export function EventForm({
           )}
         />
         <FieldError id="end-at-error" message={fieldErrors.endAt} />
-        <p className="text-xs text-subtle">We&apos;ll auto-fill three hours after the start—adjust if the event runs longer or shorter.</p>
       </div>
     </div>
   );
 
   const spacesField = (
     <div className="space-y-2">
-      <Label htmlFor="venueSpace">Spaces</Label>
+      <FieldLabel htmlFor="venueSpace" help="Enter the specific areas or rooms being used.">
+        Spaces
+      </FieldLabel>
       <Input
         id="venueSpace"
         name="venueSpace"
@@ -963,52 +974,55 @@ export function EventForm({
         )}
       />
       <FieldError id="venue-space-error" message={fieldErrors.venueSpace} />
-      <p className="text-xs text-subtle">Enter the specific areas or rooms being used.</p>
     </div>
   );
 
   const eventImageField = (
     <div className="space-y-2">
-      <Label htmlFor="eventImage">Event image (optional)</Label>
+      <FieldLabel htmlFor="eventImage" help="Add a hero image to strengthen event listings and social shares.">
+        Event image (optional)
+      </FieldLabel>
       <Input id="eventImage" name="eventImage" type="file" accept="image/*" />
       {defaultValues?.event_image_path ? (
         <p className="text-xs text-subtle">
           Current image: {defaultValues.event_image_path.split("/").at(-1) ?? defaultValues.event_image_path}
         </p>
-      ) : (
-        <p className="text-xs text-subtle">Add a hero image to strengthen event listings and social shares.</p>
-      )}
+      ) : null}
     </div>
   );
 
   const promosFields = (
     <div className="grid gap-4 md:grid-cols-2">
       <div className="space-y-2">
-        <Label htmlFor="wetPromo">Wet promotion</Label>
+        <FieldLabel htmlFor="wetPromo" help="Use this when the event is expected to drive wet sales. Note any key drink offers.">
+          Wet promotion
+        </FieldLabel>
         <Input
           id="wetPromo"
           name="wetPromo"
           defaultValue={defaultValues?.wet_promo ?? ""}
           placeholder="Two-for-one cocktails, guest brewery taps"
         />
-        <p className="text-xs text-subtle">Is this event expected to drive wet sales? Note any key drink offers.</p>
       </div>
       <div className="space-y-2">
-        <Label htmlFor="foodPromo">Food promotion</Label>
+        <FieldLabel htmlFor="foodPromo" help="List any paired food promotions or add-ons.">
+          Food promotion
+        </FieldLabel>
         <Input
           id="foodPromo"
           name="foodPromo"
           defaultValue={defaultValues?.food_promo ?? ""}
           placeholder="Sharing boards, brunch specials"
         />
-        <p className="text-xs text-subtle">List any paired food promotions or add-ons.</p>
       </div>
     </div>
   );
 
   const headcountField = (
     <div className="space-y-2">
-      <Label htmlFor="expectedHeadcount">Expected headcount</Label>
+      <FieldLabel htmlFor="expectedHeadcount" help="Rough numbers help planning for staffing, stock, and floor setup.">
+        Expected headcount
+      </FieldLabel>
       <Input
         id="expectedHeadcount"
         name="expectedHeadcount"
@@ -1017,14 +1031,15 @@ export function EventForm({
         defaultValue={defaultValues?.expected_headcount ?? ""}
         placeholder="e.g. 120"
       />
-      <p className="text-xs text-subtle">Rough numbers help planning for staffing, stock, and floor setup.</p>
     </div>
   );
 
   const bookingFields = (
     <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px]">
       <div className="space-y-2">
-        <Label htmlFor="bookingType">Booking format</Label>
+        <FieldLabel htmlFor="bookingType" help="This drives AI copy so guests understand how to secure their place.">
+          Booking format
+        </FieldLabel>
         <Select
           id="bookingType"
           name="bookingType"
@@ -1045,10 +1060,22 @@ export function EventForm({
           ))}
         </Select>
         <FieldError id="booking-type-error" message={fieldErrors.bookingType} />
-        <p className="text-xs text-subtle">This drives AI copy so guests understand how to secure their place.</p>
       </div>
       <div className="space-y-2">
-        <Label htmlFor="ticketPrice">Ticket price (£)</Label>
+        <FieldLabel
+          htmlFor="ticketPrice"
+          help={
+            isFreeBookingSelected
+              ? "No price for free formats."
+              : isPaidBookingSelected
+                ? "Required for paid events."
+                : isPayOnArrivalBookingSelected
+                  ? "Optional, shown as pay-on-arrival price."
+                  : "Choose a booking format to set price rules."
+          }
+        >
+          Ticket price (£)
+        </FieldLabel>
         <Input
           id="ticketPrice"
           name="ticketPrice"
@@ -1068,15 +1095,6 @@ export function EventForm({
           )}
         />
         <FieldError id="ticket-price-error" message={fieldErrors.ticketPrice} />
-        <p className="text-xs text-subtle">
-          {isFreeBookingSelected
-            ? "No price for free formats."
-            : isPaidBookingSelected
-            ? "Required for paid events."
-            : isPayOnArrivalBookingSelected
-              ? "Optional, shown as pay-on-arrival price."
-              : "Choose a booking format to set price rules."}
-        </p>
       </div>
     </div>
   );
@@ -1084,7 +1102,9 @@ export function EventForm({
   const cutoffAndCancellationFields = (
     <div className="grid gap-4 md:grid-cols-2">
       <div className="space-y-2">
-        <Label htmlFor="checkInCutoffMinutes">Last admission / check-in cutoff (minutes)</Label>
+        <FieldLabel htmlFor="checkInCutoffMinutes" help="Use minutes before start time. Example: 30 means check-in closes 30 minutes before the event starts.">
+          Last admission / check-in cutoff (minutes)
+        </FieldLabel>
         <Input
           id="checkInCutoffMinutes"
           name="checkInCutoffMinutes"
@@ -1104,12 +1124,14 @@ export function EventForm({
           )}
         />
         <FieldError id="check-in-cutoff-error" message={fieldErrors.checkInCutoffMinutes} />
-        <p className="text-xs text-subtle">
-          Use minutes before start time. Example: `30` means check-in closes 30 minutes before the event starts.
-        </p>
       </div>
       <div className="space-y-2">
-        <Label htmlFor="cancellationWindowHours">Cancellation / refund window (hours)</Label>
+        <FieldLabel
+          htmlFor="cancellationWindowHours"
+          help={isFreeBookingSelected ? "Optional for free-entry events." : "Required for bookable events so guests get a clear cancellation/refund policy."}
+        >
+          Cancellation / refund window (hours)
+        </FieldLabel>
         <Input
           id="cancellationWindowHours"
           name="cancellationWindowHours"
@@ -1129,11 +1151,6 @@ export function EventForm({
           )}
         />
         <FieldError id="cancellation-window-error" message={fieldErrors.cancellationWindowHours} />
-        <p className="text-xs text-subtle">
-          {isFreeBookingSelected
-            ? "Optional for free-entry events."
-            : "Required for bookable events so guests get a clear cancellation/refund policy."}
-        </p>
       </div>
     </div>
   );
@@ -1141,7 +1158,9 @@ export function EventForm({
   const agePolicyAndAccessibilityFields = (
     <div className="grid gap-4 md:grid-cols-2">
       <div className="space-y-2">
-        <Label htmlFor="agePolicy">Age policy</Label>
+        <FieldLabel htmlFor="agePolicy" help="Use clear guest-facing wording that door staff can enforce consistently.">
+          Age policy
+        </FieldLabel>
         <Input
           id="agePolicy"
           name="agePolicy"
@@ -1158,10 +1177,11 @@ export function EventForm({
           )}
         />
         <FieldError id="age-policy-error" message={fieldErrors.agePolicy} />
-        <p className="text-xs text-subtle">Use clear guest-facing wording that door staff can enforce consistently.</p>
       </div>
       <div className="space-y-2">
-        <Label htmlFor="accessibilityNotes">Accessibility notes</Label>
+        <FieldLabel htmlFor="accessibilityNotes" help="Add event-specific accessibility information so guests can plan confidently.">
+          Accessibility notes
+        </FieldLabel>
         <Textarea
           id="accessibilityNotes"
           name="accessibilityNotes"
@@ -1178,9 +1198,6 @@ export function EventForm({
           )}
         />
         <FieldError id="accessibility-notes-error" message={fieldErrors.accessibilityNotes} />
-        <p className="text-xs text-subtle">
-          Add event-specific accessibility information so guests can plan confidently.
-        </p>
       </div>
     </div>
   );
@@ -1188,7 +1205,9 @@ export function EventForm({
   const termsField = (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <Label htmlFor="termsAndConditions">Terms & conditions</Label>
+        <FieldLabel htmlFor="termsAndConditions" help="Keep this guest-safe and policy-focused: booking, cancellation, arrival, age policy, and accessibility.">
+          Terms & conditions
+        </FieldLabel>
         <Button
           type="button"
           variant="ghost"
@@ -1215,9 +1234,6 @@ export function EventForm({
         )}
       />
       <FieldError id="terms-and-conditions-error" message={fieldErrors.termsAndConditions} />
-      <p className="text-xs text-subtle">
-        Keep this guest-safe and policy-focused: booking, cancellation, arrival, age policy, accessibility.
-      </p>
     </div>
   );
 
@@ -1253,24 +1269,26 @@ export function EventForm({
 
   const goalsSection = (
     <div className="space-y-3">
-      <Label>Goals</Label>
-      <p className="text-xs text-subtle">Select the goals that matter for this event. Pick as many as apply.</p>
+      <FieldLabel help="Select the goals that matter for this event. Pick as many as apply.">
+        Goals
+      </FieldLabel>
       <div className="grid gap-2 sm:grid-cols-2">
         {EVENT_GOALS.map((option) => (
-          <label key={option.value} className="flex items-start gap-2 text-sm text-[var(--ink)]">
+          <label
+            key={option.value}
+            className="flex items-center gap-2 text-sm text-[var(--ink)]"
+            title={option.helper}
+            aria-label={`${option.label}. ${option.helper}`}
+          >
             <input
               type="checkbox"
               name="goalFocus"
               value={option.value}
               checked={selectedGoals.has(option.value)}
               onChange={(event) => toggleGoal(option.value, event.target.checked)}
-              className="mt-1 h-4 w-4 rounded border-[var(--hair)] text-[var(--navy)] focus:ring-[var(--slate)]"
+              className="h-4 w-4 rounded border-[var(--hair)] text-[var(--navy)] focus:ring-[var(--slate)]"
             />
-            <span>
-              <span className="font-medium">{option.label}</span>
-              <br />
-              <span className="text-xs text-subtle">{option.helper}</span>
-            </span>
+            <span className="font-medium">{option.label}</span>
           </label>
         ))}
       </div>
@@ -1318,7 +1336,9 @@ export function EventForm({
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="publicHighlights">Event Highlights</Label>
+        <FieldLabel htmlFor="publicHighlights" help="One highlight per line. Keep each line concise so guests can scan the USP quickly.">
+          Event Highlights
+        </FieldLabel>
         <Textarea
           id="publicHighlights"
           name="publicHighlights"
@@ -1335,13 +1355,12 @@ export function EventForm({
           )}
         />
         <FieldError id="public-highlights-error" message={fieldErrors.publicHighlights} />
-        <p className="text-xs text-subtle">
-          One highlight per line. Keep each line concise so guests can scan the USP quickly.
-        </p>
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="publicDescription">Public description</Label>
+        <FieldLabel htmlFor="publicDescription" help="Write as if a guest is reading this on the website.">
+          Public description
+        </FieldLabel>
         <Textarea
           id="publicDescription"
           name="publicDescription"
@@ -1358,7 +1377,6 @@ export function EventForm({
           )}
         />
         <FieldError id="public-description-error" message={fieldErrors.publicDescription} />
-        <p className="text-xs text-subtle">Write as if a guest is reading this on the website.</p>
       </div>
 
       <div className="space-y-4 rounded-lg bg-[var(--paper-tint)] p-4">
@@ -1739,7 +1757,13 @@ export function EventForm({
 
   return (
     <EventFormContext.Provider value={contextValue}>
-      <form ref={formRef} action={draftAction} noValidate onSubmit={handleSubmit} onChange={() => setIsDirty(true)}>
+      <form
+        ref={formRef}
+        action={draftAction}
+        noValidate
+        onSubmit={handleSubmit}
+        onChange={() => setIsDirty(true)}
+      >
         <input type="hidden" name="eventId" defaultValue={defaultValues?.id} />
         <input type="hidden" name="operation_id" value={operationIdRef.current} readOnly />
         <input type="hidden" name="idempotency_key" value={idempotencyKeyRef.current} readOnly />
