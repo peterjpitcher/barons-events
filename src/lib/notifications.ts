@@ -1274,11 +1274,12 @@ export async function sendDebriefSubmittedToSltEmail(eventId: string): Promise<v
 }
 
 /**
- * Sends a todo digest email to active users who have open planning tasks and are due
- * based on their communication preferences.
+ * Sends a todo digest email to active users who have planning tasks needing
+ * attention, based on their communication preferences.
  *
  * Content:
- * 1. Open tasks grouped by planning item (with event title as context if linked)
+ * 1. Open tasks overdue or due in the next 7 days, grouped by planning item
+ *    (with event title as context if linked)
  * 2. Upcoming events in the next 4 days (venue-scoped for users with venue_id)
  *
  * Idempotent per calendar day (London timezone) — duplicate runs on the same day are skipped.
@@ -1292,6 +1293,7 @@ export async function sendWeeklyDigestEmail(): Promise<{ sent: number; failed: n
   if (!resend) return { sent: 0, failed: 0, skippedAssignees: 0 };
 
   const todayLondon = getTodayLondonIsoDate();
+  const digestDueLimit = addDays(todayLondon, 7);
   const db = createSupabaseAdminClient();
 
   // Idempotency: skip if we already sent a digest for this date
@@ -1452,8 +1454,13 @@ export async function sendWeeklyDigestEmail(): Promise<{ sent: number; failed: n
     };
   }
 
+  function shouldIncludeDigestTask(task: DigestTask): boolean {
+    return Boolean(task.dueDate && task.dueDate <= digestDueLimit);
+  }
+
   function addTaskForAssignee(assigneeId: string | null | undefined, task: DigestTask | null): void {
     if (!assigneeId || !task) return;
+    if (!shouldIncludeDigestTask(task)) return;
     if (!userMap.has(assigneeId)) {
       skippedAssignees++;
       return;
@@ -1524,7 +1531,7 @@ export async function sendWeeklyDigestEmail(): Promise<{ sent: number; failed: n
         const urgency = dueDate
           ? dueDate < todayLondon
             ? "overdue"
-            : dueDate <= addDays(todayLondon, 7)
+            : dueDate <= digestDueLimit
               ? "due_soon"
               : "later"
           : "later";
@@ -1584,7 +1591,7 @@ export async function sendWeeklyDigestEmail(): Promise<{ sent: number; failed: n
       }
 
       if (capped && totalTasks > 50) {
-        body.push(`\u2026and ${totalTasks - 50} more \u2014 view in BaronsHub 1.1`);
+        body.push(`\u2026and ${totalTasks - 50} more tasks needing attention \u2014 view in BaronsHub 1.1`);
       }
 
       // Filter upcoming events by venue scope
@@ -1607,7 +1614,7 @@ export async function sendWeeklyDigestEmail(): Promise<{ sent: number; failed: n
 
       const { html, text } = renderEmailTemplate({
         headline: "Your todo digest",
-        intro: "Here\u2019s what needs your attention this week.",
+        intro: "Here\u2019s what\u2019s overdue or due in the next 7 days.",
         body,
         button: { label: "Open BaronsHub 1.1", url: plannerDashboardLink() },
         footerNote: `Manage todo email frequency: ${APP_BASE_URL}/account`
@@ -1616,7 +1623,7 @@ export async function sendWeeklyDigestEmail(): Promise<{ sent: number; failed: n
       await resend.emails.send({
         from: RESEND_FROM_ADDRESS,
         to: [user.email],
-        subject: `Your BaronsHub 1.1 todo digest \u2014 ${totalTasks} open task${totalTasks === 1 ? "" : "s"}`,
+        subject: `Your BaronsHub 1.1 todo digest \u2014 ${totalTasks} task${totalTasks === 1 ? "" : "s"} need${totalTasks === 1 ? "s" : ""} attention`,
         html,
         text
       });

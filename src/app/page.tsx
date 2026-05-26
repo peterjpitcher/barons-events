@@ -3,13 +3,13 @@ import { getCurrentUser } from "@/lib/auth";
 import {
   listEventsForUser,
   getStatusCounts,
-  listReviewQueue,
   findConflicts,
 } from "@/lib/events";
 import {
   getDashboardTodoItems,
   getDebriefsDue,
   getExecutiveSummaryStats,
+  getDashboardOperationsSnapshot,
   getRecentActivity,
 } from "@/lib/dashboard";
 import { UnifiedTodoList } from "@/components/todos/unified-todo-list";
@@ -19,6 +19,12 @@ import { ConflictsCard } from "@/components/dashboard/context-cards/conflicts-ca
 import { DebriefsOutstandingCard } from "@/components/dashboard/context-cards/debriefs-outstanding-card";
 import { SummaryStatsCard } from "@/components/dashboard/context-cards/summary-stats-card";
 import { RecentActivityCard } from "@/components/dashboard/context-cards/recent-activity-card";
+import { EventReadinessCard } from "@/components/dashboard/context-cards/event-readiness-card";
+import { BookingPulseCard } from "@/components/dashboard/context-cards/booking-pulse-card";
+import {
+  NeedsAttentionCard,
+  type DashboardAttentionItem,
+} from "@/components/dashboard/context-cards/needs-attention-card";
 import { londonDateString } from "@/lib/planning/utils";
 import { PageHeader } from "@/components/ui/design-primitives";
 
@@ -50,6 +56,134 @@ async function safeFetch<T>(promise: Promise<T>): Promise<T | null> {
   }
 }
 
+function buildAttentionItems(params: {
+  overdueCount: number;
+  dueSoonCount: number;
+  statusCounts: Record<string, number> | null;
+  conflicts: Awaited<ReturnType<typeof findConflicts>> | null;
+  debriefsDue: Awaited<ReturnType<typeof getDebriefsDue>> | null;
+  operationsSnapshot: Awaited<ReturnType<typeof getDashboardOperationsSnapshot>> | null;
+}): DashboardAttentionItem[] {
+  const items: Array<DashboardAttentionItem & { priority: number }> = [];
+
+  if (params.conflicts && params.conflicts.length > 0) {
+    items.push({
+      id: "conflicts",
+      title: `${params.conflicts.length} event conflict${params.conflicts.length === 1 ? "" : "s"}`,
+      subtitle: "Overlapping venue spaces need resolving.",
+      href: `/events/${params.conflicts[0].event.id}`,
+      label: "Conflict",
+      tone: "danger",
+      priority: 10,
+    });
+  }
+
+  if (params.overdueCount > 0) {
+    items.push({
+      id: "overdue-todos",
+      title: `${params.overdueCount} overdue todo${params.overdueCount === 1 ? "" : "s"}`,
+      subtitle: "Assigned planning, SOP, review, revision, or debrief work is past due.",
+      href: "/planning",
+      label: "Overdue",
+      tone: "danger",
+      priority: 20,
+    });
+  }
+
+  const pendingProposals = params.statusCounts?.pending_approval ?? 0;
+  if (pendingProposals > 0) {
+    items.push({
+      id: "pending-proposals",
+      title: `${pendingProposals} proposal${pendingProposals === 1 ? "" : "s"} awaiting approval`,
+      subtitle: "Approve, reject, or request more detail from event proposers.",
+      href: "/events/pending",
+      label: "Approval",
+      tone: "warning",
+      priority: 30,
+    });
+  }
+
+  const reviewQueue = (params.statusCounts?.submitted ?? 0) + (params.statusCounts?.needs_revisions ?? 0);
+  if (reviewQueue > 0) {
+    items.push({
+      id: "review-queue",
+      title: `${reviewQueue} event${reviewQueue === 1 ? "" : "s"} in review flow`,
+      subtitle: "Submitted or revision-stage events are waiting on a decision.",
+      href: "/reviews",
+      label: "Review",
+      tone: "warning",
+      priority: 40,
+    });
+  }
+
+  const detailsNeeded = params.statusCounts?.approved_pending_details ?? 0;
+  if (detailsNeeded > 0) {
+    items.push({
+      id: "approved-pending-details",
+      title: `${detailsNeeded} approved event${detailsNeeded === 1 ? "" : "s"} need details`,
+      subtitle: "Approved proposals still need full event setup before publishing.",
+      href: "/events",
+      label: "Details",
+      tone: "warning",
+      priority: 45,
+    });
+  }
+
+  for (const event of params.operationsSnapshot?.readiness ?? []) {
+    if (event.readinessScore >= 75 && event.overdueTasks === 0 && event.blockedTasks === 0) continue;
+    const firstIssue = event.issues[0]?.label ?? "Readiness risk";
+    items.push({
+      id: `readiness-${event.id}`,
+      title: event.title,
+      subtitle: `${event.dateLabel} at ${event.venueName}: ${firstIssue}`,
+      href: event.href,
+      label: `${event.readinessScore}%`,
+      tone: event.readinessTone,
+      priority: event.overdueTasks > 0 || event.blockedTasks > 0 ? 50 : 60,
+    });
+  }
+
+  for (const alert of params.operationsSnapshot?.bookingPulse.capacityAlerts ?? []) {
+    items.push({
+      id: `capacity-${alert.id}`,
+      title: alert.title,
+      subtitle: `${alert.venueName}: ${alert.label.toLowerCase()} at ${alert.capacityPercent}% capacity.`,
+      href: alert.href,
+      label: "Capacity",
+      tone: alert.tone,
+      priority: 70,
+    });
+  }
+
+  if (params.debriefsDue && params.debriefsDue.length > 0) {
+    items.push({
+      id: "debriefs-due",
+      title: `${params.debriefsDue.length} outstanding debrief${params.debriefsDue.length === 1 ? "" : "s"}`,
+      subtitle: "Past approved events are missing debrief submissions.",
+      href: `/debriefs/${params.debriefsDue[0].id}`,
+      label: "Debrief",
+      tone: "warning",
+      priority: 80,
+    });
+  }
+
+  if (params.dueSoonCount > 0) {
+    items.push({
+      id: "due-soon-todos",
+      title: `${params.dueSoonCount} todo${params.dueSoonCount === 1 ? "" : "s"} due soon`,
+      subtitle: "Assigned work is due within the next seven days.",
+      href: "/planning",
+      label: "Soon",
+      tone: "info",
+      priority: 90,
+    });
+  }
+
+  return items
+    .sort((left, right) => left.priority - right.priority)
+    .map(({ priority: _priority, ...item }) => item);
+}
+
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -77,6 +211,9 @@ export default async function OverviewPage(): Promise<React.ReactNode> {
         )
         .slice(0, 4)
     : null;
+  const operationsSnapshot = allEvents
+    ? await safeFetch(getDashboardOperationsSnapshot(allEvents, today))
+    : null;
 
   // Role-specific additional fetches
   let statusCounts: Record<string, number> | null = null;
@@ -88,14 +225,16 @@ export default async function OverviewPage(): Promise<React.ReactNode> {
     null;
 
   if (user.role === "administrator") {
-    const [sc, cf, dd] = await Promise.all([
+    const [sc, cf, dd, ra] = await Promise.all([
       safeFetch(getStatusCounts()),
       safeFetch(findConflicts()),
       safeFetch(getDebriefsDue(user)),
+      safeFetch(getRecentActivity()),
     ]);
     statusCounts = sc;
     conflicts = cf;
     debriefsDue = dd;
+    recentActivity = ra;
   } else if (user.role === "executive") {
     const [ss, ra] = await Promise.all([
       safeFetch(getExecutiveSummaryStats()),
@@ -110,6 +249,14 @@ export default async function OverviewPage(): Promise<React.ReactNode> {
     todoResult?.items.filter((i) => i.urgency === "overdue").length ?? 0;
   const dueSoonCount =
     todoResult?.items.filter((i) => i.urgency === "due_soon").length ?? 0;
+  const attentionItems = buildAttentionItems({
+    overdueCount,
+    dueSoonCount,
+    statusCounts,
+    conflicts,
+    debriefsDue,
+    operationsSnapshot,
+  });
 
   return (
     <div className="app-page">
@@ -133,44 +280,44 @@ export default async function OverviewPage(): Promise<React.ReactNode> {
         }
       />
 
-      {/* 60/40 grid */}
-      <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">
-        {/* Left column — Todo list */}
-        <div>
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.85fr)]">
+        <div className="space-y-4">
+          <NeedsAttentionCard items={attentionItems} />
           <UnifiedTodoList
             mode="dashboard"
             items={todoResult?.items ?? []}
             currentUserId={user.id}
             failedSources={todoResult?.errors}
           />
+          <EventReadinessCard events={operationsSnapshot?.readiness ?? null} />
         </div>
 
-        {/* Right column — Context cards */}
         <div className="space-y-4">
           {user.role === "administrator" && (
             <>
+              <BookingPulseCard pulse={operationsSnapshot?.bookingPulse ?? null} />
+              <PipelineCard counts={statusCounts} />
+              <ConflictsCard conflicts={conflicts} />
+              <DebriefsOutstandingCard debriefs={debriefsDue} />
+              <RecentActivityCard activity={recentActivity} />
+            </>
+          )}
+
+          {user.role === "office_worker" && (
+            <>
+              <BookingPulseCard pulse={operationsSnapshot?.bookingPulse ?? null} />
               <UpcomingEventsCard
                 events={upcomingEvents}
                 userRole={user.role}
                 hasVenue={Boolean(user.venueId)}
               />
-              <PipelineCard counts={statusCounts} />
-              <ConflictsCard conflicts={conflicts} />
-              <DebriefsOutstandingCard debriefs={debriefsDue} />
             </>
-          )}
-
-          {user.role === "office_worker" && (
-            <UpcomingEventsCard
-              events={upcomingEvents}
-              userRole={user.role}
-              hasVenue={Boolean(user.venueId)}
-            />
           )}
 
           {user.role === "executive" && (
             <>
               <SummaryStatsCard stats={summaryStats} />
+              <BookingPulseCard pulse={operationsSnapshot?.bookingPulse ?? null} />
               <RecentActivityCard activity={recentActivity} />
               <UpcomingEventsCard
                 events={upcomingEvents}

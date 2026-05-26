@@ -830,7 +830,16 @@ export async function recordApproval(params: {
 export async function getStatusCounts(): Promise<Record<EventStatus, number>> {
   const supabase = await createSupabaseReadonlyClient();
 
-  const statuses = ["draft", "submitted", "needs_revisions", "approved", "rejected", "completed"] as const;
+  const statuses = [
+    "pending_approval",
+    "approved_pending_details",
+    "draft",
+    "submitted",
+    "needs_revisions",
+    "approved",
+    "rejected",
+    "completed"
+  ] as const;
   const results = await Promise.all(
     statuses.map((status) =>
       supabase

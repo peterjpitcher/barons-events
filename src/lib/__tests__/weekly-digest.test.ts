@@ -203,7 +203,7 @@ describe("sendWeeklyDigestEmail", () => {
   });
 
   // 1. Happy path
-  it("should send an email with tasks and upcoming events when user has open tasks", async () => {
+  it("should send an email with actionable tasks and upcoming events", async () => {
     const tasks = [
       makeTask({ id: "t1", title: "Book DJ", due_date: "2026-04-22", assignee_id: "user-1" }),
       makeTask({ id: "t2", title: "Order flowers", due_date: "2026-04-23", assignee_id: "user-1" }),
@@ -231,7 +231,7 @@ describe("sendWeeklyDigestEmail", () => {
 
     const call = mockEmailSend.mock.calls[0][0];
     expect(call.to).toEqual(["alice@example.com"]);
-    expect(call.subject).toContain("3 open tasks");
+    expect(call.subject).toContain("3 tasks need attention");
     expect(call.html).toBeDefined();
   });
 
@@ -258,8 +258,31 @@ describe("sendWeeklyDigestEmail", () => {
     expect(result.sent).toBe(1);
     const call = mockEmailSend.mock.calls[0][0];
     expect(call.to).toEqual(["bob@example.com"]);
-    expect(call.subject).toContain("1 open task");
+    expect(call.subject).toContain("1 task needs attention");
     expect(call.text.match(/Confirm staffing/g)).toHaveLength(1);
+  });
+
+  it("does not count future open tasks outside the digest window", async () => {
+    const tasks = [
+      makeTask({ id: "due-soon", title: "Confirm staffing", due_date: "2026-04-24", assignee_id: "user-1" }),
+      makeTask({ id: "future", title: "Plan autumn campaign", due_date: "2026-05-15", assignee_id: "user-1" })
+    ];
+    const users = [makeUser()];
+
+    setupMockDb({
+      audit_log: { data: [], error: null },
+      planning_tasks: { data: tasks, error: null },
+      events: { data: [], error: null },
+      users: { data: users, error: null }
+    });
+
+    const result = await sendWeeklyDigestEmail();
+
+    expect(result.sent).toBe(1);
+    const call = mockEmailSend.mock.calls[0][0];
+    expect(call.subject).toContain("1 task needs attention");
+    expect(call.text).toContain("Confirm staffing");
+    expect(call.text).not.toContain("Plan autumn campaign");
   });
 
   it("respects per-user todo digest frequency preferences", async () => {
@@ -393,6 +416,26 @@ describe("sendWeeklyDigestEmail", () => {
     setupMockDb({
       audit_log: { data: [], error: null },
       planning_tasks: { data: [], error: null },
+      events: { data: [makeEvent()], error: null },
+      users: { data: users, error: null }
+    });
+
+    const result = await sendWeeklyDigestEmail();
+
+    expect(result.sent).toBe(0);
+    expect(result.failed).toBe(0);
+    expect(mockEmailSend).not.toHaveBeenCalled();
+  });
+
+  it("should not send a digest when open tasks are only future tasks", async () => {
+    const tasks = [
+      makeTask({ id: "future", title: "Plan autumn campaign", due_date: "2026-05-15", assignee_id: "user-1" })
+    ];
+    const users = [makeUser()];
+
+    setupMockDb({
+      audit_log: { data: [], error: null },
+      planning_tasks: { data: tasks, error: null },
       events: { data: [makeEvent()], error: null },
       users: { data: users, error: null }
     });
@@ -542,7 +585,7 @@ describe("sendWeeklyDigestEmail", () => {
     // Should show overflow message
     expect(call.text).toContain("10 more");
     // Subject should reflect total count (60), not capped count
-    expect(call.subject).toContain("60 open tasks");
+    expect(call.subject).toContain("60 tasks need attention");
   });
 
   // 11. Idempotency
@@ -622,6 +665,6 @@ describe("sendWeeklyDigestEmail", () => {
 
     expect(result.sent).toBe(1);
     const call = mockEmailSend.mock.calls[0][0];
-    expect(call.subject).toBe("Your BaronsHub 1.1 todo digest \u2014 3 open tasks");
+    expect(call.subject).toBe("Your BaronsHub 1.1 todo digest \u2014 3 tasks need attention");
   });
 });
