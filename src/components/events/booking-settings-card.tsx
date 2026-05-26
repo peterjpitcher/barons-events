@@ -2,14 +2,13 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Copy, ExternalLink } from "lucide-react";
+import { Copy, ExternalLink, Loader2 } from "lucide-react";
 import { updateBookingSettingsAction } from "@/actions/events";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FieldLabel } from "@/components/ui/field-label";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { SubmitButton } from "@/components/ui/submit-button";
 import {
   BOOKING_FORMAT_LABELS,
   getBookingCtaLabel,
@@ -55,11 +54,29 @@ export function BookingSettingsCard({
   const [bookingUrl, setBookingUrl] = useState(initialBookingUrl ?? "");
   const [isPending, startTransition] = useTransition();
   const formRef = useRef<HTMLFormElement>(null);
+  const [isFormVisible, setIsFormVisible] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   // Keep local slug in sync when the prop changes (e.g. after save)
   useEffect(() => {
     setCurrentSlug(initialSeoSlug);
   }, [initialSeoSlug]);
+
+  useEffect(() => {
+    const node = formRef.current;
+    if (!node || typeof IntersectionObserver === "undefined") {
+      setIsFormVisible(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => setIsFormVisible(entry.isIntersecting),
+      { rootMargin: "0px 0px -15% 0px", threshold: 0 }
+    );
+    observer.observe(node);
+
+    return () => observer.disconnect();
+  }, []);
 
   const landingUrl = currentSlug ? `https://${LANDING_BASE}/${currentSlug}` : null;
   const bookingFormat = isBookingFormat(bookingType) ? bookingType : null;
@@ -94,6 +111,7 @@ export function BookingSettingsCard({
 
       if (result.success) {
         toast.success(result.message ?? "Booking settings saved.");
+        setHasUnsavedChanges(false);
         if (result.seoSlug && !currentSlug) {
           setCurrentSlug(result.seoSlug);
         }
@@ -123,7 +141,13 @@ export function BookingSettingsCard({
           Enable online bookings to get a public landing page at{" "}
           <span className="font-mono text-xs">{LANDING_BASE}/…</span>
         </p>
-        <form ref={formRef} onSubmit={handleSave} className="space-y-3" noValidate>
+        <form
+          ref={formRef}
+          onSubmit={handleSave}
+          onChange={() => setHasUnsavedChanges(true)}
+          className="space-y-3"
+          noValidate
+        >
           {bookingFormat ? (
             <div className="rounded-[var(--radius)] border border-[var(--hair)] bg-[var(--canvas-2)] px-3 py-2 text-xs text-subtle">
               <span className="font-semibold text-[var(--ink)]">{BOOKING_FORMAT_LABELS[bookingFormat]}</span>
@@ -139,7 +163,10 @@ export function BookingSettingsCard({
               type="button"
               role="switch"
               aria-checked={bookingEnabled}
-              onClick={() => setBookingEnabled((v) => !v)}
+              onClick={() => {
+                setBookingEnabled((v) => !v);
+                setHasUnsavedChanges(true);
+              }}
               className={`relative inline-flex h-6 w-11 flex-none cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--slate)] ${
                 bookingEnabled
                   ? "bg-[var(--navy)]"
@@ -258,7 +285,10 @@ export function BookingSettingsCard({
                 type="button"
                 role="switch"
                 aria-checked={bookingNotesEnabled}
-                onClick={() => setBookingNotesEnabled((v) => !v)}
+                onClick={() => {
+                  setBookingNotesEnabled((v) => !v);
+                  setHasUnsavedChanges(true);
+                }}
                   className={`relative inline-flex h-6 w-11 flex-none cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--slate)] ${
                   bookingNotesEnabled
                     ? "bg-[var(--navy)]"
@@ -290,7 +320,10 @@ export function BookingSettingsCard({
                   type="button"
                   role="switch"
                   aria-checked={smsPromoEnabled}
-                  onClick={() => setSmsPromoEnabled((v) => !v)}
+                  onClick={() => {
+                    setSmsPromoEnabled((v) => !v);
+                    setHasUnsavedChanges(true);
+                  }}
                   className={`relative inline-flex h-6 w-11 flex-none cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--slate)] ${
                     smsPromoEnabled
                       ? "bg-[var(--navy)]"
@@ -314,14 +347,19 @@ export function BookingSettingsCard({
             </div>
           )}
 
-          <div className="flex justify-end">
-            <SubmitButton
-              label="Save booking settings"
-              pendingLabel="Saving…"
-              variant="secondary"
-              disabled={isPending}
-            />
-          </div>
+          {isFormVisible || hasUnsavedChanges ? (
+            <div className="fixed bottom-[4.75rem] right-4 z-[70] max-w-[calc(100vw-2rem)] sm:bottom-[5.25rem] sm:right-6">
+              <Button
+                type="submit"
+                variant="secondary"
+                disabled={isPending}
+                className="w-full justify-center rounded-[10px] shadow-card sm:w-auto"
+              >
+                {isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
+                {isPending ? "Saving..." : "Save booking settings"}
+              </Button>
+            </div>
+          ) : null}
         </form>
       </CardContent>
     </Card>

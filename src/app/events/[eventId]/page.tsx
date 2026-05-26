@@ -550,7 +550,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
   ) : null;
 
   return (
-    <div className="app-page">
+    <div className={canEdit ? "app-page pb-32" : "app-page"}>
       <EventPageHeader
         title={event.title}
         mode={canEdit ? "edit" : "view"}

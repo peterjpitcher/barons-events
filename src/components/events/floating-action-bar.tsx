@@ -24,7 +24,7 @@ export function FloatingActionBar({ className }: FloatingActionBarProps): React.
   return (
     <div
       className={cn(
-        "mt-4 flex items-center justify-end gap-2 border-t border-[var(--hair)] bg-[var(--paper)] pt-3",
+        "fixed bottom-4 right-4 z-[70] flex max-w-[calc(100vw-2rem)] flex-col-reverse items-stretch gap-2 rounded-[10px] border border-[var(--hair)] bg-[var(--paper)]/95 p-2 shadow-card backdrop-blur sm:bottom-6 sm:right-6 sm:flex-row sm:items-center",
         className
       )}
     >
@@ -33,7 +33,7 @@ export function FloatingActionBar({ className }: FloatingActionBarProps): React.
           variant="secondary"
           onClick={submitForReview}
           disabled={isPending}
-          className="flex-1 sm:flex-none"
+          className="w-full justify-center sm:w-auto"
         >
           {isSubmitting && (
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -46,7 +46,7 @@ export function FloatingActionBar({ className }: FloatingActionBarProps): React.
         variant="primary"
         onClick={saveDraft}
         disabled={isPending}
-        className="flex-1 sm:flex-none"
+        className="w-full justify-center sm:w-auto"
       >
         {isSaving && (
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
