@@ -637,6 +637,8 @@ export function PlanningItemCard({
                 selectedIds={selectedVenueIds}
                 onChange={setSelectedVenueIds}
                 disabled={isPending}
+                emptyLabel="Global item"
+                emptyDescription="No venue-specific ownership or rollout."
               />
               <p className="text-[11px] text-subtle">
                 Pick no venues for a global item, or one or more venues to link this item to. Tasks with a "one per venue" SOP setting will fan out automatically.

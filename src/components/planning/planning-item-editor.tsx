@@ -294,6 +294,8 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                       selectedIds={itemVenueIds}
                       onChange={setItemVenueIds}
                       disabled={isPending}
+                      emptyLabel="Global item"
+                      emptyDescription="No venue-specific ownership or rollout."
                     />
                     <p className="mt-1 text-xs text-subtle">
                       Pick no venues for a global item, or tick one or more to link this item to those venues. Tasks with a "one per venue" SOP setting will fan out automatically.

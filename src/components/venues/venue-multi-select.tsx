@@ -1,8 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Check, ChevronDown, ChevronRight } from "lucide-react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  Building2,
+  Check,
+  ChevronDown,
+  Globe2,
+  MapPin,
+  Search,
+  Store,
+  X
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export type VenueOption = {
   id: string;
@@ -18,159 +28,363 @@ type VenueMultiSelectProps = {
   disabled?: boolean;
   /** HTML `name` for hidden inputs that carry the selection into a form action. Optional. */
   hiddenFieldName?: string;
-  /** Initial expand state. Defaults to expanded when nothing is selected yet, collapsed otherwise. */
+  /** Initial open state. Defaults to collapsed so the picker behaves like a dropdown. */
   defaultExpanded?: boolean;
+  /** Whether an empty selection is valid. Use for global planning items. */
+  allowEmpty?: boolean;
+  /** Label shown for an empty valid selection. */
+  emptyLabel?: string;
+  /** Helper copy for an empty valid selection. */
+  emptyDescription?: string;
+  /** Label shown before a required selection is made. */
+  placeholder?: string;
+  /** Marks the primary venue when the first selected venue drives downstream fields. */
+  primaryVenueId?: string;
 };
 
-/**
- * Reusable multi-select for venues with quick-select buttons and a category-
- * grouped checkbox list.
- *
- * - Collapsible header shows a summary of the current selection; the full
- *   picker only takes vertical space when the user opens it.
- * - Categories grouped into "Pubs" and "Cafes".
- * - Quick actions: Select all, Select all pubs, Clear.
- * - Accessibility: each checkbox has a visible label; category headings use
- *   <h5> to preserve heading hierarchy; the toggle uses aria-expanded.
- * - Colour-independent: quick-action counts and the "Selected N" summary use
- *   text, not colour.
- * - Optional hidden-input rendering (via `hiddenFieldName`) makes this usable
- *   inside native HTML forms using server actions.
- */
+type VenueGroup = {
+  key: string;
+  label: string;
+  venues: VenueOption[];
+};
+
 export function VenueMultiSelect({
   venues,
   selectedIds,
   onChange,
   disabled = false,
   hiddenFieldName,
-  defaultExpanded
+  defaultExpanded,
+  allowEmpty = true,
+  emptyLabel = "Global",
+  emptyDescription = "Applies across the whole business, not a specific venue.",
+  placeholder = "Choose venues",
+  primaryVenueId
 }: VenueMultiSelectProps) {
-  const { pubs, cafes, internal } = useMemo(() => {
-    const sorted = [...venues].sort((a, b) => a.name.localeCompare(b.name));
-    return {
-      pubs: sorted.filter((v) => !v.isInternal && v.category === "pub"),
-      cafes: sorted.filter((v) => !v.isInternal && v.category === "cafe"),
-      internal: sorted.filter((v) => v.isInternal)
-    };
-  }, [venues]);
-
-  const selected = useMemo(() => new Set(selectedIds), [selectedIds]);
-
-  // Default expansion: explicit prop wins, otherwise start collapsed so the
-  // picker stays compact — users expand when they need to pick.
-  const [isExpanded, setIsExpanded] = useState<boolean>(() =>
-    typeof defaultExpanded === "boolean" ? defaultExpanded : selectedIds.length === 0
+  const panelId = useId();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [isOpen, setIsOpen] = useState<boolean>(() =>
+    typeof defaultExpanded === "boolean" ? defaultExpanded : false
   );
+  const [query, setQuery] = useState("");
+
+  const sortedVenues = useMemo(
+    () => [...venues].sort((a, b) => a.name.localeCompare(b.name)),
+    [venues]
+  );
+  const venueById = useMemo(
+    () => new Map(sortedVenues.map((venue) => [venue.id, venue])),
+    [sortedVenues]
+  );
+  const selected = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const selectedVenues = useMemo(
+    () => selectedIds.map((id) => venueById.get(id)).filter((venue): venue is VenueOption => Boolean(venue)),
+    [selectedIds, venueById]
+  );
+
+  const groupedVenues = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    const matches = sortedVenues.filter((venue) =>
+      needle ? venue.name.toLowerCase().includes(needle) : true
+    );
+
+    return [
+      {
+        key: "pubs",
+        label: "Pubs",
+        venues: matches.filter((venue) => !venue.isInternal && venue.category === "pub")
+      },
+      {
+        key: "cafes",
+        label: "Cafes",
+        venues: matches.filter((venue) => !venue.isInternal && venue.category === "cafe")
+      },
+      {
+        key: "internal",
+        label: "Internal",
+        venues: matches.filter((venue) => venue.isInternal)
+      }
+    ].filter((group) => group.venues.length > 0);
+  }, [query, sortedVenues]);
+
+  const pubs = useMemo(
+    () => sortedVenues.filter((venue) => !venue.isInternal && venue.category === "pub"),
+    [sortedVenues]
+  );
+  const cafes = useMemo(
+    () => sortedVenues.filter((venue) => !venue.isInternal && venue.category === "cafe"),
+    [sortedVenues]
+  );
+  const selectableVenues = useMemo(
+    () => sortedVenues.filter((venue) => !venue.isInternal),
+    [sortedVenues]
+  );
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    function onPointerDown(event: MouseEvent) {
+      if (rootRef.current?.contains(event.target as Node)) return;
+      setIsOpen(false);
+    }
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [isOpen]);
+
+  function emit(ids: string[]) {
+    onChange(ids);
+  }
 
   function toggle(id: string) {
     if (disabled) return;
     const next = new Set(selected);
     if (next.has(id)) next.delete(id);
     else next.add(id);
-    onChange(Array.from(next));
+    emit(Array.from(next));
   }
 
-  function selectAll() {
+  function remove(id: string) {
     if (disabled) return;
-    onChange([...pubs, ...cafes].map((v) => v.id));
+    emit(selectedIds.filter((selectedId) => selectedId !== id));
   }
 
-  function selectAllPubs() {
+  function selectPreset(ids: string[]) {
     if (disabled) return;
-    onChange(pubs.map((v) => v.id));
+    emit(ids);
   }
 
-  function clear() {
-    if (disabled) return;
-    onChange([]);
-  }
-
-  // Short summary for the collapsed header: "None", venue name, or "N venues".
   const summary = useMemo(() => {
-    if (selectedIds.length === 0) return "None selected";
-    if (selectedIds.length === 1) {
-      const only = venues.find((v) => v.id === selectedIds[0]);
-      return only?.name ?? "1 venue";
-    }
-    return `${selectedIds.length} venues selected`;
-  }, [selectedIds, venues]);
+    if (selectedVenues.length === 0) return allowEmpty ? emptyLabel : placeholder;
+    if (selectedVenues.length === 1) return selectedVenues[0].name;
+    return `${selectedVenues.length} venues selected`;
+  }, [allowEmpty, emptyLabel, placeholder, selectedVenues]);
 
-  function renderGroup(heading: string, group: VenueOption[]) {
-    if (group.length === 0) return null;
+  const primaryId = primaryVenueId ?? selectedIds[0];
+  const visibleChips = selectedVenues.slice(0, 5);
+  const hiddenChipCount = Math.max(0, selectedVenues.length - visibleChips.length);
+  const noMatches = venues.length > 0 && groupedVenues.length === 0;
+
+  function renderGroup(group: VenueGroup) {
     return (
-      <div className="space-y-1">
-        <h5 className="text-xs font-semibold uppercase tracking-[0.08em] text-subtle">
-          {heading} ({group.length})
-        </h5>
+      <section key={group.key} className="space-y-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <h5 className="font-brand-mono text-[0.6rem] font-semibold uppercase tracking-[0.12em] text-[var(--ink-soft)]">
+            {group.label}
+          </h5>
+          <span className="font-brand-mono text-[0.6rem] text-[var(--ink-soft)]">{group.venues.length}</span>
+        </div>
         <ul className="space-y-1">
-          {group.map((venue) => {
+          {group.venues.map((venue) => {
             const isSelected = selected.has(venue.id);
+            const isPrimary = isSelected && venue.id === primaryId;
             return (
               <li key={venue.id}>
-                <label className="flex items-center gap-2 rounded-[var(--radius-sm)] border border-[var(--hair)] bg-[var(--paper)] px-2 py-1.5 text-sm text-[var(--ink)] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[var(--mustard)]">
+                <label
+                  className={cn(
+                    "flex cursor-pointer items-center gap-2 rounded-[8px] border px-2.5 py-2 text-sm transition has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[var(--mustard)]",
+                    isSelected
+                      ? "border-[var(--mustard)] bg-[var(--mustard-tint)] text-[var(--ink)]"
+                      : "border-[var(--hair)] bg-[var(--paper)] text-[var(--ink)] hover:bg-[var(--paper-tint)]",
+                    disabled && "cursor-not-allowed opacity-60"
+                  )}
+                >
                   <input
                     type="checkbox"
-                    className="h-4 w-4"
+                    className="sr-only"
                     checked={isSelected}
                     disabled={disabled}
                     onChange={() => toggle(venue.id)}
                   />
-                  <span className="flex-1">{venue.name}</span>
-                  {isSelected ? <Check className="h-4 w-4" aria-hidden="true" /> : null}
+                  <span
+                    className={cn(
+                      "flex h-4 w-4 shrink-0 items-center justify-center rounded border",
+                      isSelected ? "border-[var(--mustard)] bg-[var(--mustard)]" : "border-[var(--hair-strong)] bg-white"
+                    )}
+                    aria-hidden="true"
+                  >
+                    {isSelected ? <Check className="h-3 w-3 text-[var(--ink-on-mustard)]" /> : null}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">{venue.name}</span>
+                  {isPrimary ? (
+                    <span className="rounded bg-[var(--paper)] px-1.5 py-0.5 font-brand-mono text-[0.58rem] uppercase tracking-[0.06em] text-[var(--ink-muted)]">
+                      Host
+                    </span>
+                  ) : null}
                 </label>
               </li>
             );
           })}
         </ul>
-      </div>
+      </section>
     );
   }
 
   return (
-    <div className="space-y-2">
+    <div ref={rootRef} className="relative space-y-2">
       <button
         type="button"
-        onClick={() => setIsExpanded((v) => !v)}
-        aria-expanded={isExpanded}
-        className="flex w-full items-center gap-2 rounded-[var(--radius-sm)] border border-[var(--hair)] bg-[var(--paper)] px-2 py-1.5 text-left text-sm hover:bg-[var(--canvas-2)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mustard)]"
-      >
-        {isExpanded ? (
-          <ChevronDown className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
-        ) : (
-          <ChevronRight className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
+        onClick={() => !disabled && setIsOpen((open) => !open)}
+        aria-expanded={isOpen}
+        aria-controls={panelId}
+        disabled={disabled}
+        className={cn(
+          "flex min-h-10 w-full items-center gap-2 rounded-[8px] border border-[var(--hair)] bg-[var(--paper)] px-3 py-2 text-left text-sm transition hover:bg-[var(--paper-tint)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mustard)]",
+          isOpen && "border-[var(--mustard)] ring-2 ring-[var(--mustard-tint)]",
+          disabled && "cursor-not-allowed bg-[var(--canvas-2)] opacity-70"
         )}
-        <span className="flex-1 font-medium text-[var(--ink)]">{summary}</span>
-        <span className="text-xs text-subtle">{isExpanded ? "Hide" : "Choose venues"}</span>
+      >
+        {selectedVenues.length === 0 && allowEmpty ? (
+          <Globe2 className="h-4 w-4 shrink-0 text-[var(--ink-soft)]" aria-hidden="true" />
+        ) : (
+          <MapPin className="h-4 w-4 shrink-0 text-[var(--ink-soft)]" aria-hidden="true" />
+        )}
+        <span className="min-w-0 flex-1">
+          <span className={cn("block truncate font-medium", selectedVenues.length === 0 && !allowEmpty ? "text-[var(--ink-soft)]" : "text-[var(--ink)]")}>
+            {summary}
+          </span>
+          <span className="mt-0.5 block truncate text-xs text-subtle">
+            {selectedVenues.length === 0
+              ? allowEmpty ? emptyDescription : "Search or use a preset to choose venues."
+              : selectedVenues.length === venues.length ? "Every configured venue is selected." : "Open picker to adjust selection."}
+          </span>
+        </span>
+        <ChevronDown
+          className={cn("h-4 w-4 shrink-0 text-[var(--ink-soft)] transition-transform", isOpen && "rotate-180")}
+          aria-hidden="true"
+        />
       </button>
 
-      {isExpanded ? (
-        <div className="space-y-3 rounded-[var(--radius-sm)] border border-[var(--hair)] p-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" variant="ghost" size="sm" onClick={selectAll} disabled={disabled || pubs.length + cafes.length === 0}>
-              Select all sites ({pubs.length + cafes.length})
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={selectAllPubs}
-              disabled={disabled || pubs.length === 0}
+      {selectedVenues.length > 0 ? (
+        <div className="flex flex-wrap gap-1.5">
+          {visibleChips.map((venue) => (
+            <span
+              key={venue.id}
+              className="inline-flex max-w-full items-center gap-1 rounded-full border border-[var(--hair)] bg-[var(--paper-tint)] px-2 py-1 text-xs text-[var(--ink)]"
             >
-              Select all pubs ({pubs.length})
-            </Button>
-            <Button type="button" variant="ghost" size="sm" onClick={clear} disabled={disabled || selected.size === 0}>
-              Clear
-            </Button>
-            <span className="ml-auto text-xs text-subtle">Selected {selected.size}</span>
+              <span className="truncate">{venue.name}</span>
+              {venue.id === primaryId ? (
+                <span className="font-brand-mono text-[0.55rem] uppercase tracking-[0.06em] text-[var(--ink-soft)]">Host</span>
+              ) : null}
+              <button
+                type="button"
+                className="rounded-full p-0.5 text-[var(--ink-soft)] hover:bg-[var(--canvas-2)] hover:text-[var(--ink)]"
+                onClick={() => remove(venue.id)}
+                disabled={disabled}
+                aria-label={`Remove ${venue.name}`}
+              >
+                <X className="h-3 w-3" aria-hidden="true" />
+              </button>
+            </span>
+          ))}
+          {hiddenChipCount > 0 ? (
+            <span className="inline-flex items-center rounded-full border border-[var(--hair)] bg-[var(--paper)] px-2 py-1 text-xs text-subtle">
+              +{hiddenChipCount} more
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+
+      {isOpen ? (
+        <div
+          id={panelId}
+          className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-[10px] border border-[var(--hair)] bg-[var(--paper)] shadow-card"
+        >
+          <div className="space-y-2 border-b border-[var(--hair)] p-2.5">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--ink-soft)]" aria-hidden="true" />
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search venues"
+                className="h-8 w-full rounded-[7px] border border-[var(--hair)] bg-[var(--paper)] pl-8 pr-3 text-sm text-[var(--ink)] outline-none placeholder:text-[var(--ink-soft)] focus:border-[var(--mustard)] focus:ring-2 focus:ring-[var(--mustard-tint)]"
+                disabled={disabled}
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1.5">
+              {allowEmpty ? (
+                <button
+                  type="button"
+                  className={cn(
+                    "inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition",
+                    selectedIds.length === 0
+                      ? "border-[var(--mustard)] bg-[var(--mustard-tint)] text-[var(--mustard-dark)]"
+                      : "border-[var(--hair)] bg-[var(--paper)] text-[var(--ink-muted)] hover:bg-[var(--paper-tint)]"
+                  )}
+                  onClick={() => selectPreset([])}
+                  disabled={disabled}
+                >
+                  <Globe2 className="h-3.5 w-3.5" aria-hidden="true" />
+                  {emptyLabel}
+                </button>
+              ) : null}
+              <PickerPreset
+                icon={<Building2 className="h-3.5 w-3.5" aria-hidden="true" />}
+                label={`All venues (${selectableVenues.length})`}
+                onClick={() => selectPreset(selectableVenues.map((venue) => venue.id))}
+                disabled={disabled || selectableVenues.length === 0}
+              />
+              <PickerPreset
+                icon={<Store className="h-3.5 w-3.5" aria-hidden="true" />}
+                label={`Pubs (${pubs.length})`}
+                onClick={() => selectPreset(pubs.map((venue) => venue.id))}
+                disabled={disabled || pubs.length === 0}
+              />
+              {cafes.length > 0 ? (
+                <PickerPreset
+                  label={`Cafes (${cafes.length})`}
+                  onClick={() => selectPreset(cafes.map((venue) => venue.id))}
+                  disabled={disabled}
+                />
+              ) : null}
+              <button
+                type="button"
+                className="ml-auto inline-flex h-7 items-center rounded-full px-2.5 text-xs font-medium text-[var(--ink-muted)] hover:bg-[var(--paper-tint)] hover:text-[var(--ink)] disabled:opacity-50"
+                onClick={() => selectPreset([])}
+                disabled={disabled || selectedIds.length === 0}
+              >
+                Clear
+              </button>
+            </div>
           </div>
 
-          <div className="space-y-3">
-            {renderGroup("Pubs", pubs)}
-            {renderGroup("Cafes", cafes)}
-            {renderGroup("Internal", internal)}
-            {venues.length === 0 ? (
-              <p className="text-sm text-subtle">No venues configured.</p>
+          <div className="max-h-72 space-y-3 overflow-y-auto p-2.5">
+            {allowEmpty && selectedIds.length === 0 ? (
+              <div className="rounded-[8px] border border-dashed border-[var(--hair)] bg-[var(--paper-tint)] px-3 py-2 text-xs text-subtle">
+                <span className="font-medium text-[var(--ink)]">{emptyLabel}</span> is currently active.
+              </div>
             ) : null}
+            {groupedVenues.map(renderGroup)}
+            {noMatches ? (
+              <p className="rounded-[8px] border border-[var(--hair)] bg-[var(--paper-tint)] px-3 py-6 text-center text-sm text-subtle">
+                No venues match that search.
+              </p>
+            ) : null}
+            {venues.length === 0 ? (
+              <p className="rounded-[8px] border border-[var(--hair)] bg-[var(--paper-tint)] px-3 py-6 text-center text-sm text-subtle">
+                No venues configured.
+              </p>
+            ) : null}
+          </div>
+
+          <div className="flex items-center justify-between gap-2 border-t border-[var(--hair)] bg-[var(--paper-tint)] px-2.5 py-2">
+            <span className="font-brand-mono text-[0.63rem] font-semibold uppercase tracking-[0.08em] text-[var(--ink-soft)]">
+              {selectedIds.length === 0 ? (allowEmpty ? emptyLabel : "None selected") : `${selectedIds.length} selected`}
+            </span>
+            <Button type="button" variant="subtle" size="sm" onClick={() => setIsOpen(false)}>
+              Done
+            </Button>
           </div>
         </div>
       ) : null}
@@ -183,5 +397,29 @@ export function VenueMultiSelect({
         </>
       ) : null}
     </div>
+  );
+}
+
+function PickerPreset({
+  label,
+  icon,
+  onClick,
+  disabled
+}: {
+  label: string;
+  icon?: ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      className="inline-flex h-7 items-center gap-1.5 rounded-full border border-[var(--hair)] bg-[var(--paper)] px-2.5 text-xs font-medium text-[var(--ink-muted)] transition hover:bg-[var(--paper-tint)] hover:text-[var(--ink)] disabled:cursor-not-allowed disabled:opacity-50"
+      onClick={onClick}
+      disabled={disabled}
+    >
+      {icon}
+      {label}
+    </button>
   );
 }

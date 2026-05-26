@@ -739,6 +739,9 @@ export function EventForm({
               selectedIds={selectedVenueIds}
               onChange={handleVenueMultiChange}
               hiddenFieldName="venueIds"
+              allowEmpty={false}
+              placeholder="Choose host venue"
+              primaryVenueId={selectedVenueId}
             />
           </>
         ) : canChooseVenue ? (

@@ -79,6 +79,8 @@ export function ProposeEventForm({ venues, defaultVenueId }: ProposeEventFormPro
           selectedIds={selectedVenueIds}
           onChange={setSelectedVenueIds}
           hiddenFieldName="venueIds"
+          allowEmpty={false}
+          placeholder="Choose venues"
         />
         {selectedVenueIds.length === 0 ? (
           <p className="text-xs text-[var(--burgundy)]">Pick at least one venue.</p>
