@@ -28,6 +28,7 @@ function expectedAuthMarkers(routePath: string): string[] | null {
   const exactRoutes: Record<string, string[]> = {
     "src/app/api/auth/session-check/route.ts": ["validateSessionWithRotation", "getUser"],
     "src/app/api/bookings/payment/create-order/route.ts": ["checkBookingRateLimit", "verifyTurnstile"],
+    "src/app/api/search/route.ts": ["withAuth", "searchWorkspace"],
     "src/app/api/webhooks/stripe/route.ts": ["stripe-signature", "handleStripeWebhook"],
     "src/app/api/webhooks/twilio-inbound/route.ts": ["validateTwilioRequest"]
   };

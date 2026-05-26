@@ -40,6 +40,14 @@ type AppTopBarProps = {
   mobileNav?: ReactNode;
 };
 
+type SearchResult = {
+  id: string;
+  label: string;
+  meta: string;
+  href: string;
+  type: string;
+};
+
 const roleDisplayNames: Record<string, string> = {
   administrator: "Administrator",
   office_worker: "Office Worker",
@@ -84,6 +92,20 @@ function formatRole(role: string): string {
   return roleDisplayNames[role] ?? role.replace(/_/g, " ");
 }
 
+function mergeSearchResults(localResults: SearchResult[], remoteResults: SearchResult[]): SearchResult[] {
+  const seen = new Set<string>();
+  const results: SearchResult[] = [];
+
+  for (const result of [...localResults, ...remoteResults]) {
+    const key = `${result.type}:${result.href}:${result.label}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    results.push(result);
+  }
+
+  return results.slice(0, 12);
+}
+
 export function AppTopBar({
   user,
   sections,
@@ -99,6 +121,9 @@ export function AppTopBar({
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [remoteSearchResults, setRemoteSearchResults] = useState<SearchResult[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [notificationsRead, setNotificationsRead] = useState(false);
@@ -167,7 +192,7 @@ export function AppTopBar({
 
   const unreadCount = notificationsRead ? 0 : notifications.filter((row) => row.unread).length;
 
-  const searchResults = useMemo(() => {
+  const localSearchResults = useMemo<SearchResult[]>(() => {
     const needle = query.trim().toLowerCase();
     const navMatches = navRows
       .filter((row) => !needle || `${row.label} ${row.group} ${row.href}`.toLowerCase().includes(needle))
@@ -193,6 +218,56 @@ export function AppTopBar({
 
     return [...navMatches, ...todoMatches].slice(0, 12);
   }, [navRows, query, todos]);
+
+  const searchResults = useMemo(
+    () => mergeSearchResults(localSearchResults, remoteSearchResults),
+    [localSearchResults, remoteSearchResults]
+  );
+
+  useEffect(() => {
+    const needle = query.trim();
+    if (needle.length < 2) {
+      setRemoteSearchResults([]);
+      setSearchLoading(false);
+      setSearchError(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    setRemoteSearchResults([]);
+    setSearchLoading(true);
+    setSearchError(false);
+
+    const timeout = window.setTimeout(async () => {
+      try {
+        const response = await fetch(`/api/search?q=${encodeURIComponent(needle)}`, {
+          signal: controller.signal,
+          headers: { Accept: "application/json" },
+        });
+
+        if (!response.ok) {
+          throw new Error(`Search request failed with ${response.status}`);
+        }
+
+        const payload = (await response.json()) as { results?: SearchResult[] };
+        setRemoteSearchResults(Array.isArray(payload.results) ? payload.results : []);
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        console.error("Workspace search failed", error);
+        setRemoteSearchResults([]);
+        setSearchError(true);
+      } finally {
+        if (!controller.signal.aborted) {
+          setSearchLoading(false);
+        }
+      }
+    }, 180);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeout);
+    };
+  }, [query]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -289,7 +364,17 @@ export function AppTopBar({
                       <span className="font-brand-mono text-[0.625rem] uppercase tracking-[0.08em] text-[var(--ink-soft)]">{result.type}</span>
                     </button>
                   ))}
+                  {searchLoading ? (
+                    <p className="border-t border-[var(--hair)] px-3 py-2 text-xs text-[var(--ink-muted)]">Searching records...</p>
+                  ) : null}
+                  {searchError ? (
+                    <p className="border-t border-[var(--hair)] px-3 py-2 text-xs text-[var(--burgundy)]">Record search is unavailable.</p>
+                  ) : null}
                 </div>
+              ) : searchLoading ? (
+                <p className="px-3 py-6 text-center text-sm text-[var(--ink-muted)]">Searching records...</p>
+              ) : searchError ? (
+                <p className="px-3 py-6 text-center text-sm text-[var(--burgundy)]">Record search is unavailable.</p>
               ) : (
                 <p className="px-3 py-6 text-center text-sm text-[var(--ink-muted)]">No matches.</p>
               )}
