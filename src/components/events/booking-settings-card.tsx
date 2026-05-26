@@ -115,15 +115,15 @@ export function BookingSettingsCard({
 
   return (
     <Card>
-      <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--navy)] px-6 py-3">
+      <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--navy)] px-4 py-2.5">
         <CardTitle className="text-sm font-semibold uppercase tracking-wider !text-white">Booking settings</CardTitle>
       </CardHeader>
-      <CardContent>
-        <p className="mb-4 text-sm text-muted">
+      <CardContent className="p-3">
+        <p className="mb-3 text-sm text-muted">
           Enable online bookings to get a public landing page at{" "}
           <span className="font-mono text-xs">{LANDING_BASE}/…</span>
         </p>
-        <form ref={formRef} onSubmit={handleSave} className="space-y-5" noValidate>
+        <form ref={formRef} onSubmit={handleSave} className="space-y-3" noValidate>
           {bookingFormat ? (
             <div className="rounded-[var(--radius)] border border-[var(--hair)] bg-[var(--canvas-2)] px-3 py-2 text-xs text-subtle">
               <span className="font-semibold text-[var(--ink)]">{BOOKING_FORMAT_LABELS[bookingFormat]}</span>
@@ -159,7 +159,7 @@ export function BookingSettingsCard({
 
           {/* Landing page URL — read-only, shown once slug exists and booking is enabled */}
           {bookingEnabled && landingUrl ? (
-            <div className="space-y-2">
+            <div className="space-y-1">
               <FieldLabel help="Share this link so guests can book tickets.">
                 Landing page URL
               </FieldLabel>
@@ -196,7 +196,7 @@ export function BookingSettingsCard({
           ) : null}
 
           {/* External booking link — short-circuits the local landing page when set */}
-          <div className="space-y-2">
+          <div className="space-y-1">
             <FieldLabel
               htmlFor="bookingUrl"
               help={
@@ -219,7 +219,7 @@ export function BookingSettingsCard({
           </div>
 
           {/* Total capacity */}
-          <div className="space-y-2">
+          <div className="space-y-1">
             <FieldLabel htmlFor="totalCapacity" help="Leave blank for unlimited tickets.">
               Total capacity
             </FieldLabel>
@@ -235,7 +235,7 @@ export function BookingSettingsCard({
           </div>
 
           {/* Max tickets per booking */}
-          <div className="space-y-2">
+          <div className="space-y-1">
             <FieldLabel htmlFor="maxTicketsPerBooking" help="Maximum number of tickets a single booking can include.">
               Max tickets per booking
             </FieldLabel>
@@ -251,7 +251,7 @@ export function BookingSettingsCard({
             />
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-1">
             <div className="flex items-center gap-3">
               <button
                 id="bookingNotesEnabled"
@@ -283,7 +283,7 @@ export function BookingSettingsCard({
 
           {/* Promotional SMS toggle — administrators only */}
           {userRole === "administrator" && (
-            <div className="space-y-2">
+            <div className="space-y-1">
               <div className="flex items-center gap-3">
                 <button
                   id="smsPromoEnabled"

@@ -704,8 +704,8 @@ export function EventForm({
   // ─── Shared field blocks (used in both tabbed and legacy layouts) ──────────
 
   const titleAndVenueFields = (
-    <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_260px]">
-      <div className="space-y-2">
+    <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="space-y-1">
         <FieldLabel htmlFor="title" help="This is the headline guests will see on the website and in reviewer dashboards.">
           Event title
         </FieldLabel>
@@ -726,7 +726,7 @@ export function EventForm({
         />
         <FieldError id="title-error" message={fieldErrors.title} />
       </div>
-      <div className="space-y-2">
+      <div className="space-y-1">
         <FieldLabel
           htmlFor="venueId"
           help={
@@ -743,7 +743,6 @@ export function EventForm({
               venues={venues.map((venue) => ({
                 id: venue.id,
                 name: venue.name,
-                 
                 category: (venue as any).category === "cafe" ? "cafe" : "pub",
                 isInternal: Boolean((venue as any).is_internal)
               } satisfies VenueOption))}
@@ -796,7 +795,7 @@ export function EventForm({
   );
 
   const eventTypeField = (
-    <div className="space-y-2">
+    <div className="space-y-1">
         <FieldLabel
           htmlFor="eventType"
           help={
@@ -833,14 +832,14 @@ export function EventForm({
   );
 
   const notesField = (
-    <div className="space-y-2">
+    <div className="space-y-1">
       <FieldLabel htmlFor="eventDetails" help="Include anything a guest would want to know: what is happening, timings, promos, and key moments.">
         Event details
       </FieldLabel>
       <Textarea
         id="eventDetails"
         name="notes"
-        rows={5}
+        rows={4}
         value={eventNotes}
         onChange={(event) => setEventNotes(event.target.value)}
         placeholder="Add all the details about the event here — it doesn't need to be structured."
@@ -857,7 +856,7 @@ export function EventForm({
   );
 
   const managerResponsibleField = (
-    <div className="space-y-2">
+    <div className="space-y-1">
       <FieldLabel htmlFor="managerResponsibleId" help="The on-site manager accountable for this event.">
         Manager Responsible
       </FieldLabel>
@@ -880,7 +879,7 @@ export function EventForm({
   );
 
   const artistsField = (
-    <div className="space-y-2">
+    <div className="space-y-1">
       <FieldLabel htmlFor="artistNames" help="Only linked artists are saved. If you are unsure, leave this blank and add them later.">
         Artists / bands / hosts
       </FieldLabel>
@@ -907,8 +906,8 @@ export function EventForm({
   );
 
   const timingFields = (
-    <div className="grid gap-4 md:grid-cols-2">
-      <div className="space-y-2">
+    <div className="grid gap-3 md:grid-cols-2">
+      <div className="space-y-1">
         <FieldLabel htmlFor="startAt" help="When guests are expected to arrive or the activity begins.">
           Starts
         </FieldLabel>
@@ -929,7 +928,7 @@ export function EventForm({
         />
         <FieldError id="start-at-error" message={fieldErrors.startAt} />
       </div>
-      <div className="space-y-2">
+      <div className="space-y-1">
         <FieldLabel htmlFor="endAt" help="Auto-fills three hours after the start. Adjust if the event runs longer or shorter.">
           Ends
         </FieldLabel>
@@ -954,7 +953,7 @@ export function EventForm({
   );
 
   const spacesField = (
-    <div className="space-y-2">
+    <div className="space-y-1">
       <FieldLabel htmlFor="venueSpace" help="Enter the specific areas or rooms being used.">
         Spaces
       </FieldLabel>
@@ -978,7 +977,7 @@ export function EventForm({
   );
 
   const eventImageField = (
-    <div className="space-y-2">
+    <div className="space-y-1">
       <FieldLabel htmlFor="eventImage" help="Add a hero image to strengthen event listings and social shares.">
         Event image (optional)
       </FieldLabel>
@@ -992,8 +991,8 @@ export function EventForm({
   );
 
   const promosFields = (
-    <div className="grid gap-4 md:grid-cols-2">
-      <div className="space-y-2">
+    <div className="grid gap-3 md:grid-cols-2">
+      <div className="space-y-1">
         <FieldLabel htmlFor="wetPromo" help="Use this when the event is expected to drive wet sales. Note any key drink offers.">
           Wet promotion
         </FieldLabel>
@@ -1004,7 +1003,7 @@ export function EventForm({
           placeholder="Two-for-one cocktails, guest brewery taps"
         />
       </div>
-      <div className="space-y-2">
+      <div className="space-y-1">
         <FieldLabel htmlFor="foodPromo" help="List any paired food promotions or add-ons.">
           Food promotion
         </FieldLabel>
@@ -1019,7 +1018,7 @@ export function EventForm({
   );
 
   const headcountField = (
-    <div className="space-y-2">
+    <div className="space-y-1">
       <FieldLabel htmlFor="expectedHeadcount" help="Rough numbers help planning for staffing, stock, and floor setup.">
         Expected headcount
       </FieldLabel>
@@ -1035,8 +1034,8 @@ export function EventForm({
   );
 
   const bookingFields = (
-    <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px]">
-      <div className="space-y-2">
+    <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
+      <div className="space-y-1">
         <FieldLabel htmlFor="bookingType" help="This drives AI copy so guests understand how to secure their place.">
           Booking format
         </FieldLabel>
@@ -1061,7 +1060,7 @@ export function EventForm({
         </Select>
         <FieldError id="booking-type-error" message={fieldErrors.bookingType} />
       </div>
-      <div className="space-y-2">
+      <div className="space-y-1">
         <FieldLabel
           htmlFor="ticketPrice"
           help={
@@ -1100,8 +1099,8 @@ export function EventForm({
   );
 
   const cutoffAndCancellationFields = (
-    <div className="grid gap-4 md:grid-cols-2">
-      <div className="space-y-2">
+    <div className="grid gap-3 md:grid-cols-2">
+      <div className="space-y-1">
         <FieldLabel htmlFor="checkInCutoffMinutes" help="Use minutes before start time. Example: 30 means check-in closes 30 minutes before the event starts.">
           Last admission / check-in cutoff (minutes)
         </FieldLabel>
@@ -1125,7 +1124,7 @@ export function EventForm({
         />
         <FieldError id="check-in-cutoff-error" message={fieldErrors.checkInCutoffMinutes} />
       </div>
-      <div className="space-y-2">
+      <div className="space-y-1">
         <FieldLabel
           htmlFor="cancellationWindowHours"
           help={isFreeBookingSelected ? "Optional for free-entry events." : "Required for bookable events so guests get a clear cancellation/refund policy."}
@@ -1156,8 +1155,8 @@ export function EventForm({
   );
 
   const agePolicyAndAccessibilityFields = (
-    <div className="grid gap-4 md:grid-cols-2">
-      <div className="space-y-2">
+    <div className="grid gap-3 md:grid-cols-2">
+      <div className="space-y-1">
         <FieldLabel htmlFor="agePolicy" help="Use clear guest-facing wording that door staff can enforce consistently.">
           Age policy
         </FieldLabel>
@@ -1178,14 +1177,14 @@ export function EventForm({
         />
         <FieldError id="age-policy-error" message={fieldErrors.agePolicy} />
       </div>
-      <div className="space-y-2">
+      <div className="space-y-1">
         <FieldLabel htmlFor="accessibilityNotes" help="Add event-specific accessibility information so guests can plan confidently.">
           Accessibility notes
         </FieldLabel>
         <Textarea
           id="accessibilityNotes"
           name="accessibilityNotes"
-          rows={3}
+          rows={2}
           value={accessibilityNotes}
           onChange={(event) => setAccessibilityNotes(event.target.value)}
           placeholder="Wheelchair access route, seating support, hearing loop details, etc."
@@ -1203,7 +1202,7 @@ export function EventForm({
   );
 
   const termsField = (
-    <div className="space-y-2">
+    <div className="space-y-1">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <FieldLabel htmlFor="termsAndConditions" help="Keep this guest-safe and policy-focused: booking, cancellation, arrival, age policy, and accessibility.">
           Terms & conditions
@@ -1221,7 +1220,7 @@ export function EventForm({
       <Textarea
         id="termsAndConditions"
         name="termsAndConditions"
-        rows={5}
+        rows={4}
         value={termsAndConditions}
         onChange={(event) => setTermsAndConditions(event.target.value)}
         placeholder="Add guest-facing terms and conditions."
@@ -1238,10 +1237,10 @@ export function EventForm({
   );
 
   const financialsSection = (
-    <div className="space-y-4 rounded-lg bg-[var(--paper-tint)] p-4">
+    <div className="space-y-3 rounded-lg bg-[var(--paper-tint)] p-3">
       <h3 className="font-semibold text-[var(--ink)]">Financials</h3>
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="space-y-2">
+      <div className="grid gap-3 md:grid-cols-2">
+        <div className="space-y-1">
           <Label htmlFor="costTotal">Total predicted cost (£)</Label>
           <Input
             id="costTotal"
@@ -1253,7 +1252,7 @@ export function EventForm({
             placeholder="e.g. 500.00"
           />
         </div>
-        <div className="space-y-2">
+        <div className="space-y-1">
           <Label htmlFor="costDetails">Cost details</Label>
           <Textarea
             id="costDetails"
@@ -1272,13 +1271,11 @@ export function EventForm({
       <FieldLabel help="Select the goals that matter for this event. Pick as many as apply.">
         Goals
       </FieldLabel>
-      <div className="grid gap-2 sm:grid-cols-2">
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {EVENT_GOALS.map((option) => (
           <label
             key={option.value}
-            className="flex items-center gap-2 text-sm text-[var(--ink)]"
-            title={option.helper}
-            aria-label={`${option.label}. ${option.helper}`}
+            className="flex min-w-0 cursor-pointer items-start gap-2 rounded-md border border-[var(--hair)] bg-white px-3 py-2 text-sm text-[var(--ink)] transition hover:border-[var(--mustard)] hover:bg-[var(--paper-tint)]"
           >
             <input
               type="checkbox"
@@ -1286,9 +1283,12 @@ export function EventForm({
               value={option.value}
               checked={selectedGoals.has(option.value)}
               onChange={(event) => toggleGoal(option.value, event.target.checked)}
-              className="h-4 w-4 rounded border-[var(--hair)] text-[var(--navy)] focus:ring-[var(--slate)]"
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border-[var(--hair)] text-[var(--navy)] focus:ring-[var(--slate)]"
             />
-            <span className="font-medium">{option.label}</span>
+            <span className="min-w-0">
+              <span className="block font-medium leading-5">{option.label}</span>
+              <span className="mt-0.5 block text-xs leading-4 text-subtle">{option.helper}</span>
+            </span>
           </label>
         ))}
       </div>
@@ -1297,7 +1297,7 @@ export function EventForm({
 
   const websiteFields = (
     <>
-      <div className="space-y-2">
+      <div className="space-y-1">
         <Label htmlFor="publicTitle">Public name</Label>
         <Input
           id="publicTitle"
@@ -1316,7 +1316,7 @@ export function EventForm({
         <FieldError id="public-title-error" message={fieldErrors.publicTitle} />
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-1">
         <Label htmlFor="publicTeaser">Teaser</Label>
         <Input
           id="publicTeaser"
@@ -1335,14 +1335,14 @@ export function EventForm({
         <FieldError id="public-teaser-error" message={fieldErrors.publicTeaser} />
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-1">
         <FieldLabel htmlFor="publicHighlights" help="One highlight per line. Keep each line concise so guests can scan the USP quickly.">
           Event Highlights
         </FieldLabel>
         <Textarea
           id="publicHighlights"
           name="publicHighlights"
-          rows={4}
+          rows={3}
           value={publicHighlights}
           onChange={(event) => setPublicHighlights(event.target.value)}
           placeholder="- Live entertainment from 8pm&#10;- Signature cocktails and food pairings&#10;- Limited spaces, advance booking advised"
@@ -1357,14 +1357,14 @@ export function EventForm({
         <FieldError id="public-highlights-error" message={fieldErrors.publicHighlights} />
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-1">
         <FieldLabel htmlFor="publicDescription" help="Write as if a guest is reading this on the website.">
           Public description
         </FieldLabel>
         <Textarea
           id="publicDescription"
           name="publicDescription"
-          rows={9}
+          rows={7}
           value={publicDescription}
           onChange={(event) => setPublicDescription(event.target.value)}
           placeholder="~300 words designed to drive urgency and bookings."
@@ -1379,10 +1379,10 @@ export function EventForm({
         <FieldError id="public-description-error" message={fieldErrors.publicDescription} />
       </div>
 
-      <div className="space-y-4 rounded-lg bg-[var(--paper-tint)] p-4">
+      <div className="space-y-3 rounded-lg bg-[var(--paper-tint)] p-3">
         <h3 className="font-semibold text-[var(--ink)]">SEO metadata</h3>
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="space-y-1">
             <Label htmlFor="seoTitle">SEO title</Label>
             <Input
               id="seoTitle"
@@ -1400,7 +1400,7 @@ export function EventForm({
             />
             <FieldError id="seo-title-error" message={fieldErrors.seoTitle} />
           </div>
-          <div className="space-y-2">
+          <div className="space-y-1">
             <Label htmlFor="seoSlug">SEO slug</Label>
             <Input
               id="seoSlug"
@@ -1419,12 +1419,12 @@ export function EventForm({
             <FieldError id="seo-slug-error" message={fieldErrors.seoSlug} />
           </div>
         </div>
-        <div className="space-y-2">
+        <div className="space-y-1">
           <Label htmlFor="seoDescription">SEO description</Label>
           <Textarea
             id="seoDescription"
             name="seoDescription"
-            rows={3}
+            rows={2}
             value={seoDescription}
             onChange={(event) => setSeoDescription(event.target.value)}
             placeholder="Include the date, e.g. Join us at The Cricketers for Quiz Night on 6 Jan 2026."
@@ -1468,9 +1468,9 @@ export function EventForm({
         </div>
 
         <div className="grid gap-5 p-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-          <div className="space-y-4">
+          <div className="space-y-3">
             <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px]">
-              <div className="space-y-2">
+              <div className="space-y-1">
                 <Label htmlFor="artist-search">Search artists</Label>
                 <Input
                   id="artist-search"
@@ -1479,7 +1479,7 @@ export function EventForm({
                   placeholder="Search by name, contact, or description"
                 />
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1">
                 <Label htmlFor="artist-type-filter">Filter by type</Label>
                 <Select
                   id="artist-type-filter"
@@ -1688,8 +1688,8 @@ export function EventForm({
           <input type="hidden" name="agePolicy" value={agePolicy} />
           <input type="hidden" name="accessibilityNotes" value={accessibilityNotes} />
 
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="space-y-2">
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="space-y-1">
               <Label htmlFor="allowsWalkIns">Allow walk-ins?</Label>
               <Select
                 id="allowsWalkIns"
@@ -1702,7 +1702,7 @@ export function EventForm({
                 <option value="no">No</option>
               </Select>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1">
               <Label htmlFor="refundAllowed">Allow refunds?</Label>
               <Select
                 id="refundAllowed"
@@ -1715,7 +1715,7 @@ export function EventForm({
                 <option value="no">No</option>
               </Select>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1">
               <Label htmlFor="rescheduleAllowed">Allow reschedules?</Label>
               <Select
                 id="rescheduleAllowed"
@@ -1730,7 +1730,7 @@ export function EventForm({
             </div>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-1">
             <Label htmlFor="extraNotes">Extra policy notes</Label>
             <Textarea
               id="extraNotes"
@@ -1800,20 +1800,20 @@ export function EventForm({
 
         <fieldset disabled={isPending || readOnly} className="disabled:opacity-60">
           {/* Two-column layout */}
-          <div className="grid gap-6 lg:grid-cols-2">
+          <div className="grid gap-4 lg:grid-cols-2">
             {/* Left column: Event Details */}
             <Card>
-              <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--navy)] px-6 py-3">
+              <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--navy)] px-4 py-2.5">
                 <CardTitle className="text-sm font-semibold uppercase tracking-wider !text-white">
                   Event Details
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-3 p-3">
                 {/* Row 1: Title + Venue (side by side — already a grid) */}
                 {titleAndVenueFields}
 
                 {/* Row 2: Event type + Manager side by side */}
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid gap-3 md:grid-cols-2">
                   <div>{eventTypeField}</div>
                   <div>{managerResponsibleField}</div>
                 </div>
@@ -1822,7 +1822,7 @@ export function EventForm({
                 {timingFields}
 
                 {/* Row 4: Spaces + Artists side by side */}
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid gap-3 md:grid-cols-2">
                   <div>{spacesField}</div>
                   <div>{artistsField}</div>
                 </div>
@@ -1845,13 +1845,13 @@ export function EventForm({
           </div>
 
           {/* Lower: Booking & Ticketing */}
-          <Card className="mt-6">
-            <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--navy)] px-6 py-3">
+          <Card className="mt-4">
+            <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--navy)] px-4 py-2.5">
               <CardTitle className="text-sm font-semibold uppercase tracking-wider !text-white">
                 Booking &amp; Ticketing
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-3 p-3">
               {promosFields}
               {headcountField}
               {bookingFields}

@@ -8,32 +8,32 @@ export const EVENT_GOALS: EventGoal[] = [
   {
     value: "grow_sales",
     label: "Grow sales",
-    helper: "Use when the event aims to increase revenue or average spend."
+    helper: "Pick this when the event should bring in more sales or higher spend."
   },
   {
     value: "guest_data",
     label: "Drive guest data collection",
-    helper: "Perfect for loyalty sign-ups, email capture, or surveys."
+    helper: "Pick this when you want guests to sign up, share contact details, or answer a survey."
   },
   {
     value: "guest_engagement",
     label: "Drive guest engagement",
-    helper: "Focus on keeping guests entertained and staying longer."
+    helper: "Pick this when the main aim is to keep guests involved and enjoying the visit."
   },
   {
     value: "community",
     label: "Boost community presence",
-    helper: "Charity nights, local partnerships, or neighbourhood outreach."
+    helper: "Pick this for charity nights, local groups, community events, or neighbourhood partnerships."
   },
   {
     value: "staff_development",
     label: "Staff development",
-    helper: "Training sessions or shadows that build team skills."
+    helper: "Pick this when the event helps the team learn, practise, or build confidence."
   },
   {
     value: "brand_partnerships",
     label: "Strengthen brand partnerships",
-    helper: "Supplier collaborations, co-branded promotions, or launches."
+    helper: "Pick this when a supplier or brand is involved and you want to build that relationship."
   }
 ];
 
