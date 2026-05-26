@@ -26,11 +26,11 @@ type VenuesManagerProps = {
   users: UserOption[];
 };
 
-const errorInputClass = "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]";
+const errorInputClass = "!border-[var(--burgundy)] focus-visible:!border-[var(--burgundy)]";
 
 export function VenuesManager({ venues, reviewers, users }: VenuesManagerProps) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <VenueCreateForm reviewers={reviewers} users={users} />
       <VenueTable venues={venues} reviewers={reviewers} users={users} />
     </div>
@@ -83,7 +83,7 @@ function VenueCreateForm({ reviewers, users }: { reviewers: ReviewerOption[]; us
             </Select>
           </div>
           <div className="flex items-end pb-2">
-            <label className="flex items-center gap-2 text-sm text-[var(--color-text)]">
+            <label className="flex items-center gap-2 text-sm text-[var(--ink)]">
               <input type="checkbox" name="isInternal" className="h-4 w-4" />
               Internal
             </label>
@@ -134,10 +134,10 @@ function VenueTable({ venues, reviewers, users }: VenuesManagerProps) {
   }
 
   return (
-    <div className="overflow-x-auto rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-white shadow-soft">
-      <table className="min-w-full border-collapse">
+    <div className="data-table-shell">
+      <table className="data-table min-w-full">
         <thead>
-          <tr className="bg-[var(--color-muted-surface)] text-left text-xs font-semibold uppercase tracking-[0.14em] text-subtle">
+          <tr className="bg-[var(--canvas-2)] text-left text-xs font-semibold uppercase tracking-[0.14em] text-subtle">
             <th scope="col" className="px-4 py-3">Venue</th>
             <th scope="col" className="px-4 py-3">Category</th>
             <th scope="col" className="px-4 py-3">Internal</th>
@@ -188,7 +188,7 @@ function VenueRowEditor({ venue, reviewers, users }: { venue: VenueRow; reviewer
   }, [deleteState, router]);
 
   return (
-    <tr className="border-t border-[var(--color-border)]">
+    <tr className="border-t border-[var(--hair)]">
       <td colSpan={8} className="px-4 py-3">
         <div className="grid gap-3 md:grid-cols-[minmax(0,16fr)_minmax(0,10fr)_minmax(0,8fr)_minmax(0,16fr)_minmax(0,14fr)_minmax(0,24fr)_auto_auto] md:items-start">
           <form id={`venue-form-${venue.id}`} action={formAction} className="contents" noValidate>
@@ -223,7 +223,7 @@ function VenueRowEditor({ venue, reviewers, users }: { venue: VenueRow; reviewer
               </Select>
             </div>
             <div className="flex items-center">
-              <label className="flex items-center gap-2 text-sm text-[var(--color-text)]">
+              <label className="flex items-center gap-2 text-sm text-[var(--ink)]">
                 <input
                   type="checkbox"
                   name="isInternal"

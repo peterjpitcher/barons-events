@@ -23,7 +23,7 @@ type ArtistsManagerProps = {
 type ArtistSortKey = "name" | "artistType" | "eventCount" | "averageSalesUpliftPercent" | "averageSentimentScore" | "effectivenessScore";
 type SortDirection = "asc" | "desc";
 
-const errorInputClass = "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]";
+const errorInputClass = "!border-[var(--burgundy)] focus-visible:!border-[var(--burgundy)]";
 
 function formatPercent(value: number | null): string {
   if (value === null || Number.isNaN(value)) return "—";
@@ -129,7 +129,7 @@ export function ArtistsManager({ artists, canEdit = false }: ArtistsManagerProps
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {canEdit ? (
         <Card>
           <CardHeader>
@@ -196,14 +196,14 @@ export function ArtistsManager({ artists, canEdit = false }: ArtistsManagerProps
         </Card>
       ) : null}
 
-      <div className="overflow-x-auto rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-white shadow-soft">
-        <table className="min-w-full border-collapse">
+      <div className="data-table-shell">
+        <table className="data-table min-w-full">
           <thead>
-            <tr className="bg-[var(--color-muted-surface)] text-left text-xs font-semibold uppercase tracking-[0.14em] text-subtle">
+            <tr className="bg-[var(--canvas-2)] text-left text-xs font-semibold uppercase tracking-[0.14em] text-subtle">
               <th className="px-4 py-3" aria-sort={ariaSort("name")}>
                 <button
                   type="button"
-                  className="inline-flex items-center gap-1 hover:text-[var(--color-text)]"
+                  className="inline-flex items-center gap-1 hover:text-[var(--ink)]"
                   onClick={() => toggleSort("name")}
                 >
                   Artist {sortIcon("name")}
@@ -212,7 +212,7 @@ export function ArtistsManager({ artists, canEdit = false }: ArtistsManagerProps
               <th className="px-4 py-3" aria-sort={ariaSort("artistType")}>
                 <button
                   type="button"
-                  className="inline-flex items-center gap-1 hover:text-[var(--color-text)]"
+                  className="inline-flex items-center gap-1 hover:text-[var(--ink)]"
                   onClick={() => toggleSort("artistType")}
                 >
                   Type {sortIcon("artistType")}
@@ -221,7 +221,7 @@ export function ArtistsManager({ artists, canEdit = false }: ArtistsManagerProps
               <th className="px-4 py-3" aria-sort={ariaSort("eventCount")}>
                 <button
                   type="button"
-                  className="inline-flex items-center gap-1 hover:text-[var(--color-text)]"
+                  className="inline-flex items-center gap-1 hover:text-[var(--ink)]"
                   onClick={() => toggleSort("eventCount")}
                 >
                   Events {sortIcon("eventCount")}
@@ -230,7 +230,7 @@ export function ArtistsManager({ artists, canEdit = false }: ArtistsManagerProps
               <th className="px-4 py-3" aria-sort={ariaSort("averageSalesUpliftPercent")}>
                 <button
                   type="button"
-                  className="inline-flex items-center gap-1 hover:text-[var(--color-text)]"
+                  className="inline-flex items-center gap-1 hover:text-[var(--ink)]"
                   onClick={() => toggleSort("averageSalesUpliftPercent")}
                 >
                   Avg uplift {sortIcon("averageSalesUpliftPercent")}
@@ -239,7 +239,7 @@ export function ArtistsManager({ artists, canEdit = false }: ArtistsManagerProps
               <th className="px-4 py-3" aria-sort={ariaSort("averageSentimentScore")}>
                 <button
                   type="button"
-                  className="inline-flex items-center gap-1 hover:text-[var(--color-text)]"
+                  className="inline-flex items-center gap-1 hover:text-[var(--ink)]"
                   onClick={() => toggleSort("averageSentimentScore")}
                 >
                   Sentiment {sortIcon("averageSentimentScore")}
@@ -248,7 +248,7 @@ export function ArtistsManager({ artists, canEdit = false }: ArtistsManagerProps
               <th className="px-4 py-3" aria-sort={ariaSort("effectivenessScore")}>
                 <button
                   type="button"
-                  className="inline-flex items-center gap-1 hover:text-[var(--color-text)]"
+                  className="inline-flex items-center gap-1 hover:text-[var(--ink)]"
                   onClick={() => toggleSort("effectivenessScore")}
                 >
                   Effectiveness {sortIcon("effectivenessScore")}
@@ -266,11 +266,11 @@ export function ArtistsManager({ artists, canEdit = false }: ArtistsManagerProps
               </tr>
             ) : (
               sortedArtists.map((artist) => (
-                <tr key={artist.id} className="border-t border-[var(--color-border)]">
+                <tr key={artist.id} className="border-t border-[var(--hair)]">
                   <td className="px-4 py-3 align-top">
                     <Link
                       href={`/artists/${artist.id}`}
-                      className="font-medium text-[var(--color-text)] transition-colors hover:text-[var(--color-primary-700)]"
+                      className="font-medium text-[var(--ink)] transition-colors hover:text-[var(--navy)]"
                     >
                       {artist.name}
                     </Link>
@@ -282,7 +282,7 @@ export function ArtistsManager({ artists, canEdit = false }: ArtistsManagerProps
                   <td className="px-4 py-3 text-sm">{artist.eventCount}</td>
                   <td className="px-4 py-3 text-sm">{formatPercent(artist.averageSalesUpliftPercent)}</td>
                   <td className="px-4 py-3 text-sm">{formatScore(artist.averageSentimentScore === null ? null : (artist.averageSentimentScore + 1) * 50)}</td>
-                  <td className="px-4 py-3 text-sm font-semibold text-[var(--color-primary-700)]">
+                  <td className="px-4 py-3 text-sm font-semibold text-[var(--navy)]">
                     {formatScore(artist.effectivenessScore)}
                   </td>
                   <td className="px-4 py-3 align-top text-right">

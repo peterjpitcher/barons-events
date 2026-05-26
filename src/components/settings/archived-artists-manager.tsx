@@ -32,10 +32,10 @@ export function ArchivedArtistsManager({ artists }: ArchivedArtistsManagerProps)
   }
 
   return (
-    <div className="overflow-x-auto rounded-[var(--radius)] border border-[var(--color-border)] bg-white">
-      <table className="min-w-full border-collapse">
+    <div className="data-table-shell">
+      <table className="data-table min-w-full">
         <thead>
-          <tr className="bg-[var(--color-muted-surface)] text-left text-xs font-semibold uppercase tracking-[0.14em] text-subtle">
+          <tr className="bg-[var(--canvas-2)] text-left text-xs font-semibold uppercase tracking-[0.14em] text-subtle">
             <th className="px-4 py-3">Artist</th>
             <th className="px-4 py-3">Type</th>
             <th className="px-4 py-3">Contact</th>
@@ -44,8 +44,8 @@ export function ArchivedArtistsManager({ artists }: ArchivedArtistsManagerProps)
         </thead>
         <tbody>
           {artists.map((artist) => (
-            <tr key={artist.id} className="border-t border-[var(--color-border)]">
-              <td className="px-4 py-3 text-sm font-medium text-[var(--color-text)]">{artist.name}</td>
+            <tr key={artist.id} className="border-t border-[var(--hair)]">
+              <td className="px-4 py-3 text-sm font-medium text-[var(--ink)]">{artist.name}</td>
               <td className="px-4 py-3 text-sm">{artist.artistType}</td>
               <td className="px-4 py-3 text-sm text-subtle">{[artist.email, artist.phone].filter(Boolean).join(" · ") || "No contact info"}</td>
               <td className="px-4 py-3 text-right">

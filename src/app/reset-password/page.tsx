@@ -2,8 +2,8 @@ import { AuthLayout } from "@/components/auth/auth-layout";
 import { ResetPasswordCard } from "./reset-password-card";
 
 export const metadata = {
-  title: "Reset password · Barons Events",
-  description: "Choose a new password to regain access to BaronsHub."
+  title: "Reset password · BaronsHub 1.1",
+  description: "Choose a new password to regain access to BaronsHub 1.1."
 };
 
 export default function ResetPasswordPage() {

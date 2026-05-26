@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { DebriefForm } from "@/components/events/debrief-form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/design-primitives";
 import { getCurrentUser } from "@/lib/auth";
 import { getEventDetail } from "@/lib/events";
 import { canSubmitDebriefForEvent, canViewDebriefs } from "@/lib/roles";
@@ -51,21 +52,25 @@ export default async function DebriefPage({ params }: { params: Promise<{ eventI
   const labourRateGbp = Number(rateRow?.labour_rate_gbp ?? 12.71);
 
   return (
-    <div className="space-y-6">
+    <div className="app-page">
+      <PageHeader
+        eyebrow="Post-event report"
+        title="Post-event debrief"
+        description="Keep it clear and simple. Numbers help the planning team understand how the night performed."
+        meta={<span>{event.title}</span>}
+      />
       <Card>
         <CardHeader>
-          <CardTitle>Post-event debrief</CardTitle>
-          <CardDescription>
-            Keep it clear and simple—numbers help the planning team understand how the night performed.
-          </CardDescription>
+          <CardTitle>{event.title}</CardTitle>
+          <CardDescription>{new Date(event.start_at).toLocaleDateString("en-GB")}</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="mb-6 rounded-[var(--radius)] bg-muted-surface px-4 py-3 text-sm text-subtle">
+          <div className="mb-6 rounded-[8px] border border-[var(--hair)] bg-[var(--paper-tint)] px-4 py-3 text-sm text-subtle">
             <p>
               Event:{" "}
               <Link
                 href={`/events/${event.id}`}
-                className="font-medium text-[var(--color-text)] transition-colors hover:text-[var(--color-primary-600)]"
+                className="font-medium text-[var(--ink)] transition-colors hover:text-[var(--navy)]"
               >
                 {event.title}
               </Link>{" "}

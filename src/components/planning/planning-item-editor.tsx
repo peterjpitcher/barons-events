@@ -283,7 +283,7 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
               <div className="space-y-1">
                 <Label htmlFor="planning-item-venue">Venue</Label>
                 {isAdmin ? (
-                  <div className="rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] p-2">
+                  <div className="rounded-[var(--radius-sm)] border border-[var(--hair)] bg-[var(--paper)] p-2">
                     <VenueMultiSelect
                       venues={venues.map((venue) => ({
                         id: venue.id,
@@ -401,7 +401,7 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                 <legend className="text-xs font-semibold uppercase tracking-[0.08em] text-subtle">Weekdays</legend>
                 <div className="flex flex-wrap gap-2">
                   {WEEKDAY_OPTIONS.map((weekday) => (
-                    <label key={weekday.value} className="inline-flex items-center gap-1 rounded-full border border-[var(--color-border)] px-2 py-1 text-xs">
+                    <label key={weekday.value} className="inline-flex items-center gap-1 rounded-full border border-[var(--hair)] px-2 py-1 text-xs">
                       <input
                         type="checkbox"
                         checked={weekdays.includes(weekday.value)}
@@ -465,9 +465,9 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
               </div>
             </div>
 
-            <section className="space-y-2 rounded-[var(--radius-sm)] border border-[var(--color-border)] p-3">
+            <section className="space-y-2 rounded-[var(--radius-sm)] border border-[var(--hair)] p-3">
               <div className="flex items-center justify-between">
-                <h4 className="text-sm font-semibold text-[var(--color-text)]">Task templates</h4>
+                <h4 className="text-sm font-semibold text-[var(--ink)]">Task templates</h4>
                 <Button
                   type="button"
                   size="sm"

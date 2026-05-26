@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/ui/design-primitives";
 import { EventOverflowMenu } from "@/components/events/event-overflow-menu";
 import type { EventStatus } from "@/lib/types";
 
@@ -53,36 +54,20 @@ export function EventPageHeader({
   const displayTitle = isCreate ? "New Event" : title;
 
   return (
-    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-      {/* Left: breadcrumbs + title */}
-      <div className="min-w-0">
-        <nav
-          aria-label="Breadcrumb"
-          className="mb-1 text-sm text-[var(--color-text-muted)]"
-        >
-          <ol className="flex items-center gap-1">
-            <li>
-              <Link
-                href="/events"
-                className="hover:text-[var(--color-text)] transition-colors"
-              >
-                Events
-              </Link>
-            </li>
-            <li aria-hidden="true">&gt;</li>
-            <li className="truncate font-medium text-[var(--color-text)]">
-              {displayTitle}
-            </li>
-          </ol>
-        </nav>
-
-        <h1 className="truncate text-2xl font-bold text-[var(--color-text)]">
-          {displayTitle}
-        </h1>
-      </div>
-
-      {/* Right: status badge + overflow menu */}
-      <div className="flex shrink-0 items-center gap-3 mt-2 sm:mt-0">
+    <PageHeader
+      eyebrow={
+        <span className="inline-flex items-center gap-1">
+          <Link href="/events" className="hover:text-[var(--ink)]">
+            Events
+          </Link>
+          <span aria-hidden="true">/</span>
+          <span>{isCreate ? "New" : mode === "edit" ? "Edit" : "Detail"}</span>
+        </span>
+      }
+      title={displayTitle}
+      description={isCreate ? "Create a new event draft with venue, timing, booking, and website details." : "Review event details, workflow state, and supporting actions."}
+      actions={
+        <>
         {!isCreate && status && (
           <Badge variant={STATUS_BADGE_VARIANT[status]}>
             {STATUS_LABEL[status]}
@@ -96,7 +81,8 @@ export function EventPageHeader({
             canRevertToDraft={canRevertToDraft}
           />
         )}
-      </div>
-    </div>
+        </>
+      }
+    />
   );
 }

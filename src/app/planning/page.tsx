@@ -1,12 +1,14 @@
 import { redirect } from "next/navigation";
 import { PlanningBoard } from "@/components/planning/planning-board";
 import { getCurrentUser } from "@/lib/auth";
+import { getDashboardTodoItems } from "@/lib/dashboard";
 import { listPlanningBoardData } from "@/lib/planning";
+import { londonDateString } from "@/lib/planning/utils";
 import { listVenues } from "@/lib/venues";
 import { canReviewEvents, canViewPlanning } from "@/lib/roles";
 
 export const metadata = {
-  title: "Planning · BaronsHub",
+  title: "Planning · BaronsHub 1.1",
   description: "Manage operational planning in 30/60/90 windows with recurring templates and tasks."
 };
 
@@ -20,7 +22,7 @@ export default async function PlanningPage() {
     redirect("/unauthorized");
   }
 
-  const [venues, boardData, calendarData] = await Promise.all([
+  const [venues, boardData, calendarData, queueResult] = await Promise.all([
     listVenues(),
     listPlanningBoardData({
       user,
@@ -35,7 +37,8 @@ export default async function PlanningPage() {
       today: new Date(),
       unbounded: true,
       includeAllStatuses: true
-    })
+    }),
+    getDashboardTodoItems(user, londonDateString()).catch(() => ({ items: [], errors: [] }))
   ]);
   const visibleVenues =
     user.role === "office_worker" && user.venueId
@@ -57,6 +60,7 @@ export default async function PlanningPage() {
       userRole={user.role}
       currentUserId={user.id}
       currentUserVenueId={user.venueId}
+      queueItems={queueResult.items}
     />
   );
 }

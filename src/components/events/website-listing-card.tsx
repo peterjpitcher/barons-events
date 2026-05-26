@@ -18,17 +18,17 @@ export function WebsiteListingCard({
 }: WebsiteListingCardProps): ReactNode {
   return (
     <Card>
-      <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--color-primary-700)] px-6 py-3">
+      <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--navy)] px-6 py-3">
         <span className="text-sm font-semibold uppercase tracking-wider text-white">
           Website Listing
         </span>
       </CardHeader>
 
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-4">
         {websiteFields}
 
         {!readOnly && (
-          <div className="rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface-soft)] p-4">
+          <div className="rounded-[var(--radius)] border border-[var(--hair)] bg-[var(--paper-tint)] p-4">
             <p className="mb-3 text-sm text-subtle">
               {canGenerate
                 ? "Generate website copy from this event’s details using AI."

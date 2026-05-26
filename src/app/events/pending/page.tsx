@@ -2,11 +2,11 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PendingProposalRow } from "@/components/events/pending-proposal-row";
+import { PageHeader } from "@/components/ui/design-primitives";
 
 export const metadata = {
-  title: "Pending proposals · BaronsHub",
+  title: "Pending proposals · BaronsHub 1.1",
   description: "Review and approve or reject event proposals."
 };
 
@@ -70,16 +70,14 @@ export default async function PendingProposalsPage() {
   });
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Pending proposals</CardTitle>
-          <CardDescription>
-            Review quick event proposals. Approving unlocks the full event form for the creator; rejecting closes
-            the proposal with a reason.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+    <div className="app-page">
+      <PageHeader
+        eyebrow="Approvals"
+        title="Pending proposals"
+        description="Review quick event proposals. Approving unlocks the full event form for the creator; rejecting closes the proposal with a reason."
+        meta={<span>{proposals.length} proposal{proposals.length === 1 ? "" : "s"}</span>}
+      />
+      <section className="rounded-[10px] border border-[var(--hair)] bg-[var(--paper)] p-4 shadow-card">
           {proposals.length === 0 ? (
             <p className="text-sm text-subtle">No pending proposals.</p>
           ) : (
@@ -92,8 +90,7 @@ export default async function PendingProposalsPage() {
           <p className="mt-6 text-xs text-subtle">
             <Link href="/events" className="underline">← Back to events</Link>
           </p>
-        </CardContent>
-      </Card>
+      </section>
     </div>
   );
 }

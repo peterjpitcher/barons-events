@@ -13,7 +13,7 @@ export function FieldError({ id, message, className }: FieldErrorProps) {
     <p
       id={id}
       role="alert"
-      className={cn("text-xs text-[var(--color-danger)]", className)}
+      className={cn("text-xs text-[var(--burgundy)]", className)}
     >
       {message}
     </p>

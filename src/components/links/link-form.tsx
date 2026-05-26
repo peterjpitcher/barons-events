@@ -44,7 +44,7 @@ export function LinkForm({ mode, initialValues, fieldErrors = {}, onSubmit, onCa
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-1">
-          <label htmlFor="link-name" className="text-sm font-medium text-[var(--color-text)]">
+          <label htmlFor="link-name" className="text-sm font-medium text-[var(--ink)]">
             Name
           </label>
           <Input
@@ -60,7 +60,7 @@ export function LinkForm({ mode, initialValues, fieldErrors = {}, onSubmit, onCa
         </div>
 
         <div className="space-y-1">
-          <label htmlFor="link-type" className="text-sm font-medium text-[var(--color-text)]">
+          <label htmlFor="link-type" className="text-sm font-medium text-[var(--ink)]">
             Type
           </label>
           <Select
@@ -79,7 +79,7 @@ export function LinkForm({ mode, initialValues, fieldErrors = {}, onSubmit, onCa
         </div>
 
         <div className="space-y-1 sm:col-span-2">
-          <label htmlFor="link-destination" className="text-sm font-medium text-[var(--color-text)]">
+          <label htmlFor="link-destination" className="text-sm font-medium text-[var(--ink)]">
             Destination URL
           </label>
           <Input
@@ -96,7 +96,7 @@ export function LinkForm({ mode, initialValues, fieldErrors = {}, onSubmit, onCa
         </div>
 
         <div className="space-y-1">
-          <label htmlFor="link-expires" className="text-sm font-medium text-[var(--color-text)]">
+          <label htmlFor="link-expires" className="text-sm font-medium text-[var(--ink)]">
             Expiry date{" "}
             <span className="font-normal text-subtle">(optional)</span>
           </label>

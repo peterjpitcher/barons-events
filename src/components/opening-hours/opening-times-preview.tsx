@@ -116,16 +116,16 @@ export function OpeningTimesPreview({
 
           <div className="flex flex-col gap-1">
             <span className="text-xs font-medium text-subtle">Time window</span>
-            <div className="flex overflow-hidden rounded-[var(--radius)] border border-[var(--color-border)]">
+            <div className="flex overflow-hidden rounded-[var(--radius)] border border-[var(--hair)]">
               {DAY_OPTIONS.map((opt) => (
                 <button
                   key={opt.value}
                   type="button"
                   onClick={() => setDays(opt.value)}
-                  className={`border-r px-3 py-2 text-sm font-medium transition-colors last:border-r-0 border-[var(--color-border)] ${
+                  className={`border-r px-3 py-2 text-sm font-medium transition-colors last:border-r-0 border-[var(--hair)] ${
                     days === opt.value
-                      ? "bg-[var(--color-primary-700)] text-white"
-                      : "bg-white text-[var(--color-text)] hover:bg-[var(--color-muted-surface)]"
+                      ? "bg-[var(--navy)] text-white"
+                      : "bg-[var(--paper)] text-[var(--ink)] hover:bg-[var(--canvas-2)]"
                   }`}
                 >
                   {opt.label}
@@ -178,17 +178,17 @@ function ResultsTable({
   const columns = serviceTypes.filter((st) => availableServiceTypeIds.has(st.id));
 
   return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full border-collapse text-sm">
+    <div className="data-table-shell">
+      <table className="data-table min-w-full">
         <thead>
           <tr>
-            <th className="w-28 border-b border-[var(--color-border)] pb-2 pr-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-subtle">
+            <th className="w-28 border-b border-[var(--hair)] pb-2 pr-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-subtle">
               Date
             </th>
             {columns.map((col) => (
               <th
                 key={col.id}
-                className="min-w-[8rem] border-b border-[var(--color-border)] pb-2 px-2 text-center text-xs font-semibold uppercase tracking-[0.12em] text-subtle"
+                className="min-w-[8rem] border-b border-[var(--hair)] pb-2 px-2 text-center text-xs font-semibold uppercase tracking-[0.12em] text-subtle"
               >
                 {col.name}
               </th>
@@ -199,9 +199,9 @@ function ResultsTable({
           {result.days.map((day) => (
             <tr
               key={day.date}
-              className="border-b border-[var(--color-border)] last:border-0"
+              className="border-b border-[var(--hair)] last:border-0"
             >
-              <td className="py-2.5 pr-3 text-sm text-[var(--color-text)]">
+              <td className="py-2.5 pr-3 text-sm text-[var(--ink)]">
                 {formatDateLabel(day.date)}
               </td>
               {columns.map((col) => {
@@ -242,10 +242,10 @@ function ServiceCell({
 
   if (!service.isOpen) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-[var(--color-muted-surface)] px-2 py-1 text-xs text-subtle">
+      <span className="inline-flex items-center gap-1 rounded-full bg-[var(--canvas-2)] px-2 py-1 text-xs text-subtle">
         {service.isOverride && (
           <span
-            className="inline-block h-1.5 w-1.5 rounded-full bg-[var(--color-primary-500)]"
+            className="inline-block h-1.5 w-1.5 rounded-full bg-[var(--slate)]"
             title="Date-specific override"
           />
         )}
@@ -255,10 +255,10 @@ function ServiceCell({
   }
 
   return (
-    <span className="inline-flex items-center gap-1 text-xs text-[var(--color-text)]">
+    <span className="inline-flex items-center gap-1 text-xs text-[var(--ink)]">
       {service.isOverride && (
         <span
-          className="inline-block h-1.5 w-1.5 rounded-full bg-[var(--color-primary-500)]"
+          className="inline-block h-1.5 w-1.5 rounded-full bg-[var(--slate)]"
           title="Date-specific override"
         />
       )}

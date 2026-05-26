@@ -20,6 +20,7 @@ import { DebriefsOutstandingCard } from "@/components/dashboard/context-cards/de
 import { SummaryStatsCard } from "@/components/dashboard/context-cards/summary-stats-card";
 import { RecentActivityCard } from "@/components/dashboard/context-cards/recent-activity-card";
 import { londonDateString } from "@/lib/planning/utils";
+import { PageHeader } from "@/components/ui/design-primitives";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -111,28 +112,26 @@ export default async function OverviewPage(): Promise<React.ReactNode> {
     todoResult?.items.filter((i) => i.urgency === "due_soon").length ?? 0;
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="font-brand-serif text-3xl text-[var(--color-primary-700)]">
-            {copy.heading}
-          </h1>
-          <p className="mt-1 max-w-2xl text-base text-subtle">{copy.body}</p>
-        </div>
-        <div className="flex items-center gap-3">
+    <div className="app-page">
+      <PageHeader
+        eyebrow="Today"
+        title={copy.heading}
+        description={copy.body}
+        actions={
+          <div className="flex items-center gap-2">
           {overdueCount > 0 && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-[rgba(141,68,70,0.12)] px-3 py-1 text-xs font-semibold text-[var(--color-antique-burgundy)]">
-              <span aria-hidden="true">&#9650;</span> {overdueCount} overdue
+            <span className="inline-flex items-center gap-1 rounded-full bg-[var(--burgundy-tint)] px-3 py-1 font-brand-mono text-[0.625rem] font-semibold uppercase tracking-[0.04em] text-[var(--burgundy)]">
+              {overdueCount} overdue
             </span>
           )}
           {dueSoonCount > 0 && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-[rgba(194,149,76,0.15)] px-3 py-1 text-xs font-semibold text-[var(--color-warm-gold-700,#8B6914)]">
-              <span aria-hidden="true">&#9679;</span> {dueSoonCount} due soon
+            <span className="inline-flex items-center gap-1 rounded-full bg-[var(--mustard-tint)] px-3 py-1 font-brand-mono text-[0.625rem] font-semibold uppercase tracking-[0.04em] text-[var(--mustard-dark)]">
+              {dueSoonCount} due soon
             </span>
           )}
-        </div>
-      </div>
+          </div>
+        }
+      />
 
       {/* 60/40 grid */}
       <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">

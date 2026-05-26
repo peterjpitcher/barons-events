@@ -10,9 +10,10 @@ import { listAssignableUsers } from "@/lib/users";
 import { listVenues } from "@/lib/venues";
 import { canEditVenueLinkedPlanning } from "@/lib/visibility";
 import { PlanningItemEditorShell } from "./planning-item-editor-shell";
+import { PageHeader } from "@/components/ui/design-primitives";
 
 export const metadata = {
-  title: "Planning item · BaronsHub",
+  title: "Planning item · BaronsHub 1.1",
   description: "Manage a single planning item, its SOP tasks, attachments, and audit trail."
 };
 
@@ -56,13 +57,25 @@ export default async function PlanningItemDetailPage({
   });
 
   return (
-    <div className="space-y-6">
+    <div className="app-page">
       <Link href="/planning" className="text-sm text-subtle underline">
         ← Back to planning
       </Link>
+      <PageHeader
+        eyebrow="Planning item"
+        title={item.title}
+        description="Manage the item details, SOP tasks, attachments, and audit trail."
+        meta={
+          <>
+            <span>{item.venueName ?? "Global"}</span>
+            <span className="h-1 w-1 rounded-full bg-[var(--hair-strong)]" />
+            <span>{item.tasks.length} task{item.tasks.length === 1 ? "" : "s"}</span>
+          </>
+        }
+      />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <div className="space-y-6">
+        <div className="space-y-4">
           {/* Full edit surface — matches the modal experience the planning
               board used to open. All inline editors (title, venues, dates,
               tasks, notes, attachments, status) live here. */}

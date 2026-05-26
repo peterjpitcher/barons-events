@@ -114,7 +114,7 @@ export function BookingSettingsCard({
 
   return (
     <Card>
-      <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--color-primary-700)] px-6 py-3">
+      <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--navy)] px-6 py-3">
         <CardTitle className="text-sm font-semibold uppercase tracking-wider !text-white">Booking settings</CardTitle>
       </CardHeader>
       <CardContent>
@@ -124,8 +124,8 @@ export function BookingSettingsCard({
         </p>
         <form ref={formRef} onSubmit={handleSave} className="space-y-5" noValidate>
           {bookingFormat ? (
-            <div className="rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-muted-surface)] px-3 py-2 text-xs text-subtle">
-              <span className="font-semibold text-[var(--color-text)]">{BOOKING_FORMAT_LABELS[bookingFormat]}</span>
+            <div className="rounded-[var(--radius)] border border-[var(--hair)] bg-[var(--canvas-2)] px-3 py-2 text-xs text-subtle">
+              <span className="font-semibold text-[var(--ink)]">{BOOKING_FORMAT_LABELS[bookingFormat]}</span>
               {" · "}
               Guest CTA: {getBookingCtaLabel(bookingFormat)}
             </div>
@@ -139,14 +139,14 @@ export function BookingSettingsCard({
               role="switch"
               aria-checked={bookingEnabled}
               onClick={() => setBookingEnabled((v) => !v)}
-              className={`relative inline-flex h-6 w-11 flex-none cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(39,54,64,0.45)] ${
+              className={`relative inline-flex h-6 w-11 flex-none cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--slate)] ${
                 bookingEnabled
-                  ? "bg-[var(--color-primary-700)]"
-                  : "bg-[rgba(39,54,64,0.2)]"
+                  ? "bg-[var(--navy)]"
+                  : "bg-[var(--canvas-2)]"
               }`}
             >
               <span
-                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-[var(--paper)] shadow ring-0 transition duration-200 ease-in-out ${
                   bookingEnabled ? "translate-x-5" : "translate-x-0"
                 }`}
               />
@@ -161,7 +161,7 @@ export function BookingSettingsCard({
             <div className="space-y-2">
               <Label>Landing page URL</Label>
               <div className="flex items-center gap-2">
-                <code className="flex-1 rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-muted-surface)] px-3 py-2 text-xs font-mono text-[var(--color-primary-700)] truncate">
+                <code className="flex-1 rounded-[var(--radius)] border border-[var(--hair)] bg-[var(--canvas-2)] px-3 py-2 text-xs font-mono text-[var(--navy)] truncate">
                   {landingUrl}
                 </code>
                 <Button
@@ -190,7 +190,7 @@ export function BookingSettingsCard({
               </p>
             </div>
           ) : bookingEnabled && !landingUrl ? (
-            <p className="rounded-[var(--radius)] bg-[var(--color-muted-surface)] px-3 py-2 text-xs text-subtle">
+            <p className="rounded-[var(--radius)] bg-[var(--canvas-2)] px-3 py-2 text-xs text-subtle">
               A booking URL will be generated automatically when you save.
             </p>
           ) : null}
@@ -253,14 +253,14 @@ export function BookingSettingsCard({
                 role="switch"
                 aria-checked={bookingNotesEnabled}
                 onClick={() => setBookingNotesEnabled((v) => !v)}
-                className={`relative inline-flex h-6 w-11 flex-none cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(39,54,64,0.45)] ${
+                  className={`relative inline-flex h-6 w-11 flex-none cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--slate)] ${
                   bookingNotesEnabled
-                    ? "bg-[var(--color-primary-700)]"
-                    : "bg-[rgba(39,54,64,0.2)]"
+                    ? "bg-[var(--navy)]"
+                    : "bg-[var(--canvas-2)]"
                 }`}
               >
                 <span
-                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-[var(--paper)] shadow ring-0 transition duration-200 ease-in-out ${
                     bookingNotesEnabled ? "translate-x-5" : "translate-x-0"
                   }`}
                 />
@@ -284,14 +284,14 @@ export function BookingSettingsCard({
                   role="switch"
                   aria-checked={smsPromoEnabled}
                   onClick={() => setSmsPromoEnabled((v) => !v)}
-                  className={`relative inline-flex h-6 w-11 flex-none cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(39,54,64,0.45)] ${
+                  className={`relative inline-flex h-6 w-11 flex-none cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--slate)] ${
                     smsPromoEnabled
-                      ? "bg-[var(--color-primary-700)]"
-                      : "bg-[rgba(39,54,64,0.2)]"
+                      ? "bg-[var(--navy)]"
+                      : "bg-[var(--canvas-2)]"
                   }`}
                 >
                   <span
-                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-[var(--paper)] shadow ring-0 transition duration-200 ease-in-out ${
                       smsPromoEnabled ? "translate-x-5" : "translate-x-0"
                     }`}
                   />

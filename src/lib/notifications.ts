@@ -12,7 +12,7 @@ import {
   type SalesReport,
 } from "@/lib/monthly-sales-report";
 
-const RESEND_FROM_ADDRESS = process.env.RESEND_FROM_EMAIL ?? "BaronsHub <noreply@auth.orangejelly.co.uk>";
+const RESEND_FROM_ADDRESS = process.env.RESEND_FROM_EMAIL ?? "BaronsHub 1.1 <noreply@auth.orangejelly.co.uk>";
 const BOOKING_RESEND_FROM_ADDRESS =
   process.env.BOOKING_RESEND_FROM_EMAIL ?? "Barons Pub Company <noreply@auth.orangejelly.co.uk>";
 const APP_BASE_URL =
@@ -185,7 +185,7 @@ function renderEmailTemplate({ headline, intro, body = [], button, meta, footerN
     <div class="wrapper">
       <div class="card">
         <div class="header">
-          <h1>BaronsHub</h1>
+          <h1>BaronsHub 1.1</h1>
           <p>Accelerating Barons Success Everyday</p>
         </div>
         <div class="content">
@@ -196,7 +196,7 @@ function renderEmailTemplate({ headline, intro, body = [], button, meta, footerN
           ${metaHtml}
         </div>
         <div class="footer">
-          © ${escapeHtml(APP_BASE_URL)} · Sent from the BaronsHub planning team.<br />
+          © ${escapeHtml(APP_BASE_URL)} · Sent from the BaronsHub 1.1 planning team.<br />
           Need help? Email <a href="mailto:peter@orangejelly.co.uk">peter@orangejelly.co.uk</a>.
           ${footerHtml}
         </div>
@@ -435,7 +435,7 @@ function getResendClient() {
 
 /**
  * Booking emails are customer communications and may send whenever Resend is
- * configured. Wider BaronsHub operational emails are opt-in so enabling Resend
+ * configured. Wider BaronsHub 1.1 operational emails are opt-in so enabling Resend
  * for booking confirmations does not start staff workflow emails.
  *
  * Auth emails (sendInviteEmail, sendPasswordResetEmail) are intentionally
@@ -818,8 +818,8 @@ export async function sendInviteEmail(email: string, inviteLink: string, fullNam
   try {
     const greeting = fullName ? `Hi ${fullName},` : "Hi there,";
     const { html, text } = renderEmailTemplate({
-      headline: "You've been invited to BaronsHub",
-      intro: `${greeting} you've been invited to join the Barons BaronsHub planning platform.`,
+      headline: "You've been invited to BaronsHub 1.1",
+      intro: `${greeting} you've been invited to join the BaronsHub 1.1 planning platform.`,
       body: [
         "Use the button below to set your password and get started.",
         "This invite link is valid for 7 days. If you didn't expect this email, you can safely ignore it."
@@ -831,7 +831,7 @@ export async function sendInviteEmail(email: string, inviteLink: string, fullNam
     await resend.emails.send({
       from: RESEND_FROM_ADDRESS,
       to: email,
-      subject: "You've been invited to BaronsHub",
+      subject: "You've been invited to BaronsHub 1.1",
       html,
       text
     });
@@ -850,8 +850,8 @@ export async function sendPasswordResetEmail(email: string, resetLink: string) {
 
   try {
     const { html, text } = renderEmailTemplate({
-      headline: "Reset your BaronsHub password",
-      intro: "Hi there — we received a request to reset your BaronsHub password.",
+      headline: "Reset your BaronsHub 1.1 password",
+      intro: "Hi there — we received a request to reset your BaronsHub 1.1 password.",
       body: [
         "Use the button below to choose a new password and get back to planning.",
         "If you didn’t request this, you can safely ignore this message."
@@ -863,7 +863,7 @@ export async function sendPasswordResetEmail(email: string, resetLink: string) {
     await resend.emails.send({
       from: RESEND_FROM_ADDRESS,
       to: email,
-      subject: "Reset your BaronsHub password",
+      subject: "Reset your BaronsHub 1.1 password",
       html,
       text
     });
@@ -1141,7 +1141,7 @@ export async function sendPostEventDigestEmail(eventId: string) {
         `When: ${formatEventWindow(event)}`,
         `Submitted by: ${event.creator?.full_name ?? "Unknown"}`
       ],
-      footerNote: "You’re receiving this because you’re listed as an administrator in BaronsHub."
+      footerNote: "You’re receiving this because you’re listed as an administrator in BaronsHub 1.1."
     });
 
     await resend.emails.send({
@@ -1237,7 +1237,7 @@ export async function sendDebriefSubmittedToSltEmail(eventId: string): Promise<v
         `Venue: ${event.venue?.name ?? "Unknown venue"}`,
         `When: ${formatEventWindow(event)}`
       ],
-      footerNote: "You're receiving this because you're a member of the SLT distribution list in BaronsHub."
+      footerNote: "You're receiving this because you're a member of the SLT distribution list in BaronsHub 1.1."
     });
 
     const subject = `Debrief submitted: ${event.title}`;
@@ -1584,7 +1584,7 @@ export async function sendWeeklyDigestEmail(): Promise<{ sent: number; failed: n
       }
 
       if (capped && totalTasks > 50) {
-        body.push(`\u2026and ${totalTasks - 50} more \u2014 view in BaronsHub`);
+        body.push(`\u2026and ${totalTasks - 50} more \u2014 view in BaronsHub 1.1`);
       }
 
       // Filter upcoming events by venue scope
@@ -1609,14 +1609,14 @@ export async function sendWeeklyDigestEmail(): Promise<{ sent: number; failed: n
         headline: "Your todo digest",
         intro: "Here\u2019s what needs your attention this week.",
         body,
-        button: { label: "Open BaronsHub", url: plannerDashboardLink() },
+        button: { label: "Open BaronsHub 1.1", url: plannerDashboardLink() },
         footerNote: `Manage todo email frequency: ${APP_BASE_URL}/account`
       });
 
       await resend.emails.send({
         from: RESEND_FROM_ADDRESS,
         to: [user.email],
-        subject: `Your BaronsHub todo digest \u2014 ${totalTasks} open task${totalTasks === 1 ? "" : "s"}`,
+        subject: `Your BaronsHub 1.1 todo digest \u2014 ${totalTasks} open task${totalTasks === 1 ? "" : "s"}`,
         html,
         text
       });

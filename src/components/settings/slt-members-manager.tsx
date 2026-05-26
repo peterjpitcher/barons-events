@@ -80,15 +80,15 @@ export function SltMembersManager({ members, candidates }: SltMembersManagerProp
       </div>
 
       <div className="space-y-1">
-        <h4 className="text-sm font-semibold text-[var(--color-text)]">Current SLT members</h4>
+        <h4 className="text-sm font-semibold text-[var(--ink)]">Current SLT members</h4>
         {members.length === 0 ? (
           <p className="text-sm text-subtle">No SLT members yet. Add users above to receive debrief notifications.</p>
         ) : (
-          <ul className="divide-y divide-[var(--color-border)] rounded-[var(--radius-sm)] border border-[var(--color-border)]">
+          <ul className="divide-y divide-[var(--hair)] rounded-[var(--radius-sm)] border border-[var(--hair)]">
             {members.map((member) => (
               <li key={member.id} className="flex items-center justify-between px-3 py-2">
                 <div>
-                  <p className="text-sm font-medium text-[var(--color-text)]">{member.name}</p>
+                  <p className="text-sm font-medium text-[var(--ink)]">{member.name}</p>
                   <p className="text-xs text-subtle">{member.email}</p>
                 </div>
                 <Button

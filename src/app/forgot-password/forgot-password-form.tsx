@@ -24,9 +24,9 @@ export function ForgotPasswordForm({ nonce }: { nonce?: string }) {
   }, [state]);
 
   return (
-    <form action={formAction} className="space-y-6" noValidate>
+    <form action={formAction} className="space-y-5" noValidate>
       <div className="space-y-2">
-        <Label className="text-[var(--color-text-subtle)]" htmlFor="email">
+        <Label className="text-[var(--ink-soft)]" htmlFor="email">
           Email
         </Label>
         <Input
@@ -54,4 +54,3 @@ export function ForgotPasswordForm({ nonce }: { nonce?: string }) {
     </form>
   );
 }
-

@@ -21,20 +21,20 @@ export function ImpactSummary({ summary }: ImpactSummaryProps): React.ReactEleme
     summary.tasksCompletedBy + summary.venueOverridesCreated;
 
   return (
-    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-muted-surface)] p-3">
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
+    <div className="rounded-lg border border-[var(--hair)] bg-[var(--canvas-2)] p-3">
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--ink-muted)]">
         Content to reassign
       </p>
       <div className="grid grid-cols-2 gap-x-4 gap-y-1">
         {ownershipItems.map(({ key, label }) => (
           <div key={key} className="flex justify-between text-sm">
-            <span className="text-[var(--color-text-muted)]">{label}</span>
+            <span className="text-[var(--ink-muted)]">{label}</span>
             <span className="font-semibold">{summary[key]}</span>
           </div>
         ))}
       </div>
       {totalProvenance > 0 && (
-        <p className="mt-2 text-xs text-[var(--color-text-muted)]">
+        <p className="mt-2 text-xs text-[var(--ink-muted)]">
           {totalProvenance} historical record{totalProvenance !== 1 ? "s" : ""} will be anonymised.
         </p>
       )}

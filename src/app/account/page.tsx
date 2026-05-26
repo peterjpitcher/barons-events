@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { CommunicationPreferencesForm } from "@/components/account/communication-preferences-form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/design-primitives";
 import { getCurrentUser } from "@/lib/auth";
 import { normaliseTodoDigestFrequency } from "@/lib/communication-preferences";
 import { createSupabaseReadonlyClient } from "@/lib/supabase/server";
@@ -21,18 +22,17 @@ export default async function AccountPage(): Promise<React.ReactNode> {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="font-brand-serif text-3xl text-[var(--color-primary-700)]">Account</h1>
-        <p className="mt-1 max-w-2xl text-base text-subtle">
-          Manage the operational emails sent to {user.email}.
-        </p>
-      </div>
+    <div className="app-page">
+      <PageHeader
+        eyebrow="Profile"
+        title="Account"
+        description={`Manage the operational emails sent to ${user.email}.`}
+      />
 
       <Card>
         <CardHeader>
           <CardTitle>Communication Preferences</CardTitle>
-          <CardDescription>Choose how often BaronsHub sends your open todo list.</CardDescription>
+          <CardDescription>Choose how often BaronsHub 1.1 sends your open todo list.</CardDescription>
         </CardHeader>
         <CardContent>
           <CommunicationPreferencesForm

@@ -42,14 +42,14 @@ export function CustomersView({ customers }: Props) {
           placeholder="Search name, mobile or email…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-white px-3 py-2 text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-subtle)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)] sm:max-w-xs"
+          className="h-8 w-full rounded-[7px] border border-[var(--hair)] bg-[var(--paper)] px-3 text-sm text-[var(--ink)] placeholder:text-[var(--ink-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--mustard-tint)] sm:max-w-xs"
         />
-        <label className="flex cursor-pointer items-center gap-2 text-sm text-[var(--color-text-muted)]">
+        <label className="flex cursor-pointer items-center gap-2 text-sm text-[var(--ink-muted)]">
           <input
             type="checkbox"
             checked={optInOnly}
             onChange={(e) => setOptInOnly(e.target.checked)}
-            className="h-4 w-4 rounded border-[var(--color-border)] accent-[var(--color-primary-700)]"
+            className="h-4 w-4 rounded border-[var(--hair)] accent-[var(--navy)]"
           />
           Marketing opt-in only
         </label>
@@ -57,16 +57,16 @@ export function CustomersView({ customers }: Props) {
 
       {/* Table or empty state */}
       {filtered.length === 0 ? (
-        <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-white px-6 py-12 text-center text-sm text-[var(--color-text-subtle)]">
+        <div className="rounded-[8px] border border-[var(--hair)] bg-[var(--paper)] px-6 py-12 text-center text-sm text-[var(--ink-soft)] shadow-card">
           {customers.length === 0
             ? "No customers yet."
             : "No customers match your filters."}
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-white shadow-[var(--shadow-soft)]">
-          <table className="min-w-full border-collapse">
+        <div className="data-table-shell">
+          <table className="data-table min-w-full">
             <thead>
-              <tr className="bg-[var(--color-muted-surface)] text-left text-xs font-semibold uppercase tracking-[0.14em] text-[var(--color-text-subtle)]">
+              <tr>
                 <th scope="col" className="px-4 py-3">Name</th>
                 <th scope="col" className="px-4 py-3">Mobile</th>
                 <th scope="col" className="px-4 py-3">Email</th>
@@ -79,40 +79,40 @@ export function CustomersView({ customers }: Props) {
               {filtered.map((customer) => (
                 <tr
                   key={customer.id}
-                  className="border-t border-[var(--color-border)] text-sm text-[var(--color-text)]"
+                  className="text-sm text-[var(--ink)]"
                 >
                   <td className="px-4 py-3 font-medium">
                     <Link
                       href={`/customers/${customer.id}`}
-                      className="text-[var(--color-primary-700)] hover:underline"
+                      className="text-[var(--navy)] hover:underline"
                     >
                       {customer.firstName}
                       {customer.lastName ? ` ${customer.lastName}` : ""}
                     </Link>
                   </td>
-                  <td className="px-4 py-3 font-mono text-xs text-[var(--color-text-muted)]">
+                  <td className="px-4 py-3 font-mono text-xs text-[var(--ink-muted)]">
                     {customer.mobile}
                   </td>
-                  <td className="px-4 py-3 text-[var(--color-text-muted)]">
+                  <td className="px-4 py-3 text-[var(--ink-muted)]">
                     {customer.email ? (
                       <span className="max-w-[180px] truncate block" title={customer.email}>
                         {customer.email}
                       </span>
                     ) : (
-                      <span className="text-[var(--color-text-subtle)]">—</span>
+                      <span className="text-[var(--ink-soft)]">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-[var(--color-text-muted)]">
+                  <td className="px-4 py-3 text-right tabular-nums text-[var(--ink-muted)]">
                     {customer.bookingCount} · {customer.ticketCount}
                   </td>
                   <td className="px-4 py-3 text-center">
                     {customer.marketingOptIn ? (
-                      <span className="text-[#c8a005] font-semibold" aria-label="Opted in">✓</span>
+                      <span className="font-semibold text-[var(--mustard)]" aria-label="Opted in">✓</span>
                     ) : (
-                      <span className="text-[var(--color-text-subtle)]" aria-label="Not opted in">—</span>
+                      <span className="text-[var(--ink-soft)]" aria-label="Not opted in">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-[var(--color-text-muted)]">
+                  <td className="px-4 py-3 text-[var(--ink-muted)]">
                     <time dateTime={customer.firstSeen.toISOString()}>
                       {dateFormatter.format(customer.firstSeen)}
                     </time>

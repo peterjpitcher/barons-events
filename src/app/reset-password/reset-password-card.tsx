@@ -47,12 +47,12 @@ export function ResetPasswordCard() {
     return (
       <Card className={AUTH_CARD_CLASS}>
         <CardHeader className={AUTH_CARD_HEADER_CLASS}>
-          <div className="flex items-center gap-3 text-[var(--color-success)]">
+          <div className="flex items-center gap-3 text-[var(--sage-dark)]">
             <CheckCircle className="h-6 w-6" />
-            <CardTitle className="text-2xl text-[var(--color-success)]">Password updated</CardTitle>
+            <CardTitle className="text-2xl text-[var(--sage-dark)]">Password updated</CardTitle>
           </div>
-          <CardDescription className="text-[var(--color-text-muted)]">
-            You&apos;re all set. Sign in with your new password to jump back into BaronsHub.
+          <CardDescription className="text-[var(--ink-muted)]">
+            You&apos;re all set. Sign in with your new password to jump back into BaronsHub 1.1.
           </CardDescription>
         </CardHeader>
         <CardContent className={AUTH_CARD_CONTENT_CLASS}>
@@ -72,19 +72,19 @@ export function ResetPasswordCard() {
     <Card className={AUTH_CARD_CLASS}>
       <CardHeader className={AUTH_CARD_HEADER_CLASS}>
         <CardTitle className="text-2xl">Reset your password</CardTitle>
-        <CardDescription className="text-[var(--color-text-muted)]">
-          Choose a new password for your BaronsHub account.
+        <CardDescription className="text-[var(--ink-muted)]">
+          Choose a new password for your BaronsHub 1.1 account.
         </CardDescription>
       </CardHeader>
       <CardContent className={AUTH_CARD_CONTENT_CLASS}>
         {errorMessage ? (
-          <p className="rounded-[var(--radius)] border border-[rgba(139,34,44,0.25)] bg-[rgba(139,34,44,0.08)] p-3 text-sm text-[var(--color-danger)]">
+          <p className="rounded-[var(--radius)] border border-[var(--burgundy)] bg-[var(--burgundy-tint)] p-3 text-sm text-[var(--burgundy)]">
             {errorMessage}
           </p>
         ) : null}
-        <form action={formAction} onSubmit={handleSubmit} className="space-y-6" noValidate>
+        <form action={formAction} onSubmit={handleSubmit} className="space-y-5" noValidate>
           <div className="space-y-2">
-            <Label className="text-[var(--color-text-subtle)]" htmlFor="password">
+            <Label className="text-[var(--ink-soft)]" htmlFor="password">
               New password
             </Label>
             <div className="relative">
@@ -103,7 +103,7 @@ export function ResetPasswordCard() {
               />
               <button
                 type="button"
-                className="absolute inset-y-0 right-3 flex items-center text-[var(--color-text-subtle)]"
+                className="absolute inset-y-0 right-3 flex items-center text-[var(--ink-soft)]"
                 onClick={() => setShowPassword((prev) => !prev)}
                 aria-label={showPassword ? "Hide password" : "Show password"}
               >
@@ -115,7 +115,7 @@ export function ResetPasswordCard() {
           </div>
 
           <div className="space-y-2">
-            <Label className="text-[var(--color-text-subtle)]" htmlFor="confirmPassword">
+            <Label className="text-[var(--ink-soft)]" htmlFor="confirmPassword">
               Confirm password
             </Label>
             <div className="relative">
@@ -134,7 +134,7 @@ export function ResetPasswordCard() {
               />
               <button
                 type="button"
-                className="absolute inset-y-0 right-3 flex items-center text-[var(--color-text-subtle)]"
+                className="absolute inset-y-0 right-3 flex items-center text-[var(--ink-soft)]"
                 onClick={() => setShowConfirmPassword((prev) => !prev)}
                 aria-label={showConfirmPassword ? "Hide password" : "Show password"}
               >

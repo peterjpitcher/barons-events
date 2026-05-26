@@ -69,9 +69,9 @@ export function DeactivateDialog({ open, onClose, user }: DeactivateDialogProps)
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(12,20,28,0.55)] p-4" onClick={onClose} role="presentation">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--overlay-scrim)] p-4" onClick={onClose} role="presentation">
       <div
-        className="w-full max-w-lg rounded-[var(--radius)] border border-[var(--color-border)] bg-white p-6 shadow-soft"
+        className="w-full max-w-lg rounded-[var(--radius)] border border-[var(--hair)] bg-[var(--paper)] p-6 shadow-card"
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -79,7 +79,7 @@ export function DeactivateDialog({ open, onClose, user }: DeactivateDialogProps)
       >
         <div className="flex items-center gap-2 mb-4">
           <Ban className="h-5 w-5 text-amber-600" aria-hidden="true" />
-          <h2 id={titleId} className="text-lg font-semibold text-[var(--color-text)]">
+          <h2 id={titleId} className="text-lg font-semibold text-[var(--ink)]">
             Deactivate {user.full_name ?? user.email}
           </h2>
         </div>
@@ -89,13 +89,13 @@ export function DeactivateDialog({ open, onClose, user }: DeactivateDialogProps)
         </div>
 
         {loading ? (
-          <p className="text-sm text-[var(--color-text-muted)]">Loading impact summary...</p>
+          <p className="text-sm text-[var(--ink-muted)]">Loading impact summary...</p>
         ) : summary ? (
           <ImpactSummary summary={summary} />
         ) : null}
 
         <div className="mt-4 space-y-2">
-          <label htmlFor="reassign-target" className="block text-sm font-medium text-[var(--color-text)]">
+          <label htmlFor="reassign-target" className="block text-sm font-medium text-[var(--ink)]">
             Reassign content to
           </label>
           <Select

@@ -341,15 +341,15 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
 
   const assignmentCard = (
     <Card>
-      <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--color-primary-700)] px-6 py-3">
-        <CardTitle className="text-sm font-semibold uppercase tracking-wider !text-white">Assignment</CardTitle>
+      <CardHeader className="border-b border-[var(--hair)] bg-[var(--paper-tint)] px-4 py-3">
+        <CardTitle className="font-brand-mono text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-[var(--ink-muted)]">Assignment</CardTitle>
       </CardHeader>
       <CardContent>
         <p className="mb-4 text-sm text-muted">Send the next action to the right teammate.</p>
         {canUpdateAssignee ? (
           <form className="space-y-3 text-sm" action={reassignAssignee}>
             <div className="space-y-2">
-              <label htmlFor="assigneeId" className="font-semibold text-[var(--color-text)]">
+              <label htmlFor="assigneeId" className="font-semibold text-[var(--ink)]">
                 Assignee
               </label>
               <Select
@@ -376,7 +376,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
           </form>
         ) : (
           <p className="text-sm text-muted">
-            <span className="font-semibold text-[var(--color-text)]">Assignee:</span> {currentAssigneeName}
+            <span className="font-semibold text-[var(--ink)]">Assignee:</span> {currentAssigneeName}
           </p>
         )}
       </CardContent>
@@ -385,8 +385,8 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
 
   const reviewDecisionCard = canReview ? (
     <Card>
-      <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--color-primary-700)] px-6 py-3">
-        <CardTitle className="text-sm font-semibold uppercase tracking-wider !text-white">Review decision</CardTitle>
+      <CardHeader className="border-b border-[var(--hair)] bg-[var(--paper-tint)] px-4 py-3">
+        <CardTitle className="font-brand-mono text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-[var(--ink-muted)]">Review decision</CardTitle>
       </CardHeader>
       <CardContent>
         <p className="mb-4 text-sm text-muted">Share a clear decision so the venue knows what to do next.</p>
@@ -397,8 +397,8 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
 
   const reviewerTimelineCard = (
     <Card>
-      <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--color-primary-700)] px-6 py-3">
-        <CardTitle className="text-sm font-semibold uppercase tracking-wider !text-white">Reviewer timeline</CardTitle>
+      <CardHeader className="border-b border-[var(--hair)] bg-[var(--paper-tint)] px-4 py-3">
+        <CardTitle className="font-brand-mono text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-[var(--ink-muted)]">Reviewer timeline</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-muted">Quick view of submissions and reviewer notes.</p>
@@ -408,14 +408,14 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
           event.approvals.map((entry) => (
             <div
               key={entry.id}
-              className="rounded-[var(--radius)] border border-[rgba(39,54,64,0.1)] bg-white/80 px-4 py-3 text-sm shadow-soft"
+              className="rounded-[8px] border border-[var(--hair)] bg-[var(--paper)] px-4 py-3 text-sm shadow-card"
             >
-              <p className="font-semibold text-[var(--color-text)] capitalize">{entry.decision.replace(/_/g, " ")}</p>
+              <p className="font-semibold text-[var(--ink)] capitalize">{entry.decision.replace(/_/g, " ")}</p>
               <p className="text-xs text-subtle">
                 {resolveUserName(entry.reviewer_id)} · {new Date(entry.decided_at).toLocaleString("en-GB")}
               </p>
               {entry.feedback_text ? (
-                <p className="mt-2 text-[var(--color-text)]">{entry.feedback_text}</p>
+                <p className="mt-2 text-[var(--ink)]">{entry.feedback_text}</p>
               ) : null}
             </div>
           ))
@@ -426,8 +426,8 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
 
   const auditTrailCard = (
     <Card>
-      <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--color-primary-700)] px-6 py-3">
-        <CardTitle className="text-sm font-semibold uppercase tracking-wider !text-white">Audit trail</CardTitle>
+      <CardHeader className="border-b border-[var(--hair)] bg-[var(--paper-tint)] px-4 py-3">
+        <CardTitle className="font-brand-mono text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-[var(--ink-muted)]">Audit trail</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-muted">Track status changes, assignments, and reviewer feedback.</p>
@@ -437,10 +437,10 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
           auditEntries.map((entry) => (
             <div
               key={entry.id}
-              className="rounded-[var(--radius)] border border-[rgba(39,54,64,0.1)] bg-white/80 px-4 py-3 text-sm text-[var(--color-text)] shadow-soft"
+              className="rounded-[8px] border border-[var(--hair)] bg-[var(--paper)] px-4 py-3 text-sm text-[var(--ink)] shadow-card"
             >
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <p className="font-semibold text-[var(--color-text)]">{entry.summary}</p>
+                <p className="font-semibold text-[var(--ink)]">{entry.summary}</p>
                 <time dateTime={entry.createdAtIso ?? undefined} className="text-xs text-subtle">
                   {entry.timestampLabel}
                 </time>
@@ -451,7 +451,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
                   {entry.details.map((detail, index) => (
                     <li key={`${entry.id}-detail-${index}`} className="flex items-start gap-2">
                       <span
-                        className="mt-[0.35rem] h-1.5 w-1.5 flex-none rounded-full bg-[var(--color-primary-400)]"
+                        className="mt-[0.35rem] h-1.5 w-1.5 flex-none rounded-full bg-[var(--slate)]"
                         aria-hidden="true"
                       />
                       <span>{detail}</span>
@@ -460,7 +460,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
                 </ul>
               ) : null}
               {entry.feedback ? (
-                <p className="mt-3 rounded-[var(--radius)] bg-[rgba(39,54,64,0.06)] p-3 text-sm leading-relaxed text-[var(--color-text)]">
+                <p className="mt-3 rounded-[var(--radius)] bg-[var(--paper-tint)] p-3 text-sm leading-relaxed text-[var(--ink)]">
                   {entry.feedback}
                 </p>
               ) : null}
@@ -473,8 +473,8 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
 
   const debriefSubmitCard = canSubmitDebrief ? (
     <Card>
-      <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--color-primary-700)] px-6 py-3">
-        <CardTitle className="text-sm font-semibold uppercase tracking-wider !text-white">Post-event debrief</CardTitle>
+      <CardHeader className="border-b border-[var(--hair)] bg-[var(--paper-tint)] px-4 py-3">
+        <CardTitle className="font-brand-mono text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-[var(--ink-muted)]">Post-event debrief</CardTitle>
       </CardHeader>
       <CardContent>
         <p className="mb-4 text-sm text-muted">Capture attendance and takings as soon as possible.</p>
@@ -499,48 +499,48 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
 
   const debriefSnapshotCard = event.debrief ? (
     <Card>
-      <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--color-primary-700)] px-6 py-3">
-        <CardTitle className="text-sm font-semibold uppercase tracking-wider !text-white">Debrief snapshot</CardTitle>
+      <CardHeader className="border-b border-[var(--hair)] bg-[var(--paper-tint)] px-4 py-3">
+        <CardTitle className="font-brand-mono text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-[var(--ink-muted)]">Debrief snapshot</CardTitle>
       </CardHeader>
       <CardContent>
         <p className="mb-4 text-sm text-muted">Commercial outcome and guest sentiment for this event.</p>
         <div className="grid gap-3 text-sm text-muted md:grid-cols-2">
         <p>
-          <span className="font-semibold text-[var(--color-text)]">Attendance:</span>{" "}
+          <span className="font-semibold text-[var(--ink)]">Attendance:</span>{" "}
           {event.debrief.attendance ?? "—"}
           {event.debrief.baseline_attendance != null
             ? ` (baseline ${event.debrief.baseline_attendance})`
             : ""}
         </p>
         <p>
-          <span className="font-semibold text-[var(--color-text)]">Event takings:</span>{" "}
+          <span className="font-semibold text-[var(--ink)]">Event takings:</span>{" "}
           {formatCurrency(event.debrief.actual_total_takings)}
         </p>
         <p>
-          <span className="font-semibold text-[var(--color-text)]">Baseline takings:</span>{" "}
+          <span className="font-semibold text-[var(--ink)]">Baseline takings:</span>{" "}
           {formatCurrency(event.debrief.baseline_total_takings)}
         </p>
         <p>
-          <span className="font-semibold text-[var(--color-text)]">Sales uplift:</span>{" "}
+          <span className="font-semibold text-[var(--ink)]">Sales uplift:</span>{" "}
           {formatCurrency(event.debrief.sales_uplift_value)} ({formatPercent(event.debrief.sales_uplift_percent)})
         </p>
         <p>
-          <span className="font-semibold text-[var(--color-text)]">Would book again:</span>{" "}
+          <span className="font-semibold text-[var(--ink)]">Would book again:</span>{" "}
           {event.debrief.would_book_again == null ? "Not answered" : event.debrief.would_book_again ? "Yes" : "No"}
         </p>
         <p>
-          <span className="font-semibold text-[var(--color-text)]">Promo score:</span>{" "}
+          <span className="font-semibold text-[var(--ink)]">Promo score:</span>{" "}
           {event.debrief.promo_effectiveness ?? "—"} / 5
         </p>
         {event.debrief.guest_sentiment_notes ? (
           <p className="md:col-span-2">
-            <span className="font-semibold text-[var(--color-text)]">Guest sentiment:</span>{" "}
+            <span className="font-semibold text-[var(--ink)]">Guest sentiment:</span>{" "}
             {event.debrief.guest_sentiment_notes}
           </p>
         ) : null}
         {event.debrief.next_time_actions ? (
           <p className="md:col-span-2">
-            <span className="font-semibold text-[var(--color-text)]">Next time actions:</span>{" "}
+            <span className="font-semibold text-[var(--ink)]">Next time actions:</span>{" "}
             {event.debrief.next_time_actions}
           </p>
         ) : null}
@@ -550,7 +550,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
   ) : null;
 
   return (
-    <div className="space-y-6">
+    <div className="app-page">
       <EventPageHeader
         title={event.title}
         mode={canEdit ? "edit" : "view"}
@@ -563,15 +563,15 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
       {/* Quick info bar */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-subtle">
         <span>
-          <span className="font-semibold text-[var(--color-text)]">Assignee:</span> {currentAssigneeName}
+          <span className="font-semibold text-[var(--ink)]">Assignee:</span> {currentAssigneeName}
         </span>
         <span>
-          <span className="font-semibold text-[var(--color-text)]">Created by:</span>{" "}
+          <span className="font-semibold text-[var(--ink)]">Created by:</span>{" "}
           {event.created_by === user.id ? "You" : resolveUserName(event.created_by)}
         </span>
         {event.manager_responsible_id ? (
           <span>
-            <span className="font-semibold text-[var(--color-text)]">Manager:</span>{" "}
+            <span className="font-semibold text-[var(--ink)]">Manager:</span>{" "}
             {resolveUserName(event.manager_responsible_id)}
           </span>
         ) : null}

@@ -70,7 +70,7 @@ function EventListItem({
   return (
     <li
       title={hoverDetails}
-      className="flex flex-col gap-1.5 rounded-[var(--radius-sm)] border border-[rgba(39,54,64,0.12)] bg-white overflow-hidden text-xs text-[var(--color-text)] shadow-soft"
+      className="flex flex-col gap-1.5 rounded-[var(--radius-sm)] border border-[var(--hair)] bg-[var(--paper)] overflow-hidden text-xs text-[var(--ink)] shadow-card"
     >
       {imageUrl && (
         // eslint-disable-next-line @next/next/no-img-element
@@ -84,7 +84,7 @@ function EventListItem({
       <div className="flex flex-col gap-1.5 p-2">
       <Link
         href={`/events/${event.id}`}
-        className="truncate text-sm font-semibold text-[var(--color-text)] transition-colors hover:text-[var(--color-primary-700)]"
+        className="truncate text-sm font-semibold text-[var(--ink)] transition-colors hover:text-[var(--navy)]"
       >
         {event.public_title ?? event.title}
       </Link>
@@ -96,7 +96,7 @@ function EventListItem({
         <span className="truncate">{spacesLabel}</span>
         <span>{timeRange}</span>
       </div>
-      <div className="mt-auto border-t border-[rgba(39,54,64,0.12)] pt-2 flex items-center justify-between gap-1 flex-wrap">
+      <div className="mt-auto border-t border-[var(--hair)] pt-2 flex items-center justify-between gap-1 flex-wrap">
         <div className="flex items-center gap-1 flex-wrap">
           {/* Intentional departure from Badge component: includes dot indicator for compact calendar cells */}
           <span
@@ -109,8 +109,8 @@ function EventListItem({
           <span
             className={`inline-flex items-center rounded-full px-2 py-0.5 text-[0.64rem] font-semibold uppercase tracking-[0.08em] ${
               hasWebCopy
-                ? "border border-[#355849] bg-[var(--color-success)] text-white"
-                : "border border-[rgba(39,54,64,0.2)] bg-[rgba(39,54,64,0.06)] text-subtle"
+                ? "border border-[var(--sage-dark)] bg-[var(--sage-dark)] text-white"
+                : "border border-[var(--hair)] bg-[var(--paper-tint)] text-subtle"
             }`}
           >
             {hasWebCopy ? "Webpage ready" : "No web copy"}
@@ -220,15 +220,15 @@ export function EventCalendar({
 
   return (
     <div className="overflow-x-auto">
-    <div className="min-w-[560px] rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-white shadow-soft">
-      <div className="grid grid-cols-7 border-b border-[var(--color-border)] bg-[var(--color-muted-surface)] text-center text-xs font-semibold uppercase tracking-[0.12em] text-subtle">
+    <div className="min-w-[560px] rounded-[var(--radius-lg)] border border-[var(--hair)] bg-[var(--paper)] shadow-card">
+      <div className="grid grid-cols-7 border-b border-[var(--hair)] bg-[var(--canvas-2)] text-center text-xs font-semibold uppercase tracking-[0.12em] text-subtle">
         {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((label) => (
           <div key={label} className="px-3 py-2">
             {label}
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-7 gap-px bg-[var(--color-border)]">
+      <div className="grid grid-cols-7 gap-px bg-[var(--hair)]">
         {days.map((day) => {
           const key = day.format("YYYY-MM-DD");
           const isCurrentMonth = day.month() === monthCursor.month();
@@ -255,7 +255,7 @@ export function EventCalendar({
           return (
             <div
               key={key}
-              className="min-h-[7.5rem] bg-white p-2"
+              className="min-h-[7.5rem] bg-[var(--paper)] p-2"
               aria-label={`${day.format("dddd D MMMM")}, ${dayEvents.length} events`}
             >
               <div className="flex items-center justify-between">
@@ -263,16 +263,16 @@ export function EventCalendar({
                   <Link
                     href={quickCreateHref}
                     className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full px-2 py-1 text-sm font-semibold transition ${
-                      isCurrentMonth ? "text-[var(--color-text)] hover:bg-[var(--color-muted-surface)]" : "text-subtle"
-                    } ${isToday ? "bg-[var(--color-primary-700)] text-white hover:bg-[var(--color-primary-800)]" : ""}`}
+                      isCurrentMonth ? "text-[var(--ink)] hover:bg-[var(--canvas-2)]" : "text-subtle"
+                    } ${isToday ? "bg-[var(--navy)] text-white hover:bg-[var(--navy-700)]" : ""}`}
                   >
                     {day.format("D")}
                   </Link>
                 ) : (
                   <span
                     className={`text-sm font-semibold ${
-                      isCurrentMonth ? "text-[var(--color-text)]" : "text-subtle"
-                    } ${isToday ? "rounded-full bg-[var(--color-primary-700)] px-2 py-1 text-white" : ""}`}
+                      isCurrentMonth ? "text-[var(--ink)]" : "text-subtle"
+                    } ${isToday ? "rounded-full bg-[var(--navy)] px-2 py-1 text-white" : ""}`}
                   >
                     {day.format("D")}
                   </span>
@@ -282,13 +282,13 @@ export function EventCalendar({
                     asChild
                     variant="ghost"
                     size="sm"
-                    className="h-7 px-2 text-xs text-[var(--color-primary-700)]"
+                    className="h-7 px-2 text-xs text-[var(--navy)]"
                   >
                     <Link href={quickCreateHref}>Add event</Link>
                   </Button>
                 ) : null}
               </div>
-              <ul className="mt-2 space-y-1 md:space-y-0 md:divide-y md:divide-[var(--color-border)]">
+              <ul className="mt-2 space-y-1 md:space-y-0 md:divide-y md:divide-[var(--hair)]">
                 {dayEvents.slice(0, 3).map((event) => (
                   <EventListItem
                     key={event.id}

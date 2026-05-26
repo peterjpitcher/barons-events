@@ -31,11 +31,11 @@ export function SopBackfillButton() {
   }
 
   return (
-    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
-      <h3 className="text-sm font-semibold text-[var(--color-text)] mb-1">
+    <div className="rounded-lg border border-[var(--hair)] bg-[var(--paper)] p-4">
+      <h3 className="text-sm font-semibold text-[var(--ink)] mb-1">
         Backfill SOP checklists
       </h3>
-      <p className="text-xs text-[var(--color-text-muted)] mb-3">
+      <p className="text-xs text-[var(--ink-muted)] mb-3">
         Generate SOP checklists for any events or planning items that don&apos;t have one yet.
         This is safe to run multiple times — items that already have checklists are skipped.
       </p>

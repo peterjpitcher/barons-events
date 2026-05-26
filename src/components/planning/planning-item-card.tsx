@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Calendar, Check, ClipboardList, GripVertical, Pencil, Trash2, X } from "lucide-react";
+import { ArrowRight, Calendar, Check, ChevronDown, ClipboardList, GripVertical, Pencil, Sparkles, Trash2, X } from "lucide-react";
 import { ApproveEventButton } from "@/components/events/approve-event-button";
 import {
   convertInspirationItemAction,
@@ -15,6 +15,7 @@ import { PlanningTaskList } from "@/components/planning/planning-task-list";
 import { SopChecklistView } from "@/components/planning/sop-checklist-view";
 import { VenueMultiSelect, type VenueOption } from "@/components/venues/venue-multi-select";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, ProgressRing, SLAChip } from "@/components/ui/design-primitives";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -57,14 +58,16 @@ function formatStatus(value: PlanningItem["status"]): string {
   return value.replace(/_/g, " ");
 }
 
+function getStatusLabel(value: PlanningItem["status"]): string {
+  return STATUS_OPTIONS.find((option) => option.value === value)?.label ?? formatStatus(value);
+}
+
 type TaskProgressBarProps = {
   tasks: PlanningTask[];
 };
 
 function TaskProgressBar({ tasks }: TaskProgressBarProps) {
-  const total = tasks.length;
-  const resolved = tasks.filter((t) => t.status === "done" || t.status === "not_required").length;
-  const pct = total > 0 ? Math.round((resolved / total) * 100) : 0;
+  const { total, resolved, pct } = getTaskProgress(tasks);
 
   return (
     <div className="space-y-1">
@@ -72,11 +75,11 @@ function TaskProgressBar({ tasks }: TaskProgressBarProps) {
         <p className="text-xs text-subtle">
           Tasks: {resolved}/{total}
         </p>
-        <p className="text-xs font-medium text-[var(--color-text)]">{pct}%</p>
+        <p className="text-xs font-medium text-[var(--ink)]">{pct}%</p>
       </div>
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--color-muted-surface)]">
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--canvas-2)]">
         <div
-          className="h-full rounded-full bg-[var(--color-primary-400)] transition-[width]"
+          className="h-full rounded-full bg-[var(--slate)] transition-[width]"
           style={{ width: `${pct}%` }}
           role="progressbar"
           aria-valuenow={pct}
@@ -87,6 +90,16 @@ function TaskProgressBar({ tasks }: TaskProgressBarProps) {
       </div>
     </div>
   );
+}
+
+function getTaskProgress(tasks: PlanningTask[]): { total: number; resolved: number; pct: number } {
+  const total = tasks.length;
+  const resolved = tasks.filter((task) => task.status === "done" || task.status === "not_required").length;
+  return {
+    total,
+    resolved,
+    pct: total > 0 ? Math.round((resolved / total) * 100) : 0,
+  };
 }
 
 export function PlanningItemCard({
@@ -112,6 +125,8 @@ export function PlanningItemCard({
   const [status, setStatus] = useState<PlanningItem["status"]>(item.status);
   const [targetDate, setTargetDate] = useState(item.targetDate);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [compactStatusOpen, setCompactStatusOpen] = useState(false);
+  const compactStatusRef = useRef<HTMLDivElement>(null);
   const [isPending, startTransition] = useTransition();
 
   function handleCompactStatusChange(newStatus: PlanningItem["status"]) {
@@ -130,6 +145,29 @@ export function PlanningItemCard({
       onChanged();
     });
   }
+
+  useEffect(() => {
+    if (!compactStatusOpen) return;
+
+    function handlePointerDown(event: MouseEvent): void {
+      if (!compactStatusRef.current?.contains(event.target as Node)) {
+        setCompactStatusOpen(false);
+      }
+    }
+
+    function handleEscape(event: KeyboardEvent): void {
+      if (event.key === "Escape") {
+        setCompactStatusOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [compactStatusOpen]);
 
   useEffect(() => {
     setTitle(item.title);
@@ -328,6 +366,8 @@ export function PlanningItemCard({
     if (item.venues.length === 1) return item.venues[0].name;
     return `${item.venues[0].name} + ${item.venues.length - 1} more`;
   })();
+  const taskProgress = getTaskProgress(item.tasks);
+  const daysUntilTarget = Math.ceil((new Date(`${item.targetDate}T12:00:00Z`).getTime() - Date.now()) / 86_400_000);
 
   if (compact) {
     return (
@@ -335,73 +375,102 @@ export function PlanningItemCard({
         draggable={canDrag}
         onDragStart={canDrag ? () => onDragStart(item) : undefined}
         aria-label={`Planning item: ${item.title}`}
-        className="space-y-2 rounded-[var(--radius)] border border-[var(--color-border)] border-l-4 border-l-[var(--color-primary-400)] bg-white p-2.5 shadow-soft"
+        className="group space-y-2 rounded-[8px] border border-[var(--hair)] bg-[var(--paper)] p-2.5 shadow-card transition hover:-translate-y-px hover:border-[var(--hair-strong)]"
       >
-        <header className="flex items-start justify-between gap-1.5">
-          <div className="space-y-0.5">
-            <p className="flex items-center gap-1 text-xs uppercase tracking-[0.08em] text-subtle">
+        <header className="flex items-start justify-between gap-2">
+          <div className="min-w-0 space-y-1">
+            <p className="flex items-center gap-1 font-brand-mono text-[0.58rem] font-semibold uppercase tracking-[0.12em] text-[var(--ink-soft)]">
               {canDrag ? <GripVertical className="h-3.5 w-3.5" aria-hidden="true" /> : null}
-              <ClipboardList className="h-3.5 w-3.5" aria-hidden="true" />
-              Planning item
+              <ClipboardList className="h-3 w-3" aria-hidden="true" />
+              {item.typeLabel}
             </p>
-            <h3 className="text-base font-semibold text-[var(--color-text)]">{item.title}</h3>
-            <p className="text-xs text-subtle">{item.typeLabel}</p>
+            <h3 className="line-clamp-2 text-sm font-semibold leading-snug text-[var(--ink)]">{item.title}</h3>
           </div>
-          <select
-            value={status}
-            disabled={isPending}
-            onChange={(e) => handleCompactStatusChange(e.target.value as PlanningItem["status"])}
-            aria-label="Change status"
-            className={cn(
-              "cursor-pointer appearance-none rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-500)] disabled:cursor-not-allowed disabled:opacity-60",
-              status === "planned" && "border border-[var(--color-primary-400)] bg-[var(--color-primary-100)] text-[var(--color-primary-900)]",
-              status === "in_progress" && "border border-[var(--color-accent-cool-dark)] bg-[var(--color-info)] text-white",
-              status === "blocked" && "border border-[#9a6d2b] bg-[var(--color-warning)] text-[#2f230d]",
-              status === "done" && "border border-[#355849] bg-[var(--color-success)] text-white",
-              status === "cancelled" && "border border-[#6e3032] bg-[var(--color-danger)] text-white"
-            )}
-          >
-            {STATUS_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+          <div ref={compactStatusRef} className="relative shrink-0">
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() => setCompactStatusOpen((open) => !open)}
+              aria-label="Change status"
+              aria-haspopup="listbox"
+              aria-expanded={compactStatusOpen}
+              className={cn(
+                "inline-flex h-6 items-center gap-1 rounded-full border px-2 font-brand-mono text-[0.58rem] font-semibold uppercase leading-none tracking-[0.06em] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mustard-tint)] disabled:cursor-not-allowed disabled:opacity-60",
+                status === "planned" && "border-[var(--hair)] bg-[var(--paper-tint)] text-[var(--ink-muted)]",
+                status === "in_progress" && "border-[var(--slate)] bg-[var(--slate-tint)] text-[var(--slate)]",
+                status === "blocked" && "border-[var(--mustard)] bg-[var(--mustard-tint)] text-[var(--mustard-dark)]",
+                status === "done" && "border-[var(--sage-dark)] bg-[var(--sage-tint)] text-[var(--sage-dark)]",
+                status === "cancelled" && "border-[var(--burgundy)] bg-[var(--burgundy-tint)] text-[var(--burgundy)]"
+              )}
+            >
+              <span>{getStatusLabel(status)}</span>
+              <ChevronDown className="h-3 w-3" aria-hidden="true" />
+            </button>
+            {compactStatusOpen ? (
+              <div
+                role="listbox"
+                aria-label="Planning status"
+                className="absolute right-0 top-full z-30 mt-1 min-w-[10rem] rounded-[8px] border border-[var(--hair)] bg-[var(--paper)] py-1 shadow-card"
+              >
+                {STATUS_OPTIONS.map((option) => {
+                  const selected = option.value === status;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="option"
+                      aria-selected={selected}
+                      className="grid w-full grid-cols-[1rem_minmax(0,1fr)] items-center gap-2 px-3 py-1.5 text-left text-sm text-[var(--ink)] transition-colors hover:bg-[var(--paper-tint)]"
+                      onClick={() => {
+                        setCompactStatusOpen(false);
+                        if (!selected) {
+                          handleCompactStatusChange(option.value);
+                        }
+                      }}
+                    >
+                      <span className="flex h-4 w-4 items-center justify-center">
+                        {selected ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : null}
+                      </span>
+                      <span>{option.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
         </header>
 
-        <div className="grid gap-1.5 text-xs text-subtle md:grid-cols-2">
-          <p>
-            <span className="font-semibold text-[var(--color-text)]">Target:</span> {formatDate(item.targetDate)}
-          </p>
-          <p>
-            <span className="font-semibold text-[var(--color-text)]">Owner:</span> {item.ownerName ?? "Unassigned"}
-          </p>
-          <p>
-            <span className="font-semibold text-[var(--color-text)]">
-              {item.venues.length > 1 ? "Venues" : "Venue"}:
-            </span>{" "}
-            {item.venues.length === 0
-              ? "Global"
-              : item.venues.length === 1
-                ? item.venues[0].name
-                : `${item.venues[0].name} + ${item.venues.length - 1} more`}
-          </p>
-          <p>
-            <span className="font-semibold text-[var(--color-text)]">Recurring:</span> {item.seriesId ? "Yes" : "No"}
-            {item.isException ? " (exception)" : ""}
-          </p>
+        <div className="flex flex-wrap items-center gap-2 font-brand-mono text-[0.6rem] uppercase tracking-[0.04em] text-[var(--ink-muted)]">
+          <span>{formatDate(item.targetDate)}</span>
+          <SLAChip days={daysUntilTarget} />
+          <span className="h-1 w-1 rounded-full bg-[var(--hair-strong)]" />
+          <span className="inline-flex min-w-0 items-center gap-1">
+            <Avatar name={item.ownerName ?? ownerName} size={16} />
+            <span className="truncate">{item.ownerName ?? ownerName}</span>
+          </span>
         </div>
 
-        {item.description ? <p className="text-sm text-[var(--color-text)]">{item.description}</p> : null}
+        <div className="flex items-center justify-between gap-2 text-xs text-[var(--ink-muted)]">
+          <span className="truncate">{venueName}</span>
+          {item.seriesId ? <span className="rounded-full bg-[var(--canvas-2)] px-1.5 py-0.5">Recurring</span> : null}
+        </div>
+
+        {item.description ? <p className="line-clamp-2 text-xs leading-snug text-[var(--ink-muted)]">{item.description}</p> : null}
 
         {item.tasks.length > 0 ? (
-          <TaskProgressBar tasks={item.tasks} />
+          <div className="flex items-center justify-between gap-2 border-t border-[var(--hair)] pt-2">
+            <span className="flex items-center gap-1.5 text-xs text-[var(--ink-muted)]">
+              <ProgressRing value={taskProgress.pct} />
+              {taskProgress.resolved}/{taskProgress.total} tasks
+            </span>
+            <span className="font-brand-mono text-[0.6rem] uppercase tracking-[0.04em] text-[var(--ink-soft)]">{taskProgress.pct}%</span>
+          </div>
         ) : null}
 
         {onOpenDetails ? (
-          <div className="flex flex-wrap items-center justify-end gap-1.5">
-            <Button type="button" size="sm" variant="subtle" onClick={() => onOpenDetails(item)}>
-              <Pencil className="mr-1 h-4 w-4" aria-hidden="true" /> Manage
+          <div className="flex justify-end">
+            <Button type="button" size="sm" variant="ghost" onClick={() => onOpenDetails(item)}>
+              <Pencil className="h-3.5 w-3.5" aria-hidden="true" /> Manage
             </Button>
           </div>
         ) : null}
@@ -414,11 +483,11 @@ export function PlanningItemCard({
       draggable={canDrag}
       onDragStart={canDrag ? () => onDragStart(item) : undefined}
       aria-label={`Planning item: ${title}`}
-      className="space-y-2 rounded-[var(--radius)] border border-[var(--color-border)] border-l-4 border-l-[var(--color-primary-400)] bg-white p-2.5 shadow-soft"
+      className="space-y-2 rounded-[8px] border border-[var(--hair)] bg-[var(--paper)] p-3 shadow-card"
     >
       <header className="flex items-start justify-between gap-1.5">
         <div className="space-y-0.5">
-          <p className="flex items-center gap-1 text-xs uppercase tracking-[0.08em] text-subtle">
+          <p className="flex items-center gap-1 font-brand-mono text-[0.62rem] uppercase tracking-[0.1em] text-[var(--ink-soft)]">
             {canDrag ? <GripVertical className="h-3.5 w-3.5" aria-hidden="true" /> : null}
             <ClipboardList className="h-3.5 w-3.5" aria-hidden="true" />
             Planning item
@@ -430,7 +499,7 @@ export function PlanningItemCard({
             </div>
           ) : (
             <div className="flex items-center gap-1">
-              <h3 className="text-base font-semibold text-[var(--color-text)]">{title}</h3>
+              <h3 className="text-base font-semibold text-[var(--ink)]">{title}</h3>
               <Button
                 type="button"
                 size="icon"
@@ -452,7 +521,7 @@ export function PlanningItemCard({
             </div>
           ) : (
             <div className="flex items-center gap-1">
-              <p className="text-xs text-subtle">{typeLabel}</p>
+              <p className="text-xs text-[var(--ink-muted)]">{typeLabel}</p>
               <Button
                 type="button"
                 size="icon"
@@ -497,8 +566,8 @@ export function PlanningItemCard({
       </header>
 
       <div className="grid gap-1.5 md:grid-cols-2">
-        <div className="rounded-[var(--radius-sm)] border border-[var(--color-border)] px-2 py-1.5 text-xs text-subtle">
-          <p className="font-semibold text-[var(--color-text)]">Target</p>
+        <div className="rounded-[var(--radius-sm)] border border-[var(--hair)] px-2 py-1.5 text-xs text-subtle">
+          <p className="font-semibold text-[var(--ink)]">Target</p>
           {editingField === "targetDate" ? (
             <div className="mt-0.5 flex items-center gap-1.5">
               <Input type="date" value={targetDate} disabled={isPending} onChange={(event) => setTargetDate(event.target.value)} />
@@ -522,8 +591,8 @@ export function PlanningItemCard({
           )}
         </div>
 
-        <div className="rounded-[var(--radius-sm)] border border-[var(--color-border)] px-2 py-1.5 text-xs text-subtle">
-          <p className="font-semibold text-[var(--color-text)]">Owner</p>
+        <div className="rounded-[var(--radius-sm)] border border-[var(--hair)] px-2 py-1.5 text-xs text-subtle">
+          <p className="font-semibold text-[var(--ink)]">Owner</p>
           {editingField === "ownerId" ? (
             <div className="mt-0.5 flex items-center gap-1.5">
               <Select value={ownerId} disabled={isPending} onChange={(event) => setOwnerId(event.target.value)}>
@@ -554,8 +623,8 @@ export function PlanningItemCard({
           )}
         </div>
 
-        <div className="rounded-[var(--radius-sm)] border border-[var(--color-border)] px-2 py-1.5 text-xs text-subtle">
-          <p className="font-semibold text-[var(--color-text)]">Venue</p>
+        <div className="rounded-[var(--radius-sm)] border border-[var(--hair)] px-2 py-1.5 text-xs text-subtle">
+          <p className="font-semibold text-[var(--ink)]">Venue</p>
           {editingField === "venueId" ? (
             <div className="mt-0.5 space-y-2">
               <VenueMultiSelect
@@ -594,8 +663,8 @@ export function PlanningItemCard({
           )}
         </div>
 
-        <div className="rounded-[var(--radius-sm)] border border-[var(--color-border)] px-2 py-1.5 text-xs text-subtle">
-          <p className="font-semibold text-[var(--color-text)]">Recurring</p>
+        <div className="rounded-[var(--radius-sm)] border border-[var(--hair)] px-2 py-1.5 text-xs text-subtle">
+          <p className="font-semibold text-[var(--ink)]">Recurring</p>
           <p className="mt-0.5">
             {item.seriesId ? "Yes" : "No"}
             {item.isException ? " (exception)" : ""}
@@ -603,8 +672,8 @@ export function PlanningItemCard({
         </div>
       </div>
 
-      <div className="rounded-[var(--radius-sm)] border border-[var(--color-border)] px-2 py-1.5">
-        <p className="text-xs font-semibold text-[var(--color-text)]">Description</p>
+      <div className="rounded-[var(--radius-sm)] border border-[var(--hair)] px-2 py-1.5">
+        <p className="text-xs font-semibold text-[var(--ink)]">Description</p>
         {editingField === "description" ? (
           <div className="mt-0.5 flex items-start gap-1.5">
             <Textarea
@@ -619,7 +688,7 @@ export function PlanningItemCard({
           </div>
         ) : (
           <div className="mt-0.5 flex items-start gap-1">
-            <p className="text-sm text-[var(--color-text)]">{description.trim().length ? description : "No description"}</p>
+            <p className="text-sm text-[var(--ink)]">{description.trim().length ? description : "No description"}</p>
             <Button
               type="button"
               size="icon"
@@ -639,7 +708,7 @@ export function PlanningItemCard({
         <div className="ml-auto flex items-center gap-1.5">
           {confirmDelete ? (
             <>
-              <p className="text-xs font-medium text-[var(--color-danger)]">Confirm delete?</p>
+              <p className="text-xs font-medium text-[var(--burgundy)]">Confirm delete?</p>
               <Button type="button" size="sm" variant="ghost" disabled={isPending} onClick={() => setConfirmDelete(false)}>
                 Cancel
               </Button>
@@ -732,28 +801,27 @@ export function InspirationItemCard({ item }: { item: PlanningInspirationItem })
   }).format(new Date(`${item.eventDate}T12:00:00Z`));
 
   return (
-    <div className="rounded-md border-2 border-dashed border-amber-400 bg-amber-50 px-3 py-2 flex items-start justify-between gap-2">
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-sm">✨</span>
-          <span className="text-sm font-medium text-amber-900 truncate">{item.eventName}</span>
-          <span className="text-xs text-amber-600 bg-amber-100 rounded px-1.5 py-0.5 shrink-0">
+    <div className="flex items-start justify-between gap-2 rounded-[8px] border border-dashed border-[var(--mustard)] bg-[var(--mustard-tint)] px-3 py-2">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Sparkles className="h-3.5 w-3.5 text-[var(--mustard-dark)]" aria-hidden="true" />
+          <span className="truncate text-sm font-medium text-[var(--ink)]">{item.eventName}</span>
+          <span className="shrink-0 rounded bg-[var(--mustard-tint)] px-1.5 py-0.5 font-brand-mono text-[0.6rem] uppercase tracking-[0.04em] text-[var(--mustard-dark)]">
             {CATEGORY_LABELS[item.category]}
           </span>
         </div>
-        <p className="text-xs text-amber-700 mt-0.5">{formattedDate}</p>
+        <p className="mt-0.5 font-brand-mono text-[0.6rem] uppercase tracking-[0.04em] text-[var(--mustard-dark)]">{formattedDate}</p>
         {item.description && (
-          <p className="text-xs text-amber-600 mt-0.5 truncate">{item.description}</p>
+          <p className="mt-0.5 truncate text-xs text-[var(--ink-muted)]">{item.description}</p>
         )}
       </div>
-      <div className="flex items-center gap-1 shrink-0">
+      <div className="flex shrink-0 items-center gap-1">
         <Button
           type="button"
-          variant="primary"
+          variant="secondary"
           size="sm"
           disabled={converting || dismissing}
           onClick={handleConvert}
-          className="bg-amber-500 hover:bg-amber-600 text-white"
         >
           {converting ? '…' : 'Add to plan'}
         </Button>
@@ -790,24 +858,24 @@ export function EventOverlayCard({ event, canApprove }: EventOverlayCardProps) {
   const hasWebCopy = Boolean(event.publicTitle);
 
   return (
-    <article aria-label={`Event: ${event.publicTitle ?? event.title}`} className="space-y-2 rounded-[var(--radius)] border border-[var(--color-border)] border-l-4 border-l-[var(--color-accent-cool-dark)] bg-white p-2.5 shadow-soft">
+    <article aria-label={`Event: ${event.publicTitle ?? event.title}`} className="space-y-2 rounded-[8px] border border-[var(--hair)] bg-[var(--slate-tint)] p-2.5 shadow-card">
       <header className="flex items-start justify-between gap-1.5">
         <div className="space-y-0.5">
-          <p className="flex items-center gap-1 text-xs uppercase tracking-[0.08em] text-subtle">
+          <p className="flex items-center gap-1 font-brand-mono text-[0.58rem] font-semibold uppercase tracking-[0.12em] text-[var(--slate)]">
             <Calendar className="h-3.5 w-3.5" aria-hidden="true" />
             Event
           </p>
-          <h3 className="text-base font-semibold text-[var(--color-text)]">{event.publicTitle ?? event.title}</h3>
+          <h3 className="text-sm font-semibold leading-snug text-[var(--ink)]">{event.publicTitle ?? event.title}</h3>
           {event.publicTeaser && (
-            <p className="text-xs text-subtle">{event.publicTeaser}</p>
+            <p className="line-clamp-2 text-xs text-[var(--ink-muted)]">{event.publicTeaser}</p>
           )}
         </div>
         <Badge variant={statusTone}>{event.status.replace(/_/g, " ")}</Badge>
       </header>
 
-      <div className="grid gap-1.5 text-xs text-subtle md:grid-cols-2">
+      <div className="grid gap-1.5 text-xs text-[var(--ink-muted)] md:grid-cols-2">
         <p>
-          <span className="font-semibold text-[var(--color-text)]">Date:</span>{" "}
+          <span className="font-semibold text-[var(--ink)]">Date:</span>{" "}
           {new Date(event.startAt).toLocaleString("en-GB", {
             timeZone: "Europe/London",
             day: "numeric",
@@ -818,12 +886,12 @@ export function EventOverlayCard({ event, canApprove }: EventOverlayCardProps) {
           })}
         </p>
         <p>
-          <span className="font-semibold text-[var(--color-text)]">Venue:</span>{" "}
+          <span className="font-semibold text-[var(--ink)]">Venue:</span>{" "}
           {event.venueName ?? "Unknown venue"}
           {event.venueSpace ? ` · ${event.venueSpace}` : ""}
         </p>
         <p>
-          <span className="font-semibold text-[var(--color-text)]">Web copy:</span>{" "}
+          <span className="font-semibold text-[var(--ink)]">Web copy:</span>{" "}
           {hasWebCopy ? "Ready" : "Not yet"}
         </p>
       </div>
@@ -834,7 +902,7 @@ export function EventOverlayCard({ event, canApprove }: EventOverlayCardProps) {
         ) : null}
         <Link href={`/events/${event.eventId}`}>
           <Button type="button" size="sm" variant="subtle">
-            <Pencil className="mr-1 h-4 w-4" aria-hidden="true" /> Manage
+            <ArrowRight className="h-4 w-4" aria-hidden="true" /> Manage
           </Button>
         </Link>
       </div>

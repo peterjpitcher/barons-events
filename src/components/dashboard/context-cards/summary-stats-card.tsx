@@ -32,7 +32,7 @@ export function SummaryStatsCard({ stats }: SummaryStatsCardProps): React.ReactN
       <CardContent className="grid grid-cols-2 gap-3 py-4">
         {items.map((item) => (
           <div key={item.label} className="text-center">
-            <p className="text-lg font-bold text-[var(--color-primary-700)]">{item.value}</p>
+            <p className="text-lg font-bold text-[var(--navy)]">{item.value}</p>
             <p className="text-xs text-subtle">{item.label}</p>
           </div>
         ))}

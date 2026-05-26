@@ -11,9 +11,9 @@ export const dynamic = "force-dynamic";
 const spec = {
   openapi: "3.1.0",
   info: {
-    title: "BaronsHub Website API",
-    version: "1.0.0",
-    description: "Server-to-server API for publishing approved BaronsHub events to the brand website."
+    title: "BaronsHub 1.1 Website API",
+    version: "1.1.0",
+    description: "Server-to-server API for publishing approved BaronsHub 1.1 events to the brand website."
   },
   components: {
     securitySchemes: {

@@ -622,6 +622,6 @@ describe("sendWeeklyDigestEmail", () => {
 
     expect(result.sent).toBe(1);
     const call = mockEmailSend.mock.calls[0][0];
-    expect(call.subject).toBe("Your BaronsHub todo digest \u2014 3 open tasks");
+    expect(call.subject).toBe("Your BaronsHub 1.1 todo digest \u2014 3 open tasks");
   });
 });

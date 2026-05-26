@@ -19,15 +19,15 @@ export function SopProgressCard({ progress }: SopProgressCardProps): React.React
     <Card>
       <CardHeader className="flex items-center justify-between">
         <CardTitle className="text-sm">SOP Progress</CardTitle>
-        <Link href="/planning" className="text-xs text-[var(--color-primary-600)] hover:text-[var(--color-primary-700)]">
+        <Link href="/planning" className="text-xs text-[var(--navy)] hover:text-[var(--navy)]">
           View &rarr;
         </Link>
       </CardHeader>
       <CardContent>
-        <p className="mb-2 text-xs font-medium text-[var(--color-text)]">{progress.eventTitle}</p>
-        <div className="h-2 overflow-hidden rounded-full bg-[var(--color-muted-surface)]">
+        <p className="mb-2 text-xs font-medium text-[var(--ink)]">{progress.eventTitle}</p>
+        <div className="h-2 overflow-hidden rounded-full bg-[var(--canvas-2)]">
           <div
-            className="h-full rounded-full bg-[var(--color-primary-500)]"
+            className="h-full rounded-full bg-[var(--slate)]"
             style={{ width: `${pct}%` }}
           />
         </div>

@@ -80,9 +80,9 @@ export function DeleteDialog({ open, onClose, user }: DeleteDialogProps): React.
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(12,20,28,0.55)] p-4" onClick={onClose} role="presentation">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--overlay-scrim)] p-4" onClick={onClose} role="presentation">
       <div
-        className="w-full max-w-lg rounded-[var(--radius)] border border-[var(--color-border)] bg-white p-6 shadow-soft"
+        className="w-full max-w-lg rounded-[var(--radius)] border border-[var(--hair)] bg-[var(--paper)] p-6 shadow-card"
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -90,7 +90,7 @@ export function DeleteDialog({ open, onClose, user }: DeleteDialogProps): React.
       >
         <div className="flex items-center gap-2 mb-4">
           <Trash2 className="h-5 w-5 text-red-600" aria-hidden="true" />
-          <h2 id={titleId} className="text-lg font-semibold text-[var(--color-text)]">
+          <h2 id={titleId} className="text-lg font-semibold text-[var(--ink)]">
             Delete {user.full_name ?? user.email}
           </h2>
         </div>
@@ -98,13 +98,13 @@ export function DeleteDialog({ open, onClose, user }: DeleteDialogProps): React.
         {step === 1 ? (
           <>
             {loading ? (
-              <p className="text-sm text-[var(--color-text-muted)]">Loading impact summary...</p>
+              <p className="text-sm text-[var(--ink-muted)]">Loading impact summary...</p>
             ) : summary ? (
               <ImpactSummary summary={summary} />
             ) : null}
 
             <div className="mt-4 space-y-2">
-              <label htmlFor="delete-reassign-target" className="block text-sm font-medium text-[var(--color-text)]">
+              <label htmlFor="delete-reassign-target" className="block text-sm font-medium text-[var(--ink)]">
                 Reassign content to
               </label>
               <Select
@@ -137,15 +137,15 @@ export function DeleteDialog({ open, onClose, user }: DeleteDialogProps): React.
         ) : (
           <>
             <div className="space-y-3">
-              <p className="text-sm text-[var(--color-text)]">
+              <p className="text-sm text-[var(--ink)]">
                 Reassigning all content to <strong>{selectedTargetName?.full_name ?? selectedTargetName?.email}</strong>.
               </p>
               <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
                 This action is permanent. The user account will be completely removed and cannot be recovered.
               </div>
               <div className="space-y-2">
-                <label htmlFor="confirm-name" className="block text-sm font-medium text-[var(--color-text)]">
-                  Type <code className="rounded bg-[var(--color-muted-surface)] px-1 py-0.5 text-xs">{expectedName}</code> to confirm
+                <label htmlFor="confirm-name" className="block text-sm font-medium text-[var(--ink)]">
+                  Type <code className="rounded bg-[var(--canvas-2)] px-1 py-0.5 text-xs">{expectedName}</code> to confirm
                 </label>
                 <Input
                   id="confirm-name"

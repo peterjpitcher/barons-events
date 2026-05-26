@@ -31,6 +31,7 @@ import { Button } from "@/components/ui/button";
 import { EventCalendar, type CalendarEvent } from "@/components/events/event-calendar";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { PageHeader } from "@/components/ui/design-primitives";
 
 dayjs.extend(advancedFormat);
 dayjs.extend(utc);
@@ -71,36 +72,36 @@ const statusAccentStyles: Record<
   { badge: string; dot: string }
 > = {
   pending_approval: {
-    badge: "bg-[var(--color-info)] text-white border border-[var(--color-accent-cool-dark)]",
-    dot: "bg-white"
+    badge: "bg-[var(--slate)] text-white border border-[var(--navy)]",
+    dot: "bg-[var(--paper)]"
   },
   approved_pending_details: {
-    badge: "bg-[var(--color-info)] text-white border border-[var(--color-accent-cool-dark)]",
-    dot: "bg-white"
+    badge: "bg-[var(--slate)] text-white border border-[var(--navy)]",
+    dot: "bg-[var(--paper)]"
   },
   draft: {
-    badge: "bg-[var(--color-primary-100)] text-[var(--color-primary-900)] border border-[var(--color-primary-400)]",
-    dot: "bg-[var(--color-primary-700)]"
+    badge: "bg-[var(--slate-50)] text-[var(--navy-900)] border border-[var(--slate)]",
+    dot: "bg-[var(--navy)]"
   },
   submitted: {
-    badge: "bg-[var(--color-info)] text-white border border-[var(--color-accent-cool-dark)]",
-    dot: "bg-white"
+    badge: "bg-[var(--slate)] text-white border border-[var(--navy)]",
+    dot: "bg-[var(--paper)]"
   },
   needs_revisions: {
-    badge: "bg-[var(--color-warning)] text-[#2f230d] border border-[#9a6d2b]",
-    dot: "bg-[#2f230d]"
+    badge: "bg-[var(--mustard)] text-[var(--navy)] border border-[var(--mustard-dark)]",
+    dot: "bg-[var(--navy)]"
   },
   approved: {
-    badge: "bg-[var(--color-success)] text-white border border-[#355849]",
-    dot: "bg-white"
+    badge: "bg-[var(--sage-dark)] text-white border border-[var(--sage-dark)]",
+    dot: "bg-[var(--paper)]"
   },
   rejected: {
-    badge: "bg-[var(--color-danger)] text-white border border-[#6e3032]",
-    dot: "bg-white"
+    badge: "bg-[var(--burgundy)] text-white border border-[var(--burgundy)]",
+    dot: "bg-[var(--paper)]"
   },
   completed: {
-    badge: "bg-[#355849] text-white border border-[#284338]",
-    dot: "bg-white"
+    badge: "bg-[var(--sage-dark)] text-white border border-[var(--sage-dark)]",
+    dot: "bg-[var(--paper)]"
   }
 };
 
@@ -486,15 +487,14 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
   const heading = user.role === "office_worker" ? "My events" : "Events overview";
 
   return (
-    <div className="space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="font-brand-serif text-3xl text-[var(--color-primary-700)]">{heading}</h1>
-          <p className="mt-1 text-subtle">
-            Track programming across venues, pivot between month, week, and list views, and jump straight into new drafts.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+    <div className="app-page">
+      <PageHeader
+        eyebrow="Programming"
+        title={heading}
+        description="Track programming across venues, pivot between month, week, and list views, and jump straight into new drafts."
+        meta={<span>{filteredEvents.length} event{filteredEvents.length === 1 ? "" : "s"} in view</span>}
+        actions={
+          <>
           {canCreate ? (
             <Button asChild variant="primary">
               <Link href="/events/new">New event</Link>
@@ -510,7 +510,7 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
               <Link href="/events/pending">Pending proposals</Link>
             </Button>
           ) : null}
-          <div className="flex items-center gap-1 rounded-full border border-[var(--color-border)] bg-white p-1">
+          <div className="flex items-center gap-1 rounded-[7px] border border-[var(--hair)] bg-[var(--paper)] p-1">
             {viewOptions.map(({ mode, icon: Icon, label }) => (
               <Button
                 key={mode}
@@ -523,13 +523,14 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
               </Button>
             ))}
           </div>
-        </div>
-      </header>
+          </>
+        }
+      />
 
       <section className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 rounded-full border border-[var(--color-border)] bg-white px-3 py-1.5">
+            <div className="flex items-center gap-2 rounded-full border border-[var(--hair)] bg-[var(--paper)] px-3 py-1.5">
               <Search className="h-4 w-4 text-subtle" aria-hidden="true" />
               <Input
                 aria-label="Search venues"
@@ -601,7 +602,7 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
               <Button type="button" variant="outline" size="sm" onClick={() => setMonthCursor(monthCursor.subtract(1, "month"))}>
                 <ChevronLeft className="mr-1 h-4 w-4" /> Previous month
               </Button>
-              <span className="px-2 text-sm font-semibold text-[var(--color-text)]">{monthLabel}</span>
+              <span className="px-2 text-sm font-semibold text-[var(--ink)]">{monthLabel}</span>
               <Button type="button" variant="ghost" size="sm" onClick={() => setMonthCursor(dayjs().startOf("month"))}>
                 Today
               </Button>
@@ -621,11 +622,11 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
                 {hidePastEvents ? "Past hidden" : "Show past"}
               </Button>
               {hiddenPastCount > 0 && (
-                <span className="text-xs text-[var(--color-text-muted)]">
+                <span className="text-xs text-[var(--ink-muted)]">
                   {hiddenPastCount} past event{hiddenPastCount !== 1 ? "s" : ""} hidden
                 </span>
               )}
-              <div className="rounded-full border border-[var(--color-border)] bg-white px-3 py-2 text-sm text-subtle">
+              <div className="rounded-full border border-[var(--hair)] bg-[var(--paper)] px-3 py-2 text-sm text-subtle">
                 {listEvents.length} event{listEvents.length === 1 ? "" : "s"}
               </div>
             </div>
@@ -633,7 +634,7 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
         </div>
 
         {showAdvancedFilters || hasAdvancedFilters ? (
-          <div className="grid gap-3 rounded-[var(--radius)] border border-[var(--color-border)] bg-white p-4 md:grid-cols-3">
+          <div className="grid gap-3 rounded-[var(--radius)] border border-[var(--hair)] bg-[var(--paper)] p-4 md:grid-cols-3">
             <div className="space-y-1">
               <label htmlFor="events-filter-search" className="text-xs font-semibold uppercase tracking-[0.1em] text-subtle">
                 Event search
@@ -766,8 +767,8 @@ function StatusLegend({
   legendItems: { status: EventSummary["status"]; label: string; tone: Parameters<typeof Badge>[0]["variant"] }[];
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-[var(--radius)] border border-[var(--color-border)] bg-white px-4 py-2 text-xs text-subtle">
-      <span className="font-medium text-[var(--color-text)]">Legend:</span>
+    <div className="flex flex-wrap items-center gap-2 rounded-[var(--radius)] border border-[var(--hair)] bg-[var(--paper)] px-4 py-2 text-xs text-subtle">
+      <span className="font-medium text-[var(--ink)]">Legend:</span>
       {legendItems.map((item) => (
         <Badge key={item.status} variant={item.tone}>
           {item.label}
@@ -855,42 +856,42 @@ function EventsListTable({ events, allFilteredCount, hidePastEvents }: { events:
   );
 
   return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full border-collapse rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-white shadow-soft">
+    <div className="data-table-shell">
+      <table className="data-table min-w-full">
         <thead>
-          <tr className="bg-[var(--color-muted-surface)] text-left text-xs font-semibold uppercase tracking-[0.12em] text-subtle">
+          <tr className="bg-[var(--canvas-2)] text-left text-xs font-semibold uppercase tracking-[0.12em] text-subtle">
             <th className="px-4 py-3" aria-sort={sortAriaValue("date")}>
-              <button type="button" className="inline-flex items-center gap-1 hover:text-[var(--color-text)]" onClick={() => toggleSort("date")}>
+              <button type="button" className="inline-flex items-center gap-1 hover:text-[var(--ink)]" onClick={() => toggleSort("date")}>
                 Date {sortIcon("date")}
               </button>
             </th>
             <th className="px-4 py-3" aria-sort={sortAriaValue("time")}>
-              <button type="button" className="inline-flex items-center gap-1 hover:text-[var(--color-text)]" onClick={() => toggleSort("time")}>
+              <button type="button" className="inline-flex items-center gap-1 hover:text-[var(--ink)]" onClick={() => toggleSort("time")}>
                 Time {sortIcon("time")}
               </button>
             </th>
             <th className="px-4 py-3" aria-sort={sortAriaValue("event")}>
-              <button type="button" className="inline-flex items-center gap-1 hover:text-[var(--color-text)]" onClick={() => toggleSort("event")}>
+              <button type="button" className="inline-flex items-center gap-1 hover:text-[var(--ink)]" onClick={() => toggleSort("event")}>
                 Event {sortIcon("event")}
               </button>
             </th>
             <th className="px-4 py-3" aria-sort={sortAriaValue("venue")}>
-              <button type="button" className="inline-flex items-center gap-1 hover:text-[var(--color-text)]" onClick={() => toggleSort("venue")}>
+              <button type="button" className="inline-flex items-center gap-1 hover:text-[var(--ink)]" onClick={() => toggleSort("venue")}>
                 Venue {sortIcon("venue")}
               </button>
             </th>
             <th className="px-4 py-3" aria-sort={sortAriaValue("artist")}>
-              <button type="button" className="inline-flex items-center gap-1 hover:text-[var(--color-text)]" onClick={() => toggleSort("artist")}>
+              <button type="button" className="inline-flex items-center gap-1 hover:text-[var(--ink)]" onClick={() => toggleSort("artist")}>
                 Artist {sortIcon("artist")}
               </button>
             </th>
             <th className="px-4 py-3" aria-sort={sortAriaValue("space")}>
-              <button type="button" className="inline-flex items-center gap-1 hover:text-[var(--color-text)]" onClick={() => toggleSort("space")}>
+              <button type="button" className="inline-flex items-center gap-1 hover:text-[var(--ink)]" onClick={() => toggleSort("space")}>
                 Space {sortIcon("space")}
               </button>
             </th>
             <th className="px-4 py-3" aria-sort={sortAriaValue("status")}>
-              <button type="button" className="inline-flex items-center gap-1 hover:text-[var(--color-text)]" onClick={() => toggleSort("status")}>
+              <button type="button" className="inline-flex items-center gap-1 hover:text-[var(--ink)]" onClick={() => toggleSort("status")}>
                 Status {sortIcon("status")}
               </button>
             </th>
@@ -919,7 +920,7 @@ function EventsListTable({ events, allFilteredCount, hidePastEvents }: { events:
               const artistLabel = getEventArtistLabel(event);
               const spaceName = event.venue_space?.trim().length ? event.venue_space : "Space to be confirmed";
               return (
-                <tr key={event.id} className="border-t border-[var(--color-border)] text-sm text-[var(--color-text)]">
+                <tr key={event.id} className="border-t border-[var(--hair)] text-sm text-[var(--ink)]">
                   <td className="px-4 py-3 whitespace-nowrap">{event.start.format("ddd D MMM YYYY")}</td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     {event.start.format("HH:mm")} - {event.end.format("HH:mm")}
@@ -927,7 +928,7 @@ function EventsListTable({ events, allFilteredCount, hidePastEvents }: { events:
                   <td className="px-4 py-3">
                     <Link
                       href={`/events/${event.id}`}
-                      className="font-semibold text-[var(--color-text)] transition-colors hover:text-[var(--color-primary-700)]"
+                      className="font-semibold text-[var(--ink)] transition-colors hover:text-[var(--navy)]"
                     >
                       {event.title}
                     </Link>
@@ -995,16 +996,16 @@ function SevenDayMatrix({
   }, [events, venues, rangeEnd, safeStart]);
 
   return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full border-collapse rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-white shadow-soft">
+    <div className="data-table-shell">
+      <table className="data-table min-w-full">
         <thead>
-          <tr className="bg-[var(--color-muted-surface)] text-xs font-semibold uppercase tracking-[0.12em] text-subtle">
+          <tr className="bg-[var(--canvas-2)] text-xs font-semibold uppercase tracking-[0.12em] text-subtle">
             <th className="w-48 px-4 py-3 text-left">Venue</th>
             {days.map((day) => (
-              <th key={day.toISOString()} className="min-w-[9rem] border-l border-[var(--color-border)] px-4 py-3 text-left">
+              <th key={day.toISOString()} className="min-w-[9rem] border-l border-[var(--hair)] px-4 py-3 text-left">
                 <div className="flex flex-col">
                   <span className="text-[0.7rem]">{day.format("ddd")}</span>
-                  <span className="text-sm text-[var(--color-text)]">{day.format("D MMM")}</span>
+                  <span className="text-sm text-[var(--ink)]">{day.format("D MMM")}</span>
                 </div>
               </th>
             ))}
@@ -1080,17 +1081,17 @@ function VenueMatrixRow({ venue, events, days, canCreate, createVenueId }: Venue
   });
 
   return (
-    <tr className="border-t border-[var(--color-border)]">
-      <th className="border-r border-[var(--color-border)] px-4 py-3 text-left align-top text-sm text-[var(--color-text)]">
+    <tr className="border-t border-[var(--hair)]">
+      <th className="border-r border-[var(--hair)] px-4 py-3 text-left align-top text-sm text-[var(--ink)]">
         <div className="font-semibold">{venue.name}</div>
         <div className="text-xs text-subtle">{events.length} event{events.length === 1 ? "" : "s"}</div>
       </th>
       <td colSpan={7} className="p-0">
-        <div className="grid grid-cols-7 gap-0 border border-[var(--color-border)] bg-white">
+        <div className="grid grid-cols-7 gap-0 border border-[var(--hair)] bg-[var(--paper)]">
           {days.map((day, index) => (
             <div
               key={day.toISOString()}
-              className="relative flex min-h-[6.5rem] flex-col gap-2 border border-[var(--color-border)] bg-white p-2"
+              className="relative flex min-h-[6.5rem] flex-col gap-2 border border-[var(--hair)] bg-[var(--paper)] p-2"
               style={{
                 borderLeftWidth: index === 0 ? undefined : 0,
                 borderTopWidth: 0,
@@ -1106,11 +1107,11 @@ function VenueMatrixRow({ venue, events, days, canCreate, createVenueId }: Venue
                 return (
                   <div
                     key={`${event.id}-${day.format("YYYY-MM-DD")}`}
-                    className="flex h-full flex-col rounded-[var(--radius-sm)] border border-[rgba(39,54,64,0.12)] bg-white p-2 text-xs text-[var(--color-text)] shadow-soft"
+                    className="flex h-full flex-col rounded-[var(--radius-sm)] border border-[var(--hair)] bg-[var(--paper)] p-2 text-xs text-[var(--ink)] shadow-card"
                   >
                     <Link
                       href={`/events/${event.id}`}
-                      className="truncate text-sm font-semibold text-[var(--color-text)] transition-colors hover:text-[var(--color-primary-700)]"
+                      className="truncate text-sm font-semibold text-[var(--ink)] transition-colors hover:text-[var(--navy)]"
                     >
                       {event.public_title ?? event.title}
                     </Link>
@@ -1123,7 +1124,7 @@ function VenueMatrixRow({ venue, events, days, canCreate, createVenueId }: Venue
                       </span>
                     </div>
                     {/* Intentional departure from Badge component: includes dot indicator for compact board cells */}
-                    <div className="mt-auto border-t border-[rgba(39,54,64,0.12)] pt-2">
+                    <div className="mt-auto border-t border-[var(--hair)] pt-2">
                       <span
                         className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.64rem] font-semibold uppercase tracking-[0.08em] ${accent.badge}`}
                       >
@@ -1148,7 +1149,7 @@ function VenueMatrixRow({ venue, events, days, canCreate, createVenueId }: Venue
                       asChild
                       variant="ghost"
                       size="sm"
-                      className="h-6 self-start px-2 text-[0.7rem] text-[var(--color-primary-700)]"
+                      className="h-6 self-start px-2 text-[0.7rem] text-[var(--navy)]"
                     >
                       <Link href={href}>Add</Link>
                     </Button>

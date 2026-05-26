@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CalendarRange, Filter, LayoutGrid, List, MoveHorizontal, Plus, Users } from "lucide-react";
-import { movePlanningItemDateAction, refreshInspirationItemsAction } from "@/actions/planning";
+import { CalendarRange, Check, LayoutGrid, List, MoveHorizontal, Pin, Plus, RefreshCw, Search, Users } from "lucide-react";
+import { movePlanningItemDateAction, refreshInspirationItemsAction, togglePlanningTaskStatusAction } from "@/actions/planning";
 import { PlanningAlertStrip } from "@/components/planning/planning-alert-strip";
 import { PlanningCalendarView } from "@/components/planning/planning-calendar-view";
 import { PlanningItemCard, EventOverlayCard, InspirationItemCard } from "@/components/planning/planning-item-card";
@@ -16,6 +16,8 @@ import type { PlanningViewEntry } from "@/components/planning/view-types";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { Avatar, Kbd, PageHeader } from "@/components/ui/design-primitives";
+import type { TodoItem, TodoUrgency } from "@/components/todos/todo-item-types";
 import type {
   PlanningBoardData,
   PlanningBucketKey,
@@ -41,6 +43,7 @@ type PlanningBoardProps = {
   userRole?: UserRole;
   currentUserId?: string;
   currentUserVenueId?: string | null;
+  queueItems?: TodoItem[];
 };
 
 type BucketConfig = {
@@ -75,6 +78,44 @@ function sortByDateThenTitle<T extends { targetDate: string; title: string }>(ro
 
 type ViewMode = "board" | "calendar" | "list" | "todos_by_person";
 
+const BUCKET_TONE_CLASS: Record<PlanningBucketKey, string> = {
+  past: "bg-[var(--burgundy)]",
+  "0_30": "bg-[var(--mustard)]",
+  "31_60": "bg-[var(--slate)]",
+  "61_90": "bg-[var(--sage)]",
+  later: "bg-[var(--hair-strong)]",
+};
+
+const QUEUE_GROUPS: Array<{
+  key: TodoUrgency;
+  label: string;
+  colorClass: string;
+  dotClass: string;
+  bgClass: string;
+}> = [
+  {
+    key: "overdue",
+    label: "Overdue",
+    colorClass: "text-[var(--burgundy)]",
+    dotClass: "bg-[var(--burgundy)]",
+    bgClass: "bg-[var(--burgundy-tint)]",
+  },
+  {
+    key: "due_soon",
+    label: "This week",
+    colorClass: "text-[var(--mustard-dark)]",
+    dotClass: "bg-[var(--mustard)]",
+    bgClass: "bg-[var(--mustard-tint)]",
+  },
+  {
+    key: "later",
+    label: "Later",
+    colorClass: "text-[var(--slate)]",
+    dotClass: "bg-[var(--slate)]",
+    bgClass: "bg-[var(--slate-tint)]",
+  },
+];
+
 function RefreshInspirationButton() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -97,7 +138,7 @@ function RefreshInspirationButton() {
         disabled={loading}
         title="Refresh inspiration items"
       >
-        <span>{loading ? '⏳' : '✨'}</span>
+        <RefreshCw className={loading ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} aria-hidden="true" />
         <span>{loading ? 'Refreshing…' : 'Refresh inspiration'}</span>
       </Button>
       {message && <span className="text-xs text-muted-foreground">{message}</span>}
@@ -105,7 +146,96 @@ function RefreshInspirationButton() {
   );
 }
 
-export function PlanningBoard({ data, calendarData, venues, canApproveEvents, userRole, currentUserId, currentUserVenueId }: PlanningBoardProps) {
+function TodoQueueRail({
+  items,
+  onToggle,
+  onOpen,
+}: {
+  items: TodoItem[];
+  onToggle: (item: TodoItem) => void;
+  onOpen: (item: TodoItem) => void;
+}) {
+  const [optimisticallyDone, setOptimisticallyDone] = useState<Set<string>>(new Set());
+  const visibleItems = items.filter((item) => !optimisticallyDone.has(item.id));
+  const doneCount = items.length - visibleItems.length;
+
+  function handleToggle(item: TodoItem) {
+    if (!item.canToggle || !item.planningTaskId) {
+      onOpen(item);
+      return;
+    }
+    setOptimisticallyDone((current) => new Set(current).add(item.id));
+    onToggle(item);
+  }
+
+  return (
+    <aside className="sticky top-[66px] flex w-full flex-col gap-2 rounded-[10px] border border-[var(--hair)] bg-[var(--paper)] p-3 xl:w-[288px]">
+      <header className="flex items-baseline justify-between gap-2 border-b border-[var(--hair)] pb-2">
+        <div className="flex items-baseline gap-2">
+          <h2 className="font-brand-serif text-[15px] font-medium text-[var(--navy)]">Your queue</h2>
+          <span className="font-brand-mono text-[0.625rem] uppercase tracking-[0.04em] text-[var(--ink-soft)]">
+            {visibleItems.length} open
+          </span>
+        </div>
+        <span className="font-brand-mono text-[0.6rem] uppercase tracking-[0.06em] text-[var(--ink-soft)]">
+          {doneCount}/{items.length} done
+        </span>
+      </header>
+
+      {items.length === 0 ? (
+        <p className="py-6 text-center text-sm text-[var(--ink-muted)]">No assigned todos right now.</p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {QUEUE_GROUPS.map((group) => {
+            const rows = visibleItems.filter((item) => item.urgency === group.key).slice(0, group.key === "later" ? 4 : 8);
+            if (rows.length === 0) return null;
+            return (
+              <section key={group.key}>
+                <div className={`mb-1.5 flex items-center gap-2 font-brand-mono text-[0.6rem] font-semibold uppercase tracking-[0.14em] ${group.colorClass}`}>
+                  <span className={`h-2 w-2 rounded-full ${group.dotClass}`} />
+                  <span>{group.label}</span>
+                  <span className={`ml-auto rounded-full px-1.5 py-0.5 ${group.bgClass}`}>{rows.length}</span>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  {rows.map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex items-start gap-2 rounded-[6px] border border-[var(--hair)] bg-[var(--canvas-2)] px-2 py-1.5"
+                    >
+                      <button
+                        type="button"
+                        aria-label={item.canToggle ? `Mark ${item.title} done` : `Open ${item.title}`}
+                        className="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border border-[var(--hair-strong)] bg-[var(--paper)] text-white hover:border-[var(--sage)] hover:bg-[var(--sage)]"
+                        onClick={() => handleToggle(item)}
+                      >
+                        <Check className="h-2.5 w-2.5" aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        className="min-w-0 flex-1 text-left"
+                        onClick={() => onOpen(item)}
+                      >
+                        <span className="block text-xs leading-snug text-[var(--ink)]">{item.title}</span>
+                        <span className="mt-1 flex min-w-0 items-center gap-1.5 font-brand-mono text-[0.58rem] uppercase tracking-[0.04em] text-[var(--ink-muted)]">
+                          <Avatar name={item.assigneeName ?? item.venueName ?? item.source} size={14} />
+                          <span>{item.source}</span>
+                          <span className="text-[var(--hair-strong)]">.</span>
+                          <span className="truncate">{item.parentTitle ?? item.venueName ?? item.subtitle}</span>
+                        </span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            );
+          })}
+        </div>
+      )}
+    </aside>
+  );
+}
+
+export function PlanningBoard({ data, calendarData, venues, canApproveEvents, userRole, currentUserId, currentUserVenueId, queueItems = [] }: PlanningBoardProps) {
   const router = useRouter();
   const [viewMode, setViewMode] = useState<ViewMode>("board");
   const [isCreateModalOpen, setCreateModalOpen] = useState(false);
@@ -391,28 +521,61 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
     });
   }
 
+  function toggleQueueItem(item: TodoItem) {
+    if (!item.planningTaskId) return;
+    startTransition(async () => {
+      const result = await togglePlanningTaskStatusAction({
+        taskId: item.planningTaskId,
+        status: "done",
+      });
+
+      if (!result.success) {
+        toast.error(result.message ?? "Could not mark task as done.");
+        return;
+      }
+
+      toast.success("Task marked done.");
+      refreshBoard();
+    });
+  }
+
+  function openQueueItem(item: TodoItem) {
+    if (item.planningItemId) {
+      router.push(`/planning/${item.planningItemId}`);
+      return;
+    }
+    router.push(item.linkHref);
+  }
+
   return (
-    <div className="space-y-4">
-      <header className="space-y-2">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h1 className="font-brand-serif text-3xl text-[var(--color-primary-700)]">Planning Workspace</h1>
-            <p className="max-w-3xl text-subtle">
-              Track operational actions and launches in a rolling 30/60/90 planner, with recurring templates and task ownership.
-            </p>
-            {userRole === 'administrator' && <RefreshInspirationButton />}
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
+    <div className="app-page">
+      <PageHeader
+        eyebrow="30 / 60 / 90 planner"
+        title="Planning workspace"
+        description="Operational actions and launches on a rolling horizon, with recurring templates and task ownership."
+        meta={
+          <>
+            <span>{filteredPlanningItems.length} items</span>
+            <span className="h-1 w-1 rounded-full bg-[var(--hair-strong)]" />
+            <span>{visibleEvents.length} events</span>
+            <span className="h-1 w-1 rounded-full bg-[var(--hair-strong)]" />
+            <span>{data.inspirationItems.length} inspiration</span>
+            <span className="h-1 w-1 rounded-full bg-[var(--hair-strong)]" />
+            <span className="text-[var(--ink-soft)]">Updated now</span>
+          </>
+        }
+        actions={
+          <>
             {userRole && canCreatePlanningItems(userRole, currentUserVenueId) && (
               <Button type="button" onClick={() => setCreateModalOpen(true)}>
-                <Plus className="h-4 w-4" aria-hidden="true" /> Add planning item
+                <Plus className="h-4 w-4" aria-hidden="true" /> New item
               </Button>
             )}
-            <div className="flex items-center gap-1 rounded-full border border-[var(--color-border)] bg-white p-1">
+            <div className="inline-flex h-8 items-center rounded-[7px] border border-[var(--hair)] bg-[var(--paper)] p-1">
               <Button
                 type="button"
                 size="sm"
-                variant={viewMode === "board" ? "secondary" : "ghost"}
+                variant={viewMode === "board" ? "primary" : "ghost"}
                 onClick={() => switchView("board")}
               >
                 <LayoutGrid className="h-4 w-4" aria-hidden="true" /> Board
@@ -420,7 +583,7 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
               <Button
                 type="button"
                 size="sm"
-                variant={viewMode === "calendar" ? "secondary" : "ghost"}
+                variant={viewMode === "calendar" ? "primary" : "ghost"}
                 onClick={() => switchView("calendar")}
               >
                 <CalendarRange className="h-4 w-4" aria-hidden="true" /> Calendar
@@ -428,7 +591,7 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
               <Button
                 type="button"
                 size="sm"
-                variant={viewMode === "list" ? "secondary" : "ghost"}
+                variant={viewMode === "list" ? "primary" : "ghost"}
                 onClick={() => switchView("list")}
               >
                 <List className="h-4 w-4" aria-hidden="true" /> List
@@ -436,15 +599,17 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
               <Button
                 type="button"
                 size="sm"
-                variant={viewMode === "todos_by_person" ? "secondary" : "ghost"}
+                variant={viewMode === "todos_by_person" ? "primary" : "ghost"}
                 onClick={() => switchView("todos_by_person")}
               >
                 <Users className="h-4 w-4" aria-hidden="true" /> Todos by person
               </Button>
             </div>
-          </div>
-        </div>
-      </header>
+          </>
+        }
+      />
+
+      {userRole === 'administrator' && <RefreshInspirationButton />}
 
       <PlanningAlertStrip
         alerts={data.alerts}
@@ -463,16 +628,29 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
         }}
       />
 
-      <section className="space-y-2 rounded-[var(--radius)] border border-[var(--color-border)] bg-white p-3 shadow-soft">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Filter className="h-4 w-4 text-subtle" aria-hidden="true" />
+      <section className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          className="inline-flex h-7 items-center gap-1.5 rounded-[7px] border border-[var(--hair)] bg-[var(--paper)] px-2.5 text-xs font-medium text-[var(--ink)]"
+        >
+          <Pin className="h-3.5 w-3.5 text-[var(--mustard)]" aria-hidden="true" />
+          All open items
+        </button>
+        <div className="h-5 w-px bg-[var(--hair)]" />
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--ink-soft)]" aria-hidden="true" />
           <Input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search planning and events"
-            className="h-10 w-full md:w-80"
+            placeholder="Search"
+            className="h-7 w-full pl-8 pr-9 text-xs md:w-64"
           />
-          <Select value={venueFilter} onChange={(event) => setVenueFilter(event.target.value)} className="h-10 w-full md:w-72">
+          <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2">
+            <Kbd>/</Kbd>
+          </span>
+        </div>
+        <div className="h-5 w-px bg-[var(--hair)]" />
+        <Select value={venueFilter} onChange={(event) => setVenueFilter(event.target.value)} className="h-7 w-full py-1 text-xs md:w-56">
             <option value="">All venues</option>
             {venues.map((venue) => (
               <option key={venue.id} value={venue.id}>
@@ -483,7 +661,7 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
           <Select
             value={eventVisibility}
             onChange={(event) => setEventVisibility(event.target.value as "with_events" | "planning_only")}
-            className="h-10 w-full md:w-64"
+            className="h-7 w-full py-1 text-xs md:w-48"
           >
             <option value="with_events">Planning + events</option>
             <option value="planning_only">Planning only</option>
@@ -494,85 +672,98 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
               {showLater ? "Hide 90+" : "Show 90+"}
             </Button>
           ) : null}
-        </div>
+        <span className="ml-auto font-brand-mono text-[0.625rem] uppercase tracking-[0.05em] text-[var(--ink-soft)]">
+          {combinedEntries.length} shown
+        </span>
       </section>
 
       {viewMode === "board" ? (
-        <section className={`grid gap-4 ${
-          visibleBuckets.length === 5 ? "xl:grid-cols-5" :
-          visibleBuckets.length === 4 ? "xl:grid-cols-4" :
-          "xl:grid-cols-3"
-        }`}>
-          {visibleBuckets.map((bucket) => {
-            const rows = combinedByBucket[bucket.key];
-            return (
-              <article
-                key={bucket.key}
-                className="flex min-h-[18rem] flex-col gap-2 rounded-[var(--radius)] border border-[var(--color-border)] bg-white p-2.5 shadow-soft"
-              >
-                <header className="border-b border-[var(--color-border)] pb-1.5">
-                  <h2 className="text-lg font-semibold text-[var(--color-primary-700)]">{bucket.label}</h2>
-                  <p className="text-xs text-subtle">{bucket.helper}</p>
-                </header>
+        <section className="grid gap-4 xl:grid-cols-[1fr_288px]">
+          <div className={`grid gap-3 ${
+            visibleBuckets.length === 5 ? "2xl:grid-cols-5" :
+            visibleBuckets.length === 4 ? "2xl:grid-cols-4" :
+            "2xl:grid-cols-3"
+          }`}>
+            {visibleBuckets.map((bucket) => {
+              const rows = combinedByBucket[bucket.key];
+              return (
+                <article
+                  key={bucket.key}
+                  className="flex min-h-[18rem] min-w-0 flex-col gap-2"
+                >
+                  <header className="flex items-start justify-between gap-2 border-b border-[var(--hair)] px-1 pb-2">
+                    <div className="min-w-0">
+                      <h2 className="relative pl-3 font-brand-serif text-[15px] font-medium text-[var(--navy)]">
+                        <span className={`absolute left-0 top-1 bottom-1 w-[3px] rounded-full ${BUCKET_TONE_CLASS[bucket.key]}`} />
+                        {bucket.label}
+                      </h2>
+                      <p className="mt-0.5 pl-3 font-brand-mono text-[0.58rem] uppercase tracking-[0.08em] text-[var(--ink-soft)]">{bucket.helper}</p>
+                    </div>
+                    <span className="rounded-full bg-[var(--canvas-2)] px-2 py-0.5 font-brand-mono text-[0.65rem] text-[var(--ink-muted)]">
+                      {rows.length}
+                    </span>
+                  </header>
 
-                <div className="space-y-2">
-                  {rows.map((row) => {
-                    if (row.type === "planning") {
-                      const canEditItem = userRole && currentUserId
-                        ? canEditVenueLinkedPlanning(
-                            {
-                              id: currentUserId,
-                              role: userRole,
-                              venueId: currentUserVenueId ?? null,
-                              email: "",
-                              fullName: null,
-                              deactivatedAt: null
-                            },
-                            { venueId: row.item.venueId, venues: row.item.venues }
-                          )
-                        : false;
-                      return (
-                        <PlanningItemCard
-                          key={row.item.id}
-                          item={row.item}
-                          users={data.users}
-                          venues={venues}
-                          onChanged={refreshBoard}
-                          compact
-                          onOpenDetails={canEditItem ? (planningItem) => router.push(`/planning/${planningItem.id}`) : undefined}
-                          currentUserId={currentUserId}
-                        />
-                      );
-                    }
-                    if (row.type === "inspiration") {
-                      return <InspirationItemCard key={row.item.id} item={row.item} />;
-                    }
-                    return <EventOverlayCard key={row.event.id} event={row.event} canApprove={canApproveEvents} />;
-                  })}
-                </div>
+                  <div className="space-y-2">
+                    {rows.map((row) => {
+                      if (row.type === "planning") {
+                        const canEditItem = userRole && currentUserId
+                          ? canEditVenueLinkedPlanning(
+                              {
+                                id: currentUserId,
+                                role: userRole,
+                                venueId: currentUserVenueId ?? null,
+                                email: "",
+                                fullName: null,
+                                deactivatedAt: null
+                              },
+                              { venueId: row.item.venueId, venues: row.item.venues }
+                            )
+                          : false;
+                        return (
+                          <PlanningItemCard
+                            key={row.item.id}
+                            item={row.item}
+                            users={data.users}
+                            venues={venues}
+                            onChanged={refreshBoard}
+                            compact
+                            onOpenDetails={canEditItem ? (planningItem) => router.push(`/planning/${planningItem.id}`) : undefined}
+                            currentUserId={currentUserId}
+                          />
+                        );
+                      }
+                      if (row.type === "inspiration") {
+                        return <InspirationItemCard key={row.item.id} item={row.item} />;
+                      }
+                      return <EventOverlayCard key={row.event.id} event={row.event} canApprove={canApproveEvents} />;
+                    })}
+                  </div>
 
-                {rows.length === 0 ? (
-                  <p className="mt-auto text-sm text-subtle">No items in this window.</p>
-                ) : null}
-              </article>
-            );
-          })}
+                  {rows.length === 0 ? (
+                    <p className="rounded-[8px] border border-dashed border-[var(--hair)] px-3 py-5 text-center text-sm text-[var(--ink-soft)]">No items match your filter</p>
+                  ) : null}
+                </article>
+              );
+            })}
+          </div>
+          <TodoQueueRail items={queueItems} onToggle={toggleQueueItem} onOpen={openQueueItem} />
         </section>
       ) : null}
 
       {viewMode === "calendar" ? (
         <div className="space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius)] border border-[var(--color-border)] bg-white p-2 shadow-soft">
-            <p className="text-xs text-subtle">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-[8px] border border-[var(--hair)] bg-[var(--paper)] p-2 shadow-card">
+            <p className="text-xs text-[var(--ink-muted)]">
               Calendar shows every event and planning item across all time.
               {showDoneCancelled
                 ? " Completed and cancelled items are visible."
                 : " Completed and cancelled items are currently hidden."}
             </p>
-            <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-[var(--color-text)]">
+            <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-[var(--ink)]">
               <input
                 type="checkbox"
-                className="h-4 w-4"
+                className="h-4 w-4 accent-[var(--navy)]"
                 checked={showDoneCancelled}
                 onChange={(event) => setShowDoneCancelled(event.target.checked)}
               />

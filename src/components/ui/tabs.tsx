@@ -45,7 +45,7 @@ type TabsListProps = {
 
 export function TabsList({ children, className }: TabsListProps) {
   return (
-    <div role="tablist" className={cn("flex", className)}>
+    <div role="tablist" className={cn("inline-flex rounded-[7px] border border-[var(--hair)] bg-[var(--paper)] p-1", className)}>
       {children}
     </div>
   );
@@ -68,10 +68,10 @@ export function TabsTrigger({ value, children, className, indicator }: TabsTrigg
       aria-selected={isActive}
       onClick={() => setActiveTab(value)}
       className={cn(
-        "relative flex items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-500)] focus-visible:ring-inset",
+        "relative flex items-center gap-1.5 rounded-[5px] px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mustard)] focus-visible:ring-inset",
         isActive
-          ? "border-b-2 border-[var(--color-primary-700)] text-[var(--color-primary-700)]"
-          : "text-subtle hover:text-[var(--color-text)]",
+          ? "bg-[var(--navy)] text-white"
+          : "text-[var(--ink-muted)] hover:text-[var(--ink)]",
         className
       )}
     >

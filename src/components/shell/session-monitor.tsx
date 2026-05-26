@@ -70,8 +70,8 @@ export function SessionMonitor(): React.ReactNode {
       role="status"
       aria-live="polite"
     >
-      <div className="rounded-lg bg-white px-6 py-4 shadow-lg">
-        <p className="text-sm font-medium text-[var(--color-text)]">
+      <div className="rounded-lg bg-[var(--paper)] px-6 py-4 shadow-lg">
+        <p className="text-sm font-medium text-[var(--ink)]">
           Checking session...
         </p>
       </div>

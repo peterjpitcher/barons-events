@@ -34,7 +34,7 @@ export function RecentActivityCard({ activity }: RecentActivityCardProps): React
           activity.map((item) => (
             <div key={item.id} className="flex items-start justify-between text-xs">
               <div>
-                <span className="font-medium text-[var(--color-text)]">{item.actorName}</span>{" "}
+                <span className="font-medium text-[var(--ink)]">{item.actorName}</span>{" "}
                 <span className="text-subtle">{item.action}</span>
               </div>
               <span className="shrink-0 text-subtle">

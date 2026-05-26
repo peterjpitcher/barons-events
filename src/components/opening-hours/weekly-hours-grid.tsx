@@ -190,17 +190,17 @@ export function WeeklyHoursGrid({
 
   return (
     <div className="space-y-4">
-      <div className="overflow-x-auto">
-        <table className="min-w-full border-collapse text-sm">
+      <div className="data-table-shell">
+        <table className="data-table min-w-full">
           <thead>
             <tr>
-              <th className="w-32 border-b border-[var(--color-border)] pb-2 pr-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-subtle">
+              <th className="w-32 border-b border-[var(--hair)] pb-2 pr-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-subtle">
                 Service
               </th>
               {DAYS.map((day) => (
                 <th
                   key={day}
-                  className="min-w-[8rem] border-b border-[var(--color-border)] pb-2 px-2 text-center text-xs font-semibold uppercase tracking-[0.12em] text-subtle"
+                  className="min-w-[8rem] border-b border-[var(--hair)] pb-2 px-2 text-center text-xs font-semibold uppercase tracking-[0.12em] text-subtle"
                 >
                   {day}
                 </th>
@@ -209,8 +209,8 @@ export function WeeklyHoursGrid({
           </thead>
           <tbody>
             {serviceTypes.map((st) => (
-              <tr key={st.id} className="border-b border-[var(--color-border)] last:border-0">
-                <td className="py-3 pr-3 text-sm font-semibold text-[var(--color-text)]">
+              <tr key={st.id} className="border-b border-[var(--hair)] last:border-0">
+                <td className="py-3 pr-3 text-sm font-semibold text-[var(--ink)]">
                   <div className="space-y-1">
                     <div>{st.name}</div>
                     <label className="flex items-center gap-1.5 text-xs font-normal text-subtle">
@@ -325,7 +325,7 @@ function HoursCell({
 }) {
   if (!hasService) {
     return (
-      <span className="inline-flex items-center rounded-full bg-[var(--color-muted-surface)] px-2 py-1 text-xs text-subtle">
+      <span className="inline-flex items-center rounded-full bg-[var(--canvas-2)] px-2 py-1 text-xs text-subtle">
         Not offered
       </span>
     );
@@ -337,7 +337,7 @@ function HoursCell({
     }
     if (cell.availability === "closed") {
       return (
-        <span className="inline-flex items-center rounded-full bg-[var(--color-muted-surface)] px-2 py-1 text-xs text-subtle">
+        <span className="inline-flex items-center rounded-full bg-[var(--canvas-2)] px-2 py-1 text-xs text-subtle">
           Closed
         </span>
       );
@@ -346,7 +346,7 @@ function HoursCell({
       return <span className="text-xs text-subtle">—</span>;
     }
     return (
-      <span className="text-xs text-[var(--color-text)]">
+      <span className="text-xs text-[var(--ink)]">
         {cell.open_time || "?"} – {cell.close_time || "?"}
       </span>
     );
@@ -379,7 +379,7 @@ function HoursCell({
             onChange={(e) => onChange({ open_time: e.target.value })}
             placeholder="Open"
             aria-label="Opening time"
-            className="block w-full rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-white px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]"
+            className="block w-full rounded-[var(--radius-sm)] border border-[var(--hair)] bg-[var(--paper)] px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[var(--slate)]"
           />
           <input
             type="time"
@@ -387,7 +387,7 @@ function HoursCell({
             onChange={(e) => onChange({ close_time: e.target.value })}
             placeholder="Close"
             aria-label="Closing time"
-            className="block w-full rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-white px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]"
+            className="block w-full rounded-[var(--radius-sm)] border border-[var(--hair)] bg-[var(--paper)] px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[var(--slate)]"
           />
         </>
       ) : null}

@@ -40,13 +40,13 @@ function formatLondonDateTime(value: Date | string): string {
 function StatusBadge({ status }: { status: BookingStatus }) {
   if (status === "confirmed") {
     return (
-      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800">
+      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-[var(--sage-tint)] text-[var(--sage-dark)]">
         Confirmed
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-red-100 text-red-800">
+    <span className="inline-flex items-center rounded-full bg-[var(--burgundy-tint)] px-2 py-0.5 text-xs font-medium text-[var(--burgundy)]">
       Cancelled
     </span>
   );
@@ -54,21 +54,21 @@ function StatusBadge({ status }: { status: BookingStatus }) {
 
 function PaymentBadge({ booking }: { booking: BookingRow }) {
   if (booking.paymentStatus === "not_required") {
-    return <span className="text-xs text-[#637c8c]">Not required</span>;
+    return <span className="text-xs text-[var(--ink-muted)]">Not required</span>;
   }
   const classes =
     booking.paymentStatus === "completed"
-      ? "bg-green-100 text-green-800"
+      ? "bg-[var(--sage-tint)] text-[var(--sage-dark)]"
       : booking.paymentStatus === "pending" || booking.paymentStatus === "partially_refunded"
-        ? "bg-amber-100 text-amber-800"
-        : "bg-red-100 text-red-800";
+        ? "bg-[var(--mustard-tint)] text-[var(--mustard-dark)]"
+        : "bg-[var(--burgundy-tint)] text-[var(--burgundy)]";
   return (
     <div className="space-y-1">
       <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${classes}`}>
         {booking.paymentStatus.replace(/_/g, " ")}
       </span>
       {booking.paymentCompletedAt ? (
-        <p className="text-xs text-[#637c8c]">
+        <p className="text-xs text-[var(--ink-muted)]">
           Paid {formatLondonDateTime(booking.paymentCompletedAt)}
         </p>
       ) : null}
@@ -134,7 +134,7 @@ export function BookingsView({ groups }: Props) {
   const summaryTickets  = filteredGroups.reduce((s, g) => s + g.totalTickets, 0);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
         <input
@@ -142,13 +142,13 @@ export function BookingsView({ groups }: Props) {
           placeholder="Search name or mobile…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full sm:w-64 rounded-md border border-[var(--color-border)] bg-white px-3 py-1.5 text-sm text-[var(--color-text)] placeholder:text-[#637c8c] focus:outline-none focus:ring-2 focus:ring-[#273640]"
+          className="h-8 w-full rounded-[7px] border border-[var(--hair)] bg-[var(--paper)] px-3 text-sm text-[var(--ink)] placeholder:text-[var(--ink-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--mustard-tint)] sm:w-64"
         />
 
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-          className="rounded-md border border-[var(--color-border)] bg-white px-3 py-1.5 text-sm text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[#273640]"
+          className="h-8 rounded-[7px] border border-[var(--hair)] bg-[var(--paper)] px-3 text-sm text-[var(--ink)] focus:outline-none focus:ring-2 focus:ring-[var(--mustard-tint)]"
         >
           <option value="all">All statuses</option>
           <option value="confirmed">Confirmed</option>
@@ -158,86 +158,86 @@ export function BookingsView({ groups }: Props) {
         <select
           value={dateFilter}
           onChange={(e) => setDateFilter(e.target.value as DateFilter)}
-          className="rounded-md border border-[var(--color-border)] bg-white px-3 py-1.5 text-sm text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[#273640]"
+          className="h-8 rounded-[7px] border border-[var(--hair)] bg-[var(--paper)] px-3 text-sm text-[var(--ink)] focus:outline-none focus:ring-2 focus:ring-[var(--mustard-tint)]"
         >
           <option value="all">All dates</option>
           <option value="this_month">This month</option>
           <option value="next_30_days">Next 30 days</option>
         </select>
 
-        <span className="text-sm text-[#637c8c] ml-auto whitespace-nowrap">
+        <span className="ml-auto whitespace-nowrap font-brand-mono text-[0.625rem] uppercase tracking-[0.05em] text-[var(--ink-soft)]">
           {summaryBookings} booking{summaryBookings !== 1 ? "s" : ""} · {summaryTickets} ticket{summaryTickets !== 1 ? "s" : ""}
         </span>
       </div>
 
       {/* Groups */}
       {filteredGroups.length === 0 ? (
-        <p className="text-sm text-[#637c8c]">No bookings found.</p>
+        <p className="text-sm text-[var(--ink-muted)]">No bookings found.</p>
       ) : (
         <div className="space-y-8">
           {filteredGroups.map((group) => (
             <div key={group.eventId}>
               {/* Group header */}
               <div className="mb-2 flex flex-col sm:flex-row sm:items-baseline sm:gap-3">
-                <h2 className="text-base font-semibold text-[#273640]">
+                <h2 className="font-brand-serif text-base font-medium text-[var(--navy)]">
                   {group.eventTitle}
                 </h2>
-                <span className="text-sm text-[#637c8c]">
+                <span className="text-sm text-[var(--ink-muted)]">
                   {formatLondonDate(group.eventStartAt)}
                   {group.venueName ? ` · ${group.venueName}` : ""}
                 </span>
-                <span className="text-xs text-[#637c8c] sm:ml-auto">
+                <span className="font-brand-mono text-[0.625rem] uppercase tracking-[0.04em] text-[var(--ink-soft)] sm:ml-auto">
                   {group.totalBookings} booking{group.totalBookings !== 1 ? "s" : ""} · {group.totalTickets} ticket{group.totalTickets !== 1 ? "s" : ""}
                 </span>
               </div>
 
               {/* Bookings table */}
-              <div className="overflow-x-auto rounded-lg border border-[var(--color-border)]">
-                <table className="min-w-full divide-y divide-[var(--color-border)] text-sm">
-                  <thead className="bg-[#cbd5db]/30">
+              <div className="data-table-shell">
+                <table className="data-table min-w-full">
+                  <thead>
                     <tr>
-                      <th scope="col" className="px-4 py-2 text-left font-medium text-[#273640]">
+                      <th scope="col" className="px-4 py-2 text-left font-medium text-[var(--ink)]">
                         Name
                       </th>
-                      <th scope="col" className="px-4 py-2 text-left font-medium text-[#273640]">
+                      <th scope="col" className="px-4 py-2 text-left font-medium text-[var(--ink)]">
                         Mobile
                       </th>
-                      <th scope="col" className="px-4 py-2 text-left font-medium text-[#273640]">
+                      <th scope="col" className="px-4 py-2 text-left font-medium text-[var(--ink)]">
                         Notes
                       </th>
-                      <th scope="col" className="px-4 py-2 text-right font-medium text-[#273640]">
+                      <th scope="col" className="px-4 py-2 text-right font-medium text-[var(--ink)]">
                         Tickets
                       </th>
-                      <th scope="col" className="px-4 py-2 text-left font-medium text-[#273640]">
+                      <th scope="col" className="px-4 py-2 text-left font-medium text-[var(--ink)]">
                         Booked
                       </th>
-                      <th scope="col" className="px-4 py-2 text-left font-medium text-[#273640]">
+                      <th scope="col" className="px-4 py-2 text-left font-medium text-[var(--ink)]">
                         Status
                       </th>
-                      <th scope="col" className="px-4 py-2 text-left font-medium text-[#273640]">
+                      <th scope="col" className="px-4 py-2 text-left font-medium text-[var(--ink)]">
                         Payment
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[var(--color-border)] bg-white">
+                  <tbody>
                     {group.bookings.map((booking) => (
-                      <tr key={booking.id} className="hover:bg-[#cbd5db]/10">
-                        <td className="px-4 py-2 text-[var(--color-text)]">
+                      <tr key={booking.id}>
+                        <td className="px-4 py-2 text-[var(--ink)]">
                           {booking.firstName}
                           {booking.lastName ? ` ${booking.lastName}` : ""}
                         </td>
-                        <td className="px-4 py-2 text-[#637c8c]">{booking.mobile}</td>
-                        <td className="max-w-xs px-4 py-2 text-[#637c8c]">
+                        <td className="px-4 py-2 text-[var(--ink-muted)]">{booking.mobile}</td>
+                        <td className="max-w-xs px-4 py-2 text-[var(--ink-muted)]">
                           {booking.customerNotes ? (
                             <span className="block break-words">{booking.customerNotes}</span>
                           ) : (
                             "—"
                           )}
                         </td>
-                        <td className="px-4 py-2 text-right text-[var(--color-text)]">
+                        <td className="px-4 py-2 text-right text-[var(--ink)]">
                           {booking.ticketCount}
                         </td>
-                        <td className="px-4 py-2 text-[#637c8c]">
+                        <td className="px-4 py-2 text-[var(--ink-muted)]">
                           {formatLondonDateTime(booking.createdAt)}
                         </td>
                         <td className="px-4 py-2">

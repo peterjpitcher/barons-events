@@ -46,7 +46,7 @@ export function EventFormActions({ eventId, canDelete }: EventFormActionsProps) 
       </div>
 
       {canDelete && eventId ? (
-        <div className="border-t border-[var(--color-border)] pt-4">
+        <div className="border-t border-[var(--hair)] pt-4">
           <p className="mb-2 text-xs font-medium text-red-600">Danger zone</p>
           <DeleteEventButton eventId={eventId} />
         </div>

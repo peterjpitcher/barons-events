@@ -30,10 +30,10 @@ export function LoginForm({ redirectTo, nonce }: LoginFormProps) {
   }, [state]);
 
   return (
-    <form action={formAction} className="space-y-6" noValidate>
+    <form action={formAction} className="space-y-5" noValidate>
       <input type="hidden" name="redirectTo" value={redirectTo} />
       <div className="space-y-2">
-        <Label className="text-[var(--color-text-subtle)]" htmlFor="email">
+        <Label className="text-[var(--ink-soft)]" htmlFor="email">
           Email
         </Label>
         <Input
@@ -49,7 +49,7 @@ export function LoginForm({ redirectTo, nonce }: LoginFormProps) {
         <FieldError id="email-error" message={emailError} />
       </div>
       <div className="space-y-2">
-        <Label className="text-[var(--color-text-subtle)]" htmlFor="password">
+        <Label className="text-[var(--ink-soft)]" htmlFor="password">
           Password
         </Label>
         <Input
@@ -70,4 +70,3 @@ export function LoginForm({ redirectTo, nonce }: LoginFormProps) {
     </form>
   );
 }
-

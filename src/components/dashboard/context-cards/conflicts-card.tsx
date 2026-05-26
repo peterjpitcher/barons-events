@@ -33,7 +33,7 @@ export function ConflictsCard({ conflicts }: ConflictsCardProps): React.ReactNod
           conflicts.map((pair) => (
             <div
               key={`${pair.event.id}-${pair.conflictingWith.id}`}
-              className="rounded-lg border border-[rgba(141,68,70,0.3)] bg-[rgba(141,68,70,0.06)] px-3 py-2 text-xs text-[var(--color-antique-burgundy)]"
+              className="rounded-[8px] border border-[var(--burgundy)] bg-[var(--burgundy-tint)] px-3 py-2 text-xs text-[var(--burgundy)]"
             >
               <Link href={`/events/${pair.event.id}`} className="font-semibold hover:underline">
                 {pair.event.title}

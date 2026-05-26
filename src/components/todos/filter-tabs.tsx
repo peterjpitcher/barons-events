@@ -35,10 +35,10 @@ export function FilterTabs({
             role="tab"
             aria-selected={isActive}
             onClick={() => onTabChange(tab.key)}
-            className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-500)] ${
+            className={`rounded-full px-3 py-1 font-brand-mono text-[0.625rem] font-semibold uppercase tracking-[0.04em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mustard-tint)] ${
               isActive
-                ? "bg-[var(--color-primary-700)] text-white"
-                : "bg-[var(--color-muted-surface)] text-[var(--color-text)] hover:bg-[var(--color-border)]"
+                ? "bg-[var(--navy)] text-white"
+                : "bg-[var(--paper-tint)] text-[var(--ink)] hover:bg-[var(--canvas-2)]"
             }`}
           >
             {tab.label}

@@ -94,14 +94,14 @@ export function PlanningCalendarView({ today, entries, onOpenPlanningItem, onMov
   }, [activeMonth]);
 
   return (
-    <section className="space-y-4 rounded-[var(--radius)] border border-[var(--color-border)] bg-white p-4 shadow-soft">
+    <section className="space-y-4 rounded-[var(--radius)] border border-[var(--hair)] bg-[var(--paper)] p-4 shadow-card">
       <header className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-lg font-semibold text-[var(--color-primary-700)]">Calendar view</h2>
+        <h2 className="text-lg font-semibold text-[var(--navy)]">Calendar view</h2>
         <div className="flex items-center gap-2">
           <Button type="button" size="sm" variant="ghost" onClick={() => setActiveMonth((current) => addMonths(current, -1))}>
             <ChevronLeft className="h-4 w-4" aria-hidden="true" /> Prev
           </Button>
-          <p className="min-w-[11rem] text-center text-sm font-semibold text-[var(--color-text)]">{formatMonthHeading(activeMonth)}</p>
+          <p className="min-w-[11rem] text-center text-sm font-semibold text-[var(--ink)]">{formatMonthHeading(activeMonth)}</p>
           <Button type="button" size="sm" variant="ghost" onClick={() => setActiveMonth((current) => addMonths(current, 1))}>
             Next <ChevronRight className="h-4 w-4" aria-hidden="true" />
           </Button>
@@ -139,13 +139,13 @@ export function PlanningCalendarView({ today, entries, onOpenPlanningItem, onMov
               }}
               className={`min-h-[7.5rem] rounded-[var(--radius-sm)] border p-2 ${
                 isToday
-                  ? "border-[var(--color-primary-600)] bg-[rgba(39,54,64,0.04)] ring-1 ring-[var(--color-primary-500)]"
+                  ? "border-[var(--navy)] bg-[var(--paper-tint)] ring-1 ring-[var(--slate)]"
                   : inActiveMonth
-                    ? "border-[var(--color-border)] bg-white"
-                    : "border-[rgba(39,54,64,0.12)] bg-[var(--color-muted-surface)]"
-              } ${isDropCandidate ? "ring-1 ring-[var(--color-primary-500)]" : ""}`}
+                    ? "border-[var(--hair)] bg-[var(--paper)]"
+                    : "border-[var(--hair)] bg-[var(--canvas-2)]"
+              } ${isDropCandidate ? "ring-1 ring-[var(--slate)]" : ""}`}
             >
-              <p className={`text-xs font-semibold ${isToday ? "text-[var(--color-primary-700)]" : inActiveMonth ? "text-[var(--color-text)]" : "text-subtle"}`}>{formatDayNumber(dateKey)}</p>
+              <p className={`text-xs font-semibold ${isToday ? "text-[var(--navy)]" : inActiveMonth ? "text-[var(--ink)]" : "text-subtle"}`}>{formatDayNumber(dateKey)}</p>
               <div className="mt-2 space-y-1">
                 {rows.slice(0, 3).map((entry) => {
                   if (entry.source === "planning") {
@@ -163,7 +163,7 @@ export function PlanningCalendarView({ today, entries, onOpenPlanningItem, onMov
                         }
                         onDragEnd={onMovePlanningItem ? () => setDraggedPlanningItem(null) : undefined}
                         onClick={() => onOpenPlanningItem?.(entry.planningItem)}
-                        className={`block w-full rounded-[var(--radius-sm)] border-l-4 border-[var(--color-primary-600)] bg-[var(--color-muted-surface)] px-2 py-1 text-left text-[0.72rem] leading-tight text-[var(--color-text)] hover:bg-[rgba(39,54,64,0.08)] ${onMovePlanningItem ? "cursor-grab active:cursor-grabbing" : ""}`}
+                        className={`block w-full rounded-[var(--radius-sm)] border-l-4 border-[var(--navy)] bg-[var(--canvas-2)] px-2 py-1 text-left text-[0.72rem] leading-tight text-[var(--ink)] hover:bg-[var(--paper-tint)] ${onMovePlanningItem ? "cursor-grab active:cursor-grabbing" : ""}`}
                         title={entry.title}
                       >
                         {entry.title}
@@ -175,7 +175,7 @@ export function PlanningCalendarView({ today, entries, onOpenPlanningItem, onMov
                     return (
                       <div
                         key={entry.id}
-                        className="block rounded-[var(--radius-sm)] border-l-4 border-amber-400 bg-amber-50 px-2 py-1 text-[0.72rem] leading-tight text-[var(--color-text)]"
+                        className="block rounded-[var(--radius-sm)] border-l-4 border-amber-400 bg-amber-50 px-2 py-1 text-[0.72rem] leading-tight text-[var(--ink)]"
                         title={entry.title}
                       >
                         ✨ {entry.title}
@@ -187,7 +187,7 @@ export function PlanningCalendarView({ today, entries, onOpenPlanningItem, onMov
                     <Link
                       key={entry.id}
                       href={`/events/${entry.eventId}`}
-                      className="block rounded-[var(--radius-sm)] border-l-4 border-[var(--color-accent-warm)] bg-[rgba(39,54,64,0.04)] px-2 py-1 text-[0.72rem] leading-tight text-[var(--color-text)] hover:bg-[rgba(39,54,64,0.08)]"
+                      className="block rounded-[var(--radius-sm)] border-l-4 border-[var(--mustard)] bg-[var(--paper-tint)] px-2 py-1 text-[0.72rem] leading-tight text-[var(--ink)] hover:bg-[var(--canvas-2)]"
                       title={entry.title}
                     >
                       {entry.title}

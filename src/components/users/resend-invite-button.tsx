@@ -38,7 +38,7 @@ export function ResendInviteButton({ userId, email, fullName }: ResendInviteButt
       <button
         type="submit"
         disabled={isPending}
-        className="flex items-center gap-1 text-xs text-[var(--color-text-muted)] underline-offset-2 hover:text-[var(--color-primary-700)] hover:underline disabled:opacity-50"
+        className="flex items-center gap-1 text-xs text-[var(--ink-muted)] underline-offset-2 hover:text-[var(--navy)] hover:underline disabled:opacity-50"
       >
         <Mail className="h-3 w-3" aria-hidden="true" />
         {isPending ? "Sending…" : "Resend invite"}

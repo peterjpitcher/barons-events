@@ -21,7 +21,7 @@ const geistMono = Geist_Mono({
 const playfair = Playfair_Display({
   variable: "--font-playfair",
   subsets: ["latin"],
-  weight: ["400", "600", "700"]
+  weight: ["400", "500", "600", "700"]
 });
 
 const clientPolyfills = `
@@ -143,8 +143,13 @@ const clientPolyfills = `
 `;
 
 export const metadata: Metadata = {
-  title: "Barons Events Workspace",
-  description: "Plan, review, and learn from events in one shared workspace."
+  applicationName: "BaronsHub 1.1",
+  title: "BaronsHub 1.1 Workspace",
+  description: "Plan, review, and learn from events in one shared workspace.",
+  icons: {
+    icon: [{ url: "/icon.png", type: "image/png", sizes: "512x512" }],
+    apple: [{ url: "/apple-icon.png", type: "image/png", sizes: "180x180" }]
+  }
 };
 
 export default async function RootLayout({
@@ -167,7 +172,7 @@ export default async function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${playfair.variable} bg-[var(--color-canvas)] text-[var(--color-text)] antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${playfair.variable} bg-[var(--canvas)] text-[var(--ink)] antialiased`}
       >
         <Script id="client-polyfills" strategy="beforeInteractive" nonce={nonce}>
           {clientPolyfills}

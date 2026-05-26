@@ -32,7 +32,7 @@ export function UpcomingEventsCard({ events, userRole, hasVenue }: UpcomingEvent
     <Card>
       <CardHeader className="flex items-center justify-between">
         <CardTitle className="text-sm">Upcoming Events</CardTitle>
-        <Link href="/events" className="text-xs text-[var(--color-primary-600)] hover:text-[var(--color-primary-700)]">
+        <Link href="/events" className="text-xs text-[var(--navy)] hover:text-[var(--navy)]">
           View all &rarr;
         </Link>
       </CardHeader>
@@ -51,9 +51,9 @@ export function UpcomingEventsCard({ events, userRole, hasVenue }: UpcomingEvent
             <Link
               key={event.id}
               href={`/events/${event.id}`}
-              className="block rounded-lg px-3 py-2 text-sm transition-colors hover:bg-[var(--color-surface-soft)]"
+              className="block rounded-lg px-3 py-2 text-sm transition-colors hover:bg-[var(--paper-tint)]"
             >
-              <p className="font-medium text-[var(--color-text)]">{event.title}</p>
+              <p className="font-medium text-[var(--ink)]">{event.title}</p>
               <p className="text-xs text-subtle">
                 {new Date(event.start_at).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}
                 {event.venue ? ` \u00b7 ${event.venue.name}` : ""}

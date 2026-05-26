@@ -41,29 +41,29 @@ export function VariantRow({
   }
 
   return (
-    <tr className="group bg-[var(--color-canvas)] hover:bg-[var(--color-muted-surface)]">
+    <tr className="group bg-[var(--color-canvas)] hover:bg-[var(--canvas-2)]">
       {/* Indented name with touchpoint label */}
       <td className="py-2 pl-10 pr-4">
         <div className="flex items-center gap-1.5 text-xs text-subtle">
-          <span aria-hidden="true" className="shrink-0 text-[var(--color-border)]">↳</span>
-          <span className="font-medium text-[var(--color-text)]">{touchpointLabel}</span>
+          <span aria-hidden="true" className="shrink-0 text-[var(--hair)]">↳</span>
+          <span className="font-medium text-[var(--ink)]">{touchpointLabel}</span>
         </div>
       </td>
 
       {/* Short URL with copy button */}
       <td className="px-4 py-2" colSpan={1}>
         <div className="flex items-center gap-1.5">
-          <code className="rounded bg-white px-2 py-0.5 text-xs font-mono text-[var(--color-text)] border border-[var(--color-border)]">
+          <code className="rounded bg-[var(--paper)] px-2 py-0.5 text-xs font-mono text-[var(--ink)] border border-[var(--hair)]">
             /l/{link.code}
           </code>
           <button
             type="button"
             onClick={handleCopy}
             title="Copy short URL"
-            className="rounded p-1 text-subtle hover:bg-white hover:text-[var(--color-primary-700)] transition-colors"
+            className="rounded p-1 text-subtle hover:bg-[var(--paper)] hover:text-[var(--navy)] transition-colors"
           >
             {copied
-              ? <Check className="h-3.5 w-3.5 text-[var(--color-success)]" aria-hidden="true" />
+              ? <Check className="h-3.5 w-3.5 text-[var(--sage-dark)]" aria-hidden="true" />
               : <Copy  className="h-3.5 w-3.5" aria-hidden="true" />
             }
             <span className="sr-only">Copy URL</span>
@@ -89,12 +89,12 @@ export function VariantRow({
       <td className="px-4 py-2">
         {confirmingDelete ? (
           <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-[var(--color-danger)]">Delete?</span>
+            <span className="text-xs font-medium text-[var(--burgundy)]">Delete?</span>
             <button
               type="button"
               onClick={onDeleteConfirm}
               disabled={isPending}
-              className="rounded p-1 text-[var(--color-danger)] hover:bg-[rgba(239,68,68,0.1)] transition-colors"
+              className="rounded p-1 text-[var(--burgundy)] hover:bg-[var(--burgundy-tint)] transition-colors"
               aria-label="Confirm delete"
             >
               <Check className="h-3.5 w-3.5" aria-hidden="true" />
@@ -102,7 +102,7 @@ export function VariantRow({
             <button
               type="button"
               onClick={onDeleteCancel}
-              className="rounded p-1 text-subtle hover:bg-[var(--color-muted-surface)] transition-colors"
+              className="rounded p-1 text-subtle hover:bg-[var(--canvas-2)] transition-colors"
               aria-label="Cancel delete"
             >
               <X className="h-3.5 w-3.5" aria-hidden="true" />
@@ -113,7 +113,7 @@ export function VariantRow({
             type="button"
             onClick={onDeleteRequest}
             title="Delete variant"
-            className="rounded p-1.5 text-subtle md:opacity-0 md:group-hover:opacity-100 hover:bg-[rgba(239,68,68,0.1)] hover:text-[var(--color-danger)] transition-colors"
+            className="rounded p-1.5 text-subtle md:opacity-0 md:group-hover:opacity-100 hover:bg-[var(--burgundy-tint)] hover:text-[var(--burgundy)] transition-colors"
           >
             <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
             <span className="sr-only">Delete variant</span>

@@ -1,10 +1,13 @@
 import type { ReactNode } from "react";
-import { signOutAction } from "@/actions/auth";
-import { Button } from "@/components/ui/button";
 import type { AppUser, UserRole } from "@/lib/types";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getDashboardTodoItems } from "@/lib/dashboard";
+import { londonDateString } from "@/lib/planning/utils";
+import type { TodoItem, TodoSource } from "@/components/todos/todo-item-types";
+import { Avatar } from "@/components/ui/design-primitives";
+import { AppTopBar, type ShellNavSection } from "./app-topbar";
 import { MobileNav } from "./mobile-nav";
-import { NavLink } from "./nav-link";
+import { NavCalloutLink, NavLink } from "./nav-link";
 import { SessionMonitor } from "./session-monitor";
 
 type NavItem = {
@@ -13,6 +16,10 @@ type NavItem = {
   roles: UserRole[];
   newUntil?: string; // ISO date; show "New" badge until end of this date
   children?: NavItem[]; // Rendered indented under the parent
+  badge?: {
+    value: number;
+    tone?: "default" | "warn" | "critical";
+  };
   /** Marks a resolved parent as a visual-only label — happens when the
    * parent's roles don't include the viewer but at least one child does. */
   labelOnly?: boolean;
@@ -25,45 +32,33 @@ type NavSection = {
 
 const NAV_SECTIONS: NavSection[] = [
   {
-    label: "Dashboard",
+    label: "Workspace",
     items: [
       { label: "Dashboard", href: "/", roles: ["administrator", "office_worker", "executive"] },
-      { label: "Account", href: "/account", roles: ["administrator", "office_worker", "executive"] }
-    ]
-  },
-  {
-    label: "Events",
-    items: [
       {
         label: "Events",
         href: "/events",
-        roles: ["administrator", "office_worker"],
+        roles: ["administrator", "office_worker", "executive"],
         children: [
-          { label: "Propose an event", href: "/events/propose", roles: ["administrator", "office_worker"] },
           { label: "Pending proposals", href: "/events/pending", roles: ["administrator"] }
         ]
       },
+      { label: "30/60/90 Planning", href: "/planning", roles: ["administrator", "office_worker", "executive"] },
+      { label: "Reviews", href: "/reviews", roles: ["administrator", "office_worker"] },
+      { label: "Debriefs", href: "/debriefs", roles: ["administrator", "office_worker", "executive"] }
+    ]
+  },
+  {
+    label: "Operations",
+    items: [
       { label: "Bookings", href: "/bookings", roles: ["administrator", "office_worker"] },
       { label: "Customers", href: "/customers", roles: ["administrator", "office_worker"] },
       { label: "Artists", href: "/artists", roles: ["administrator", "office_worker"] },
-      { label: "Reviews", href: "/reviews", roles: ["administrator", "office_worker"] },
-      { label: "Debriefs", href: "/debriefs", roles: ["administrator", "office_worker"] }
-    ]
-  },
-  {
-    label: "Strategic Planning",
-    items: [
-      { label: "30/60/90 Planning", href: "/planning", roles: ["administrator", "office_worker", "executive"] }
-    ]
-  },
-  {
-    label: "Tools",
-    items: [
       { label: "Links & QR Codes", href: "/links", roles: ["administrator"] }
     ]
   },
   {
-    label: "Administration",
+    label: "Manage",
     items: [
       { label: "Venues", href: "/venues", roles: ["administrator"] },
       { label: "Opening Hours", href: "/opening-hours", roles: ["administrator"] },
@@ -95,12 +90,29 @@ async function countPendingProposals(): Promise<number> {
   return typeof count === "number" ? count : 0;
 }
 
+async function loadShellTodos(user: AppUser): Promise<{ items: TodoItem[]; errors: TodoSource[] }> {
+  try {
+    return await getDashboardTodoItems(user, londonDateString());
+  } catch (error) {
+    console.error("Shell todos failed to load", error);
+    return { items: [], errors: ["planning", "sop", "review", "revision", "debrief"] };
+  }
+}
+
 export async function AppShell({ user, children }: AppShellProps) {
   const todayIso = new Date().toISOString().slice(0, 10);
 
   // Admins see "Pending proposals" only when there's a non-zero queue, with
   // a count badge. Non-admins never see this item regardless.
-  const pendingCount = user.role === "administrator" ? await countPendingProposals() : 0;
+  const [pendingCount, todoResult] = await Promise.all([
+    user.role === "administrator" ? countPendingProposals() : Promise.resolve(0),
+    loadShellTodos(user)
+  ]);
+
+  const openTodoCount = todoResult.items.length;
+  const reviewTodoCount = todoResult.items.filter((item) => item.source === "review").length;
+  const overdueTodoCount = todoResult.items.filter((item) => item.urgency === "overdue").length;
+  const canProposeEvents = user.role === "administrator" || user.role === "office_worker";
 
   const sections = NAV_SECTIONS.map((section) => ({
     ...section,
@@ -118,7 +130,8 @@ export async function AppShell({ user, children }: AppShellProps) {
             ...child,
             // Append a count badge to the label itself so the existing NavLink
             // renders it without further plumbing.
-            label: child.href === "/events/pending" ? `${child.label} (${pendingCount})` : child.label
+            label: child.label,
+            badge: child.href === "/events/pending" ? { value: pendingCount, tone: "critical" as const } : child.badge
           }));
 
         const parentMatches = item.roles.includes(user.role);
@@ -127,56 +140,71 @@ export async function AppShell({ user, children }: AppShellProps) {
 
         return {
           ...item,
+          badge:
+            item.href === "/planning" && openTodoCount > 0
+              ? { value: openTodoCount, tone: overdueTodoCount > 0 ? "critical" as const : "warn" as const }
+              : item.href === "/reviews" && reviewTodoCount > 0
+                ? { value: reviewTodoCount, tone: "critical" as const }
+                : item.badge,
           // When the viewer can't access the parent route but a child is
           // available, show the parent as a visual group header (not a link)
-          // so the child keeps its nesting context. Office workers hit this
-          // on Events → "Propose an event".
+          // so the child keeps its nesting context.
           labelOnly: !parentMatches,
           children: filteredChildren
         };
       })
       .filter(<T,>(item: T | null): item is T => item !== null)
-  })).filter((section) => section.items.length > 0);
+  })).filter((section) => section.items.length > 0) satisfies ShellNavSection[];
 
   return (
-    <div className="flex h-screen bg-[var(--color-canvas)] text-[var(--color-text)]">
+    <div className="min-h-screen bg-[var(--canvas)] text-[var(--ink)] md:pl-[var(--rail-w)]">
       <SessionMonitor />
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-full focus:bg-[var(--color-primary-700)] focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-white focus:shadow-soft"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-[7px] focus:bg-[var(--navy)] focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-white focus:shadow-card"
       >
         Skip to main content
       </a>
-      <aside className="hidden w-72 border-r border-white/10 bg-[var(--color-primary-700)] px-4 py-4 shadow-soft md:flex md:h-screen md:flex-col md:gap-3">
-        <div className="shrink-0">
-          <h1 className="font-brand-serif text-3xl font-bold text-[var(--color-accent-warm)]">BaronsHub</h1>
-          <p className="mt-0.5 text-[0.6rem] uppercase tracking-[0.35em] text-[rgba(255,255,255,0.65)]">
-            Accelerating Barons Success Everyday
-          </p>
+      <aside className="group/sidebar fixed inset-y-0 left-0 z-50 hidden w-[var(--rail-w)] overflow-hidden whitespace-nowrap border-r border-white/5 bg-[var(--navy)] px-2.5 py-3 text-[var(--canvas-2)] shadow-card transition-[width,box-shadow] duration-200 ease-out hover:w-[var(--rail-w-open)] hover:shadow-card focus-within:w-[var(--rail-w-open)] md:flex md:flex-col">
+        <div className="mb-2 flex shrink-0 items-center gap-2.5 border-b border-white/10 px-1.5 pb-3">
+          <div className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] border border-[var(--mustard)] bg-[var(--mustard)] font-brand-serif text-[17px] font-semibold text-[var(--ink-on-mustard)]">
+            B
+          </div>
+          <div className="min-w-0 transition-all duration-200 md:max-w-0 md:opacity-0 md:group-hover/sidebar:max-w-[180px] md:group-hover/sidebar:opacity-100 md:group-focus-within/sidebar:max-w-[180px] md:group-focus-within/sidebar:opacity-100">
+            <h1 className="font-brand-serif text-base font-medium leading-none text-[var(--canvas-2)]">BaronsHub 1.1</h1>
+            <p className="mt-1 font-brand-mono text-[0.53rem] uppercase tracking-[0.22em] text-[var(--canvas-2)]/60">
+              Planning Operations
+            </p>
+          </div>
         </div>
-        <nav className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+        <nav className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden">
           {sections.map((section) => (
-            <div key={section.label} className="space-y-0.5">
-              <p className="px-3 text-[0.6rem] uppercase tracking-[0.2em] text-[rgba(255,255,255,0.55)]">{section.label}</p>
+            <div key={section.label} className="space-y-1">
+              <p className="max-h-0 overflow-hidden px-2 font-brand-mono text-[0.55rem] uppercase tracking-[0.2em] text-[var(--canvas-2)]/50 opacity-0 transition-all duration-200 group-hover/sidebar:max-h-8 group-hover/sidebar:py-1 group-hover/sidebar:opacity-100 group-focus-within/sidebar:max-h-8 group-focus-within/sidebar:py-1 group-focus-within/sidebar:opacity-100">
+                {section.label}
+              </p>
               <div className="flex flex-col">
                 {section.items.map((item) => (
                   <div key={item.href} className="flex flex-col">
                     {item.labelOnly ? (
-                      <p className="px-3 py-1 text-sm font-medium text-[rgba(255,255,255,0.55)]">{item.label}</p>
+                      <p className="px-3 py-1 text-sm font-medium text-[var(--canvas-2)]/65">{item.label}</p>
                     ) : (
                       <NavLink
                         href={item.href}
                         label={item.label}
+                        badge={item.badge}
                         showNew={item.newUntil ? todayIso <= item.newUntil : false}
                       />
                     )}
                     {item.children && item.children.length > 0 ? (
-                      <div className="ml-4 flex flex-col border-l border-white/15 pl-2">
+                      <div className="ml-3 flex flex-col border-l border-white/10 pl-1.5">
                         {item.children.map((child) => (
                           <NavLink
                             key={child.href}
                             href={child.href}
                             label={child.label}
+                            badge={child.badge}
+                            className="h-8 text-xs"
                             showNew={child.newUntil ? todayIso <= child.newUntil : false}
                           />
                         ))}
@@ -189,40 +217,32 @@ export async function AppShell({ user, children }: AppShellProps) {
           ))}
         </nav>
         <div className="mt-auto shrink-0 space-y-2">
-          <div className="rounded-[var(--radius)] border border-white/10 bg-white/5 p-2.5 text-sm leading-snug text-white/80">
-            <p className="font-medium text-white">{user.fullName ?? user.email}</p>
-            <p className="capitalize text-white/70">{roleDisplayNames[user.role] ?? user.role.replace(/_/g, " ")}</p>
-          </div>
-          <div className="flex items-center justify-center">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.png" alt="Barons" className="h-8 w-auto" />
+          {canProposeEvents ? (
+            <NavCalloutLink href="/events/propose" label="Propose an event" />
+          ) : null}
+          <div className="flex items-center gap-2 rounded-[8px] border border-[var(--rail-border)] bg-[var(--rail-surface)] p-2">
+            <Avatar name={user.fullName ?? user.email} size={28} />
+            <div className="min-w-0 transition-all duration-200 md:max-w-0 md:opacity-0 md:group-hover/sidebar:max-w-[170px] md:group-hover/sidebar:opacity-100 md:group-focus-within/sidebar:max-w-[170px] md:group-focus-within/sidebar:opacity-100">
+              <p className="truncate text-xs font-medium text-white">{user.fullName ?? user.email}</p>
+              <p className="mt-0.5 truncate font-brand-mono text-[0.58rem] uppercase tracking-[0.05em] text-[var(--canvas-2)]/65">
+                {roleDisplayNames[user.role] ?? user.role.replace(/_/g, " ")}
+              </p>
+            </div>
           </div>
         </div>
       </aside>
 
-      <div className="flex flex-1 flex-col">
-        <header className="space-y-3 border-b border-[rgba(39,54,64,0.12)] bg-white px-4 py-4 shadow-soft md:flex md:items-center md:justify-between md:space-y-0 md:pl-8 md:pr-6">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <MobileNav sections={sections} todayIso={todayIso} />
-              <div>
-                <p className="text-sm font-medium text-subtle">Logged in as</p>
-                <p className="text-base font-semibold text-[var(--color-text)]">{user.fullName ?? user.email}</p>
-              </div>
-            </div>
-            <form action={signOutAction} className="md:hidden">
-              <Button type="submit" variant="ghost">
-                Sign out
-              </Button>
-            </form>
-          </div>
-          <form action={signOutAction} className="hidden md:block">
-            <Button type="submit" variant="ghost">
-              Sign out
-            </Button>
-          </form>
-        </header>
-        <main id="main-content" className="flex-1 overflow-y-auto bg-[var(--color-canvas)] px-4 py-6 md:px-8 md:py-8">{children}</main>
+      <div className="flex min-h-screen flex-col">
+        <AppTopBar
+          user={{ email: user.email, fullName: user.fullName, role: user.role }}
+          sections={sections}
+          utilityNavItems={canProposeEvents ? [{ label: "Propose an event", href: "/events/propose" }] : []}
+          todos={todoResult.items}
+          failedSources={todoResult.errors}
+          pendingProposalCount={pendingCount}
+          mobileNav={<MobileNav sections={sections} todayIso={todayIso} showProposeEvent={canProposeEvents} />}
+        />
+        <main id="main-content" className="flex-1 bg-[var(--canvas)] px-4 py-5 md:px-5 md:py-5">{children}</main>
       </div>
     </div>
   );

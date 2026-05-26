@@ -1,5 +1,5 @@
 export const AUTH_CARD_CLASS =
-  "w-full max-w-md overflow-hidden border-none bg-white/95 text-left text-[var(--color-text)] shadow-soft backdrop-blur ring-1 ring-white/20";
+  "w-full max-w-md overflow-hidden border border-[var(--hair)] bg-[var(--paper)] text-left text-[var(--ink)] shadow-card";
 
 export const AUTH_CARD_HEADER_CLASS = "border-none bg-transparent p-8 pb-4";
 

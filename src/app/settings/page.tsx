@@ -7,7 +7,7 @@ import { SltMembersManager } from "@/components/settings/slt-members-manager";
 import { SopTemplateEditor } from "@/components/settings/sop-template-editor";
 import { SopBackfillButton } from "@/components/settings/sop-backfill-button";
 import { SettingsTabs } from "@/components/settings/settings-tabs";
-import { Card, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/design-primitives";
 import { getCurrentUser } from "@/lib/auth";
 import { listArchivedArtists } from "@/lib/artists";
 import { listEventTypes } from "@/lib/event-types";
@@ -16,7 +16,7 @@ import { canViewSopTemplate } from "@/lib/roles";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export const metadata = {
-  title: "Settings · BaronsHub",
+  title: "Settings · BaronsHub 1.1",
   description: "Manage event configuration and defaults."
 };
 
@@ -76,7 +76,7 @@ export default async function SettingsPage() {
     {
       value: "business",
       label: "Business",
-      description: "Labour cost and other operational defaults used across BaronsHub.",
+      description: "Labour cost and other operational defaults used across BaronsHub 1.1.",
       content: (
         <BusinessSettingsManager
           labourRateGbp={labourRateGbp}
@@ -112,7 +112,7 @@ export default async function SettingsPage() {
             label: "SOP Checklist",
             description: "Define the default checklist sections and tasks that get applied to each event and planning item.",
             content: (
-              <div className="space-y-6">
+              <div className="space-y-4">
                 <SopTemplateEditor />
                 <SopBackfillButton />
               </div>
@@ -129,12 +129,13 @@ export default async function SettingsPage() {
   ];
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Settings</CardTitle>
-        </CardHeader>
-      </Card>
+    <div className="app-page">
+      <PageHeader
+        eyebrow="Configuration"
+        title="Settings"
+        description="Manage operational defaults, event taxonomies, SOP templates, and archived artist records."
+        meta={<span>{tabs.length} sections</span>}
+      />
 
       <SettingsTabs tabs={tabs} />
     </div>

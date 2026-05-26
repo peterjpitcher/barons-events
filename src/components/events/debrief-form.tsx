@@ -101,7 +101,7 @@ export function DebriefForm({ eventId, defaults, labourRateGbp = 12.71, readOnly
   }, [eventWetTakings, eventFoodTakings, baselineWetTakings, baselineFoodTakings]);
 
   return (
-    <form action={formAction} className="space-y-6">
+    <form action={formAction} className="space-y-5">
       <input type="hidden" name="eventId" value={eventId} />
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -185,20 +185,20 @@ export function DebriefForm({ eventId, defaults, labourRateGbp = 12.71, readOnly
         </div>
       </div>
 
-      <div className="rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-muted-surface)] p-4 text-sm">
-        <p className="font-semibold text-[var(--color-text)]">Automatic uplift calculation</p>
+      <div className="rounded-[var(--radius)] border border-[var(--hair)] bg-[var(--canvas-2)] p-4 text-sm">
+        <p className="font-semibold text-[var(--ink)]">Automatic uplift calculation</p>
         <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <p>
-            <span className="font-medium text-[var(--color-text)]">Event total:</span> {formatCurrency(uplift.eventTotal)}
+            <span className="font-medium text-[var(--ink)]">Event total:</span> {formatCurrency(uplift.eventTotal)}
           </p>
           <p>
-            <span className="font-medium text-[var(--color-text)]">Baseline total:</span> {formatCurrency(uplift.baselineTotal)}
+            <span className="font-medium text-[var(--ink)]">Baseline total:</span> {formatCurrency(uplift.baselineTotal)}
           </p>
           <p>
-            <span className="font-medium text-[var(--color-text)]">Sales uplift:</span> {formatCurrency(uplift.upliftValue)}
+            <span className="font-medium text-[var(--ink)]">Sales uplift:</span> {formatCurrency(uplift.upliftValue)}
           </p>
           <p>
-            <span className="font-medium text-[var(--color-text)]">Uplift %:</span> {formatPercent(uplift.upliftPercent)}
+            <span className="font-medium text-[var(--ink)]">Uplift %:</span> {formatPercent(uplift.upliftPercent)}
           </p>
         </div>
       </div>

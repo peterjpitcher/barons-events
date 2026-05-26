@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { CancelBookingButton } from "@/components/bookings/cancel-booking-button";
 import { RefundBookingButton } from "@/components/bookings/refund-booking-button";
 import { canManageBookings } from "@/lib/roles";
+import { PageHeader } from "@/components/ui/design-primitives";
 
 const dateFormatter = new Intl.DateTimeFormat("en-GB", {
   day: "2-digit",
@@ -41,7 +42,7 @@ export async function generateMetadata({ params }: { params: Promise<{ eventId: 
   const user = await getCurrentUser();
   const event = user ? await getEventDetail(eventId, user) : null;
   return {
-    title: event ? `Bookings · ${event.title}` : "Bookings · BaronsHub",
+    title: event ? `Bookings · ${event.title}` : "Bookings · BaronsHub 1.1",
   };
 }
 
@@ -74,50 +75,37 @@ export default async function BookingsPage({
   const cancelledBookings = bookings.filter((b) => b.status === "cancelled");
 
   return (
-    <div className="space-y-6">
+    <div className="app-page">
       <div>
         <Link
           href={`/events/${eventId}`}
-          className="inline-flex items-center gap-1 text-sm text-subtle transition-colors hover:text-[var(--color-text)]"
+          className="inline-flex items-center gap-1 text-sm text-[var(--ink-muted)] transition-colors hover:text-[var(--ink)]"
         >
           <ChevronLeft className="h-4 w-4" aria-hidden="true" />
           {event.title}
         </Link>
       </div>
 
-      {/* Header */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-[var(--color-primary-700)]">
-            Bookings — {event.title}
-          </CardTitle>
-          <CardDescription>
-            {event.venue?.name ?? ""} · Manage customer bookings for this event.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap gap-6 text-sm">
-            <div>
-              <span className="font-semibold text-[var(--color-text)]">Confirmed tickets: </span>
-              <span className="text-[var(--color-text)]">{totalTickets}</span>
-            </div>
-            <div>
-              <span className="font-semibold text-[var(--color-text)]">Confirmed bookings: </span>
-              <span className="text-[var(--color-text)]">{confirmedBookings.length}</span>
-            </div>
-            <div>
-              <span className="font-semibold text-[var(--color-text)]">Cancelled bookings: </span>
-              <span className="text-subtle">{cancelledBookings.length}</span>
-            </div>
+      <PageHeader
+        eyebrow="Bookings"
+        title={event.title}
+        description={`${event.venue?.name ?? "Venue"} · Manage customer bookings for this event.`}
+        meta={
+          <>
+            <span>{totalTickets} confirmed ticket{totalTickets === 1 ? "" : "s"}</span>
+            <span className="h-1 w-1 rounded-full bg-[var(--hair-strong)]" />
+            <span>{confirmedBookings.length} confirmed booking{confirmedBookings.length === 1 ? "" : "s"}</span>
+            <span className="h-1 w-1 rounded-full bg-[var(--hair-strong)]" />
+            <span>{cancelledBookings.length} cancelled</span>
             {event.total_capacity != null ? (
-              <div>
-                <span className="font-semibold text-[var(--color-text)]">Capacity: </span>
-                <span className="text-[var(--color-text)]">{event.total_capacity}</span>
-              </div>
+              <>
+                <span className="h-1 w-1 rounded-full bg-[var(--hair-strong)]" />
+                <span>{event.total_capacity} capacity</span>
+              </>
             ) : null}
-          </div>
-        </CardContent>
-      </Card>
+          </>
+        }
+      />
 
       {/* Bookings table */}
       {bookings.length === 0 ? (
@@ -127,10 +115,10 @@ export default async function BookingsPage({
           </CardContent>
         </Card>
       ) : (
-        <div className="overflow-x-auto rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-white shadow-soft">
-          <table className="min-w-full border-collapse">
+        <div className="data-table-shell">
+          <table className="data-table min-w-full">
             <thead>
-              <tr className="bg-[var(--color-muted-surface)] text-left text-xs font-semibold uppercase tracking-[0.14em] text-subtle">
+              <tr>
                 <th scope="col" className="px-4 py-3">Name</th>
                 <th scope="col" className="px-4 py-3">Mobile</th>
                 <th scope="col" className="px-4 py-3">Email</th>
@@ -146,7 +134,7 @@ export default async function BookingsPage({
               {bookings.map((booking) => (
                 <tr
                   key={booking.id}
-                  className="border-t border-[var(--color-border)] text-sm text-[var(--color-text)]"
+                  className="text-sm text-[var(--ink)]"
                 >
                   <td className="px-4 py-3 font-medium">
                     {booking.firstName}

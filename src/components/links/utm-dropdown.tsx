@@ -17,7 +17,7 @@ const QR_OPTIONS: QRCode.QRCodeToDataURLOptions = {
   width: 512,
   margin: 2,
   errorCorrectionLevel: "M",
-  color: { dark: "#273640", light: "#ffffff" },
+  color: { dark: "rgb(39,54,64)", light: "rgb(255,255,255)" },
 };
 
 type UtmDropdownProps = {
@@ -127,7 +127,7 @@ export function UtmDropdown({ link, mode, disabled, onNewVariant }: UtmDropdownP
               left:     menuLeft,
               zIndex:   9999,
             }}
-            className="w-52 overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)] bg-white py-1 shadow-lg"
+            className="w-52 overflow-hidden rounded-[var(--radius-md)] border border-[var(--hair)] bg-[var(--paper)] py-1 shadow-lg"
           >
             <p className="px-3 pb-1 pt-0.5 text-[10px] font-semibold uppercase tracking-widest text-subtle">
               {mode === "share" ? "Copy URL for…" : "Download QR for…"}
@@ -137,7 +137,7 @@ export function UtmDropdown({ link, mode, disabled, onNewVariant }: UtmDropdownP
                 key={tp.value}
                 type="button"
                 onClick={() => handleSelect(tp)}
-                className="w-full px-3 py-2 text-left text-sm text-[var(--color-text)] hover:bg-[var(--color-canvas)] transition-colors"
+                className="w-full px-3 py-2 text-left text-sm text-[var(--ink)] hover:bg-[var(--color-canvas)] transition-colors"
               >
                 {tp.label}
               </button>
@@ -156,7 +156,7 @@ export function UtmDropdown({ link, mode, disabled, onNewVariant }: UtmDropdownP
         type="button"
         onClick={handleToggle}
         disabled={disabled || isLoading}
-        className="flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-subtle hover:bg-[var(--color-muted-surface)] hover:text-[var(--color-text)] transition-colors disabled:opacity-40"
+        className="flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-subtle hover:bg-[var(--canvas-2)] hover:text-[var(--ink)] transition-colors disabled:opacity-40"
       >
         {isLoading
           ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />

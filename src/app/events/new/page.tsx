@@ -69,7 +69,7 @@ export default async function NewEventPage({ searchParams }: PageProps) {
         : undefined;
 
   return (
-    <div className="space-y-6">
+    <div className="app-page">
       <EventPageHeader title="New Event" mode="create" />
       <EventForm
         key="new"

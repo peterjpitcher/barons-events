@@ -1,6 +1,6 @@
 {
-  "name": "barons-events-mvp",
-  "version": "0.0.1",
+  "name": "baronshub",
+  "version": "1.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",

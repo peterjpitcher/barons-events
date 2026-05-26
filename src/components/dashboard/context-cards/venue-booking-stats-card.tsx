@@ -26,15 +26,15 @@ export function VenueBookingStatsCard({ stats }: VenueBookingStatsCardProps): Re
       </CardHeader>
       <CardContent className="grid grid-cols-3 gap-2">
         <div className="text-center">
-          <p className="text-lg font-bold text-[var(--color-primary-700)]">{stats.confirmedThisWeek}</p>
+          <p className="text-lg font-bold text-[var(--navy)]">{stats.confirmedThisWeek}</p>
           <p className="text-xs text-subtle">This week</p>
         </div>
         <div className="text-center">
-          <p className="text-lg font-bold text-[var(--color-primary-700)]">{stats.totalTickets}</p>
+          <p className="text-lg font-bold text-[var(--navy)]">{stats.totalTickets}</p>
           <p className="text-xs text-subtle">Tickets</p>
         </div>
         <div className="text-center">
-          <p className="text-lg font-bold text-[var(--color-primary-700)]">{stats.nextEventCapacityPct}%</p>
+          <p className="text-lg font-bold text-[var(--navy)]">{stats.nextEventCapacityPct}%</p>
           <p className="text-xs text-subtle">Capacity</p>
         </div>
       </CardContent>

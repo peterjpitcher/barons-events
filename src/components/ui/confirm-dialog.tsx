@@ -57,23 +57,23 @@ export function ConfirmDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(12,20,28,0.55)] p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--overlay-scrim)] p-4 backdrop-blur-[2px]"
       onClick={onCancel}
       role="presentation"
     >
       <div
-        className="w-full max-w-md rounded-[var(--radius)] border border-[var(--color-border)] bg-white p-6 shadow-soft"
+        className="w-full max-w-md rounded-[var(--radius-lg)] border border-[var(--hair)] bg-[var(--paper)] p-5 shadow-card"
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 id={titleId} className="text-lg font-semibold text-[var(--color-text)]">
+        <h2 id={titleId} className="text-lg font-semibold text-[var(--ink)]">
           {title}
         </h2>
 
         {description ? (
-          <p className="mt-2 text-sm text-subtle">{description}</p>
+          <p className="mt-2 text-sm text-[var(--ink-muted)]">{description}</p>
         ) : null}
 
         <div className="mt-6 flex justify-end gap-3">

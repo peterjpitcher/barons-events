@@ -8,7 +8,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { LoginForm } from "./login-form";
 
 export const metadata = {
-  title: "Sign in · Barons Events",
+  title: "Sign in · BaronsHub 1.1",
   description: "Enter your Barons workspace details to continue."
 };
 
@@ -55,29 +55,29 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
       <Card className={AUTH_CARD_CLASS}>
         <CardHeader className={AUTH_CARD_HEADER_CLASS}>
           <CardTitle className="text-2xl">Welcome back</CardTitle>
-          <CardDescription className="text-[var(--color-text-muted)]">
+          <CardDescription className="text-[var(--ink-muted)]">
             Use your Barons email and password. If you&apos;re not sure, speak with the central planning team.
           </CardDescription>
         </CardHeader>
         <CardContent className={AUTH_CARD_CONTENT_CLASS}>
           {reason === "session_expired" || reason === "session_missing" || reason === "session_mismatch" ? (
-            <p className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+            <p className="rounded-[var(--radius)] border border-[var(--mustard)] bg-[var(--mustard-tint)] p-3 text-sm text-[var(--navy)]">
               Your session has expired. Please sign in again.
             </p>
           ) : null}
           {error === "invalid_token" || error === "missing_token" ? (
-            <p className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+            <p className="rounded-[var(--radius)] border border-[var(--mustard)] bg-[var(--mustard-tint)] p-3 text-sm text-[var(--navy)]">
               That link has expired or is no longer valid. Please request a new invite or reset link.
             </p>
           ) : null}
           {error === "server_error" ? (
-            <p className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+            <p className="rounded-[var(--radius)] border border-[var(--burgundy)] bg-[var(--burgundy-tint)] p-3 text-sm text-[var(--burgundy)]">
               Something went wrong verifying your link. Please try again or contact support.
             </p>
           ) : null}
           <LoginForm redirectTo={redirectTarget} nonce={nonce} />
           <div className="space-y-3 text-sm text-muted">
-            <Link href="/forgot-password" className="font-medium text-[var(--color-primary-700)] underline">
+            <Link href="/forgot-password" className="font-medium text-[var(--navy)] underline">
               Reset your password
             </Link>
             <p>

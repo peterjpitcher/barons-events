@@ -113,13 +113,13 @@ export function SopChecklistView({ tasks, users, itemId, currentUserId, onChange
     : 0;
 
   return (
-    <section className="space-y-3 border-t border-[var(--color-border)] pt-2">
+    <section className="space-y-3 border-t border-[var(--hair)] pt-2">
       <h4 className="text-xs font-semibold uppercase tracking-[0.08em] text-subtle">SOP Checklist</h4>
 
       {/* Progress summary bar */}
       <div className="space-y-1.5">
         <div className="flex items-center gap-2 text-xs">
-          <span className="font-medium text-[var(--color-text)]">{progressPercent}% complete</span>
+          <span className="font-medium text-[var(--ink)]">{progressPercent}% complete</span>
           <div className="flex items-center gap-1.5 text-subtle">
             <Badge variant="success" className="text-[10px] px-1.5 py-0.5">{summary.complete} done</Badge>
             <Badge variant="neutral" className="text-[10px] px-1.5 py-0.5">{summary.open} open</Badge>
@@ -133,7 +133,7 @@ export function SopChecklistView({ tasks, users, itemId, currentUserId, onChange
         </div>
         <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
           <div
-            className="h-full rounded-full bg-[var(--color-success)] transition-all duration-300"
+            className="h-full rounded-full bg-[var(--sage-dark)] transition-all duration-300"
             style={{ width: `${progressPercent}%` }}
           />
         </div>
@@ -151,10 +151,10 @@ export function SopChecklistView({ tasks, users, itemId, currentUserId, onChange
             type="button"
             onClick={() => setFilterMode(key)}
             className={cn(
-              "rounded-full px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-500)]",
+              "rounded-full px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slate)]",
               filterMode === key
-                ? "bg-[var(--color-primary-700)] text-white"
-                : "bg-[var(--color-muted-surface)] text-subtle hover:text-[var(--color-text)]"
+                ? "bg-[var(--navy)] text-white"
+                : "bg-[var(--canvas-2)] text-subtle hover:text-[var(--ink)]"
             )}
           >
             {label}
@@ -164,10 +164,10 @@ export function SopChecklistView({ tasks, users, itemId, currentUserId, onChange
           type="button"
           onClick={() => setHideNotRequired(!hideNotRequired)}
           className={cn(
-            "rounded-full px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-500)]",
+            "rounded-full px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slate)]",
             hideNotRequired
-              ? "bg-[var(--color-primary-700)] text-white"
-              : "bg-[var(--color-muted-surface)] text-subtle hover:text-[var(--color-text)]"
+              ? "bg-[var(--navy)] text-white"
+              : "bg-[var(--canvas-2)] text-subtle hover:text-[var(--ink)]"
           )}
         >
           Hide not required
@@ -182,7 +182,7 @@ export function SopChecklistView({ tasks, users, itemId, currentUserId, onChange
       {sections.map((section) => (
         <div key={section.name} className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <h5 className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--color-text)]">
+            <h5 className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--ink)]">
               {section.name}
             </h5>
             <span className="text-xs text-subtle">

@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { getCustomerById } from "@/lib/customers";
 import { canViewCustomers } from "@/lib/roles";
 import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/ui/design-primitives";
 
 const dateFormatter = new Intl.DateTimeFormat("en-GB", {
   weekday: "short",
@@ -21,7 +22,7 @@ export async function generateMetadata({
 }) {
   const { id } = await params;
   // Metadata is best-effort — no user context available here
-  return { title: `Customer ${id} — BaronsHub` };
+  return { title: `Customer ${id} — BaronsHub 1.1` };
 }
 
 export default async function CustomerDetailPage({
@@ -43,34 +44,38 @@ export default async function CustomerDetailPage({
   const fullName = [customer.firstName, customer.lastName].filter(Boolean).join(" ");
 
   return (
-    <div className="space-y-6">
-      {/* Back link */}
+    <div className="app-page">
       <div>
         <Link
           href="/customers"
-          className="inline-flex items-center gap-1 text-sm text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text)]"
+          className="inline-flex items-center gap-1 text-sm text-[var(--ink-muted)] transition-colors hover:text-[var(--ink)]"
         >
           <ChevronLeft className="h-4 w-4" aria-hidden="true" />
           Customers
         </Link>
       </div>
 
-      {/* Customer profile */}
-      <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-white p-6 shadow-[var(--shadow-soft)]">
-        <h1 className="text-2xl font-bold text-[var(--color-primary-700)]">{fullName}</h1>
-        <dl className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+      <PageHeader
+        eyebrow="Customer profile"
+        title={fullName}
+        description="Booking history, contact details, and communication preference status."
+        meta={<span>{customer.bookings.length} booking{customer.bookings.length === 1 ? "" : "s"}</span>}
+      />
+
+      <div className="rounded-[10px] border border-[var(--hair)] bg-[var(--paper)] p-5 shadow-card">
+        <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
           <div>
-            <dt className="font-semibold text-[var(--color-text)]">Mobile</dt>
-            <dd className="mt-0.5 font-mono text-[var(--color-text-muted)]">{customer.mobile}</dd>
+            <dt className="font-semibold text-[var(--ink)]">Mobile</dt>
+            <dd className="mt-0.5 font-mono text-[var(--ink-muted)]">{customer.mobile}</dd>
           </div>
           <div>
-            <dt className="font-semibold text-[var(--color-text)]">Email</dt>
-            <dd className="mt-0.5 text-[var(--color-text-muted)]">
-              {customer.email ?? <span className="text-[var(--color-text-subtle)]">—</span>}
+            <dt className="font-semibold text-[var(--ink)]">Email</dt>
+            <dd className="mt-0.5 text-[var(--ink-muted)]">
+              {customer.email ?? <span className="text-[var(--ink-soft)]">—</span>}
             </dd>
           </div>
           <div>
-            <dt className="font-semibold text-[var(--color-text)]">Marketing opt-in</dt>
+            <dt className="font-semibold text-[var(--ink)]">Marketing opt-in</dt>
             <dd className="mt-0.5">
               {customer.marketingOptIn ? (
                 <Badge variant="success">Opted in</Badge>
@@ -80,8 +85,8 @@ export default async function CustomerDetailPage({
             </dd>
           </div>
           <div>
-            <dt className="font-semibold text-[var(--color-text)]">Customer since</dt>
-            <dd className="mt-0.5 text-[var(--color-text-muted)]">
+            <dt className="font-semibold text-[var(--ink)]">Customer since</dt>
+            <dd className="mt-0.5 text-[var(--ink-muted)]">
               <time dateTime={customer.createdAt.toISOString()}>
                 {dateFormatter.format(customer.createdAt)}
               </time>
@@ -92,19 +97,19 @@ export default async function CustomerDetailPage({
 
       {/* Bookings */}
       <div>
-        <h2 className="mb-3 text-lg font-semibold text-[var(--color-primary-700)]">
+        <h2 className="mb-3 font-brand-serif text-lg font-medium text-[var(--navy)]">
           Bookings ({customer.bookings.length})
         </h2>
 
         {customer.bookings.length === 0 ? (
-          <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-white px-6 py-10 text-center text-sm text-[var(--color-text-subtle)]">
+          <div className="rounded-[8px] border border-[var(--hair)] bg-[var(--paper)] px-6 py-10 text-center text-sm text-[var(--ink-soft)] shadow-card">
             No bookings found.
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-white shadow-[var(--shadow-soft)]">
-            <table className="min-w-full border-collapse">
+          <div className="data-table-shell">
+            <table className="data-table min-w-full">
               <thead>
-                <tr className="bg-[var(--color-muted-surface)] text-left text-xs font-semibold uppercase tracking-[0.14em] text-[var(--color-text-subtle)]">
+                <tr>
                   <th scope="col" className="px-4 py-3">Event</th>
                   <th scope="col" className="px-4 py-3">Venue</th>
                   <th scope="col" className="px-4 py-3">Date</th>
@@ -117,22 +122,22 @@ export default async function CustomerDetailPage({
                 {customer.bookings.map((booking) => (
                   <tr
                     key={booking.id}
-                    className="border-t border-[var(--color-border)] text-sm text-[var(--color-text)]"
+                    className="text-sm text-[var(--ink)]"
                   >
                     <td className="px-4 py-3 font-medium">{booking.eventTitle}</td>
-                    <td className="px-4 py-3 text-[var(--color-text-muted)]">
-                      {booking.venueName ?? <span className="text-[var(--color-text-subtle)]">—</span>}
+                    <td className="px-4 py-3 text-[var(--ink-muted)]">
+                      {booking.venueName ?? <span className="text-[var(--ink-soft)]">—</span>}
                     </td>
-                    <td className="px-4 py-3 text-[var(--color-text-muted)]">
+                    <td className="px-4 py-3 text-[var(--ink-muted)]">
                       <time dateTime={booking.eventStartAt.toISOString()}>
                         {dateFormatter.format(booking.eventStartAt)}
                       </time>
                     </td>
-                    <td className="max-w-xs px-4 py-3 text-[var(--color-text-muted)]">
+                    <td className="max-w-xs px-4 py-3 text-[var(--ink-muted)]">
                       {booking.customerNotes ? (
                         <span className="block break-words">{booking.customerNotes}</span>
                       ) : (
-                        <span className="text-[var(--color-text-subtle)]">—</span>
+                        <span className="text-[var(--ink-soft)]">—</span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums">{booking.ticketCount}</td>

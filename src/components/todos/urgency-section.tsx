@@ -29,13 +29,13 @@ function getUrgencyConfig(urgency: TodoUrgency): UrgencyConfig {
       return {
         label: "Overdue",
         icon: <AlertTriangle className="h-4 w-4" aria-hidden="true" />,
-        headerClass: "text-[var(--color-antique-burgundy)]",
+        headerClass: "text-[var(--burgundy)]",
       };
     case "due_soon":
       return {
         label: "Due This Week",
         icon: <Circle className="h-4 w-4 fill-current" aria-hidden="true" />,
-        headerClass: "text-[var(--color-warning)]",
+        headerClass: "text-[var(--mustard-dark)]",
       };
     case "later":
       return {
@@ -86,7 +86,7 @@ export function UrgencySection({
         ) : (
           <ChevronDown className="h-4 w-4 text-subtle" aria-hidden="true" />
         )}
-        <span className={`flex items-center gap-1.5 text-sm font-semibold ${config.headerClass}`}>
+        <span className={`flex items-center gap-1.5 font-brand-mono text-[0.65rem] font-semibold uppercase tracking-[0.08em] ${config.headerClass}`}>
           {config.icon}
           {config.label}
         </span>
@@ -109,7 +109,7 @@ export function UrgencySection({
             <button
               type="button"
               onClick={() => setShowAll(true)}
-              className="w-full rounded-lg py-1.5 text-center text-xs font-medium text-[var(--color-primary-700)] hover:bg-[var(--color-muted-surface)]"
+              className="w-full rounded-[7px] py-1.5 text-center text-xs font-medium text-[var(--navy)] hover:bg-[var(--paper-tint)]"
             >
               Show {hiddenCount} more...
             </button>

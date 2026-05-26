@@ -32,7 +32,7 @@ export function BusinessSettingsManager({
   }, [state]);
 
   return (
-    <form action={formAction} className="max-w-xl space-y-6">
+    <form action={formAction} className="max-w-xl space-y-5">
       <div className="space-y-2">
         <Label htmlFor="labourRateGbp">Labour cost (£ per hour)</Label>
         <Input
@@ -49,7 +49,7 @@ export function BusinessSettingsManager({
         </p>
       </div>
 
-      <div className="space-y-3 rounded-[var(--radius)] border border-[var(--color-border)] bg-white p-4 shadow-soft">
+      <div className="space-y-3 rounded-[var(--radius)] border border-[var(--hair)] bg-[var(--paper)] p-4 shadow-card">
         <div className="space-y-2">
           <Label htmlFor="accountantSalesReportEmail">Accountant sales report email</Label>
           <Input
@@ -63,12 +63,12 @@ export function BusinessSettingsManager({
             Monthly paid booking sales are emailed on the first of each month for the previous calendar month.
           </p>
         </div>
-        <label className="flex items-start gap-3 text-sm text-[var(--color-text)]">
+        <label className="flex items-start gap-3 text-sm text-[var(--ink)]">
           <input
             name="accountantSalesReportEnabled"
             type="checkbox"
             defaultChecked={accountantSalesReportEnabled}
-            className="mt-1 h-4 w-4 rounded border-[var(--color-border)]"
+            className="mt-1 h-4 w-4 rounded border-[var(--hair)]"
           />
           <span>
             Send the monthly accountant sales report automatically, including months with no completed paid sales.

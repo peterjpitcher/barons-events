@@ -15,6 +15,7 @@ import { SubmitButton } from "@/components/ui/submit-button";
 import { FieldError } from "@/components/ui/field-error";
 import { formatCurrency } from "@/lib/utils/format";
 import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/ui/design-primitives";
 
 type ArtistDetailEditorProps = {
   artist: ArtistDetail;
@@ -66,35 +67,40 @@ export function ArtistDetailEditor({ artist, canEdit = false }: ArtistDetailEdit
   }, [archiveState, router]);
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <CardTitle>{artist.name}</CardTitle>
-            <CardDescription>
-              {artist.eventCount} linked event{artist.eventCount === 1 ? "" : "s"} · {artist.debriefCount} debrief
-              {artist.debriefCount === 1 ? "" : "s"}
-            </CardDescription>
-          </div>
+    <div className="app-page">
+      <Link href="/artists" className="text-sm text-subtle underline">
+        ← Back to artists
+      </Link>
+      <PageHeader
+        eyebrow="Artist profile"
+        title={artist.name}
+        description={`${artist.eventCount} linked event${artist.eventCount === 1 ? "" : "s"} · ${artist.debriefCount} debrief${artist.debriefCount === 1 ? "" : "s"}`}
+        actions={
           <Badge variant={scoreTone(artist.effectivenessScore)}>
             Effectiveness {Math.round(artist.effectivenessScore)}/100
           </Badge>
+        }
+      />
+      <Card>
+        <CardHeader>
+          <CardTitle>Performance snapshot</CardTitle>
+          <CardDescription>Debrief metrics from linked events.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 text-sm">
           <p>
-            <span className="font-semibold text-[var(--color-text)]">Avg sales uplift:</span>{" "}
+            <span className="font-semibold text-[var(--ink)]">Avg sales uplift:</span>{" "}
             {formatPercent(artist.averageSalesUpliftPercent)}
           </p>
           <p>
-            <span className="font-semibold text-[var(--color-text)]">Avg promo score:</span>{" "}
+            <span className="font-semibold text-[var(--ink)]">Avg promo score:</span>{" "}
             {artist.averagePromoEffectiveness ? `${artist.averagePromoEffectiveness.toFixed(2)}/5` : "—"}
           </p>
           <p>
-            <span className="font-semibold text-[var(--color-text)]">Sentiment:</span>{" "}
+            <span className="font-semibold text-[var(--ink)]">Sentiment:</span>{" "}
             {formatSentiment(artist.averageSentimentScore)}
           </p>
           <p>
-            <span className="font-semibold text-[var(--color-text)]">Would book again:</span>{" "}
+            <span className="font-semibold text-[var(--ink)]">Would book again:</span>{" "}
             {formatPercent(artist.wouldBookAgainRate)}
           </p>
         </CardContent>
@@ -181,13 +187,13 @@ export function ArtistDetailEditor({ artist, canEdit = false }: ArtistDetailEdit
             artist.events.map((entry) => (
               <div
                 key={`${entry.eventId}-${entry.startAt}`}
-                className="rounded-[var(--radius)] border border-[var(--color-border)] bg-white/80 p-4 text-sm shadow-soft"
+                className="rounded-[8px] border border-[var(--hair)] bg-[var(--paper)] p-4 text-sm shadow-card"
               >
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <Link
                       href={`/events/${entry.eventId}`}
-                      className="font-semibold text-[var(--color-text)] transition-colors hover:text-[var(--color-primary-700)]"
+                      className="font-semibold text-[var(--ink)] transition-colors hover:text-[var(--navy)]"
                     >
                       {entry.eventTitle}
                     </Link>
@@ -200,27 +206,27 @@ export function ArtistDetailEditor({ artist, canEdit = false }: ArtistDetailEdit
                 {entry.debrief ? (
                   <div className="mt-3 grid gap-2 md:grid-cols-2">
                     <p>
-                      <span className="font-medium text-[var(--color-text)]">Attendance:</span>{" "}
+                      <span className="font-medium text-[var(--ink)]">Attendance:</span>{" "}
                       {entry.debrief.attendance ?? "—"}
                     </p>
                     <p>
-                      <span className="font-medium text-[var(--color-text)]">Promo score:</span>{" "}
+                      <span className="font-medium text-[var(--ink)]">Promo score:</span>{" "}
                       {entry.debrief.promo_effectiveness ? `${entry.debrief.promo_effectiveness}/5` : "—"}
                     </p>
                     <p>
-                      <span className="font-medium text-[var(--color-text)]">Event takings:</span>{" "}
+                      <span className="font-medium text-[var(--ink)]">Event takings:</span>{" "}
                       {formatCurrency(entry.debrief.actual_total_takings)}
                     </p>
                     <p>
-                      <span className="font-medium text-[var(--color-text)]">Sales uplift:</span>{" "}
+                      <span className="font-medium text-[var(--ink)]">Sales uplift:</span>{" "}
                       {formatPercent(entry.debrief.sales_uplift_percent)}
                     </p>
                     <p>
-                      <span className="font-medium text-[var(--color-text)]">Sentiment score:</span>{" "}
+                      <span className="font-medium text-[var(--ink)]">Sentiment score:</span>{" "}
                       {formatSentiment(entry.sentimentScore)}
                     </p>
                     <p>
-                      <span className="font-medium text-[var(--color-text)]">Would book again:</span>{" "}
+                      <span className="font-medium text-[var(--ink)]">Would book again:</span>{" "}
                       {typeof entry.debrief.would_book_again === "boolean"
                         ? entry.debrief.would_book_again
                           ? "Yes"

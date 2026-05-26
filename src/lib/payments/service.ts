@@ -190,7 +190,7 @@ function buildStripeAccountingLabel(params: {
   bookingId: string;
 }): string {
   return [
-    "BaronsHub event booking",
+    "BaronsHub 1.1 event booking",
     params.eventName,
     params.venueName,
     params.eventDateLabel,

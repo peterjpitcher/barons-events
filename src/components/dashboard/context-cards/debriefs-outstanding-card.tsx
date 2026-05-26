@@ -27,7 +27,7 @@ export function DebriefsOutstandingCard({ debriefs }: DebriefsOutstandingCardPro
           <Link
             key={d.id}
             href={`/debriefs/${d.id}`}
-            className="block text-xs text-subtle hover:text-[var(--color-primary-600)]"
+            className="block text-xs text-subtle hover:text-[var(--navy)]"
           >
             {d.title} &middot; {d.venueName}
           </Link>

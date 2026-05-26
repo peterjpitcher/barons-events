@@ -37,7 +37,7 @@ export function EventOverflowMenu({
           "[&_button]:w-full [&_button]:justify-start [&_button]:rounded-none",
           "[&_button]:border-0 [&_button]:shadow-none",
           "[&_button]:px-3 [&_button]:py-2 [&_button]:text-sm [&_button]:h-auto",
-          "[&_button]:bg-transparent [&_button]:hover:bg-[var(--color-muted-surface)]",
+          "[&_button]:bg-transparent [&_button]:hover:bg-[var(--canvas-2)]",
           "[&_form]:w-full",
         ].join(" ")}
       >

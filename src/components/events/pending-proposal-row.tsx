@@ -77,10 +77,10 @@ export function PendingProposalRow({ proposal }: { proposal: PendingProposal }) 
     : null;
 
   return (
-    <li className="rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface)]">
+    <li className="rounded-[var(--radius)] border border-[var(--hair)] bg-[var(--paper)]">
       <button
         type="button"
-        className="flex w-full items-start gap-2 p-4 text-left hover:bg-[var(--color-muted-surface)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
+        className="flex w-full items-start gap-2 p-4 text-left hover:bg-[var(--canvas-2)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mustard)]"
         onClick={() => setIsExpanded((v) => !v)}
         aria-expanded={isExpanded}
         aria-controls={detailsId}
@@ -93,7 +93,7 @@ export function PendingProposalRow({ proposal }: { proposal: PendingProposal }) 
           )}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-sm font-semibold text-[var(--color-text)]">{proposal.title}</span>
+          <span className="block text-sm font-semibold text-[var(--ink)]">{proposal.title}</span>
           <span className="mt-0.5 block text-xs text-subtle">
             {proposal.venueName} · {summaryStart} · proposed by {proposal.creatorName}
           </span>
@@ -107,24 +107,24 @@ export function PendingProposalRow({ proposal }: { proposal: PendingProposal }) 
       </button>
 
       {isExpanded ? (
-        <div id={detailsId} className="space-y-3 border-t border-[var(--color-border)] px-4 py-3">
+        <div id={detailsId} className="space-y-3 border-t border-[var(--hair)] px-4 py-3">
           <dl className="grid gap-2 text-sm sm:grid-cols-[120px_minmax(0,1fr)]">
             <dt className="font-semibold text-subtle">Title</dt>
-            <dd className="text-[var(--color-text)]">{proposal.title}</dd>
+            <dd className="text-[var(--ink)]">{proposal.title}</dd>
             <dt className="font-semibold text-subtle">
               {proposal.venueNames && proposal.venueNames.length > 1 ? "Venues" : "Venue"}
             </dt>
-            <dd className="text-[var(--color-text)]">
+            <dd className="text-[var(--ink)]">
               {proposal.venueNames && proposal.venueNames.length > 0
                 ? proposal.venueNames.join(", ")
                 : proposal.venueName}
             </dd>
             <dt className="font-semibold text-subtle">Start</dt>
-            <dd className="text-[var(--color-text)]">{formattedStart}</dd>
+            <dd className="text-[var(--ink)]">{formattedStart}</dd>
             <dt className="font-semibold text-subtle">Proposed by</dt>
-            <dd className="text-[var(--color-text)]">{proposal.creatorName}</dd>
+            <dd className="text-[var(--ink)]">{proposal.creatorName}</dd>
             <dt className="font-semibold text-subtle">Notes</dt>
-            <dd className="whitespace-pre-wrap text-[var(--color-text)]">
+            <dd className="whitespace-pre-wrap text-[var(--ink)]">
               {proposal.notes?.trim() ? proposal.notes : <span className="italic text-subtle">No notes provided.</span>}
             </dd>
           </dl>
@@ -159,7 +159,7 @@ export function PendingProposalRow({ proposal }: { proposal: PendingProposal }) 
             </Button>
           </div>
           {showRejectForm ? (
-            <div className="space-y-2 rounded-[var(--radius-sm)] border border-dashed border-[var(--color-border)] p-3">
+            <div className="space-y-2 rounded-[var(--radius-sm)] border border-dashed border-[var(--hair)] p-3">
               <label htmlFor={`reject-reason-${proposal.id}`} className="text-xs font-medium text-subtle">
                 Rejection reason
               </label>

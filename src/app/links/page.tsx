@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { listShortLinks } from "@/lib/links-server";
 import { canManageLinks } from "@/lib/roles";
 import { LinksManager } from "@/components/links/links-manager";
+import { PageHeader } from "@/components/ui/design-primitives";
 
 export default async function LinksPage() {
   const user = await getCurrentUser();
@@ -13,17 +14,21 @@ export default async function LinksPage() {
   const canEdit = canManageLinks(user.role);
 
   return (
-    <div className="space-y-6">
-      <header>
-        <h1 className="font-brand-serif text-3xl text-[var(--color-primary-700)]">Links & QR Codes</h1>
-        <p className="mt-1 text-subtle">
+    <div className="app-page">
+      <PageHeader
+        eyebrow="Distribution"
+        title="Links & QR Codes"
+        description={
+          <>
           Short links live at{" "}
-          <code className="rounded bg-[var(--color-muted-surface)] px-1.5 py-0.5 text-xs font-mono">
+          <code className="rounded bg-[var(--canvas-2)] px-1.5 py-0.5 text-xs font-mono">
             l.baronspubs.com/[code]
           </code>{" "}
           and redirect automatically. Click counts update on each visit.
-        </p>
-      </header>
+          </>
+        }
+        meta={<span>{links.length} active link{links.length === 1 ? "" : "s"}</span>}
+      />
 
       <LinksManager links={links} canEdit={canEdit} />
     </div>

@@ -100,123 +100,123 @@ export function EventDetailSummary({ event }: EventDetailSummaryProps) {
       <CardContent className="space-y-4 text-sm text-muted">
         {eventImageUrl ? (
           <div className="space-y-2">
-            <p className="font-semibold text-[var(--color-text)]">Event image</p>
+            <p className="font-semibold text-[var(--ink)]">Event image</p>
             {/* eslint-disable-next-line @next/next/no-img-element -- external event image URL, not suitable for next/image optimisation */}
             <img
               src={eventImageUrl}
               alt={`${event.title} event image`}
-              className="max-h-80 w-full rounded-[var(--radius)] border border-[var(--color-border)] object-cover"
+              className="max-h-80 w-full rounded-[var(--radius)] border border-[var(--hair)] object-cover"
             />
           </div>
         ) : null}
         {event.notes ? (
-          <div className="space-y-1 text-[var(--color-text)]">
+          <div className="space-y-1 text-[var(--ink)]">
             <p className="font-semibold">Notes</p>
             <p className="whitespace-pre-wrap text-sm text-subtle">{event.notes}</p>
           </div>
         ) : null}
         <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
           <p>
-            <span className="font-semibold text-[var(--color-text)]">Type:</span>{" "}
+            <span className="font-semibold text-[var(--ink)]">Type:</span>{" "}
             {event.event_type ? event.event_type : <span className="italic text-subtle">TBC</span>}
           </p>
           <p>
-            <span className="font-semibold text-[var(--color-text)]">
+            <span className="font-semibold text-[var(--ink)]">
               {venueNames.length > 1 ? "Venues" : "Venue"}:
             </span>{" "}
             {venueNames.length ? venueNames.join(", ") : <span className="italic text-subtle">Not specified</span>}
           </p>
           <p>
-            <span className="font-semibold text-[var(--color-text)]">
+            <span className="font-semibold text-[var(--ink)]">
               {venueSpaces.length > 1 ? "Spaces" : "Space"}:
             </span>{" "}
             {venueSpaces.length ? venueSpaces.join(", ") : "Not specified"}
           </p>
           <p>
-            <span className="font-semibold text-[var(--color-text)]">Start:</span>{" "}
+            <span className="font-semibold text-[var(--ink)]">Start:</span>{" "}
             {formatter.format(new Date(event.start_at))}
           </p>
           <p>
-            <span className="font-semibold text-[var(--color-text)]">End:</span>{" "}
+            <span className="font-semibold text-[var(--ink)]">End:</span>{" "}
             {event.end_at ? formatter.format(new Date(event.end_at)) : <span className="italic text-subtle">TBC</span>}
           </p>
           {event.expected_headcount != null ? (
             <p>
-              <span className="font-semibold text-[var(--color-text)]">Headcount:</span>{" "}
+              <span className="font-semibold text-[var(--ink)]">Headcount:</span>{" "}
               {event.expected_headcount}
             </p>
           ) : null}
           {event.wet_promo ? (
             <p>
-              <span className="font-semibold text-[var(--color-text)]">Wet promo:</span>{" "}
+              <span className="font-semibold text-[var(--ink)]">Wet promo:</span>{" "}
               {event.wet_promo}
             </p>
           ) : null}
           {event.food_promo ? (
             <p>
-              <span className="font-semibold text-[var(--color-text)]">Food promo:</span>{" "}
+              <span className="font-semibold text-[var(--ink)]">Food promo:</span>{" "}
               {event.food_promo}
             </p>
           ) : null}
           {event.booking_type ? (
             <p>
-              <span className="font-semibold text-[var(--color-text)]">Booking format:</span>{" "}
+              <span className="font-semibold text-[var(--ink)]">Booking format:</span>{" "}
               {bookingFormat ? BOOKING_FORMAT_LABELS[bookingFormat] : event.booking_type}
             </p>
           ) : null}
           {displayTicketPrice != null ? (
             <p>
-              <span className="font-semibold text-[var(--color-text)]">{ticketPriceLabel}:</span>{" "}
+              <span className="font-semibold text-[var(--ink)]">{ticketPriceLabel}:</span>{" "}
               {formatCurrency(displayTicketPrice)}
             </p>
           ) : null}
           {checkInCutoffLabel ? (
             <p>
-              <span className="font-semibold text-[var(--color-text)]">Last admission/check-in:</span>{" "}
+              <span className="font-semibold text-[var(--ink)]">Last admission/check-in:</span>{" "}
               {checkInCutoffLabel}
             </p>
           ) : null}
           {event.cancellation_window_hours != null ? (
             <p>
-              <span className="font-semibold text-[var(--color-text)]">Cancellation/refund window:</span>{" "}
+              <span className="font-semibold text-[var(--ink)]">Cancellation/refund window:</span>{" "}
               {event.cancellation_window_hours} hour{event.cancellation_window_hours === 1 ? "" : "s"}
             </p>
           ) : null}
           {event.age_policy ? (
             <p>
-              <span className="font-semibold text-[var(--color-text)]">Age policy:</span>{" "}
+              <span className="font-semibold text-[var(--ink)]">Age policy:</span>{" "}
               {event.age_policy}
             </p>
           ) : null}
           <p>
-            <span className="font-semibold text-[var(--color-text)]">Bookings:</span>{" "}
+            <span className="font-semibold text-[var(--ink)]">Bookings:</span>{" "}
             {event.booking_enabled ? "Enabled" : "Disabled"}
           </p>
           {event.total_capacity != null ? (
             <p>
-              <span className="font-semibold text-[var(--color-text)]">Capacity:</span>{" "}
+              <span className="font-semibold text-[var(--ink)]">Capacity:</span>{" "}
               {event.total_capacity}
             </p>
           ) : null}
           {event.max_tickets_per_booking != null ? (
             <p>
-              <span className="font-semibold text-[var(--color-text)]">Max per booking:</span>{" "}
+              <span className="font-semibold text-[var(--ink)]">Max per booking:</span>{" "}
               {event.max_tickets_per_booking}
             </p>
           ) : null}
           {event.booking_url ? (
             <p>
-              <span className="font-semibold text-[var(--color-text)]">Booking link:</span>{" "}
-              <a href={event.booking_url} target="_blank" rel="noopener noreferrer" className="text-[var(--color-primary-500)] underline">{event.booking_url}</a>
+              <span className="font-semibold text-[var(--ink)]">Booking link:</span>{" "}
+              <a href={event.booking_url} target="_blank" rel="noopener noreferrer" className="text-[var(--slate)] underline">{event.booking_url}</a>
             </p>
           ) : null}
           <p>
-            <span className="font-semibold text-[var(--color-text)]">SMS promo:</span>{" "}
+            <span className="font-semibold text-[var(--ink)]">SMS promo:</span>{" "}
             {event.sms_promo_enabled ? "Enabled" : "Disabled"}
           </p>
           {artistNames.length ? (
             <p>
-              <span className="font-semibold text-[var(--color-text)]">
+              <span className="font-semibold text-[var(--ink)]">
                 {artistNames.length > 1 ? "Artists / hosts" : "Artist / host"}:
               </span>{" "}
               {artistNames.join(", ")}
@@ -224,7 +224,7 @@ export function EventDetailSummary({ event }: EventDetailSummaryProps) {
           ) : null}
           {event.cost_total != null ? (
             <p>
-              <span className="font-semibold text-[var(--color-text)]">Cost:</span>{" "}
+              <span className="font-semibold text-[var(--ink)]">Cost:</span>{" "}
               {formatCurrency(event.cost_total)}
               {event.cost_details ? (
                 <span className="block text-xs text-subtle mt-1">{event.cost_details}</span>
@@ -233,25 +233,25 @@ export function EventDetailSummary({ event }: EventDetailSummaryProps) {
           ) : null}
         </div>
         {event.accessibility_notes ? (
-          <div className="space-y-1 text-[var(--color-text)]">
+          <div className="space-y-1 text-[var(--ink)]">
             <p className="font-semibold">Accessibility notes</p>
             <p className="whitespace-pre-wrap text-sm text-subtle">{event.accessibility_notes}</p>
           </div>
         ) : null}
         {event.terms_and_conditions ? (
-          <div className="space-y-1 text-[var(--color-text)]">
+          <div className="space-y-1 text-[var(--ink)]">
             <p className="font-semibold">Terms & conditions</p>
             <p className="whitespace-pre-wrap text-sm text-subtle">{event.terms_and_conditions}</p>
           </div>
         ) : null}
         {publicHighlights.length ? (
-          <div className="space-y-2 text-[var(--color-text)]">
+          <div className="space-y-2 text-[var(--ink)]">
             <p className="font-semibold">Event highlights</p>
             <ul className="space-y-1 text-sm text-subtle">
               {publicHighlights.map((highlight, index) => (
                 <li key={`${event.id}-highlight-${index}`} className="flex items-start gap-2">
                   <span
-                    className="mt-[0.35rem] h-1.5 w-1.5 flex-none rounded-full bg-[var(--color-primary-400)]"
+                    className="mt-[0.35rem] h-1.5 w-1.5 flex-none rounded-full bg-[var(--slate)]"
                     aria-hidden="true"
                   />
                   <span>{highlight}</span>
@@ -262,11 +262,11 @@ export function EventDetailSummary({ event }: EventDetailSummaryProps) {
         ) : null}
         {hasGoalDetails ? (
           <div className="space-y-2">
-            <p className="font-semibold text-[var(--color-text)]">Goals</p>
+            <p className="font-semibold text-[var(--ink)]">Goals</p>
             <div className="space-y-2">
               {goalDetails.map((goal) => (
                 <div key={goal.value}>
-                  <p className="font-medium text-[var(--color-text)]">{goal.label}</p>
+                  <p className="font-medium text-[var(--ink)]">{goal.label}</p>
                   {goal.helper ? <p className="text-xs text-subtle">{goal.helper}</p> : null}
                 </div>
               ))}

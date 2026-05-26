@@ -33,7 +33,7 @@ export function CommunicationPreferencesForm({
   }, [state]);
 
   return (
-    <form action={formAction} className="max-w-xl space-y-6">
+    <form action={formAction} className="max-w-xl space-y-5">
       <div className="space-y-2">
         <Label htmlFor="todoDigestFrequency">Todo digest email</Label>
         <Select

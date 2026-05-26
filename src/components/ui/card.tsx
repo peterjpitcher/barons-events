@@ -5,7 +5,7 @@ export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
       className={cn(
-        "rounded-[var(--radius-lg)] border border-[rgba(39,54,64,0.12)] bg-white shadow-card",
+        "rounded-[var(--radius-lg)] border border-[var(--hair)] bg-[var(--paper)] shadow-card",
         className
       )}
       {...props}
@@ -16,7 +16,7 @@ export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
 export function CardHeader({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("space-y-2 border-b border-[rgba(39,54,64,0.08)] bg-white/90 p-6", className)}
+      className={cn("space-y-1.5 border-b border-[var(--hair)] bg-[var(--paper)] p-4", className)}
       {...props}
     />
   );
@@ -24,7 +24,7 @@ export function CardHeader({ className, ...props }: HTMLAttributes<HTMLDivElemen
 
 export function CardTitle({ className, ...props }: HTMLAttributes<HTMLHeadingElement>) {
   return (
-    <h3 className={cn("text-lg font-semibold tracking-tight text-[var(--color-text)]", className)} {...props} />
+    <h3 className={cn("text-base font-semibold tracking-tight text-[var(--ink)]", className)} {...props} />
   );
 }
 
@@ -32,17 +32,17 @@ export function CardDescription({
   className,
   ...props
 }: HTMLAttributes<HTMLParagraphElement>) {
-  return <p className={cn("text-sm text-muted leading-relaxed", className)} {...props} />;
+  return <p className={cn("text-sm leading-relaxed text-[var(--ink-muted)]", className)} {...props} />;
 }
 
 export function CardContent({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("p-6", className)} {...props} />;
+  return <div className={cn("p-4", className)} {...props} />;
 }
 
 export function CardFooter({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("flex items-center justify-between gap-4 border-t border-[rgba(39,54,64,0.08)] p-6", className)}
+      className={cn("flex items-center justify-between gap-4 border-t border-[var(--hair)] p-4", className)}
       {...props}
     />
   );

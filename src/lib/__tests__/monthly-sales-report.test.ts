@@ -160,7 +160,7 @@ describe("monthly sales report", () => {
     const detailCsv = buildMonthlySalesReportDetailCsv(report);
     const attachments = buildMonthlySalesReportAttachments(report);
 
-    expect(email.subject).toBe("[TEST] BaronsHub sales report - April 2026");
+    expect(email.subject).toBe("[TEST] BaronsHub 1.1 sales report - April 2026");
     expect(email.text).toContain("Hi Julie,");
     expect(email.text).toContain("Julie has not been emailed.");
     expect(email.text).toContain("The Duke: gross");

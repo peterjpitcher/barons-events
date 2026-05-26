@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { createSupabaseReadonlyClient } from "@/lib/supabase/server";
 import { canViewDebriefs } from "@/lib/roles";
 import { formatInLondon } from "@/lib/datetime";
+import { PageHeader } from "@/components/ui/design-primitives";
 
 export default async function DebriefsPage() {
   const user = await getCurrentUser();
@@ -37,9 +38,9 @@ export default async function DebriefsPage() {
 
   if (error) {
     return (
-      <div className="p-6">
-        <h1 className="text-2xl font-bold mb-4">Debriefs</h1>
-        <p className="text-red-600">Failed to load debriefs: {error.message}</p>
+      <div className="app-page">
+        <PageHeader eyebrow="Reporting" title="Debriefs" description="Review submitted post-event debriefs." />
+        <p className="rounded-[8px] border border-[var(--burgundy)] bg-[var(--burgundy-tint)] px-4 py-3 text-sm text-[var(--burgundy)]">Failed to load debriefs: {error.message}</p>
       </div>
     );
   }
@@ -60,16 +61,21 @@ export default async function DebriefsPage() {
 
   if (!filtered.length) {
     return (
-      <div className="p-6">
-        <h1 className="text-2xl font-bold mb-4">Debriefs</h1>
-        <p className="text-[var(--color-text-muted)]">No debriefs found.</p>
+      <div className="app-page">
+        <PageHeader eyebrow="Reporting" title="Debriefs" description="Review submitted post-event debriefs." />
+        <p className="rounded-[8px] border border-[var(--hair)] bg-[var(--paper)] px-4 py-8 text-center text-sm text-[var(--ink-muted)]">No debriefs found.</p>
       </div>
     );
   }
 
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold mb-4">Debriefs</h1>
+    <div className="app-page">
+      <PageHeader
+        eyebrow="Reporting"
+        title="Debriefs"
+        description="Review submitted post-event debriefs."
+        meta={<span>{filtered.length} submission{filtered.length === 1 ? "" : "s"}</span>}
+      />
       <div className="space-y-3">
         {filtered.map((debrief) => {
           const event = debrief.events?.[0];
@@ -78,16 +84,16 @@ export default async function DebriefsPage() {
             <Link
               key={debrief.id}
               href={`/debriefs/${debrief.event_id}`}
-              className="block rounded-xl border border-[var(--color-border)] p-4 hover:bg-[rgba(39,54,64,0.06)] transition-colors"
+              className="block rounded-[8px] border border-[var(--hair)] bg-[var(--paper)] p-4 shadow-card transition-colors hover:bg-[var(--paper-tint)]"
             >
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-semibold">{event?.title}</p>
-                  <p className="text-sm text-[var(--color-text-muted)]">
+                  <p className="text-sm text-[var(--ink-muted)]">
                     {venueName}
                   </p>
                 </div>
-                <div className="text-right text-sm text-[var(--color-text-muted)]">
+                <div className="text-right text-sm text-[var(--ink-muted)]">
                   {debrief.submitted_at
                     ? formatInLondon(debrief.submitted_at).date
                     : "Not submitted"}

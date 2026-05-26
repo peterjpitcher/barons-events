@@ -16,7 +16,7 @@ type TodoRowProps = {
 function UrgencyBadge({ urgency }: { urgency: TodoUrgency }): React.ReactNode {
   if (urgency === "overdue") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-[rgba(110,60,61,0.1)] px-2 py-0.5 text-xs font-semibold text-[var(--color-antique-burgundy)]">
+      <span className="inline-flex items-center gap-1 rounded-full bg-[var(--burgundy-tint)] px-2 py-0.5 font-brand-mono text-[0.6rem] font-semibold uppercase tracking-[0.04em] text-[var(--burgundy)]">
         <AlertTriangle className="h-3 w-3" aria-hidden="true" />
         Overdue
       </span>
@@ -24,7 +24,7 @@ function UrgencyBadge({ urgency }: { urgency: TodoUrgency }): React.ReactNode {
   }
   if (urgency === "due_soon") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-[rgba(192,139,60,0.1)] px-2 py-0.5 text-xs font-semibold text-[var(--color-warning)]">
+      <span className="inline-flex items-center gap-1 rounded-full bg-[var(--mustard-tint)] px-2 py-0.5 font-brand-mono text-[0.6rem] font-semibold uppercase tracking-[0.04em] text-[var(--mustard-dark)]">
         <Circle className="h-3 w-3 fill-current" aria-hidden="true" />
         Due soon
       </span>
@@ -65,7 +65,7 @@ export function TodoRow({
 
   return (
     <div
-      className="rounded-lg border border-[rgba(39,54,64,0.12)] bg-white"
+      className="rounded-[8px] border border-[var(--hair)] bg-[var(--paper)]"
     >
       <div
         className="flex items-start gap-2.5 px-3 py-2.5 cursor-pointer"
@@ -91,7 +91,7 @@ export function TodoRow({
               }
             }}
             aria-label={`Mark "${item.title}" as done`}
-            className="mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border-2 border-[var(--color-primary-400)] bg-white hover:bg-[var(--color-primary-50)] disabled:opacity-50"
+            className="mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border-2 border-[var(--slate)] bg-[var(--paper)] hover:bg-[var(--sage-tint)] disabled:opacity-50"
           />
         )}
 
@@ -107,7 +107,7 @@ export function TodoRow({
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <p className="text-sm font-medium text-[var(--color-text)]">{item.title}</p>
+            <p className="text-sm font-medium text-[var(--ink)]">{item.title}</p>
             <UrgencyBadge urgency={item.urgency} />
           </div>
           <p className="text-xs text-subtle">{item.subtitle}</p>
@@ -116,14 +116,14 @@ export function TodoRow({
         <Link
           href={item.linkHref}
           onClick={handleViewClick}
-          className="flex-shrink-0 text-xs font-semibold text-[var(--color-primary-700)] hover:underline"
+          className="flex-shrink-0 text-xs font-semibold text-[var(--navy)] hover:underline"
         >
           View →
         </Link>
       </div>
 
       {isExpanded && hasDetails && (
-        <div className="border-t border-[rgba(39,54,64,0.08)] px-3 py-2 text-xs text-subtle">
+        <div className="border-t border-[var(--hair)] px-3 py-2 text-xs text-subtle">
           {item.parentTitle && (
             <p>
               <span className="font-medium">Parent:</span> {item.parentTitle}

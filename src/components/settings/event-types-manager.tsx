@@ -15,11 +15,11 @@ type ManagerProps = {
   eventTypes: EventTypeRow[];
 };
 
-const errorInputClass = "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]";
+const errorInputClass = "!border-[var(--burgundy)] focus-visible:!border-[var(--burgundy)]";
 
 export function EventTypesManager({ eventTypes }: ManagerProps) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <CreateEventTypeForm />
       <div className="space-y-4">
         <div className="grid gap-4 md:hidden">
@@ -118,7 +118,7 @@ function EventTypeCardMobile({ type }: { type: EventTypeRow }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg text-[var(--color-primary-700)]">{type.label}</CardTitle>
+        <CardTitle className="text-lg text-[var(--navy)]">{type.label}</CardTitle>
         <CardDescription>Last updated {new Date(type.created_at).toLocaleDateString("en-GB")}.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -151,15 +151,15 @@ function EventTypeCardMobile({ type }: { type: EventTypeRow }) {
 function EventTypeDesktopList({ eventTypes }: { eventTypes: EventTypeRow[] }) {
   if (eventTypes.length === 0) {
     return (
-      <div className="hidden rounded-[var(--radius)] border border-[var(--color-border)] bg-white py-8 text-center text-subtle md:block">
+      <div className="hidden rounded-[var(--radius)] border border-[var(--hair)] bg-[var(--paper)] py-8 text-center text-subtle md:block">
         No event types yet. Add the first one above.
       </div>
     );
   }
 
   return (
-    <div className="hidden overflow-hidden rounded-[var(--radius)] border border-[var(--color-border)] bg-white md:block">
-      <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] gap-4 border-b border-[var(--color-border)] bg-[var(--color-muted-surface)] px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-subtle">
+    <div className="hidden overflow-hidden rounded-[var(--radius)] border border-[var(--hair)] bg-[var(--paper)] md:block">
+      <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] gap-4 border-b border-[var(--hair)] bg-[var(--canvas-2)] px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-subtle">
         <div>Event type</div>
         <div>Added</div>
         <div className="text-right">Actions</div>
@@ -206,9 +206,9 @@ function EventTypeDesktopRow({ type, isFirst }: { type: EventTypeRow; isFirst: b
 
   return (
     <li
-      className={`border-[var(--color-border)] px-5 py-4 ${
+      className={`border-[var(--hair)] px-5 py-4 ${
         isFirst ? "border-b" : "border-y"
-      } hover:bg-[rgba(39,54,64,0.03)]`}
+      } hover:bg-[var(--paper-tint)]`}
     >
       <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] items-center gap-4">
         <form

@@ -63,7 +63,7 @@ export function AttachmentList({
   if (attachments.length === 0) {
     return (
       <div className="space-y-2">
-        {heading ? <h4 className="text-sm font-semibold text-[var(--color-text)]">{heading}</h4> : null}
+        {heading ? <h4 className="text-sm font-semibold text-[var(--ink)]">{heading}</h4> : null}
         <p className="text-sm text-subtle">{emptyMessage}</p>
       </div>
     );
@@ -71,14 +71,14 @@ export function AttachmentList({
 
   return (
     <div className="space-y-2">
-      {heading ? <h4 className="text-sm font-semibold text-[var(--color-text)]">{heading}</h4> : null}
+      {heading ? <h4 className="text-sm font-semibold text-[var(--ink)]">{heading}</h4> : null}
       <ul className="space-y-2">
         {attachments.map((attachment) => (
           <li
             key={attachment.id}
-            className="flex flex-wrap items-center gap-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-white p-2 text-sm"
+            className="flex flex-wrap items-center gap-3 rounded-[var(--radius-sm)] border border-[var(--hair)] bg-[var(--paper)] p-2 text-sm"
           >
-            <span className="flex-1 truncate font-medium text-[var(--color-text)]" title={attachment.originalFilename}>
+            <span className="flex-1 truncate font-medium text-[var(--ink)]" title={attachment.originalFilename}>
               {attachment.originalFilename}
             </span>
             <span className="text-xs text-subtle">{formatBytes(attachment.sizeBytes)}</span>

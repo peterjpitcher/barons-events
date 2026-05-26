@@ -1,56 +1,94 @@
 @import "tailwindcss";
 
 :root {
-  --color-primary-950: #11181f;
-  --color-primary-900: #19232c;
-  --color-primary-800: #1f2c39;
-  --color-primary-700: #273640;
+  --navy: #273640;
+  --navy-700: #1e2a32;
+  --navy-900: #131c22;
+  --slate: #637c8c;
+  --slate-dark: #3f5566;
+  --slate-50: #cbd5db;
+  --slate-tint: rgba(99, 124, 140, 0.14);
+  --burgundy: #781f25;
+  --burgundy-dark: #66191f;
+  --burgundy-tint: rgba(120, 31, 37, 0.08);
+  --sage: #93ab97;
+  --sage-dark: #42674b;
+  --sage-tint: rgba(147, 171, 151, 0.18);
+  --mustard: #c8a005;
+  --mustard-bright: #d9b021;
+  --mustard-dark: #8a6e02;
+  --mustard-tint: rgba(200, 160, 5, 0.14);
+
+  --canvas: #f4f0e9;
+  --canvas-2: #ece7dc;
+  --paper: #ffffff;
+  --paper-tint: #faf7f1;
+  --ink: #1a242c;
+  --ink-on-mustard: #1a1305;
+  --ink-muted: #5b6770;
+  --ink-soft: #8a949c;
+  --hair: #e3dccf;
+  --hair-strong: #cfc7b6;
+
+  --color-primary-950: var(--navy-900);
+  --color-primary-900: var(--navy-900);
+  --color-primary-800: var(--navy-700);
+  --color-primary-700: var(--navy);
   --color-primary-600: #324453;
-  --color-primary-500: #3d5162;
-  --color-primary-400: #4d6275;
-  --color-primary-300: #5d7286;
-  --color-primary-100: #ccd4db;
+  --color-primary-500: #3f5566;
+  --color-primary-400: var(--slate);
+  --color-primary-300: #7f93a1;
+  --color-primary-100: var(--slate-50);
 
-  --color-accent-bronze: #b98c5b;
-  --color-accent-bronze-dark: #9c7448;
-  --color-accent-sage: #4f7a69;
-  --color-accent-cranberry: #8d4446;
-  --color-accent-slate: #5d7488;
+  --color-accent-bronze: var(--mustard);
+  --color-accent-bronze-dark: var(--mustard-dark);
+  --color-accent-sage: var(--sage-dark);
+  --color-accent-cranberry: var(--burgundy);
+  --color-accent-slate: var(--slate);
 
-  --color-canvas: #f4f1eb;
+  --color-canvas: var(--canvas);
   --color-surface: #ffffff;
-  --color-surface-soft: #f8f4ee;
-  --color-muted-surface: #edf0f3;
-  --color-border: #d4d9dd;
-  --color-text: #1c252d;
-  --color-text-muted: #56616a;
-  --color-text-subtle: #6d7780;
+  --color-surface-soft: var(--paper-tint);
+  --color-muted-surface: var(--canvas-2);
+  --color-border: var(--hair);
+  --color-text: var(--ink);
+  --color-text-muted: var(--ink-muted);
+  --color-text-subtle: var(--ink-soft);
 
-  --color-accent-soft: rgba(185, 140, 91, 0.18);
-  --color-accent-soft-dark: #b98c5b;
-  --color-accent-warm: var(--color-accent-bronze);
-  --color-accent-warm-dark: var(--color-accent-bronze-dark);
-  --color-accent-cool: #5f7c91;
-  --color-accent-cool-dark: #456074;
+  --color-accent-soft: var(--mustard-tint);
+  --color-accent-soft-dark: var(--mustard);
+  --color-accent-warm: var(--mustard);
+  --color-accent-warm-dark: var(--mustard-dark);
+  --color-accent-cool: var(--slate);
+  --color-accent-cool-dark: #3f5566;
 
-  --color-success: var(--color-accent-sage);
-  --color-warning: #c08b3c;
+  --color-success: var(--sage-dark);
+  --color-warning: var(--mustard);
   --color-danger: var(--color-accent-cranberry);
   --color-info: var(--color-accent-slate);
-  --color-highlight: #d9aa6d;
+  --color-highlight: var(--mustard-bright);
   --color-olive-smoke: var(--color-accent-sage);
   --color-aged-brass: var(--color-accent-bronze);
   --color-antique-burgundy: var(--color-accent-cranberry);
+  --color-ring: var(--mustard);
 
-  --radius-sm: 0.5rem;
-  --radius-md: 0.75rem;
-  --radius-lg: 1rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.625rem;
+  --radius-pill: 999px;
 
-  --shadow-card: 0 18px 50px -32px rgba(16, 26, 36, 0.45);
-  --shadow-soft: 0 12px 30px -28px rgba(16, 26, 36, 0.35);
+  --shadow-card: 0 1px 0 rgba(26, 36, 44, 0.04), 0 6px 18px -14px rgba(26, 36, 44, 0.18);
+  --shadow-soft: 0 1px 0 rgba(26, 36, 44, 0.05), 0 18px 50px -32px rgba(16, 26, 36, 0.35);
 
   --background: var(--color-canvas);
   --foreground: var(--color-text);
+  --rail-w: 60px;
+  --rail-w-open: 224px;
+  --rail-surface: rgba(236, 231, 220, 0.08);
+  --rail-surface-strong: rgba(236, 231, 220, 0.12);
+  --rail-border: rgba(236, 231, 220, 0.14);
+  --overlay-scrim: rgba(19, 28, 34, 0.58);
+  --topbar-surface: rgba(244, 240, 233, 0.9);
   color-scheme: only light;
 }
 
@@ -90,7 +128,13 @@ body {
   color: var(--color-text);
   font-family: var(--font-geist-sans), system-ui, -apple-system, BlinkMacSystemFont,
     "Segoe UI", sans-serif;
-  letter-spacing: -0.015em;
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: rgba(200, 160, 5, 0.28);
+  color: var(--ink);
 }
 
 .text-muted {
@@ -115,6 +159,109 @@ body {
 
 .font-brand-serif {
   font-family: var(--font-playfair), "Playfair Display", Georgia, "Times New Roman", serif;
+  letter-spacing: -0.005em;
+}
+
+.font-brand-mono {
+  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  letter-spacing: 0;
+}
+
+.eyebrow {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.app-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.app-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.875rem;
+  border-bottom: 1px solid var(--hair);
+}
+
+.app-page-title {
+  margin: 0;
+  color: var(--navy);
+  font-family: var(--font-playfair), "Playfair Display", Georgia, serif;
+  font-size: clamp(1.375rem, 1.1rem + 0.7vw, 1.75rem);
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: -0.015em;
+}
+
+.app-page-subtitle {
+  margin-top: 0.25rem;
+  max-width: 48rem;
+  color: var(--ink-muted);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.625rem;
+}
+
+@media (max-width: 1180px) {
+  .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .metric-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.data-table-shell {
+  overflow-x: auto;
+  border: 1px solid var(--hair);
+  border-radius: var(--radius-lg);
+  background: var(--paper);
+  box-shadow: var(--shadow-card);
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.data-table thead {
+  background: var(--paper-tint);
+  color: var(--ink-soft);
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.data-table th,
+.data-table td {
+  padding: 0.625rem 0.875rem;
+}
+
+.data-table tbody tr {
+  border-top: 1px solid var(--hair);
+}
+
+.data-table tbody tr:hover {
+  background: rgba(99, 124, 140, 0.06);
 }
 
 .sr-only {

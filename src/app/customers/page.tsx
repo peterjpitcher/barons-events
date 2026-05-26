@@ -2,9 +2,10 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { listCustomersForUser } from "@/lib/customers";
 import { canViewCustomers } from "@/lib/roles";
+import { PageHeader } from "@/components/ui/design-primitives";
 import { CustomersView } from "./CustomersView";
 
-export const metadata = { title: "Customers — BaronsHub" };
+export const metadata = { title: "Customers — BaronsHub 1.1" };
 
 export default async function CustomersPage() {
   const user = await getCurrentUser();
@@ -16,13 +17,13 @@ export default async function CustomersPage() {
   const customers = await listCustomersForUser(user);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-[var(--color-text)]">Customers</h1>
-        <p className="text-sm text-subtle mt-1">
-          {customers.length} customer{customers.length !== 1 ? "s" : ""}
-        </p>
-      </div>
+    <div className="app-page">
+      <PageHeader
+        eyebrow="Audience"
+        title="Customers"
+        description="Browse booking history, contact details, and marketing opt-in status."
+        meta={<span>{customers.length} customer{customers.length !== 1 ? "s" : ""}</span>}
+      />
       <CustomersView customers={customers} />
     </div>
   );

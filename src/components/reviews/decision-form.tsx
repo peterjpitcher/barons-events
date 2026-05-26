@@ -72,12 +72,12 @@ export function DecisionForm({ eventId }: DecisionFormProps) {
         <input type="hidden" name="eventId" value={eventId} />
         <input ref={generateWebsiteCopyInputRef} type="hidden" name="generateWebsiteCopy" value="false" />
         <fieldset className="space-y-2" aria-describedby={decisionError ? "decision-error" : undefined}>
-          <Label className="text-sm font-semibold text-[var(--color-text)]">Decision</Label>
+          <Label className="text-sm font-semibold text-[var(--ink)]">Decision</Label>
           <div className="flex flex-wrap gap-3">
             {decisions.map((option) => (
               <label
                 key={option.value}
-                className="flex cursor-pointer items-center gap-2 rounded-full border border-[var(--color-border)] px-4 py-2 text-sm text-[var(--color-text)] shadow-soft hover:border-[var(--color-primary-500)]"
+                className="flex cursor-pointer items-center gap-2 rounded-full border border-[var(--hair)] px-4 py-2 text-sm text-[var(--ink)] shadow-card hover:border-[var(--slate)]"
               >
                 <input
                   type="radio"

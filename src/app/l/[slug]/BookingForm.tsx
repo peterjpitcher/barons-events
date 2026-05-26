@@ -86,8 +86,8 @@ export function BookingForm({
 
   if (isSoldOut) {
     return (
-      <div className="rounded-lg bg-white border border-[#cbd5db] p-6 text-center">
-        <p className="text-[#637c8c] font-medium">
+      <div className="rounded-[8px] bg-[var(--paper)] border border-[var(--hair)] p-6 text-center shadow-card">
+        <p className="text-[var(--slate)] font-medium">
           Sorry, this event is fully booked.
         </p>
       </div>
@@ -96,9 +96,9 @@ export function BookingForm({
 
   if (success) {
     return (
-      <div className="rounded-lg bg-white border border-[#cbd5db] p-6 text-center space-y-2">
-        <p className="text-lg font-semibold text-[#273640]">You&apos;re booked in!</p>
-        <p className="text-[#637c8c] text-sm">
+      <div className="rounded-[8px] bg-[var(--paper)] border border-[var(--hair)] p-6 text-center space-y-2 shadow-card">
+        <p className="text-lg font-semibold text-[var(--navy)]">You&apos;re booked in!</p>
+        <p className="text-[var(--slate)] text-sm">
           Your booking has been confirmed.
         </p>
       </div>
@@ -230,42 +230,42 @@ export function BookingForm({
     const notesAreSame = (existingCustomerNotes ?? "") === amendedCustomerNotes.trim();
     const isNotesOnlyUpdate = bookingNotesEnabled && isSame && !notesAreSame;
     return (
-      <div className="rounded-lg bg-white border border-[#cbd5db] p-6 space-y-4">
+      <div className="rounded-[8px] bg-[var(--paper)] border border-[var(--hair)] p-6 space-y-4 shadow-card">
         <div>
-          <p className="text-lg font-semibold text-[#273640]">You already have a booking</p>
-          <p className="mt-1 text-sm text-[#637c8c]">
+          <p className="text-lg font-semibold text-[var(--navy)]">You already have a booking</p>
+          <p className="mt-1 text-sm text-[var(--slate)]">
             We already have a booking for you on this event for{" "}
             <strong>{existingTicketCount}</strong>{" "}
             {peopleLabel(existingTicketCount)}.
           </p>
-          <p className="mt-2 text-sm text-[#637c8c]">
+          <p className="mt-2 text-sm text-[var(--slate)]">
             Would you like to amend your total number of people?
           </p>
         </div>
-        <div className="flex items-center justify-between rounded-md border border-[#cbd5db] bg-[#f1f4f6] px-3 py-3">
-          <span className="text-sm font-medium text-[#273640]">Total people</span>
+        <div className="flex items-center justify-between rounded-md border border-[var(--slate-50)] bg-[var(--paper-tint)] px-3 py-3">
+          <span className="text-sm font-medium text-[var(--navy)]">Total people</span>
           <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={() => setAmendedTicketCount((n) => Math.max(1, n - 1))}
               disabled={loading || amendedTicketCount <= 1}
-              className="w-8 h-8 rounded-full bg-[#273640] text-white font-bold
-                         disabled:opacity-40 flex items-center justify-center hover:bg-[#637c8c]
-                         focus:outline-none focus:ring-2 focus:ring-[#273640] focus:ring-offset-1"
+              className="w-8 h-8 rounded-full bg-[var(--navy)] text-white font-bold
+                         disabled:opacity-40 flex items-center justify-center hover:bg-[var(--slate)]
+                         focus:outline-none focus:ring-2 focus:ring-[var(--navy)] focus:ring-offset-1"
               aria-label="Decrease total people"
             >
               −
             </button>
-            <span className="text-lg font-bold w-8 text-center text-[#273640]" aria-live="polite">
+            <span className="text-lg font-bold w-8 text-center text-[var(--navy)]" aria-live="polite">
               {amendedTicketCount}
             </span>
             <button
               type="button"
               onClick={() => setAmendedTicketCount((n) => Math.min(maxTickets, n + 1))}
               disabled={loading || amendedTicketCount >= maxTickets}
-              className="w-8 h-8 rounded-full bg-[#273640] text-white font-bold
-                         disabled:opacity-40 flex items-center justify-center hover:bg-[#637c8c]
-                         focus:outline-none focus:ring-2 focus:ring-[#273640] focus:ring-offset-1"
+              className="w-8 h-8 rounded-full bg-[var(--navy)] text-white font-bold
+                         disabled:opacity-40 flex items-center justify-center hover:bg-[var(--slate)]
+                         focus:outline-none focus:ring-2 focus:ring-[var(--navy)] focus:ring-offset-1"
               aria-label="Increase total people"
             >
               +
@@ -274,7 +274,7 @@ export function BookingForm({
         </div>
         {bookingNotesEnabled ? (
           <div className="space-y-2">
-            <label htmlFor="amendedCustomerNotes" className="text-sm font-medium text-[#273640]">
+            <label htmlFor="amendedCustomerNotes" className="text-sm font-medium text-[var(--navy)]">
               Notes for the team
             </label>
             <textarea
@@ -284,8 +284,8 @@ export function BookingForm({
               maxLength={1000}
               rows={3}
               placeholder="Optional"
-              className="w-full rounded-md border border-[#cbd5db] bg-white px-3 py-2 text-sm
-                         placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-[#273640]"
+              className="w-full rounded-[8px] border border-[var(--hair)] bg-[var(--paper)] px-3 py-2 text-sm
+                         placeholder:text-[var(--ink-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--navy)]"
             />
           </div>
         ) : null}
@@ -295,7 +295,7 @@ export function BookingForm({
             type="button"
             disabled={loading || (isSame && notesAreSame)}
             onClick={handleConfirmUpdate}
-            className="rounded-full bg-[#273640] px-4 py-2 text-sm font-semibold text-white hover:bg-[#637c8c] disabled:opacity-60"
+            className="rounded-full bg-[var(--navy)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--slate)] disabled:opacity-60"
           >
             {loading
               ? "Updating…"
@@ -311,7 +311,7 @@ export function BookingForm({
               setError(null);
               setSuccess(true);
             }}
-            className="rounded-full border border-[#cbd5db] px-4 py-2 text-sm font-semibold text-[#273640] hover:bg-[#f1f4f6]"
+            className="rounded-full border border-[var(--slate-50)] px-4 py-2 text-sm font-semibold text-[var(--navy)] hover:bg-[var(--paper-tint)]"
           >
             Keep booking at {existingTicketCount} {peopleLabel(existingTicketCount)}
           </button>
@@ -321,24 +321,24 @@ export function BookingForm({
   }
 
   return (
-    <div className="bg-white border-t border-[#cbd5db] p-6">
-      <h2 className="text-sm font-bold uppercase tracking-wider text-[#273640] mb-4">
+    <div className="bg-[var(--paper)] border-t border-[var(--hair)] p-6">
+      <h2 className="text-sm font-bold uppercase tracking-wider text-[var(--navy)] mb-4">
         {ctaLabel}
       </h2>
 
       {isPaidBooking ? (
-        <div className="mb-4 rounded-lg border border-[#cbd5db] bg-[#f1f4f6] p-4 text-sm text-[#273640]">
+        <div className="mb-4 rounded-[8px] border border-[var(--hair)] bg-[var(--paper-tint)] p-4 text-sm text-[var(--navy)]">
           <div className="flex items-center justify-between gap-3">
             <span>{ticketCount} {ticketCount === 1 ? bookingNoun.slice(0, -1) : bookingNoun}</span>
             <span className="font-semibold">
               {ticketPrice != null ? formatAmount(ticketPrice) : "Unavailable"}
             </span>
           </div>
-          <div className="mt-2 flex items-center justify-between border-t border-[#cbd5db] pt-2 font-bold">
+          <div className="mt-2 flex items-center justify-between border-t border-[var(--slate-50)] pt-2 font-bold">
             <span>Total</span>
             <span>{paidTotal != null ? formatAmount(paidTotal) : "Unavailable"}</span>
           </div>
-          <p className="mt-2 text-xs text-[#637c8c]">
+          <p className="mt-2 text-xs text-[var(--slate)]">
             You&apos;ll pay securely by card through Stripe Checkout.
           </p>
         </div>
@@ -347,15 +347,15 @@ export function BookingForm({
       <form ref={formRef} onSubmit={handleSubmit} noValidate className="space-y-4">
         {/* Ticket count stepper */}
         <div className="flex items-center justify-between">
-          <span className="text-sm text-[#637c8c]">How many {bookingNoun}?</span>
+          <span className="text-sm text-[var(--slate)]">How many {bookingNoun}?</span>
           <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={() => setTicketCount((n) => Math.max(1, n - 1))}
               disabled={ticketCount <= 1}
-              className="w-8 h-8 rounded-full bg-[#273640] text-white font-bold
-                         disabled:opacity-40 flex items-center justify-center hover:bg-[#637c8c]
-                         focus:outline-none focus:ring-2 focus:ring-[#273640] focus:ring-offset-1"
+              className="w-8 h-8 rounded-full bg-[var(--navy)] text-white font-bold
+                         disabled:opacity-40 flex items-center justify-center hover:bg-[var(--slate)]
+                         focus:outline-none focus:ring-2 focus:ring-[var(--navy)] focus:ring-offset-1"
               aria-label="Decrease ticket count"
             >
               −
@@ -367,9 +367,9 @@ export function BookingForm({
               type="button"
               onClick={() => setTicketCount((n) => Math.min(maxTickets, n + 1))}
               disabled={ticketCount >= maxTickets}
-              className="w-8 h-8 rounded-full bg-[#273640] text-white font-bold
-                         disabled:opacity-40 flex items-center justify-center hover:bg-[#637c8c]
-                         focus:outline-none focus:ring-2 focus:ring-[#273640] focus:ring-offset-1"
+              className="w-8 h-8 rounded-full bg-[var(--navy)] text-white font-bold
+                         disabled:opacity-40 flex items-center justify-center hover:bg-[var(--slate)]
+                         focus:outline-none focus:ring-2 focus:ring-[var(--navy)] focus:ring-offset-1"
               aria-label="Increase ticket count"
             >
               +
@@ -389,8 +389,8 @@ export function BookingForm({
               onChange={(e) => setFirstName(e.target.value)}
               required
               autoComplete="given-name"
-              className="w-full rounded-md border border-[#cbd5db] bg-white px-3 py-2 text-sm
-                         placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-[#273640]"
+              className="w-full rounded-[8px] border border-[var(--hair)] bg-[var(--paper)] px-3 py-2 text-sm
+                         placeholder:text-[var(--ink-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--navy)]"
             />
           </div>
           <div>
@@ -402,8 +402,8 @@ export function BookingForm({
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
               autoComplete="family-name"
-              className="w-full rounded-md border border-[#cbd5db] bg-white px-3 py-2 text-sm
-                         placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-[#273640]"
+              className="w-full rounded-[8px] border border-[var(--hair)] bg-[var(--paper)] px-3 py-2 text-sm
+                         placeholder:text-[var(--ink-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--navy)]"
             />
           </div>
         </div>
@@ -419,8 +419,8 @@ export function BookingForm({
             onChange={(e) => setMobile(e.target.value)}
             required
             autoComplete="tel"
-            className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm
-                       placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-[#273640]"
+            className="w-full rounded-[8px] border border-[var(--hair)] bg-[var(--paper)] px-3 py-2 text-sm
+                       placeholder:text-[var(--ink-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--navy)]"
           />
         </div>
 
@@ -435,8 +435,8 @@ export function BookingForm({
             onChange={(e) => setEmail(e.target.value)}
             required={isPaidBooking}
             autoComplete="email"
-            className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm
-                       placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-[#273640]"
+            className="w-full rounded-[8px] border border-[var(--hair)] bg-[var(--paper)] px-3 py-2 text-sm
+                       placeholder:text-[var(--ink-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--navy)]"
           />
         </div>
 
@@ -450,23 +450,23 @@ export function BookingForm({
               onChange={(e) => setCustomerNotes(e.target.value)}
               maxLength={1000}
               rows={3}
-              className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm
-                         placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-[#273640]"
+              className="w-full rounded-[8px] border border-[var(--hair)] bg-[var(--paper)] px-3 py-2 text-sm
+                         placeholder:text-[var(--ink-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--navy)]"
             />
           </div>
         ) : null}
 
         {/* Marketing opt-in — unchecked by default (UK GDPR: pre-ticked boxes not permitted) */}
-        <div className="flex items-start gap-3 rounded-md border border-[#93ab97] bg-[#f5f8f5] p-3">
+        <div className="flex items-start gap-3 rounded-md border border-[var(--sage)] bg-[var(--sage-tint)] p-3">
           <input
             id="marketingOptIn"
             type="checkbox"
             checked={marketingOptIn}
             onChange={(e) => setMarketingOptIn(e.target.checked)}
-            className="mt-0.5 h-4 w-4 flex-shrink-0 rounded border-[#cbd5db] text-[#273640]
-                       focus:ring-2 focus:ring-[#273640] focus:ring-offset-1"
+            className="mt-0.5 h-4 w-4 flex-shrink-0 rounded border-[var(--slate-50)] text-[var(--navy)]
+                       focus:ring-2 focus:ring-[var(--navy)] focus:ring-offset-1"
           />
-          <label htmlFor="marketingOptIn" className="text-[0.68rem] leading-relaxed text-[#273640]">
+          <label htmlFor="marketingOptIn" className="text-[0.68rem] leading-relaxed text-[var(--navy)]">
             {MARKETING_CONSENT_WORDING}
           </label>
         </div>
@@ -479,13 +479,13 @@ export function BookingForm({
         )}
 
         {/* Privacy policy notice */}
-        <p className="text-[0.68rem] text-[#637c8c] leading-relaxed">
+        <p className="text-[0.68rem] text-[var(--slate)] leading-relaxed">
           By booking you agree to our{" "}
           <a
             href="https://www.baronspubs.com/policies/website-privacy/"
             target="_blank"
             rel="noopener noreferrer"
-            className="underline hover:text-[#273640]"
+            className="underline hover:text-[var(--navy)]"
           >
             privacy policy
           </a>
@@ -498,9 +498,9 @@ export function BookingForm({
         <button
           type="submit"
           disabled={loading || !firstName.trim() || !mobile.trim() || (isPaidBooking && !email.trim())}
-          className="w-full bg-[#c8a005] hover:bg-[#a88804] text-white font-bold text-sm
+          className="w-full bg-[var(--mustard)] hover:bg-[var(--mustard-dark)] text-white font-bold text-sm
                      uppercase tracking-wider py-3 rounded-md disabled:opacity-50
-                     transition-colors focus:outline-none focus:ring-2 focus:ring-[#c8a005] focus:ring-offset-1"
+                     transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--mustard)] focus:ring-offset-1"
         >
           {loading ? (isPaidBooking ? "Opening checkout…" : "Submitting…") : ctaLabel}
         </button>

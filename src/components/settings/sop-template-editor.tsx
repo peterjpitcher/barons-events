@@ -74,7 +74,7 @@ export function SopTemplateEditor(): React.ReactElement {
   if (error) {
     return (
       <Card>
-        <CardContent className="py-8 text-center text-[var(--color-danger)]">
+        <CardContent className="py-8 text-center text-[var(--burgundy)]">
           {error}
         </CardContent>
       </Card>
@@ -120,8 +120,8 @@ function LoadingSkeleton(): React.ReactElement {
         <Card key={i}>
           <CardContent className="py-6">
             <div className="animate-pulse space-y-3">
-              <div className="h-5 w-48 rounded bg-[var(--color-muted-surface)]" />
-              <div className="h-4 w-32 rounded bg-[var(--color-muted-surface)]" />
+              <div className="h-5 w-48 rounded bg-[var(--canvas-2)]" />
+              <div className="h-4 w-32 rounded bg-[var(--canvas-2)]" />
             </div>
           </CardContent>
         </Card>
@@ -175,7 +175,7 @@ function AddSectionButton({
     <Card>
       <CardContent className="flex items-end gap-3 py-4">
         <div className="flex-1 space-y-1">
-          <label htmlFor="new-section-label" className="text-sm font-medium text-[var(--color-text)]">
+          <label htmlFor="new-section-label" className="text-sm font-medium text-[var(--ink)]">
             Section name
           </label>
           <Input
@@ -345,7 +345,7 @@ function SectionPanel({
           ) : (
             <div className="flex flex-1 items-center gap-3">
               <span
-                className="text-base font-semibold text-[var(--color-text)]"
+                className="text-base font-semibold text-[var(--ink)]"
                 onDoubleClick={(e) => {
                   if (canEdit) {
                     e.stopPropagation();
@@ -377,7 +377,7 @@ function SectionPanel({
                 onClick={() => setConfirmDelete(true)}
                 disabled={deleting}
                 aria-label={`Delete section ${section.label}`}
-                className="text-[var(--color-danger)] hover:text-[var(--color-danger)]"
+                className="text-[var(--burgundy)] hover:text-[var(--burgundy)]"
               >
                 <Trash2 className="h-4 w-4" aria-hidden="true" />
               </Button>
@@ -386,9 +386,9 @@ function SectionPanel({
         </div>
 
         {expanded && (
-          <CardContent className="space-y-3 border-t border-[var(--color-border)] pt-4">
+          <CardContent className="space-y-3 border-t border-[var(--hair)] pt-4">
             {/* Section-level default assignees */}
-            <div className="space-y-1 rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-muted-surface)] p-3">
+            <div className="space-y-1 rounded-[var(--radius)] border border-[var(--hair)] bg-[var(--canvas-2)] p-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-medium text-subtle">
                   Pick names from the list to assign all todos in this section to them
@@ -566,20 +566,20 @@ function TaskRow({
       .filter(Boolean);
 
     return (
-      <div className="flex items-start gap-3 rounded-[var(--radius)] border border-[var(--color-border)] bg-white p-3">
+      <div className="flex items-start gap-3 rounded-[var(--radius)] border border-[var(--hair)] bg-[var(--paper)] p-3">
         <div className="flex-1 space-y-1">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-[var(--color-text)]">{task.title}</span>
+            <span className="text-sm font-medium text-[var(--ink)]">{task.title}</span>
             <Badge variant="info">T-{task.tMinusDays}d</Badge>
           </div>
           {resolvedNames.length > 0 ? (
             <p className="text-xs text-subtle">
               Assignees: {resolvedNames.join(", ")}
               {!hasTaskOverride && (
-                <span className="italic text-[var(--color-primary-400)]"> (from section)</span>
+                <span className="italic text-[var(--slate)]"> (from section)</span>
               )}
               {hasTaskOverride && (
-                <span className="text-[var(--color-primary-400)]"> (task override)</span>
+                <span className="text-[var(--slate)]"> (task override)</span>
               )}
             </p>
           ) : (
@@ -604,7 +604,7 @@ function TaskRow({
               onClick={() => setConfirmDelete(true)}
               disabled={deleting}
               aria-label={`Delete task ${task.title}`}
-              className="text-[var(--color-danger)] hover:text-[var(--color-danger)]"
+              className="text-[var(--burgundy)] hover:text-[var(--burgundy)]"
             >
               <Trash2 className="h-4 w-4" aria-hidden="true" />
             </Button>
@@ -626,7 +626,7 @@ function TaskRow({
 
   // Editing mode
   return (
-    <div className="space-y-3 rounded-[var(--radius)] border border-[var(--color-primary-400)] bg-[var(--color-muted-surface)] p-4">
+    <div className="space-y-3 rounded-[var(--radius)] border border-[var(--slate)] bg-[var(--canvas-2)] p-4">
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1">
           <label htmlFor={`task-title-${task.id}`} className="text-xs font-medium text-subtle">
@@ -664,7 +664,7 @@ function TaskRow({
           value={expansion}
           onChange={(e) => setExpansion(e.target.value)}
           disabled={saving}
-          className="h-9 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2 text-sm text-[var(--color-text)]"
+          className="h-9 rounded-[var(--radius-sm)] border border-[var(--hair)] bg-[var(--paper)] px-2 text-sm text-[var(--ink)]"
         >
           <option value="single">Task (single)</option>
           <option value="per_venue:pub">Pub (one task per pub)</option>
@@ -698,12 +698,12 @@ function TaskRow({
               return (
                 <span
                   key={depId}
-                  className="inline-flex items-center gap-1 rounded-full bg-[var(--color-muted-surface)] border border-[var(--color-border)] px-2 py-0.5 text-xs text-subtle"
+                  className="inline-flex items-center gap-1 rounded-full bg-[var(--canvas-2)] border border-[var(--hair)] px-2 py-0.5 text-xs text-subtle"
                 >
                   {depTask?.title ?? "Unknown"}
                   <button
                     type="button"
-                    className="ml-1 text-[var(--color-danger)] hover:text-[#dc2626]"
+                    className="ml-1 text-[var(--burgundy)] hover:text-[var(--burgundy-dark)]"
                     onClick={() => void handleRemoveDependency(depId)}
                     aria-label={`Remove dependency on ${depTask?.title ?? "unknown task"}`}
                   >
@@ -716,7 +716,7 @@ function TaskRow({
         )}
         {availableForDep.length > 0 && (
           <select
-            className="mt-1 w-full rounded-[var(--radius)] border border-[var(--color-border)] bg-white px-3 py-2 text-sm"
+            className="mt-1 w-full rounded-[var(--radius)] border border-[var(--hair)] bg-[var(--paper)] px-3 py-2 text-sm"
             value=""
             onChange={(e) => {
               if (e.target.value) {
@@ -807,7 +807,7 @@ function AddTaskButton({
   }
 
   return (
-    <div className="flex items-end gap-3 rounded-[var(--radius)] border border-dashed border-[var(--color-border)] p-3">
+    <div className="flex items-end gap-3 rounded-[var(--radius)] border border-dashed border-[var(--hair)] p-3">
       <div className="flex-1 space-y-1">
         <label htmlFor={`new-task-${sectionId}`} className="text-xs font-medium text-subtle">
           Task title
@@ -893,34 +893,34 @@ function MultiSelect({
     <div className="relative">
       <button
         type="button"
-        className="flex w-full items-center justify-between rounded-[var(--radius)] border border-[var(--color-border)] bg-white px-3 py-2 text-left text-sm shadow-soft disabled:cursor-not-allowed disabled:bg-[rgba(39,54,64,0.06)]"
+        className="flex w-full items-center justify-between rounded-[var(--radius)] border border-[var(--hair)] bg-[var(--paper)] px-3 py-2 text-left text-sm shadow-card disabled:cursor-not-allowed disabled:bg-[var(--canvas-2)]"
         onClick={() => setOpen((p) => !p)}
         disabled={disabled}
       >
-        <span className={selectedNames.length > 0 ? "text-[var(--color-text)]" : "text-subtle"}>
+        <span className={selectedNames.length > 0 ? "text-[var(--ink)]" : "text-subtle"}>
           {selectedNames.length > 0 ? selectedNames.join(", ") : (placeholder ?? "Select...")}
         </span>
         <ChevronDown className="h-4 w-4 shrink-0 text-subtle" aria-hidden="true" />
       </button>
       {open && (
-        <div className="absolute z-20 mt-1 max-h-48 w-full overflow-auto rounded-[var(--radius)] border border-[var(--color-border)] bg-white shadow-soft">
+        <div className="absolute z-20 mt-1 max-h-48 w-full overflow-auto rounded-[var(--radius)] border border-[var(--hair)] bg-[var(--paper)] shadow-card">
           {/* Dynamic roles */}
           {dynamicRoles.map((role) => (
             <label
               key={role.id}
-              className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm font-medium text-[var(--color-primary-700)] hover:bg-[rgba(39,54,64,0.05)]"
+              className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm font-medium text-[var(--navy)] hover:bg-[var(--paper-tint)]"
             >
               <input
                 type="checkbox"
                 checked={selectedIds.includes(role.id)}
                 onChange={() => toggle(role.id)}
-                className="rounded border-[var(--color-border)]"
+                className="rounded border-[var(--hair)]"
               />
               {role.name}
             </label>
           ))}
           {/* Divider */}
-          <div className="border-t border-[var(--color-border)] my-1" />
+          <div className="border-t border-[var(--hair)] my-1" />
           {/* Real users */}
           {options.length === 0 ? (
             <p className="p-3 text-sm text-subtle">No users available.</p>
@@ -928,13 +928,13 @@ function MultiSelect({
             options.map((opt) => (
               <label
                 key={opt.id}
-                className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm hover:bg-[rgba(39,54,64,0.05)]"
+                className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm hover:bg-[var(--paper-tint)]"
               >
                 <input
                   type="checkbox"
                   checked={selectedIds.includes(opt.id)}
                   onChange={() => toggle(opt.id)}
-                  className="rounded border-[var(--color-border)]"
+                  className="rounded border-[var(--hair)]"
                 />
                 {opt.name}
               </label>

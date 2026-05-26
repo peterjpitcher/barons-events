@@ -124,7 +124,7 @@ export function PlanningTaskList({ itemId, tasks, users, onChanged }: PlanningTa
   }
 
   return (
-    <section className="space-y-2 border-t border-[var(--color-border)] pt-2">
+    <section className="space-y-2 border-t border-[var(--hair)] pt-2">
       <h4 className="text-xs font-semibold uppercase tracking-[0.08em] text-subtle">Todo list</h4>
       <ul className="space-y-1.5">
         {sortedTasks.map((task) => {
@@ -147,12 +147,12 @@ export function PlanningTaskList({ itemId, tasks, users, onChanged }: PlanningTa
           return (
             <li
               key={task.id}
-              className={`rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-muted-surface)] px-2.5 py-1.5 ${
+              className={`rounded-[var(--radius-sm)] border border-[var(--hair)] bg-[var(--canvas-2)] px-2.5 py-1.5 ${
                 task.status === "not_required" ? "opacity-60" : ""
               }`}
             >
               <div className="flex items-start justify-between gap-2">
-                <div className="flex min-w-0 flex-1 items-start gap-2 text-sm text-[var(--color-text)]">
+                <div className="flex min-w-0 flex-1 items-start gap-2 text-sm text-[var(--ink)]">
                   <Select
                     aria-label={`Status for ${task.title}`}
                     value={task.status}
@@ -191,7 +191,7 @@ export function PlanningTaskList({ itemId, tasks, users, onChanged }: PlanningTa
                           disabled={isPending}
                           placeholder="Add a short note (press Enter to save)"
                           aria-label={`Edit notes for ${task.title}`}
-                          className="min-w-0 flex-1 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-0.5 text-xs text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
+                          className="min-w-0 flex-1 rounded-[var(--radius-sm)] border border-[var(--hair)] bg-[var(--paper)] px-2 py-0.5 text-xs text-[var(--ink)] focus:outline-none focus:ring-2 focus:ring-[var(--mustard)]"
                           onChange={(event) =>
                             setNotesDraft(event.target.value.replace(/[\r\n]+/g, " "))
                           }
@@ -233,11 +233,11 @@ export function PlanningTaskList({ itemId, tasks, users, onChanged }: PlanningTa
                         <span className="min-w-0 flex-1 truncate text-xs text-subtle">— {task.notes}</span>
                       ) : null}
                     </span>
-                    <span className={`block text-xs ${isOverdue ? "text-[var(--color-danger)]" : "text-subtle"}`}>
+                    <span className={`block text-xs ${isOverdue ? "text-[var(--burgundy)]" : "text-subtle"}`}>
                       {task.assigneeName} · due {formatDueDate(task.dueDate)}
                     </span>
                     {isBlocked ? (
-                      <span className="mt-0.5 block text-xs text-[var(--color-warning)]">
+                      <span className="mt-0.5 block text-xs text-[var(--mustard)]">
                         Waiting on: {openDependencyNames.length ? openDependencyNames.join(", ") : "dependencies"}
                       </span>
                     ) : null}
@@ -263,7 +263,7 @@ export function PlanningTaskList({ itemId, tasks, users, onChanged }: PlanningTa
                     title={hasNotes ? "Edit notes" : "Add notes"}
                   >
                     <Pencil
-                      className={`h-4 w-4 ${hasNotes ? "text-[var(--color-primary-700)]" : ""}`}
+                      className={`h-4 w-4 ${hasNotes ? "text-[var(--navy)]" : ""}`}
                       aria-hidden="true"
                     />
                   </Button>
@@ -295,7 +295,7 @@ export function PlanningTaskList({ itemId, tasks, users, onChanged }: PlanningTa
                     {dependencyTasks.map((dependency) => (
                       <span
                         key={dependency.id}
-                        className="inline-flex max-w-full items-center gap-1 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-0.5 text-[11px] text-[var(--color-text)]"
+                        className="inline-flex max-w-full items-center gap-1 rounded-full border border-[var(--hair)] bg-[var(--paper)] px-2 py-0.5 text-[11px] text-[var(--ink)]"
                       >
                         <span className="truncate">{dependency.title}</span>
                         <button
@@ -303,7 +303,7 @@ export function PlanningTaskList({ itemId, tasks, users, onChanged }: PlanningTa
                           disabled={isPending}
                           aria-label={`Remove dependency on ${dependency.title}`}
                           title="Remove dependency"
-                          className="rounded-full p-0.5 text-subtle hover:bg-[var(--color-muted-surface)] hover:text-[var(--color-text)] disabled:opacity-50"
+                          className="rounded-full p-0.5 text-subtle hover:bg-[var(--canvas-2)] hover:text-[var(--ink)] disabled:opacity-50"
                           onClick={() =>
                             runTaskAction(
                               () =>
@@ -354,7 +354,7 @@ export function PlanningTaskList({ itemId, tasks, users, onChanged }: PlanningTa
         })}
       </ul>
 
-      <div className="grid gap-1.5 rounded-[var(--radius-sm)] border border-dashed border-[var(--color-border)] p-1.5 md:grid-cols-[minmax(0,1fr)_180px_170px_auto]">
+      <div className="grid gap-1.5 rounded-[var(--radius-sm)] border border-dashed border-[var(--hair)] p-1.5 md:grid-cols-[minmax(0,1fr)_180px_170px_auto]">
         <Input
           value={title}
           onChange={(event) => setTitle(event.target.value)}

@@ -31,11 +31,11 @@ const roleLabels: Record<AppUserRow["role"], string> = {
   executive: "Executive"
 };
 
-const errorInputClass = "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]";
+const errorInputClass = "!border-[var(--burgundy)] focus-visible:!border-[var(--burgundy)]";
 
 export function UsersManager({ users, venues, currentUserId }: UsersManagerProps) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <InviteUserForm venues={venues} />
       <div className="space-y-4">
         <div className="grid gap-4 md:hidden">
@@ -175,7 +175,7 @@ function UserCardMobile({ user, venues, currentUserId }: { user: EnrichedUser; v
     <Card className={isDeactivated ? "opacity-60" : undefined}>
       <CardHeader className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
         <div className="flex-1 min-w-0">
-          <CardTitle className="text-lg text-[var(--color-primary-700)]">{user.full_name ?? user.email}</CardTitle>
+          <CardTitle className="text-lg text-[var(--navy)]">{user.full_name ?? user.email}</CardTitle>
           <CardDescription>{user.email}</CardDescription>
           <div className="mt-1 flex items-center gap-1.5">
             <span
@@ -184,14 +184,14 @@ function UserCardMobile({ user, venues, currentUserId }: { user: EnrichedUser; v
               }`}
               aria-hidden="true"
             />
-            <span className="text-xs text-[var(--color-text-muted)]">
+            <span className="text-xs text-[var(--ink-muted)]">
               {isDeactivated ? "Deactivated" : user.emailConfirmedAt ? "Active" : "Pending"}
               {!isDeactivated && <>{" · "}{formatRelativeTime(user.lastSignInAt)}</>}
             </span>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <p className="flex-shrink-0 rounded-full bg-muted-surface px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
+          <p className="flex-shrink-0 rounded-full bg-muted-surface px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--ink-muted)]">
             {roleLabels[user.role]}
           </p>
           <UserActionsMenu user={user} currentUserId={currentUserId} />
@@ -254,15 +254,15 @@ function UserCardMobile({ user, venues, currentUserId }: { user: EnrichedUser; v
 function UserDesktopList({ users, venues, currentUserId }: UsersManagerProps) {
   if (users.length === 0) {
     return (
-      <div className="hidden rounded-[var(--radius)] border border-[var(--color-border)] bg-white py-8 text-center text-subtle md:block">
+      <div className="hidden rounded-[var(--radius)] border border-[var(--hair)] bg-[var(--paper)] py-8 text-center text-subtle md:block">
         No workspace users yet.
       </div>
     );
   }
 
   return (
-    <div className="hidden overflow-hidden rounded-[var(--radius)] border border-[var(--color-border)] bg-white md:block">
-      <div className="grid grid-cols-[minmax(0,2.5fr)_minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,2fr)_auto] gap-4 border-b border-[var(--color-border)] bg-[var(--color-muted-surface)] px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-subtle">
+    <div className="hidden overflow-hidden rounded-[var(--radius)] border border-[var(--hair)] bg-[var(--paper)] md:block">
+      <div className="grid grid-cols-[minmax(0,2.5fr)_minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,2fr)_auto] gap-4 border-b border-[var(--hair)] bg-[var(--canvas-2)] px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-subtle">
         <div>Name</div>
         <div>Email</div>
         <div>Role</div>
@@ -296,9 +296,9 @@ function UserDesktopRow({ user, venues, isFirst, currentUserId }: { user: Enrich
 
   return (
     <li
-      className={`border-[var(--color-border)] px-5 py-4 ${
+      className={`border-[var(--hair)] px-5 py-4 ${
         isFirst ? "border-b" : "border-y"
-      } hover:bg-[rgba(39,54,64,0.03)] ${isDeactivated ? "opacity-60" : ""}`}
+      } hover:bg-[var(--paper-tint)] ${isDeactivated ? "opacity-60" : ""}`}
     >
       <form action={formAction} className="grid grid-cols-[minmax(0,2.5fr)_minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,2fr)_auto] items-center gap-4">
         <input type="hidden" name="userId" value={user.id} />
@@ -319,7 +319,7 @@ function UserDesktopRow({ user, venues, isFirst, currentUserId }: { user: Enrich
               }`}
               aria-hidden="true"
             />
-            <span className="text-xs text-[var(--color-text-muted)]">
+            <span className="text-xs text-[var(--ink-muted)]">
               {isDeactivated ? "Deactivated" : user.emailConfirmedAt ? "Active" : "Pending"}
               {!isDeactivated && <>{" · "}{formatRelativeTime(user.lastSignInAt)}</>}
             </span>
@@ -327,7 +327,7 @@ function UserDesktopRow({ user, venues, isFirst, currentUserId }: { user: Enrich
         </div>
         <div className="space-y-1">
           <span className="text-xs font-medium uppercase tracking-[0.18em] text-subtle">Email</span>
-          <p className="truncate text-sm text-[var(--color-text)]">{user.email}</p>
+          <p className="truncate text-sm text-[var(--ink)]">{user.email}</p>
         </div>
         <div className="flex flex-col gap-1">
           <label className="sr-only" htmlFor={`desktop-role-${user.id}`}>

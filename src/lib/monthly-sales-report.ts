@@ -585,7 +585,7 @@ export function renderMonthlySalesReportEmail(report: SalesReport, options: {
   testRecipientEmail?: string;
 } = {}): { subject: string; html: string; text: string } {
   const subjectPrefix = options.testMode ? "[TEST] " : "";
-  const subject = `${subjectPrefix}BaronsHub sales report - ${report.period.label}`;
+  const subject = `${subjectPrefix}BaronsHub 1.1 sales report - ${report.period.label}`;
   const testNotice = options.testMode
     ? `This is a test copy for approval${options.testRecipientEmail ? ` sent to ${options.testRecipientEmail}` : ""}. Julie has not been emailed.`
     : "";
@@ -769,7 +769,7 @@ export function renderMonthlySalesReportEmail(report: SalesReport, options: {
     <div class="wrapper">
       <div class="card">
         <div class="header">
-          <h1>BaronsHub</h1>
+          <h1>BaronsHub 1.1</h1>
           <p>Monthly sales report</p>
         </div>
         <div class="content">

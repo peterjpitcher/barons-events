@@ -1,17 +1,17 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export const metadata = {
-  title: "Account Deactivated · Barons Events",
+  title: "Account Deactivated · BaronsHub 1.1",
 };
 
 export default function DeactivatedPage(): React.ReactElement {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[var(--color-background)] p-4">
+    <div className="flex min-h-screen items-center justify-center bg-[var(--canvas)] p-4">
       <Card className="max-w-md">
         <CardHeader>
-          <CardTitle className="text-center">Account Deactivated</CardTitle>
+          <CardTitle className="text-center">Account deactivated</CardTitle>
         </CardHeader>
-        <CardContent className="text-center text-[var(--color-text-muted)]">
+        <CardContent className="text-center text-[var(--ink-muted)]">
           <p>Your account has been deactivated by an administrator.</p>
           <p className="mt-2">
             If you believe this is an error, please contact your administrator.

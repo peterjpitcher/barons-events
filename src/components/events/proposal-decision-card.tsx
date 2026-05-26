@@ -56,7 +56,7 @@ export function ProposalDecisionCard({ eventId, eventTitle }: ProposalDecisionCa
 
   return (
     <Card>
-      <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--color-primary-700)] px-6 py-3">
+      <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--navy)] px-6 py-3">
         <CardTitle className="text-sm font-semibold uppercase tracking-wider !text-white">Approve or reject this proposal</CardTitle>
       </CardHeader>
       <CardContent>
@@ -89,7 +89,7 @@ export function ProposalDecisionCard({ eventId, eventTitle }: ProposalDecisionCa
         </div>
 
         {showRejectForm ? (
-          <div className="mt-3 space-y-2 rounded-[var(--radius-sm)] border border-dashed border-[var(--color-border)] p-3">
+          <div className="mt-3 space-y-2 rounded-[var(--radius-sm)] border border-dashed border-[var(--hair)] p-3">
             <label htmlFor={`reject-reason-${eventId}`} className="text-xs font-medium text-subtle">
               Rejection reason
             </label>

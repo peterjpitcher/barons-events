@@ -90,7 +90,7 @@ export function LinkRow({
               type="button"
               onClick={onToggleExpand}
               aria-label={isExpanded ? "Collapse variants" : "Expand variants"}
-              className="mt-0.5 shrink-0 rounded p-0.5 text-subtle hover:bg-[var(--color-muted-surface)] transition-colors"
+              className="mt-0.5 shrink-0 rounded p-0.5 text-subtle hover:bg-[var(--canvas-2)] transition-colors"
             >
               <ChevronRight
                 className={`h-4 w-4 transition-transform ${isExpanded ? "rotate-90" : ""}`}
@@ -102,9 +102,9 @@ export function LinkRow({
           )}
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              <p className="font-medium text-[var(--color-text)]">{link.name}</p>
+              <p className="font-medium text-[var(--ink)]">{link.name}</p>
               {variantCount > 0 && (
-                <span className="rounded-full bg-[var(--color-muted-surface)] px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-subtle">
+                <span className="rounded-full bg-[var(--canvas-2)] px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-subtle">
                   {variantCount}
                 </span>
               )}
@@ -113,7 +113,7 @@ export function LinkRow({
               href={link.destination}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs text-subtle hover:text-[var(--color-primary-700)] transition-colors max-w-[240px] truncate block"
+              className="text-xs text-subtle hover:text-[var(--navy)] transition-colors max-w-[240px] truncate block"
             >
               {link.destination}
             </a>
@@ -123,7 +123,7 @@ export function LinkRow({
 
       {/* Short code */}
       <td className="px-4 py-3">
-        <code className="rounded bg-[var(--color-muted-surface)] px-2 py-0.5 text-xs font-mono text-[var(--color-text)]">
+        <code className="rounded bg-[var(--canvas-2)] px-2 py-0.5 text-xs font-mono text-[var(--ink)]">
           {SHORT_LINK_BASE_URL}{link.code}
         </code>
       </td>
@@ -136,7 +136,7 @@ export function LinkRow({
       </td>
 
       {/* Clicks — sum of this link + any variants */}
-      <td className="px-4 py-3 text-right tabular-nums text-sm text-[var(--color-text)]">
+      <td className="px-4 py-3 text-right tabular-nums text-sm text-[var(--ink)]">
         {(totalClicks ?? link.clicks).toLocaleString()}
       </td>
 
@@ -154,12 +154,12 @@ export function LinkRow({
       <td className="px-4 py-3">
         {confirmingDelete ? (
           <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-[var(--color-danger)]">Delete?</span>
+            <span className="text-xs font-medium text-[var(--burgundy)]">Delete?</span>
             <button
               type="button"
               onClick={onDeleteConfirm}
               disabled={isPending}
-              className="rounded p-1 text-[var(--color-danger)] hover:bg-[rgba(239,68,68,0.1)] transition-colors"
+              className="rounded p-1 text-[var(--burgundy)] hover:bg-[var(--burgundy-tint)] transition-colors"
               aria-label="Confirm delete"
             >
               <Check className="h-4 w-4" aria-hidden="true" />
@@ -167,7 +167,7 @@ export function LinkRow({
             <button
               type="button"
               onClick={onDeleteCancel}
-              className="rounded p-1 text-subtle hover:bg-[var(--color-muted-surface)] transition-colors"
+              className="rounded p-1 text-subtle hover:bg-[var(--canvas-2)] transition-colors"
               aria-label="Cancel delete"
             >
               <X className="h-4 w-4" aria-hidden="true" />
@@ -183,7 +183,7 @@ export function LinkRow({
                   type="button"
                   onClick={onEdit}
                   title="Edit link"
-                  className="rounded p-1.5 text-subtle hover:bg-[var(--color-muted-surface)] hover:text-[var(--color-primary-700)] transition-colors"
+                  className="rounded p-1.5 text-subtle hover:bg-[var(--canvas-2)] hover:text-[var(--navy)] transition-colors"
                 >
                   <Pencil className="h-4 w-4" aria-hidden="true" />
                   <span className="sr-only">Edit link</span>
@@ -192,7 +192,7 @@ export function LinkRow({
                   type="button"
                   onClick={onDeleteRequest}
                   title="Delete link"
-                  className="rounded p-1.5 text-subtle hover:bg-[rgba(239,68,68,0.1)] hover:text-[var(--color-danger)] transition-colors"
+                  className="rounded p-1.5 text-subtle hover:bg-[var(--burgundy-tint)] hover:text-[var(--burgundy)] transition-colors"
                 >
                   <Trash2 className="h-4 w-4" aria-hidden="true" />
                   <span className="sr-only">Delete link</span>

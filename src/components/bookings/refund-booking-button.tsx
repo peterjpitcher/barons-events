@@ -72,8 +72,8 @@ export function RefundBookingButton({
   }
 
   return (
-    <div className="space-y-2 rounded-[var(--radius)] border border-[var(--color-border)] bg-white p-3 text-left shadow-soft">
-      <p className="text-xs font-semibold text-[var(--color-text)]">
+    <div className="space-y-2 rounded-[var(--radius)] border border-[var(--hair)] bg-[var(--paper)] p-3 text-left shadow-card">
+      <p className="text-xs font-semibold text-[var(--ink)]">
         Refund up to {formatAmount(refundableAmountPence, currency)}
       </p>
       <input
@@ -83,14 +83,14 @@ export function RefundBookingButton({
         value={amount}
         onChange={(event) => setAmount(event.target.value)}
         placeholder="Full refund"
-        className="w-full rounded-md border border-[var(--color-border)] px-2 py-1 text-xs"
+        className="w-full rounded-md border border-[var(--hair)] px-2 py-1 text-xs"
       />
       <input
         type="text"
         value={reason}
         onChange={(event) => setReason(event.target.value)}
         placeholder="Reason (optional)"
-        className="w-full rounded-md border border-[var(--color-border)] px-2 py-1 text-xs"
+        className="w-full rounded-md border border-[var(--hair)] px-2 py-1 text-xs"
       />
       <div className="flex justify-end gap-2">
         <Button type="button" variant="ghost" size="sm" disabled={isPending} onClick={() => setOpen(false)}>

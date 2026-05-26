@@ -189,9 +189,9 @@ function DashboardMode({
     grouped.overdue.length + grouped.dueSoon.length + grouped.later.length;
 
   return (
-    <section className="space-y-3 rounded-xl border border-[rgba(39,54,64,0.12)] bg-white p-4 shadow-soft">
-      <header className="space-y-3 border-b border-[rgba(39,54,64,0.12)] pb-3">
-        <h2 className="text-lg font-semibold text-[var(--color-primary-700)]">My Todos</h2>
+    <section className="space-y-3 rounded-[10px] border border-[var(--hair)] bg-[var(--paper)] p-4 shadow-card">
+      <header className="space-y-3 border-b border-[var(--hair)] pb-3">
+        <h2 className="font-brand-serif text-lg font-medium text-[var(--navy)]">My Todos</h2>
         <FilterTabs tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
       </header>
 
@@ -203,7 +203,7 @@ function DashboardMode({
               <button
                 type="button"
                 onClick={() => setActiveTab("all")}
-                className="font-semibold text-[var(--color-primary-700)] hover:underline"
+                className="font-semibold text-[var(--navy)] hover:underline"
               >
                 Show all
               </button>
@@ -399,10 +399,10 @@ function PlanningMode({
   }
 
   return (
-    <section className="space-y-3 rounded-xl border border-[var(--color-border)] bg-white p-3 shadow-soft">
-      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--color-border)] pb-2">
+    <section className="space-y-3 rounded-[10px] border border-[var(--hair)] bg-[var(--paper)] p-3 shadow-card">
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--hair)] pb-2">
         <div>
-          <h2 className="text-lg font-semibold text-[var(--color-primary-700)]">Todos by person</h2>
+          <h2 className="font-brand-serif text-lg font-medium text-[var(--navy)]">Todos by person</h2>
           <p className="text-sm text-subtle">{getFilterDescription()}</p>
         </div>
         <div className="flex items-center gap-3">
@@ -423,7 +423,7 @@ function PlanningMode({
                   return !v;
                 });
               }}
-              className="flex items-center gap-1.5 rounded-full border border-[var(--color-border)] px-3 py-1 text-xs font-semibold transition-colors hover:bg-[var(--color-muted-surface)]"
+              className="flex items-center gap-1.5 rounded-full border border-[var(--hair)] px-3 py-1 font-brand-mono text-[0.625rem] font-semibold uppercase tracking-[0.04em] transition-colors hover:bg-[var(--paper-tint)]"
             >
               {showEveryone ? (
                 <>
@@ -466,16 +466,16 @@ function PlanningMode({
             return (
               <article
                 key={group.key}
-                className={`rounded-lg border bg-[var(--color-muted-surface)] p-2.5 ${
+                className={`rounded-[8px] border bg-[var(--paper-tint)] p-2.5 ${
                   isCurrentUser
-                    ? "border-[var(--color-primary-300)]"
-                    : "border-[var(--color-border)]"
+                    ? "border-[var(--mustard)]"
+                    : "border-[var(--hair)]"
                 }`}
               >
                 <button
                   type="button"
                   onClick={() => toggleSection(group.key)}
-                  className="flex w-full items-center justify-between gap-2 border-b border-[var(--color-border)] pb-1.5"
+                  className="flex w-full items-center justify-between gap-2 border-b border-[var(--hair)] pb-1.5"
                   aria-expanded={!isCollapsed}
                 >
                   <span className="flex items-center gap-2">
@@ -484,7 +484,7 @@ function PlanningMode({
                     ) : (
                       <ChevronDown className="h-4 w-4 text-subtle" aria-hidden="true" />
                     )}
-                    <h3 className="text-base font-semibold text-[var(--color-text)]">
+                    <h3 className="text-base font-semibold text-[var(--ink)]">
                       {group.label}
                       {isCurrentUser && (
                         <span className="ml-1.5 text-xs font-normal text-subtle">(you)</span>

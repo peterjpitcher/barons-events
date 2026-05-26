@@ -42,7 +42,7 @@ export function OpeningHoursManager({
           {serviceTypes.length === 0 ? (
             <p className="text-sm text-subtle">
               No service types configured. Add some in{" "}
-              <a href="/settings" className="underline hover:text-[var(--color-primary-700)]">
+              <a href="/settings" className="underline hover:text-[var(--navy)]">
                 Settings → Opening hours service types
               </a>
               .

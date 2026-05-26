@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button";
 import { ForgotPasswordForm } from "./forgot-password-form";
 
 export const metadata = {
-  title: "Forgot password · Barons Events",
-  description: "Request a password reset link for your Barons Events account."
+  title: "Forgot password · BaronsHub 1.1",
+  description: "Request a password reset link for your BaronsHub 1.1 account."
 };
 
 type SearchParams = Record<string, string | undefined>;
@@ -35,7 +35,7 @@ export default async function ForgotPasswordPage({ searchParams }: ForgotPasswor
         isSuccess ? (
           <p>
             We&apos;ve emailed reset instructions to your inbox. Follow the link to set a new
-            password and get back into BaronsHub.
+            password and get back into BaronsHub 1.1.
           </p>
         ) : (
           <p>
@@ -50,7 +50,7 @@ export default async function ForgotPasswordPage({ searchParams }: ForgotPasswor
           <CardTitle className="text-2xl">
             {isSuccess ? "Check your email" : "Forgot password?"}
           </CardTitle>
-          <CardDescription className="text-[var(--color-text-muted)]">
+          <CardDescription className="text-[var(--ink-muted)]">
             {isSuccess
               ? "If an account exists for that email, you’ll find a secure reset link waiting for you."
               : "We’ll email you a secure link to choose a new password."}
@@ -58,7 +58,7 @@ export default async function ForgotPasswordPage({ searchParams }: ForgotPasswor
         </CardHeader>
         <CardContent className={AUTH_CARD_CONTENT_CLASS}>
           {isSuccess ? (
-            <div className="space-y-6 text-sm text-muted">
+            <div className="space-y-5 text-sm text-muted">
               <p>
                 Didn&apos;t receive anything? Check your spam folder, or wait a couple of minutes before trying
                 again.

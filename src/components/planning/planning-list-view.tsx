@@ -65,28 +65,28 @@ export function PlanningListView({ today, entries, onOpenPlanningItem }: Plannin
       key: "30",
       label: "30-day boundary",
       date: addDays(today, 30),
-      className: "border-t-4 border-solid border-[#2e7d32] bg-[rgba(46,125,50,0.08)] text-[#1b5e20]"
+      className: "border-t-4 border-solid border-[var(--sage-dark)] bg-[var(--sage-tint)] text-[var(--sage-dark)]"
     },
     {
       key: "60",
       label: "60-day boundary",
       date: addDays(today, 60),
-      className: "border-t-4 border-dashed border-[#ef6c00] bg-[rgba(239,108,0,0.08)] text-[#e65100]"
+      className: "border-t-4 border-dashed border-[var(--mustard)] bg-[var(--mustard-tint)] text-[var(--mustard-dark)]"
     },
     {
       key: "90",
       label: "90-day boundary",
       date: addDays(today, 90),
-      className: "border-t-4 border-dotted border-[#c62828] bg-[rgba(198,40,40,0.08)] text-[#b71c1c]"
+      className: "border-t-4 border-dotted border-[var(--burgundy)] bg-[var(--burgundy-tint)] text-[var(--burgundy)]"
     }
   ];
 
   let boundaryIndex = 0;
 
   return (
-    <section className="space-y-4 rounded-[var(--radius)] border border-[var(--color-border)] bg-white p-4 shadow-soft">
+    <section className="space-y-4 rounded-[var(--radius)] border border-[var(--hair)] bg-[var(--paper)] p-4 shadow-card">
       <header>
-        <h2 className="text-lg font-semibold text-[var(--color-primary-700)]">Continuous list view</h2>
+        <h2 className="text-lg font-semibold text-[var(--navy)]">Continuous list view</h2>
         <p className="text-sm text-subtle">Everything in one date-ordered feed with 30/60/90 delineation lines.</p>
       </header>
 
@@ -105,9 +105,9 @@ export function PlanningListView({ today, entries, onOpenPlanningItem }: Plannin
           }
 
           content.push(
-            <article key={`date-${dateKey}`} className="rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-muted-surface)] p-3">
-              <header className="mb-2 flex items-baseline justify-between gap-2 border-b border-[var(--color-border)] pb-2">
-                <h3 className="text-sm font-semibold text-[var(--color-text)]">{formatDateHeading(dateKey)}</h3>
+            <article key={`date-${dateKey}`} className="rounded-[var(--radius-sm)] border border-[var(--hair)] bg-[var(--canvas-2)] p-3">
+              <header className="mb-2 flex items-baseline justify-between gap-2 border-b border-[var(--hair)] pb-2">
+                <h3 className="text-sm font-semibold text-[var(--ink)]">{formatDateHeading(dateKey)}</h3>
                 <p className="text-xs font-medium text-subtle">{formatOffset(today, dateKey)}</p>
               </header>
               <div className="space-y-2">
@@ -118,15 +118,15 @@ export function PlanningListView({ today, entries, onOpenPlanningItem }: Plannin
                         key={entry.id}
                         type="button"
                         onClick={() => onOpenPlanningItem?.(entry.planningItem)}
-                        className="flex w-full items-center justify-between gap-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] border-l-4 border-l-[var(--color-primary-600)] bg-white px-3 py-2 text-left hover:bg-[rgba(39,54,64,0.06)]"
+                        className="flex w-full items-center justify-between gap-3 rounded-[var(--radius-sm)] border border-[var(--hair)] border-l-4 border-l-[var(--navy)] bg-[var(--paper)] px-3 py-2 text-left hover:bg-[var(--paper-tint)]"
                       >
                         <span className="min-w-0">
-                          <span className="block truncate text-sm font-medium text-[var(--color-text)]">{entry.title}</span>
+                          <span className="block truncate text-sm font-medium text-[var(--ink)]">{entry.title}</span>
                           <span className="block text-xs text-subtle">
                             Planning · {entry.venueLabel} · {entry.status.replace(/_/g, " ")}
                           </span>
                         </span>
-                        <span className="text-xs font-semibold text-[var(--color-primary-700)]">Open</span>
+                        <span className="text-xs font-semibold text-[var(--navy)]">Open</span>
                       </button>
                     );
                   }
@@ -138,7 +138,7 @@ export function PlanningListView({ today, entries, onOpenPlanningItem }: Plannin
                         className="flex items-center gap-3 rounded-[var(--radius-sm)] border border-dashed border-amber-400 bg-amber-50 px-3 py-2"
                       >
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-medium text-[var(--color-text)]">✨ {entry.title}</span>
+                          <span className="block truncate text-sm font-medium text-[var(--ink)]">✨ {entry.title}</span>
                           <span className="block text-xs text-subtle">Inspiration · Seasonal occasion</span>
                         </span>
                       </div>
@@ -149,15 +149,15 @@ export function PlanningListView({ today, entries, onOpenPlanningItem }: Plannin
                     <Link
                       key={entry.id}
                       href={`/events/${entry.eventId}`}
-                      className="flex items-center justify-between gap-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] border-l-4 border-l-[var(--color-accent-warm)] bg-white px-3 py-2 hover:bg-[rgba(39,54,64,0.06)]"
+                      className="flex items-center justify-between gap-3 rounded-[var(--radius-sm)] border border-[var(--hair)] border-l-4 border-l-[var(--mustard)] bg-[var(--paper)] px-3 py-2 hover:bg-[var(--paper-tint)]"
                     >
                       <span className="min-w-0">
-                        <span className="block truncate text-sm font-medium text-[var(--color-text)]">{entry.title}</span>
+                        <span className="block truncate text-sm font-medium text-[var(--ink)]">{entry.title}</span>
                         <span className="block text-xs text-subtle">
                           Event · {entry.venueLabel} · {entry.status.replace(/_/g, " ")}
                         </span>
                       </span>
-                      <span className="text-xs font-semibold text-[var(--color-primary-700)]">Open event</span>
+                      <span className="text-xs font-semibold text-[var(--navy)]">Open event</span>
                     </Link>
                   );
                 })}

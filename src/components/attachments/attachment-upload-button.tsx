@@ -161,9 +161,9 @@ export function AttachmentUploadButton({
           disabled={isPending}
           aria-label={isPending ? uploadingLabel : label || "Attach file"}
           title={isPending ? uploadingLabel : label || "Attach file"}
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full hover:bg-[rgba(39,54,64,0.12)] disabled:opacity-60"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full hover:bg-[var(--canvas-2)] disabled:opacity-60"
         >
-          <Paperclip className="h-4 w-4 text-[var(--color-text)]/70" aria-hidden="true" />
+          <Paperclip className="h-4 w-4 text-[var(--ink)]/70" aria-hidden="true" />
         </button>
       </>
     );

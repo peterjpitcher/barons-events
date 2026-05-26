@@ -165,7 +165,7 @@ export function OverridesCalendar({
         >
           <ChevronLeft className="h-4 w-4" aria-hidden="true" /> Previous
         </Button>
-        <span className="text-sm font-semibold text-[var(--color-text)]">{monthLabel}</span>
+        <span className="text-sm font-semibold text-[var(--ink)]">{monthLabel}</span>
         <Button
           type="button"
           variant="ghost"
@@ -185,13 +185,13 @@ export function OverridesCalendar({
       </div>
 
       {/* Calendar grid */}
-      <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-white overflow-hidden">
-        <div className="grid grid-cols-7 border-b border-[var(--color-border)] bg-[var(--color-muted-surface)] text-center text-xs font-semibold uppercase tracking-[0.1em] text-subtle">
+      <div className="rounded-[var(--radius-lg)] border border-[var(--hair)] bg-[var(--paper)] overflow-hidden">
+        <div className="grid grid-cols-7 border-b border-[var(--hair)] bg-[var(--canvas-2)] text-center text-xs font-semibold uppercase tracking-[0.1em] text-subtle">
           {DAYS_SHORT.map((d) => (
             <div key={d} className="px-2 py-2">{d}</div>
           ))}
         </div>
-        <div className="grid grid-cols-7 gap-px bg-[var(--color-border)]">
+        <div className="grid grid-cols-7 gap-px bg-[var(--hair)]">
           {calendarDays.map((day) => {
             const key = isoDateKey(day);
             const isCurrentMonth = day.getMonth() === monthCursor.getMonth();
@@ -203,8 +203,8 @@ export function OverridesCalendar({
             return (
               <div
                 key={key}
-                className={`min-h-[5rem] cursor-pointer bg-white p-1.5 transition-colors hover:bg-[var(--color-muted-surface)] ${
-                  isSelected ? "ring-2 ring-inset ring-[var(--color-primary-500)]" : ""
+                className={`min-h-[5rem] cursor-pointer bg-[var(--paper)] p-1.5 transition-colors hover:bg-[var(--canvas-2)] ${
+                  isSelected ? "ring-2 ring-inset ring-[var(--slate)]" : ""
                 }`}
                 onClick={() => setSelectedDate(key === selectedDate ? null : key)}
               >
@@ -212,9 +212,9 @@ export function OverridesCalendar({
                   <span
                     className={`rounded-full px-1.5 py-0.5 text-xs font-semibold ${
                       isToday
-                        ? "bg-[var(--color-primary-700)] text-white"
+                        ? "bg-[var(--navy)] text-white"
                         : isCurrentMonth
-                          ? "text-[var(--color-text)]"
+                          ? "text-[var(--ink)]"
                           : "text-subtle"
                     }`}
                   >
@@ -227,7 +227,7 @@ export function OverridesCalendar({
                         e.stopPropagation();
                         openCreateForm(key);
                       }}
-                      className="rounded p-0.5 text-subtle opacity-0 transition-opacity hover:text-[var(--color-primary-700)] group-hover:opacity-100 focus:opacity-100"
+                      className="rounded p-0.5 text-subtle opacity-0 transition-opacity hover:text-[var(--navy)] group-hover:opacity-100 focus:opacity-100"
                       aria-label={`Add override for ${key}`}
                     >
                       <Plus className="h-3 w-3" aria-hidden="true" />
@@ -243,10 +243,10 @@ export function OverridesCalendar({
                         key={ov.id}
                         className={`truncate rounded px-1 py-0.5 text-[0.65rem] font-medium ${
                           ovAvailability === "closed"
-                            ? "bg-[var(--color-danger)] bg-opacity-15 text-[var(--color-danger)]"
+                            ? "bg-[var(--burgundy)] bg-opacity-15 text-[var(--burgundy)]"
                             : ovAvailability === "unavailable"
-                            ? "bg-[var(--color-muted-surface)] text-subtle"
-                            : "bg-[var(--color-primary-100)] text-[var(--color-primary-700)]"
+                            ? "bg-[var(--canvas-2)] text-subtle"
+                            : "bg-[var(--slate-50)] text-[var(--navy)]"
                         }`}
                       >
                         {serviceName(ov.service_type_id)}
@@ -271,9 +271,9 @@ export function OverridesCalendar({
 
       {/* Selected day detail */}
       {selectedDate ? (
-        <div className="rounded-[var(--radius)] border border-[var(--color-border)] bg-white p-4 space-y-3">
+        <div className="rounded-[var(--radius)] border border-[var(--hair)] bg-[var(--paper)] p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <p className="font-semibold text-[var(--color-text)]">
+            <p className="font-semibold text-[var(--ink)]">
               Overrides for {formatDisplayDate(selectedDate)}
             </p>
             <div className="flex items-center gap-2">
@@ -306,10 +306,10 @@ export function OverridesCalendar({
               {selectedDateOverrides.map((ov) => (
                 <li
                   key={ov.id}
-                  className="flex items-start justify-between gap-4 rounded-[var(--radius-sm)] border border-[var(--color-border)] px-3 py-2 text-sm"
+                  className="flex items-start justify-between gap-4 rounded-[var(--radius-sm)] border border-[var(--hair)] px-3 py-2 text-sm"
                 >
                   <div className="space-y-0.5">
-                    <p className="font-medium text-[var(--color-text)]">
+                    <p className="font-medium text-[var(--ink)]">
                       {serviceName(ov.service_type_id)}
                     </p>
                     <p className="text-xs text-subtle">
@@ -498,9 +498,9 @@ function OverrideFormModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
-      <div className="w-full max-w-md rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-white shadow-lg">
-        <div className="flex items-center justify-between border-b border-[var(--color-border)] px-6 py-4">
-          <h2 className="font-semibold text-[var(--color-text)]">
+      <div className="w-full max-w-md rounded-[var(--radius-lg)] border border-[var(--hair)] bg-[var(--paper)] shadow-lg">
+        <div className="flex items-center justify-between border-b border-[var(--hair)] px-6 py-4">
+          <h2 className="font-semibold text-[var(--ink)]">
             {isEditing ? "Edit override" : "Add opening time override"}
           </h2>
           <Button type="button" size="icon" variant="ghost" onClick={onClose} aria-label="Close">
@@ -510,7 +510,7 @@ function OverrideFormModal({
 
         <div className="space-y-4 px-6 py-5">
           {error ? (
-            <p className="rounded-[var(--radius-sm)] bg-red-50 px-3 py-2 text-sm text-[var(--color-danger)]">
+            <p className="rounded-[var(--radius-sm)] bg-red-50 px-3 py-2 text-sm text-[var(--burgundy)]">
               {error}
             </p>
           ) : null}
@@ -541,7 +541,7 @@ function OverrideFormModal({
             </Select>
           </div>
 
-          <fieldset className="space-y-1.5 text-sm text-[var(--color-text)]">
+          <fieldset className="space-y-1.5 text-sm text-[var(--ink)]">
             <legend className="text-xs font-semibold uppercase tracking-[0.12em] text-subtle">
               Availability
             </legend>
@@ -601,9 +601,9 @@ function OverrideFormModal({
 
           <div className="space-y-2">
             <Label>Apply to venues</Label>
-            <div className="space-y-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] p-3">
+            <div className="space-y-1.5 rounded-[var(--radius-sm)] border border-[var(--hair)] p-3">
               {venues.map((venue) => (
-                <label key={venue.id} className="flex items-center gap-2 text-sm text-[var(--color-text)]">
+                <label key={venue.id} className="flex items-center gap-2 text-sm text-[var(--ink)]">
                   <input
                     type="checkbox"
                     checked={selectedVenueIds.includes(venue.id)}
@@ -620,7 +620,7 @@ function OverrideFormModal({
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-3 border-t border-[var(--color-border)] px-6 py-4">
+        <div className="flex items-center justify-end gap-3 border-t border-[var(--hair)] px-6 py-4">
           <Button type="button" variant="ghost" onClick={onClose}>
             Cancel
           </Button>

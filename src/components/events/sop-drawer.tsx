@@ -42,15 +42,15 @@ export function SopDrawer({
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="fixed right-0 top-1/2 z-40 flex -translate-y-1/2 items-center gap-1.5 rounded-l-md border border-r-0 border-[var(--color-border)] bg-white px-1.5 py-2.5 shadow-md transition-colors hover:bg-[var(--color-muted-surface)]"
+          className="fixed right-0 top-1/2 z-40 flex -translate-y-1/2 items-center gap-1.5 rounded-l-md border border-r-0 border-[var(--hair)] bg-[var(--paper)] px-1.5 py-2.5 shadow-md transition-colors hover:bg-[var(--canvas-2)]"
           style={{ writingMode: "vertical-lr" }}
           aria-label={`Open 30/60/90 Planning — ${doneCount} of ${tasks.length} complete`}
         >
           <ClipboardList className="h-4 w-4 rotate-90" />
-          <span className="text-sm font-medium text-[var(--color-text)]">
+          <span className="text-sm font-medium text-[var(--ink)]">
             30/60/90 Planning
           </span>
-          <span className="text-xs font-semibold text-[var(--color-primary-500)]">
+          <span className="text-xs font-semibold text-[var(--slate)]">
             {doneCount}/{tasks.length}
           </span>
         </button>

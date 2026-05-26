@@ -41,13 +41,13 @@ function getTodayIso(): string {
 
 function dueDateColour(dueDate: string): string {
   const today = getTodayIso();
-  if (dueDate < today) return "text-[var(--color-danger)]";
+  if (dueDate < today) return "text-[var(--burgundy)]";
 
   const todayMs = new Date(`${today}T00:00:00Z`).getTime();
   const dueMs = new Date(`${dueDate}T00:00:00Z`).getTime();
   const diffDays = Math.round((dueMs - todayMs) / (1000 * 60 * 60 * 24));
 
-  if (diffDays <= 7) return "text-[var(--color-warning)]";
+  if (diffDays <= 7) return "text-[var(--mustard)]";
   return "text-subtle";
 }
 
@@ -159,12 +159,12 @@ export function SopTaskRow({ task, allTasks, users, onStatusChange, onChanged, p
   const rowOpacity = (menuOpen || reassignOpen)
     ? ""
     : isDone ? "opacity-50" : isNotRequired ? "opacity-40" : isBlocked ? "opacity-60" : "";
-  const titleStyle = isDone || isNotRequired ? "line-through text-subtle" : "font-medium text-[var(--color-text)]";
+  const titleStyle = isDone || isNotRequired ? "line-through text-subtle" : "font-medium text-[var(--ink)]";
 
   return (
     <div
       className={cn(
-        "rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-muted-surface)] px-2.5 py-1.5",
+        "rounded-[var(--radius-sm)] border border-[var(--hair)] bg-[var(--canvas-2)] px-2.5 py-1.5",
         rowOpacity
       )}
     >
@@ -175,10 +175,10 @@ export function SopTaskRow({ task, allTasks, users, onStatusChange, onChanged, p
         disabled={isPending || isBlocked}
         onClick={handleCheckboxClick}
         className={cn(
-          "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-500)]",
-          isActionable && "border-[var(--color-accent-cool-dark)] cursor-pointer hover:bg-[var(--color-accent-cool-dark)]/10",
+          "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slate)]",
+          isActionable && "border-[var(--slate)] cursor-pointer hover:bg-[var(--paper-tint)]",
           isBlocked && "border-gray-300 cursor-not-allowed bg-gray-50",
-          isDone && "border-[#355849] bg-[var(--color-success)] cursor-pointer",
+          isDone && "border-[var(--sage-dark)] bg-[var(--sage-dark)] cursor-pointer",
           isNotRequired && "border-gray-300 bg-gray-100 cursor-pointer"
         )}
         aria-label={
@@ -205,7 +205,7 @@ export function SopTaskRow({ task, allTasks, users, onStatusChange, onChanged, p
               disabled={savingNotes}
               placeholder="Add a short note (press Enter to save)"
               aria-label={`Edit notes for ${task.title}`}
-              className="min-w-0 flex-1 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-0.5 text-xs text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
+              className="min-w-0 flex-1 rounded-[var(--radius-sm)] border border-[var(--hair)] bg-[var(--paper)] px-2 py-0.5 text-xs text-[var(--ink)] focus:outline-none focus:ring-2 focus:ring-[var(--mustard)]"
               onChange={(event) => setNotesDraft(event.target.value.replace(/[\r\n]+/g, " "))}
               onBlur={() => {
                 // Save if dirty, otherwise just close.
@@ -241,7 +241,7 @@ export function SopTaskRow({ task, allTasks, users, onStatusChange, onChanged, p
             })
             .filter(Boolean);
           return (
-            <p className="mt-0.5 text-xs text-[var(--color-warning)]">
+            <p className="mt-0.5 text-xs text-[var(--mustard)]">
               Waiting on: {blockerNames.length > 0 ? blockerNames.join(", ") : "dependencies"}
             </p>
           );
@@ -274,12 +274,12 @@ export function SopTaskRow({ task, allTasks, users, onStatusChange, onChanged, p
                       event.stopPropagation();
                       parentLabel.onOpen?.();
                     }}
-                    className="font-medium text-[var(--color-primary-700)] hover:underline focus:outline-none focus-visible:underline"
+                    className="font-medium text-[var(--navy)] hover:underline focus:outline-none focus-visible:underline"
                   >
                     {parentLabel.title}
                   </button>
                 ) : (
-                  <span className="font-medium text-[var(--color-text)]">{parentLabel.title}</span>
+                  <span className="font-medium text-[var(--ink)]">{parentLabel.title}</span>
                 )}
               </>
             ) : null}
@@ -300,7 +300,7 @@ export function SopTaskRow({ task, allTasks, users, onStatusChange, onChanged, p
                       window.open(result.url, "_blank", "noopener,noreferrer");
                     }
                   }}
-                  className="truncate text-left underline hover:text-[var(--color-primary-700)]"
+                  className="truncate text-left underline hover:text-[var(--navy)]"
                   title={attachment.filename}
                 >
                   {attachment.filename}
@@ -327,10 +327,10 @@ export function SopTaskRow({ task, allTasks, users, onStatusChange, onChanged, p
           }
         }}
         title={hasNotes ? "Edit notes" : "Add notes"}
-        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full hover:bg-[rgba(39,54,64,0.12)]"
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full hover:bg-[var(--canvas-2)]"
       >
         <Pencil
-          className={cn("h-4 w-4", hasNotes ? "text-[var(--color-primary-700)]" : "text-[var(--color-text)]/70")}
+          className={cn("h-4 w-4", hasNotes ? "text-[var(--navy)]" : "text-[var(--ink)]/70")}
           aria-hidden="true"
         />
       </button>
@@ -354,66 +354,71 @@ export function SopTaskRow({ task, allTasks, users, onStatusChange, onChanged, p
               setReassignOpen(false);
             }}
             aria-label="More actions"
-            className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-[rgba(39,54,64,0.12)] disabled:opacity-60"
+            className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-[var(--canvas-2)] disabled:opacity-60"
           >
             <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-              <circle cx="3" cy="8" r="1.5" fill="#273640" />
-              <circle cx="8" cy="8" r="1.5" fill="#273640" />
-              <circle cx="13" cy="8" r="1.5" fill="#273640" />
+              <circle cx="3" cy="8" r="1.5" fill="currentColor" />
+              <circle cx="8" cy="8" r="1.5" fill="currentColor" />
+              <circle cx="13" cy="8" r="1.5" fill="currentColor" />
             </svg>
           </button>
 
           {menuOpen && !reassignOpen && (
             <div
-              className="absolute right-0 top-full z-10 mt-1 min-w-[180px] rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-white py-1 shadow-soft"
+              className="absolute right-0 top-full z-10 mt-1 min-w-[180px] rounded-[var(--radius-sm)] border border-[var(--hair)] bg-[var(--paper)] py-1 shadow-card"
               role="menu"
             >
               <button
                 type="button"
                 role="menuitem"
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-[var(--color-text)] hover:bg-[var(--color-muted-surface)] transition-colors"
+                className="grid w-full grid-cols-[1rem_minmax(0,1fr)] items-center gap-2 px-3 py-1.5 text-left text-sm text-[var(--ink)] transition-colors hover:bg-[var(--canvas-2)]"
                 onClick={() => setReassignOpen(true)}
               >
-                <Users className="h-3.5 w-3.5" aria-hidden="true" />
-                Reassign
+                <span className="flex h-4 w-4 items-center justify-center">
+                  <Users className="h-3.5 w-3.5" aria-hidden="true" />
+                </span>
+                <span>Reassign</span>
               </button>
               {isActionable && (
                 <button
                   type="button"
                   role="menuitem"
-                  className="w-full px-3 py-1.5 text-left text-sm text-[var(--color-text)] hover:bg-[var(--color-muted-surface)] transition-colors"
+                  className="grid w-full grid-cols-[1rem_minmax(0,1fr)] items-center gap-2 px-3 py-1.5 text-left text-sm text-[var(--ink)] transition-colors hover:bg-[var(--canvas-2)]"
                   onClick={() => {
                     setMenuOpen(false);
                     handleStatusChange("not_required");
                   }}
                 >
-                  Mark not required
+                  <span aria-hidden="true" />
+                  <span>Mark not required</span>
                 </button>
               )}
               {isNotRequired && (
                 <button
                   type="button"
                   role="menuitem"
-                  className="w-full px-3 py-1.5 text-left text-sm text-[var(--color-text)] hover:bg-[var(--color-muted-surface)] transition-colors"
+                  className="grid w-full grid-cols-[1rem_minmax(0,1fr)] items-center gap-2 px-3 py-1.5 text-left text-sm text-[var(--ink)] transition-colors hover:bg-[var(--canvas-2)]"
                   onClick={() => {
                     setMenuOpen(false);
                     handleStatusChange("open");
                   }}
                 >
-                  Mark required
+                  <span aria-hidden="true" />
+                  <span>Mark required</span>
                 </button>
               )}
               {isDone && (
                 <button
                   type="button"
                   role="menuitem"
-                  className="w-full px-3 py-1.5 text-left text-sm text-[var(--color-text)] hover:bg-[var(--color-muted-surface)] transition-colors"
+                  className="grid w-full grid-cols-[1rem_minmax(0,1fr)] items-center gap-2 px-3 py-1.5 text-left text-sm text-[var(--ink)] transition-colors hover:bg-[var(--canvas-2)]"
                   onClick={() => {
                     setMenuOpen(false);
                     handleStatusChange("open");
                   }}
                 >
-                  Reopen
+                  <span aria-hidden="true" />
+                  <span>Reopen</span>
                 </button>
               )}
             </div>
@@ -421,31 +426,31 @@ export function SopTaskRow({ task, allTasks, users, onStatusChange, onChanged, p
 
           {reassignOpen && (
             <div
-              className="absolute right-0 top-full z-10 mt-1 w-64 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-white shadow-soft"
+              className="absolute right-0 top-full z-10 mt-1 w-64 rounded-[var(--radius-sm)] border border-[var(--hair)] bg-[var(--paper)] shadow-card"
             >
-              <div className="border-b border-[var(--color-border)] px-3 py-2">
-                <p className="text-xs font-medium text-[var(--color-text)]">Assign to</p>
+              <div className="border-b border-[var(--hair)] px-3 py-2">
+                <p className="text-xs font-medium text-[var(--ink)]">Assign to</p>
               </div>
               <div className="max-h-48 overflow-auto py-1">
                 {users.map((user) => (
                   <label
                     key={user.id}
-                    className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm hover:bg-[var(--color-muted-surface)] transition-colors"
+                    className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm hover:bg-[var(--canvas-2)] transition-colors"
                   >
                     <input
                       type="checkbox"
                       checked={selectedAssigneeIds.includes(user.id)}
                       onChange={() => toggleAssignee(user.id)}
-                      className="rounded border-[var(--color-border)]"
+                      className="rounded border-[var(--hair)]"
                     />
-                    <span className="text-[var(--color-text)]">{user.name}</span>
+                    <span className="text-[var(--ink)]">{user.name}</span>
                   </label>
                 ))}
                 {users.length === 0 && (
                   <p className="px-3 py-2 text-xs text-subtle">No users available.</p>
                 )}
               </div>
-              <div className="flex justify-end gap-2 border-t border-[var(--color-border)] px-3 py-2">
+              <div className="flex justify-end gap-2 border-t border-[var(--hair)] px-3 py-2">
                 <Button
                   variant="ghost"
                   size="sm"

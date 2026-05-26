@@ -6,6 +6,7 @@ import { WeeklyHoursGrid } from "@/components/opening-hours/weekly-hours-grid";
 import { OverridesCalendar } from "@/components/opening-hours/overrides-calendar";
 import { OpeningTimesPreview } from "@/components/opening-hours/opening-times-preview";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader as AppPageHeader } from "@/components/ui/design-primitives";
 
 type VenueOption = { id: string; name: string };
 
@@ -76,12 +77,12 @@ export function OpeningHoursPageShell({
 
   if (venues.length === 0) {
     return (
-      <div className="space-y-6">
-        <PageHeader />
+      <div className="app-page">
+        <OpeningHoursHeader />
         <Card>
           <CardContent className="py-10 text-center text-subtle text-sm">
             No venues found. Add venues in the{" "}
-            <a href="/venues" className="underline hover:text-[var(--color-primary-700)]">Venues</a>{" "}
+            <a href="/venues" className="underline hover:text-[var(--navy)]">Venues</a>{" "}
             section first.
           </CardContent>
         </Card>
@@ -90,8 +91,8 @@ export function OpeningHoursPageShell({
   }
 
   return (
-    <div className="space-y-6">
-      <PageHeader />
+    <div className="app-page">
+      <OpeningHoursHeader />
 
       {/* ── Venue filter ──────────────────────────────────────────────── */}
       <Card>
@@ -108,8 +109,8 @@ export function OpeningHoursPageShell({
               onClick={toggleAll}
               className={`rounded-full border px-4 py-1.5 text-sm font-medium transition-colors ${
                 allSelected
-                  ? "border-[var(--color-primary-700)] bg-[var(--color-primary-700)] text-white"
-                  : "border-[var(--color-border)] bg-white text-[var(--color-text)] hover:border-[var(--color-primary-500)]"
+                  ? "border-[var(--navy)] bg-[var(--navy)] text-white"
+                  : "border-[var(--hair)] bg-[var(--paper)] text-[var(--ink)] hover:border-[var(--slate)]"
               }`}
             >
               All venues
@@ -123,8 +124,8 @@ export function OpeningHoursPageShell({
                   onClick={() => toggleVenue(venue.id)}
                   className={`rounded-full border px-4 py-1.5 text-sm font-medium transition-colors ${
                     active
-                      ? "border-[var(--color-primary-500)] bg-[var(--color-primary-100)] text-[var(--color-primary-800)]"
-                      : "border-[var(--color-border)] bg-white text-subtle hover:border-[var(--color-primary-400)] hover:text-[var(--color-text)]"
+                      ? "border-[var(--slate)] bg-[var(--slate-50)] text-[var(--navy-700)]"
+                      : "border-[var(--hair)] bg-[var(--paper)] text-subtle hover:border-[var(--slate)] hover:text-[var(--ink)]"
                   }`}
                 >
                   {venue.name}
@@ -149,7 +150,7 @@ export function OpeningHoursPageShell({
           <CardContent>
             <p className="text-sm text-subtle">
               No service types configured. Add them in{" "}
-              <a href="/settings" className="underline hover:text-[var(--color-primary-700)]">
+              <a href="/settings" className="underline hover:text-[var(--navy)]">
                 Settings → Opening hours service types
               </a>
               .
@@ -224,13 +225,12 @@ export function OpeningHoursPageShell({
   );
 }
 
-function PageHeader() {
+function OpeningHoursHeader() {
   return (
-    <header>
-      <h1 className="font-brand-serif text-3xl text-[var(--color-primary-700)]">Opening Hours</h1>
-      <p className="mt-1 text-subtle">
-        Set standard weekly hours and date-specific exceptions across your venues.
-      </p>
-    </header>
+    <AppPageHeader
+      eyebrow="Venue operations"
+      title="Opening Hours"
+      description="Set standard weekly hours and date-specific exceptions across your venues."
+    />
   );
 }

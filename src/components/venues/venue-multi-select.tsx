@@ -107,7 +107,7 @@ export function VenueMultiSelect({
             const isSelected = selected.has(venue.id);
             return (
               <li key={venue.id}>
-                <label className="flex items-center gap-2 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1.5 text-sm text-[var(--color-text)] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[var(--color-ring)]">
+                <label className="flex items-center gap-2 rounded-[var(--radius-sm)] border border-[var(--hair)] bg-[var(--paper)] px-2 py-1.5 text-sm text-[var(--ink)] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[var(--mustard)]">
                   <input
                     type="checkbox"
                     className="h-4 w-4"
@@ -132,19 +132,19 @@ export function VenueMultiSelect({
         type="button"
         onClick={() => setIsExpanded((v) => !v)}
         aria-expanded={isExpanded}
-        className="flex w-full items-center gap-2 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1.5 text-left text-sm hover:bg-[var(--color-muted-surface)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
+        className="flex w-full items-center gap-2 rounded-[var(--radius-sm)] border border-[var(--hair)] bg-[var(--paper)] px-2 py-1.5 text-left text-sm hover:bg-[var(--canvas-2)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mustard)]"
       >
         {isExpanded ? (
           <ChevronDown className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
         ) : (
           <ChevronRight className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
         )}
-        <span className="flex-1 font-medium text-[var(--color-text)]">{summary}</span>
+        <span className="flex-1 font-medium text-[var(--ink)]">{summary}</span>
         <span className="text-xs text-subtle">{isExpanded ? "Hide" : "Choose venues"}</span>
       </button>
 
       {isExpanded ? (
-        <div className="space-y-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] p-2">
+        <div className="space-y-3 rounded-[var(--radius-sm)] border border-[var(--hair)] p-2">
           <div className="flex flex-wrap items-center gap-2">
             <Button type="button" variant="ghost" size="sm" onClick={selectAll} disabled={disabled || pubs.length + cafes.length === 0}>
               Select all sites ({pubs.length + cafes.length})

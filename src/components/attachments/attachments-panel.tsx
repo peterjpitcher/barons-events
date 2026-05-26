@@ -64,7 +64,7 @@ export function AttachmentsPanel({
 
   return (
     <Card>
-      <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--color-primary-700)] px-6 py-3">
+      <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--navy)] px-6 py-3">
         <CardTitle className="text-sm font-semibold uppercase tracking-wider !text-white">{title}</CardTitle>
       </CardHeader>
       <CardContent>

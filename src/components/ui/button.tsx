@@ -17,28 +17,28 @@ export type ButtonProps = {
 } & ButtonHTMLAttributes<HTMLButtonElement>;
 
 const baseClass =
-  "inline-flex items-center justify-center gap-2 rounded-full font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(39,54,64,0.35)] disabled:pointer-events-none disabled:opacity-60";
+  "inline-flex items-center justify-center gap-2 rounded-[7px] font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mustard)] disabled:pointer-events-none disabled:opacity-60";
 
 const variantClass: Record<ButtonVariant, string> = {
   primary:
-    "bg-primary text-[var(--color-primary-foreground)] shadow-soft hover:bg-[var(--color-primary-800)]",
+    "border border-[var(--navy)] bg-[var(--navy)] text-white hover:bg-[var(--navy-700)]",
   secondary:
-    "bg-secondary text-secondary-foreground shadow-soft hover:bg-[var(--color-accent-soft-dark)]",
+    "border border-[var(--mustard)] bg-[var(--mustard)] text-[var(--ink-on-mustard)] hover:bg-[var(--mustard-bright)]",
   outline:
-    "border border-[var(--color-border)] bg-white text-[var(--color-primary-700)] hover:border-[var(--color-primary-500)] hover:bg-[rgba(39,54,64,0.08)]",
+    "border border-[var(--hair)] bg-[var(--paper)] text-[var(--ink-muted)] hover:border-[var(--hair-strong)] hover:bg-[var(--paper-tint)] hover:text-[var(--ink)]",
   ghost:
-    "bg-transparent text-[var(--color-primary-700)] hover:bg-[rgba(39,54,64,0.12)] hover:text-[var(--color-primary-900)]",
+    "border border-transparent bg-transparent text-[var(--ink-muted)] hover:bg-[var(--paper-tint)] hover:text-[var(--ink)]",
   subtle:
-    "bg-[var(--color-muted-surface)] text-[var(--color-primary-700)] shadow-soft hover:bg-[var(--color-accent-soft)]",
+    "border border-transparent bg-[var(--paper-tint)] text-[var(--navy)] hover:bg-[var(--canvas-2)]",
   destructive:
-    "bg-[var(--color-danger)] text-white shadow-soft hover:bg-[#dc2626]"
+    "border border-[var(--burgundy)] bg-[var(--burgundy)] text-white hover:bg-[var(--burgundy-dark)]"
 };
 
 const sizeClass: Record<ButtonSize, string> = {
-  sm: "h-9 px-4 text-sm",
-  md: "h-10 px-5 text-[0.95rem]",
-  lg: "h-12 px-6 text-base",
-  icon: "h-10 w-10"
+  sm: "h-8 px-3 text-xs",
+  md: "h-9 px-4 text-sm",
+  lg: "h-10 px-5 text-sm",
+  icon: "h-8 w-8"
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(

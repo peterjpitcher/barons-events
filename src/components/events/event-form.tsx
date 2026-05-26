@@ -717,7 +717,7 @@ export function EventForm({
           aria-describedby={fieldErrors.title ? "title-error" : undefined}
           className={cn(
             fieldErrors.title
-              ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+              ? "!border-[var(--burgundy)] focus-visible:!border-[var(--burgundy)]"
               : undefined
           )}
         />
@@ -752,7 +752,7 @@ export function EventForm({
             aria-describedby={fieldErrors.venueId ? "venue-error" : undefined}
             className={cn(
               fieldErrors.venueId
-                ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+                ? "!border-[var(--burgundy)] focus-visible:!border-[var(--burgundy)]"
                 : undefined
             )}
           >
@@ -770,7 +770,7 @@ export function EventForm({
               aria-describedby={fieldErrors.venueId ? "venue-error" : undefined}
               className={cn(
                 fieldErrors.venueId
-                  ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+                  ? "!border-[var(--burgundy)] focus-visible:!border-[var(--burgundy)]"
                   : undefined
               )}
             />
@@ -800,7 +800,7 @@ export function EventForm({
           aria-describedby={fieldErrors.eventType ? "event-type-error" : undefined}
           className={cn(
             fieldErrors.eventType
-              ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+              ? "!border-[var(--burgundy)] focus-visible:!border-[var(--burgundy)]"
               : undefined
           )}
         >
@@ -834,7 +834,7 @@ export function EventForm({
         aria-describedby={fieldErrors.notes ? "event-details-error" : undefined}
         className={cn(
           fieldErrors.notes
-            ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+            ? "!border-[var(--burgundy)] focus-visible:!border-[var(--burgundy)]"
             : undefined
         )}
       />
@@ -856,7 +856,7 @@ export function EventForm({
           setManagerDirty(true);
           setManagerResponsibleId(e.target.value);
         }}
-        className="flex h-10 w-full rounded-md border border-[var(--color-border)] bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-400)] focus-visible:ring-offset-2"
+        className="flex h-10 w-full rounded-md border border-[var(--hair)] bg-[var(--paper)] px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slate)] focus-visible:ring-offset-2"
       >
         <option value="">No manager assigned</option>
         {(users ?? []).map((u) => (
@@ -912,7 +912,7 @@ export function EventForm({
           aria-describedby={fieldErrors.startAt ? "start-at-error" : undefined}
           className={cn(
             fieldErrors.startAt
-              ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+              ? "!border-[var(--burgundy)] focus-visible:!border-[var(--burgundy)]"
               : undefined
           )}
         />
@@ -932,7 +932,7 @@ export function EventForm({
           aria-describedby={fieldErrors.endAt ? "end-at-error" : undefined}
           className={cn(
             fieldErrors.endAt
-              ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+              ? "!border-[var(--burgundy)] focus-visible:!border-[var(--burgundy)]"
               : undefined
           )}
         />
@@ -956,7 +956,7 @@ export function EventForm({
         aria-describedby={fieldErrors.venueSpace ? "venue-space-error" : undefined}
         className={cn(
           fieldErrors.venueSpace
-            ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+            ? "!border-[var(--burgundy)] focus-visible:!border-[var(--burgundy)]"
             : undefined
         )}
       />
@@ -1033,7 +1033,7 @@ export function EventForm({
           aria-describedby={fieldErrors.bookingType ? "booking-type-error" : undefined}
           className={cn(
             fieldErrors.bookingType
-              ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+              ? "!border-[var(--burgundy)] focus-visible:!border-[var(--burgundy)]"
               : undefined
           )}
         >
@@ -1061,7 +1061,7 @@ export function EventForm({
           aria-describedby={fieldErrors.ticketPrice ? "ticket-price-error" : undefined}
           className={cn(
             fieldErrors.ticketPrice
-              ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+              ? "!border-[var(--burgundy)] focus-visible:!border-[var(--burgundy)]"
               : undefined
           )}
         />
@@ -1097,7 +1097,7 @@ export function EventForm({
           aria-describedby={fieldErrors.checkInCutoffMinutes ? "check-in-cutoff-error" : undefined}
           className={cn(
             fieldErrors.checkInCutoffMinutes
-              ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+              ? "!border-[var(--burgundy)] focus-visible:!border-[var(--burgundy)]"
               : undefined
           )}
         />
@@ -1122,7 +1122,7 @@ export function EventForm({
           aria-describedby={fieldErrors.cancellationWindowHours ? "cancellation-window-error" : undefined}
           className={cn(
             fieldErrors.cancellationWindowHours
-              ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+              ? "!border-[var(--burgundy)] focus-visible:!border-[var(--burgundy)]"
               : undefined
           )}
         />
@@ -1151,7 +1151,7 @@ export function EventForm({
           aria-describedby={fieldErrors.agePolicy ? "age-policy-error" : undefined}
           className={cn(
             fieldErrors.agePolicy
-              ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+              ? "!border-[var(--burgundy)] focus-visible:!border-[var(--burgundy)]"
               : undefined
           )}
         />
@@ -1171,7 +1171,7 @@ export function EventForm({
           aria-describedby={fieldErrors.accessibilityNotes ? "accessibility-notes-error" : undefined}
           className={cn(
             fieldErrors.accessibilityNotes
-              ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+              ? "!border-[var(--burgundy)] focus-visible:!border-[var(--burgundy)]"
               : undefined
           )}
         />
@@ -1208,7 +1208,7 @@ export function EventForm({
         aria-describedby={fieldErrors.termsAndConditions ? "terms-and-conditions-error" : undefined}
         className={cn(
           fieldErrors.termsAndConditions
-            ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+            ? "!border-[var(--burgundy)] focus-visible:!border-[var(--burgundy)]"
             : undefined
         )}
       />
@@ -1220,8 +1220,8 @@ export function EventForm({
   );
 
   const financialsSection = (
-    <div className="space-y-4 rounded-lg bg-[var(--color-surface-soft)] p-4">
-      <h3 className="font-semibold text-[var(--color-text)]">Financials</h3>
+    <div className="space-y-4 rounded-lg bg-[var(--paper-tint)] p-4">
+      <h3 className="font-semibold text-[var(--ink)]">Financials</h3>
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="costTotal">Total predicted cost (£)</Label>
@@ -1255,14 +1255,14 @@ export function EventForm({
       <p className="text-xs text-subtle">Select the goals that matter for this event. Pick as many as apply.</p>
       <div className="grid gap-2 sm:grid-cols-2">
         {EVENT_GOALS.map((option) => (
-          <label key={option.value} className="flex items-start gap-2 text-sm text-[var(--color-text)]">
+          <label key={option.value} className="flex items-start gap-2 text-sm text-[var(--ink)]">
             <input
               type="checkbox"
               name="goalFocus"
               value={option.value}
               checked={selectedGoals.has(option.value)}
               onChange={(event) => toggleGoal(option.value, event.target.checked)}
-              className="mt-1 h-4 w-4 rounded border-[var(--color-border)] text-[var(--color-primary-700)] focus:ring-[var(--color-primary-500)]"
+              className="mt-1 h-4 w-4 rounded border-[var(--hair)] text-[var(--navy)] focus:ring-[var(--slate)]"
             />
             <span>
               <span className="font-medium">{option.label}</span>
@@ -1289,7 +1289,7 @@ export function EventForm({
           aria-describedby={fieldErrors.publicTitle ? "public-title-error" : undefined}
           className={cn(
             fieldErrors.publicTitle
-              ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+              ? "!border-[var(--burgundy)] focus-visible:!border-[var(--burgundy)]"
               : undefined
           )}
         />
@@ -1308,7 +1308,7 @@ export function EventForm({
           aria-describedby={fieldErrors.publicTeaser ? "public-teaser-error" : undefined}
           className={cn(
             fieldErrors.publicTeaser
-              ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+              ? "!border-[var(--burgundy)] focus-visible:!border-[var(--burgundy)]"
               : undefined
           )}
         />
@@ -1328,7 +1328,7 @@ export function EventForm({
           aria-describedby={fieldErrors.publicHighlights ? "public-highlights-error" : undefined}
           className={cn(
             fieldErrors.publicHighlights
-              ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+              ? "!border-[var(--burgundy)] focus-visible:!border-[var(--burgundy)]"
               : undefined
           )}
         />
@@ -1351,7 +1351,7 @@ export function EventForm({
           aria-describedby={fieldErrors.publicDescription ? "public-description-error" : undefined}
           className={cn(
             fieldErrors.publicDescription
-              ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+              ? "!border-[var(--burgundy)] focus-visible:!border-[var(--burgundy)]"
               : undefined
           )}
         />
@@ -1359,8 +1359,8 @@ export function EventForm({
         <p className="text-xs text-subtle">Write as if a guest is reading this on the website.</p>
       </div>
 
-      <div className="space-y-4 rounded-lg bg-[var(--color-surface-soft)] p-4">
-        <h3 className="font-semibold text-[var(--color-text)]">SEO metadata</h3>
+      <div className="space-y-4 rounded-lg bg-[var(--paper-tint)] p-4">
+        <h3 className="font-semibold text-[var(--ink)]">SEO metadata</h3>
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="seoTitle">SEO title</Label>
@@ -1374,7 +1374,7 @@ export function EventForm({
               aria-describedby={fieldErrors.seoTitle ? "seo-title-error" : undefined}
               className={cn(
                 fieldErrors.seoTitle
-                  ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+                  ? "!border-[var(--burgundy)] focus-visible:!border-[var(--burgundy)]"
                   : undefined
               )}
             />
@@ -1392,7 +1392,7 @@ export function EventForm({
               aria-describedby={fieldErrors.seoSlug ? "seo-slug-error" : undefined}
               className={cn(
                 fieldErrors.seoSlug
-                  ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+                  ? "!border-[var(--burgundy)] focus-visible:!border-[var(--burgundy)]"
                   : undefined
               )}
             />
@@ -1412,7 +1412,7 @@ export function EventForm({
             aria-describedby={fieldErrors.seoDescription ? "seo-description-error" : undefined}
             className={cn(
               fieldErrors.seoDescription
-                ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+                ? "!border-[var(--burgundy)] focus-visible:!border-[var(--burgundy)]"
                 : undefined
             )}
           />
@@ -1426,7 +1426,7 @@ export function EventForm({
 
   const artistModal = showArtistModal ? (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-[rgba(39,54,64,0.55)] p-4"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-[var(--navy-900)]/60 p-4"
       role="dialog"
       aria-modal="true"
       aria-label="Select artists"
@@ -1434,10 +1434,10 @@ export function EventForm({
       onKeyDown={(e) => { if (e.key === "Escape") setShowArtistModal(false); }}
       ref={artistModalRef}
     >
-      <div className="w-full max-w-5xl rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-white shadow-soft">
-        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--color-border)] p-5">
+      <div className="w-full max-w-5xl rounded-[var(--radius-lg)] border border-[var(--hair)] bg-[var(--paper)] shadow-card">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--hair)] p-5">
           <div className="space-y-1">
-            <h2 className="text-lg font-semibold text-[var(--color-text)]">Select artists / bands / hosts</h2>
+            <h2 className="text-lg font-semibold text-[var(--ink)]">Select artists / bands / hosts</h2>
             <p className="text-sm text-subtle">
               Search and filter the artist directory, then link confirmed names to this event.
             </p>
@@ -1474,7 +1474,7 @@ export function EventForm({
               </div>
             </div>
 
-            <div className="max-h-[380px] space-y-2 overflow-y-auto rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface-soft)] p-3">
+            <div className="max-h-[380px] space-y-2 overflow-y-auto rounded-[var(--radius)] border border-[var(--hair)] bg-[var(--paper-tint)] p-3">
               {filteredArtists.length === 0 ? (
                 <p className="px-1 py-8 text-center text-sm text-subtle">No artists match this search.</p>
               ) : (
@@ -1486,18 +1486,18 @@ export function EventForm({
                       className={cn(
                         "flex cursor-pointer items-start gap-3 rounded-[var(--radius)] border px-3 py-2 text-sm",
                         checked
-                          ? "border-[var(--color-primary-500)] bg-[rgba(193,124,61,0.12)]"
-                          : "border-[var(--color-border)] bg-white"
+                          ? "border-[var(--slate)] bg-[var(--mustard-tint)]"
+                          : "border-[var(--hair)] bg-[var(--paper)]"
                       )}
                     >
                       <input
                         type="checkbox"
                         checked={checked}
                         onChange={(event) => handleArtistSelection(artist.id, event.target.checked)}
-                        className="mt-1 h-4 w-4 rounded border-[var(--color-border)] text-[var(--color-primary-700)] focus:ring-[var(--color-primary-500)]"
+                        className="mt-1 h-4 w-4 rounded border-[var(--hair)] text-[var(--navy)] focus:ring-[var(--slate)]"
                       />
                       <span className="min-w-0">
-                        <span className="font-medium text-[var(--color-text)]">{artist.name}</span>
+                        <span className="font-medium text-[var(--ink)]">{artist.name}</span>
                         <span className="ml-2 text-xs uppercase tracking-[0.08em] text-subtle">
                           {ARTIST_TYPE_LABELS[artist.artistType] ?? artist.artistType}
                         </span>
@@ -1515,9 +1515,9 @@ export function EventForm({
             </div>
           </div>
 
-          <div className="space-y-4 rounded-[var(--radius)] border border-[var(--color-border)] bg-white p-4">
+          <div className="space-y-4 rounded-[var(--radius)] border border-[var(--hair)] bg-[var(--paper)] p-4">
             <div className="space-y-1">
-              <p className="text-sm font-semibold text-[var(--color-text)]">
+              <p className="text-sm font-semibold text-[var(--ink)]">
                 Selected artists ({selectedArtistOptions.length})
               </p>
               <p className="text-xs text-subtle">
@@ -1539,7 +1539,7 @@ export function EventForm({
             </div>
 
             {showCreateArtistForm ? (
-              <form action={createArtistFormAction} className="space-y-3 border-t border-[var(--color-border)] pt-3" noValidate>
+              <form action={createArtistFormAction} className="space-y-3 border-t border-[var(--hair)] pt-3" noValidate>
                 <div className="space-y-1">
                   <Label htmlFor="new-artist-name">Name</Label>
                   <Input
@@ -1552,7 +1552,7 @@ export function EventForm({
                     aria-describedby={createArtistFieldErrors.name ? "new-artist-name-error" : undefined}
                     className={cn(
                       createArtistFieldErrors.name
-                        ? "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]"
+                        ? "!border-[var(--burgundy)] focus-visible:!border-[var(--burgundy)]"
                         : undefined
                     )}
                   />
@@ -1629,7 +1629,7 @@ export function EventForm({
           </div>
         </div>
 
-        <div className="flex justify-end border-t border-[var(--color-border)] px-5 py-4">
+        <div className="flex justify-end border-t border-[var(--hair)] px-5 py-4">
           <Button type="button" variant="secondary" onClick={() => setShowArtistModal(false)}>
             Done
           </Button>
@@ -1640,7 +1640,7 @@ export function EventForm({
 
   const termsModal = showTermsModal ? (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(39,54,64,0.5)] p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--navy-900)]/60 p-4"
       role="dialog"
       aria-modal="true"
       aria-label="Generate terms and conditions"
@@ -1648,12 +1648,12 @@ export function EventForm({
       onKeyDown={(e) => { if (e.key === "Escape") setShowTermsModal(false); }}
       ref={termsModalRef}
     >
-      <div className="w-full max-w-2xl rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-white shadow-soft">
-        <div className="flex items-start justify-between border-b border-[var(--color-border)] p-5">
+      <div className="w-full max-w-2xl rounded-[var(--radius-lg)] border border-[var(--hair)] bg-[var(--paper)] shadow-card">
+        <div className="flex items-start justify-between border-b border-[var(--hair)] p-5">
           <div>
-            <h2 className="text-lg font-semibold text-[var(--color-text)]">Build Terms & Conditions</h2>
+            <h2 className="text-lg font-semibold text-[var(--ink)]">Build Terms & Conditions</h2>
             <p className="text-sm text-subtle">
-              Choose booking guardrails and BaronsHub will draft clear guest-facing terms.
+              Choose booking guardrails and BaronsHub 1.1 will draft clear guest-facing terms.
             </p>
           </div>
           <Button type="button" variant="ghost" size="sm" onClick={() => setShowTermsModal(false)}>
@@ -1745,26 +1745,26 @@ export function EventForm({
           <input type="hidden" name="expected_updated_at" value={expectedUpdatedAt} readOnly />
         ) : null}
         {activeState && !activeState.success && activeState.message && !activeState.fieldErrors && (
-          <div className="mb-4 rounded-lg border border-[var(--color-danger)] bg-[var(--color-danger)]/10 p-4 text-sm text-[var(--color-danger)]" role="alert">
+          <div className="mb-4 rounded-lg border border-[var(--burgundy)] bg-[var(--burgundy)]/10 p-4 text-sm text-[var(--burgundy)]" role="alert">
             <strong>Something went wrong:</strong> {activeState.message}
           </div>
         )}
         {activeState?.success && activeState?.message && (
-          <div className="mb-4 rounded-lg border border-[var(--color-success)] bg-[var(--color-success)]/10 p-4 text-sm text-[var(--color-success)]" role="status">
+          <div className="mb-4 rounded-lg border border-[var(--sage-dark)] bg-[var(--sage-dark)]/10 p-4 text-sm text-[var(--sage-dark)]" role="status">
             {activeState.message}
           </div>
         )}
         <div className="mb-4 flex items-center gap-2">
           {isPending ? (
-            <span className="text-xs text-[var(--color-text-muted)] animate-pulse">
+            <span className="text-xs text-[var(--ink-muted)] animate-pulse">
               {isSlow ? "Still saving — please don't navigate away..." : "Saving..."}
             </span>
           ) : lastSavedAt ? (
-            <span className="text-xs text-[var(--color-text-muted)]">
+            <span className="text-xs text-[var(--ink-muted)]">
               Last saved: {lastSavedAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
             </span>
           ) : isDirty ? (
-            <span className="text-xs text-[var(--color-warning)]">Unsaved changes</span>
+            <span className="text-xs text-[var(--mustard)]">Unsaved changes</span>
           ) : null}
         </div>
         {/* Proxy buttons — sr-only, clicked programmatically from FAB */}
@@ -1777,12 +1777,12 @@ export function EventForm({
           <div className="grid gap-6 lg:grid-cols-2">
             {/* Left column: Event Details */}
             <Card>
-              <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--color-primary-700)] px-6 py-3">
+              <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--navy)] px-6 py-3">
                 <CardTitle className="text-sm font-semibold uppercase tracking-wider !text-white">
                   Event Details
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-6">
+              <CardContent className="space-y-4">
                 {/* Row 1: Title + Venue (side by side — already a grid) */}
                 {titleAndVenueFields}
 
@@ -1820,12 +1820,12 @@ export function EventForm({
 
           {/* Lower: Booking & Ticketing */}
           <Card className="mt-6">
-            <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--color-primary-700)] px-6 py-3">
+            <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--navy)] px-6 py-3">
               <CardTitle className="text-sm font-semibold uppercase tracking-wider !text-white">
                 Booking &amp; Ticketing
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-4">
               {promosFields}
               {headcountField}
               {bookingFields}

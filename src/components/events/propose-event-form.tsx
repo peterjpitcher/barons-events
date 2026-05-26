@@ -73,7 +73,7 @@ export function ProposeEventForm({ venues, defaultVenueId }: ProposeEventFormPro
       </div>
 
       <div className="space-y-2">
-        <span className="text-sm font-medium text-[var(--color-text)]">Which venues?</span>
+        <span className="text-sm font-medium text-[var(--ink)]">Which venues?</span>
         <VenueMultiSelect
           venues={venues}
           selectedIds={selectedVenueIds}
@@ -81,7 +81,7 @@ export function ProposeEventForm({ venues, defaultVenueId }: ProposeEventFormPro
           hiddenFieldName="venueIds"
         />
         {selectedVenueIds.length === 0 ? (
-          <p className="text-xs text-[var(--color-danger)]">Pick at least one venue.</p>
+          <p className="text-xs text-[var(--burgundy)]">Pick at least one venue.</p>
         ) : null}
       </div>
 

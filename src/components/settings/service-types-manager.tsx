@@ -18,15 +18,15 @@ type ManagerProps = {
   serviceTypes: ServiceTypeRow[];
 };
 
-const errorInputClass = "!border-[var(--color-danger)] focus-visible:!border-[var(--color-danger)]";
+const errorInputClass = "!border-[var(--burgundy)] focus-visible:!border-[var(--burgundy)]";
 
 export function ServiceTypesManager({ serviceTypes }: ManagerProps) {
   return (
     <div className="space-y-4">
       <CreateServiceTypeForm />
       {serviceTypes.length > 0 ? (
-        <div className="overflow-hidden rounded-[var(--radius)] border border-[var(--color-border)] bg-white">
-          <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-4 border-b border-[var(--color-border)] bg-[var(--color-muted-surface)] px-4 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-subtle">
+        <div className="overflow-hidden rounded-[var(--radius)] border border-[var(--hair)] bg-[var(--paper)]">
+          <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-4 border-b border-[var(--hair)] bg-[var(--canvas-2)] px-4 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-subtle">
             <div>Service type</div>
             <div className="text-right">Save</div>
             <div className="text-right">Remove</div>
@@ -111,7 +111,7 @@ function ServiceTypeRow({ type }: { type: ServiceTypeRow }) {
   }, [deleteState, router]);
 
   return (
-    <li className="border-t border-[var(--color-border)] px-4 py-3">
+    <li className="border-t border-[var(--hair)] px-4 py-3">
       <form action={updateAction} noValidate>
         <input type="hidden" name="typeId" value={type.id} />
         <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-start gap-4">

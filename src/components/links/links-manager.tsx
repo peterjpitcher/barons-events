@@ -200,8 +200,8 @@ export function LinksManager({ links: initialLinks, canEdit }: LinksManagerProps
 
       {/* Create form */}
       {showCreateForm && canEdit && (
-        <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-white p-4 shadow-soft">
-          <p className="mb-3 text-sm font-semibold text-[var(--color-text)]">New short link</p>
+        <div className="rounded-[var(--radius-lg)] border border-[var(--hair)] bg-[var(--paper)] p-4 shadow-card">
+          <p className="mb-3 text-sm font-semibold text-[var(--ink)]">New short link</p>
           <LinkForm
             mode="create"
             fieldErrors={createFieldErrors}
@@ -214,20 +214,20 @@ export function LinksManager({ links: initialLinks, canEdit }: LinksManagerProps
 
       {/* Empty state */}
       {groups.length === 0 && !showCreateForm && (
-        <div className="rounded-[var(--radius-lg)] border border-dashed border-[var(--color-border)] bg-white py-14 text-center">
+        <div className="rounded-[var(--radius-lg)] border border-dashed border-[var(--hair)] bg-[var(--paper)] py-14 text-center">
           <QrCode className="mx-auto mb-3 h-8 w-8 text-subtle" aria-hidden="true" />
-          <p className="text-sm font-medium text-[var(--color-text)]">No short links yet</p>
+          <p className="text-sm font-medium text-[var(--ink)]">No short links yet</p>
           <p className="mt-1 text-xs text-subtle">Create one to generate UTM-tagged URLs and QR codes.</p>
         </div>
       )}
 
       {/* Table */}
       {groups.length > 0 && (
-        <div className="overflow-visible rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-white shadow-soft">
+        <div className="data-table-shell overflow-visible">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="data-table w-full">
               <thead>
-                <tr className="border-b border-[var(--color-border)] bg-[var(--color-muted-surface)] text-left text-xs font-semibold uppercase tracking-[0.1em] text-subtle">
+                <tr className="border-b border-[var(--hair)] bg-[var(--canvas-2)] text-left text-xs font-semibold uppercase tracking-[0.1em] text-subtle">
                   <th className="px-4 py-3">Name / Destination</th>
                   <th className="px-4 py-3">Short URL</th>
                   <th className="px-4 py-3">Type</th>
@@ -237,7 +237,7 @@ export function LinksManager({ links: initialLinks, canEdit }: LinksManagerProps
                   <th className="px-4 py-3 sr-only">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[var(--color-border)]">
+              <tbody className="divide-y divide-[var(--hair)]">
                 {rows}
               </tbody>
             </table>

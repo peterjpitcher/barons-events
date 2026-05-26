@@ -5,7 +5,7 @@ import { listServiceTypes, listAllVenueOpeningHours, listAllVenueServices, listO
 import { OpeningHoursPageShell } from "@/components/opening-hours/opening-hours-page-shell";
 
 export const metadata = {
-  title: "Opening Hours · BaronsHub",
+  title: "Opening Hours · BaronsHub 1.1",
   description: "Manage standard weekly hours and date-specific changes across all venues."
 };
 

@@ -66,11 +66,11 @@ export async function AuditTrailPanel({ entityType, entityId, title = "Audit tra
               return (
                 <li
                   key={entry.id}
-                  className="rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-muted-surface)] p-2 text-xs"
+                  className="rounded-[var(--radius-sm)] border border-[var(--hair)] bg-[var(--canvas-2)] p-2 text-xs"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="font-semibold text-[var(--color-text)]">{entry.action}</p>
+                      <p className="font-semibold text-[var(--ink)]">{entry.action}</p>
                       <p className="text-subtle">
                         {actor} · {timestampFormatter.format(new Date(entry.created_at))}
                       </p>
@@ -81,7 +81,7 @@ export async function AuditTrailPanel({ entityType, entityId, title = "Audit tra
                       {metaKeys.map(([key, value]) => (
                         <Fragment key={key}>
                           <dt className="font-medium">{key}</dt>
-                          <dd className="truncate text-[var(--color-text)]">
+                          <dd className="truncate text-[var(--ink)]">
                             {typeof value === "string" ? value : JSON.stringify(value)}
                           </dd>
                         </Fragment>

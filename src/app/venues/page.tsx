@@ -5,9 +5,10 @@ import { listReviewers } from "@/lib/reviewers";
 import { listAssignableUsers } from "@/lib/users";
 import { VenuesManager } from "@/components/venues/venues-manager";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/design-primitives";
 
 export const metadata = {
-  title: "Venues · Barons Events",
+  title: "Venues · BaronsHub 1.1",
   description: "Manage venues and reviewer defaults for the Barons events workspace."
 };
 
@@ -27,11 +28,17 @@ export default async function VenuesPage() {
   ]);
 
   return (
-    <div className="space-y-6">
+    <div className="app-page">
+      <PageHeader
+        eyebrow="Estate"
+        title="Venues"
+        description="Keep venue names, reviewer routing, and operational defaults current."
+        meta={<span>{venues.length} venue{venues.length === 1 ? "" : "s"}</span>}
+      />
       <Card>
         <CardHeader>
-          <CardTitle>Venues</CardTitle>
-          <CardDescription>Keep venue names and reviewer routing current in one table view.</CardDescription>
+          <CardTitle>Venue routing</CardTitle>
+          <CardDescription>These details power event forms, reviewer assignments, and planning analytics.</CardDescription>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-subtle">

@@ -198,7 +198,7 @@ export function SheetContent({ side = "right", children, className }: SheetConte
       {/* Backdrop */}
       <div
         className={cn(
-          "absolute inset-0 bg-[rgba(12,20,28,0.55)] transition-opacity duration-300",
+          "absolute inset-0 bg-[var(--overlay-scrim)] transition-opacity duration-300",
           visible ? "opacity-100" : "opacity-0",
         )}
         onClick={() => onOpenChange(false)}
@@ -212,7 +212,7 @@ export function SheetContent({ side = "right", children, className }: SheetConte
         aria-modal="true"
         aria-labelledby={titleId}
         className={cn(
-          "fixed flex w-full max-w-md flex-col border-[var(--color-border)] bg-white shadow-lg transition-transform duration-300 ease-in-out",
+          "fixed flex w-full max-w-md flex-col border-[var(--hair)] bg-[var(--paper)] shadow-lg transition-transform duration-300 ease-in-out",
           sc.panel,
           side === "right" ? "border-l" : "border-r",
           visible ? sc.enterTo : sc.enterFrom,
@@ -224,7 +224,7 @@ export function SheetContent({ side = "right", children, className }: SheetConte
           type="button"
           data-sheet-close
           onClick={() => onOpenChange(false)}
-          className="absolute right-4 top-4 rounded-md p-1 text-[var(--color-text-muted)] hover:bg-[var(--color-muted-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-500)]"
+          className="absolute right-4 top-4 rounded-[7px] p-1 text-[var(--ink-muted)] hover:bg-[var(--paper-tint)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mustard)]"
           aria-label="Close"
         >
           <X className="h-5 w-5" />
@@ -249,7 +249,7 @@ type SheetHeaderProps = {
 
 export function SheetHeader({ children, className }: SheetHeaderProps): React.ReactElement {
   return (
-    <div className={cn("border-b border-[var(--color-border)] px-6 py-4", className)}>
+    <div className={cn("border-b border-[var(--hair)] px-5 py-4", className)}>
       {children}
     </div>
   );
@@ -270,7 +270,7 @@ export function SheetTitle({ children, className }: SheetTitleProps): React.Reac
   return (
     <h2
       id={titleId}
-      className={cn("text-lg font-semibold text-[var(--color-text)]", className)}
+      className={cn("text-lg font-semibold text-[var(--ink)]", className)}
     >
       {children}
     </h2>

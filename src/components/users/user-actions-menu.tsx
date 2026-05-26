@@ -22,7 +22,7 @@ export function UserActionsMenu({ user, currentUserId }: UserActionsMenuProps): 
   if (user.role === "administrator") {
     return (
       <span
-        className="inline-flex items-center gap-1 text-xs text-[var(--color-text-muted)]"
+        className="inline-flex items-center gap-1 text-xs text-[var(--ink-muted)]"
         title="Administrators cannot be deactivated or deleted"
       >
         <Lock className="h-3 w-3" aria-hidden="true" />
