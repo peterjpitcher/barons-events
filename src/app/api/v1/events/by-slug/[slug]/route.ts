@@ -61,6 +61,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ slu
       cancellation_window_hours,
       terms_and_conditions,
       booking_url,
+      booking_enabled,
       event_image_path,
       seo_title,
       seo_description,

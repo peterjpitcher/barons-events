@@ -164,6 +164,8 @@ type PublicEvent = {
   cancellationWindowHours: number | null;
   termsAndConditions: string | null;
   bookingUrl: string | null; // optional booking link (full URL)
+  bookingEnabled: boolean; // true when BaronsHub's public booking page is enabled
+  bookingPageUrl: string | null; // public /l/ booking page URL when available
   eventImageUrl: string | null; // public storage URL if an event image exists
   seoTitle: string | null; // optional SEO title (<= 60 chars); in BaronsHub UI we include the event date to disambiguate repeats
   seoDescription: string | null; // optional SEO description (<= 155 chars); in BaronsHub UI we include the event date to disambiguate repeats
@@ -202,6 +204,8 @@ type PublicEvent = {
   "cancellationWindowHours": 24,
   "termsAndConditions": "Please arrive on time. Late entry may be refused.",
   "bookingUrl": "https://example.com/book",
+  "bookingEnabled": true,
+  "bookingPageUrl": "https://l.baronspubs.com/quiz-night-with-elliott-2026-01-06",
   "eventImageUrl": "https://<supabase>/storage/v1/object/public/event-images/<event-id>/hero.jpg",
   "seoTitle": "Quiz Night with Elliott | 6 Jan 2026",
   "seoDescription": "Join us for Quiz Night with Elliott on 6 Jan 2026 at The Cricketers. Book now.",
@@ -229,6 +233,8 @@ BaronsHub stores events in `public.events`. The API maps fields like this:
 - `PublicEvent.teaser` → `events.public_teaser`
 - `PublicEvent.description` → `events.public_description` only. Internal `events.notes` is intentionally excluded from API selects and serializers.
 - `PublicEvent.bookingUrl` → `events.booking_url`
+- `PublicEvent.bookingEnabled` → `events.booking_enabled`
+- `PublicEvent.bookingPageUrl` → computed from `events.seo_slug` when `events.booking_enabled` is true
 - `PublicEvent.seoTitle` → `events.seo_title`
 - `PublicEvent.seoDescription` → `events.seo_description`
 - `PublicEvent.seoSlug` → `events.seo_slug`

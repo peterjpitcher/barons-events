@@ -70,6 +70,7 @@ export async function GET(request: Request) {
       cancellation_window_hours,
       terms_and_conditions,
       booking_url,
+      booking_enabled,
       event_image_path,
       seo_title,
       seo_description,

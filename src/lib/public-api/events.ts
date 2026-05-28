@@ -3,6 +3,7 @@ import "server-only";
 import { isBookingFormat, isFreeBookingFormat, type BookingFormat } from "@/lib/booking-format";
 import { parseVenueSpaces } from "@/lib/venue-spaces";
 import { normaliseOptionalText, normaliseOptionalInteger } from "@/lib/normalise";
+import { SHORT_LINK_HOST } from "@/lib/short-link-config";
 
 export const PUBLIC_EVENT_STATUSES = ["approved", "completed"] as const;
 export type PublicEventStatus = (typeof PUBLIC_EVENT_STATUSES)[number];
@@ -34,6 +35,8 @@ export type PublicEvent = {
   cancellationWindowHours: number | null;
   termsAndConditions: string | null;
   bookingUrl: string | null;
+  bookingEnabled: boolean;
+  bookingPageUrl: string | null;
   eventImageUrl: string | null;
   seoTitle: string | null;
   seoDescription: string | null;
@@ -67,6 +70,7 @@ type RawEventRow = {
   cancellation_window_hours: number | null;
   terms_and_conditions: string | null;
   booking_url: string | null;
+  booking_enabled?: boolean | null;
   event_image_path: string | null;
   seo_title: string | null;
   seo_description: string | null;
@@ -110,6 +114,11 @@ function buildEventImageUrl(path: unknown): string | null {
     .map((segment) => encodeURIComponent(segment))
     .join("/");
   return `${baseUrl}/storage/v1/object/public/event-images/${encodedPath}`;
+}
+
+function buildBookingPageUrl(seoSlug: string | null, bookingEnabled: boolean): string | null {
+  if (!bookingEnabled || !seoSlug) return null;
+  return `https://${SHORT_LINK_HOST}/${encodeURIComponent(seoSlug)}`;
 }
 
 export function isValidIsoDate(value: string): boolean {
@@ -194,6 +203,7 @@ export function toPublicEvent(row: RawEventRow): PublicEvent {
   const description = normaliseOptionalText(row.public_description) ?? null;
   const highlights = normaliseHighlights(row.public_highlights);
   const bookingUrl = normaliseOptionalText(row.booking_url);
+  const bookingEnabled = row.booking_enabled === true;
   const bookingType = isBookingFormat(row.booking_type) ? row.booking_type : null;
   const rawTicketPrice = typeof row.ticket_price === "number" && Number.isFinite(row.ticket_price) ? row.ticket_price : null;
   const ticketPrice = bookingType && isFreeBookingFormat(bookingType) ? null : rawTicketPrice;
@@ -226,6 +236,8 @@ export function toPublicEvent(row: RawEventRow): PublicEvent {
     cancellationWindowHours,
     termsAndConditions,
     bookingUrl,
+    bookingEnabled,
+    bookingPageUrl: buildBookingPageUrl(seoSlug, bookingEnabled),
     eventImageUrl: buildEventImageUrl(row.event_image_path),
     seoTitle,
     seoDescription,
