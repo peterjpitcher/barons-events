@@ -1,5 +1,111 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { londonDateString } from "./utils";
 import type { SopSectionWithTasks, SopTemplateTree } from "./sop-types";
+
+export const EVENT_TODO_NOT_REQUIRED_AFTER_DATE = "2026-06-11";
+export const EVENT_TODO_NOT_REQUIRED_BEFORE_DATE = "2026-06-11";
+
+type GenerateSopOptions = {
+  notRequiredTemplateIds?: string[];
+  applyEventTodoRules?: boolean;
+};
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function normaliseSopNotRequiredTemplateIds(values: unknown): string[] {
+  const rawValues = Array.isArray(values) ? values : typeof values === "string" ? [values] : [];
+  return Array.from(
+    new Set(
+      rawValues
+        .flatMap((value) => String(value).split(","))
+        .map((value) => value.trim())
+        .filter((value) => UUID_PATTERN.test(value))
+    )
+  );
+}
+
+export function shouldMarkEventTodosNotRequired(
+  targetDate: string,
+  today = londonDateString(),
+  afterDate = EVENT_TODO_NOT_REQUIRED_AFTER_DATE,
+  beforeDate = EVENT_TODO_NOT_REQUIRED_BEFORE_DATE
+): boolean {
+  return targetDate < today || targetDate < beforeDate || targetDate > afterDate;
+}
+
+async function markOpenTasksNotRequired(taskIds: string[], completedBy: string | null): Promise<number> {
+  if (!taskIds.length) return 0;
+
+  const db = createSupabaseAdminClient();
+  const { data, error } = await (db as any)
+    .from("planning_tasks")
+    .update({
+      status: "not_required",
+      completed_at: new Date().toISOString(),
+      completed_by: completedBy,
+    })
+    .in("id", taskIds)
+    .eq("status", "open")
+    .select("id");
+
+  if (error) throw new Error(error.message);
+
+  const updatedIds = ((data ?? []) as Array<{ id: string }>).map((row) => row.id);
+  for (const taskId of updatedIds) {
+    await updateBlockedStatus(taskId, "not_required");
+  }
+
+  return updatedIds.length;
+}
+
+export async function markPlanningItemOpenTasksNotRequired(
+  planningItemId: string,
+  completedBy: string | null
+): Promise<number> {
+  const db = createSupabaseAdminClient();
+  const { data, error } = await (db as any)
+    .from("planning_tasks")
+    .select("id")
+    .eq("planning_item_id", planningItemId)
+    .eq("status", "open");
+
+  if (error) throw new Error(error.message);
+
+  const taskIds = ((data ?? []) as Array<{ id: string }>).map((row) => row.id);
+  return markOpenTasksNotRequired(taskIds, completedBy);
+}
+
+export async function markSopTemplateTasksNotRequired(
+  planningItemId: string,
+  templateIds: string[],
+  completedBy: string | null
+): Promise<number> {
+  const ids = normaliseSopNotRequiredTemplateIds(templateIds);
+  if (!ids.length) return 0;
+
+  const db = createSupabaseAdminClient();
+  const { data: masterRows, error: masterError } = await (db as any)
+    .from("planning_tasks")
+    .select("id")
+    .eq("planning_item_id", planningItemId)
+    .or(`sop_template_task_id.in.(${ids.join(",")}),cascade_sop_template_id.in.(${ids.join(",")})`);
+
+  if (masterError) throw new Error(masterError.message);
+
+  const masterIds = ((masterRows ?? []) as Array<{ id: string }>).map((row) => row.id);
+  if (!masterIds.length) return 0;
+
+  const { data: taskRows, error: taskError } = await (db as any)
+    .from("planning_tasks")
+    .select("id")
+    .eq("planning_item_id", planningItemId)
+    .or(`id.in.(${masterIds.join(",")}),parent_task_id.in.(${masterIds.join(",")})`);
+
+  if (taskError) throw new Error(taskError.message);
+
+  const taskIds = ((taskRows ?? []) as Array<{ id: string }>).map((row) => row.id);
+  return markOpenTasksNotRequired(taskIds, completedBy);
+}
 
 /**
  * Generate SOP checklist tasks for a planning item.
@@ -16,7 +122,8 @@ import type { SopSectionWithTasks, SopTemplateTree } from "./sop-types";
 export async function generateSopChecklist(
   planningItemId: string,
   targetDate: string,
-  createdBy: string
+  createdBy: string,
+  options: GenerateSopOptions = {}
 ): Promise<number> {
   const db = createSupabaseAdminClient();
    
@@ -26,6 +133,14 @@ export async function generateSopChecklist(
     p_created_by: createdBy,
   });
   if (error) throw new Error(error.message);
+
+  if (options.notRequiredTemplateIds?.length) {
+    await markSopTemplateTasksNotRequired(planningItemId, options.notRequiredTemplateIds, createdBy);
+  }
+  if (options.applyEventTodoRules && shouldMarkEventTodosNotRequired(targetDate)) {
+    await markPlanningItemOpenTasksNotRequired(planningItemId, createdBy);
+  }
+
   // v2 returns a JSONB object: { created, masters_created, children_created, skipped_venues, idempotent_skip? }
   if (data && typeof data === "object" && "created" in data) {
     return Number((data as { created: number }).created) || 0;

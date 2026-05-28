@@ -197,7 +197,7 @@ export async function AppShell({ user, children }: AppShellProps) {
                       />
                     )}
                     {item.children && item.children.length > 0 ? (
-                      <div className="ml-3 flex flex-col border-l border-white/10 pl-1.5">
+                      <div className="ml-0 flex flex-col border-l-0 pl-0 transition-[margin,padding] duration-200 group-hover/sidebar:ml-3 group-hover/sidebar:border-l group-hover/sidebar:border-white/10 group-hover/sidebar:pl-1.5 group-focus-within/sidebar:ml-3 group-focus-within/sidebar:border-l group-focus-within/sidebar:border-white/10 group-focus-within/sidebar:pl-1.5">
                         {item.children.map((child) => (
                           <NavLink
                             key={child.href}

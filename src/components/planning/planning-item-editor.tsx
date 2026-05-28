@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Plus, Repeat } from "lucide-react";
 import { createPlanningItemAction, createPlanningSeriesAction } from "@/actions/planning";
 import { VenueMultiSelect, type VenueOption } from "@/components/venues/venue-multi-select";
+import { SopNotRequiredPicker } from "@/components/planning/sop-not-required-picker";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FieldLabel } from "@/components/ui/field-label";
@@ -13,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import type { PlanningPerson, PlanningVenueOption, RecurrenceFrequency } from "@/lib/planning/types";
+import type { SopTemplateTree } from "@/lib/planning/sop-types";
 
 type PlanningItemEditorProps = {
   today: string;
@@ -23,13 +25,7 @@ type PlanningItemEditorProps = {
   currentUserId?: string;
   /** Whether the current user is an administrator */
   isAdministrator?: boolean;
-};
-
-type TemplateRow = {
-  id: string;
-  title: string;
-  assigneeId: string;
-  dueOffsetDays: string;
+  sopTemplate?: SopTemplateTree;
 };
 
 const WEEKDAY_OPTIONS: Array<{ value: number; label: string }> = [
@@ -42,16 +38,7 @@ const WEEKDAY_OPTIONS: Array<{ value: number; label: string }> = [
   { value: 0, label: "Sun" }
 ];
 
-function createTemplateRow(): TemplateRow {
-  return {
-    id: Math.random().toString(36).slice(2),
-    title: "",
-    assigneeId: "",
-    dueOffsetDays: "0"
-  };
-}
-
-export function PlanningItemEditor({ today, users, venues, onChanged, currentUserId, isAdministrator: isAdmin }: PlanningItemEditorProps) {
+export function PlanningItemEditor({ today, users, venues, onChanged, currentUserId, isAdministrator: isAdmin, sopTemplate }: PlanningItemEditorProps) {
   const [mode, setMode] = useState<"single" | "series">("single");
   const [isPending, startTransition] = useTransition();
 
@@ -70,6 +57,7 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
   const [itemVenueIds, setItemVenueIds] = useState<string[]>([]);
   const [itemOwnerId, setItemOwnerId] = useState(defaultOwnerId);
   const [itemTargetDate, setItemTargetDate] = useState(today);
+  const [itemSopNotRequiredIds, setItemSopNotRequiredIds] = useState<string[]>([]);
 
   const [seriesTitle, setSeriesTitle] = useState("");
   const [seriesType, setSeriesType] = useState("");
@@ -82,7 +70,7 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
   const [monthday, setMonthday] = useState("1");
   const [startsOn, setStartsOn] = useState(today);
   const [endsOn, setEndsOn] = useState("");
-  const [templates, setTemplates] = useState<TemplateRow[]>([createTemplateRow()]);
+  const [seriesSopNotRequiredIds, setSeriesSopNotRequiredIds] = useState<string[]>([]);
 
   function runAction<T>(work: () => Promise<T>, successMessage: string) {
     startTransition(async () => {
@@ -105,6 +93,7 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
     setItemVenueIds([]);
     setItemOwnerId(defaultOwnerId);
     setItemTargetDate(today);
+    setItemSopNotRequiredIds([]);
   }
 
   function resetSeriesForm() {
@@ -119,7 +108,7 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
     setMonthday("1");
     setStartsOn(today);
     setEndsOn("");
-    setTemplates([createTemplateRow()]);
+    setSeriesSopNotRequiredIds([]);
   }
 
   function submitSingleItem() {
@@ -145,7 +134,8 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
           venueIds,
           ownerId: itemOwnerId,
           targetDate: itemTargetDate,
-          status: "planned"
+          status: "planned",
+          sopNotRequiredTemplateIds: itemSopNotRequiredIds
         }),
       successMessage
     );
@@ -176,14 +166,6 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
     }
 
     const parsedMonthday = Number(monthday);
-    const templatePayload = templates
-      .map((template, index) => ({
-        title: template.title.trim(),
-        defaultAssigneeId: template.assigneeId,
-        dueOffsetDays: Number(template.dueOffsetDays || "0"),
-        sortOrder: index
-      }))
-      .filter((template) => template.title.length > 0);
 
     runAction(
       () =>
@@ -199,7 +181,7 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
           recurrenceMonthday: frequency === "monthly" ? parsedMonthday : null,
           startsOn,
           endsOn: endsOn || null,
-          taskTemplates: templatePayload
+          sopNotRequiredTemplateIds: seriesSopNotRequiredIds
         }),
       "Recurring series created."
     );
@@ -213,7 +195,7 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
         <div>
           <CardTitle>Create planning work</CardTitle>
           <CardDescription>
-            Add one-off operational actions or recurring planning templates.
+            Add one-off operational actions or recurring planning schedules.
           </CardDescription>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -227,85 +209,250 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
       </CardHeader>
       <CardContent className="space-y-4">
         {mode === "single" ? (
-          <div className="space-y-3">
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="space-y-1">
-                <Label htmlFor="planning-item-title">Title</Label>
-                <Input
-                  id="planning-item-title"
-                  value={itemTitle}
-                  maxLength={160}
-                  disabled={isPending}
-                  onChange={(event) => setItemTitle(event.target.value)}
-                />
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="min-w-0 space-y-3">
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-1">
+                  <Label htmlFor="planning-item-title">Title</Label>
+                  <Input
+                    id="planning-item-title"
+                    value={itemTitle}
+                    maxLength={160}
+                    disabled={isPending}
+                    onChange={(event) => setItemTitle(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="planning-item-type">Planning type</Label>
+                  <Input
+                    id="planning-item-type"
+                    value={itemType}
+                    maxLength={120}
+                    placeholder="Menu launch, ops change, etc."
+                    disabled={isPending}
+                    onChange={(event) => setItemType(event.target.value)}
+                  />
+                </div>
               </div>
-              <div className="space-y-1">
-                <Label htmlFor="planning-item-type">Planning type</Label>
-                <Input
-                  id="planning-item-type"
-                  value={itemType}
-                  maxLength={120}
-                  placeholder="Menu launch, ops change, etc."
-                  disabled={isPending}
-                  onChange={(event) => setItemType(event.target.value)}
-                />
+              <Textarea
+                value={itemDescription}
+                rows={3}
+                maxLength={2000}
+                placeholder="Optional context"
+                disabled={isPending}
+                onChange={(event) => setItemDescription(event.target.value)}
+              />
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="space-y-1">
+                  <Label htmlFor="planning-item-target">Target date</Label>
+                  <Input
+                    id="planning-item-target"
+                    type="date"
+                    value={itemTargetDate}
+                    disabled={isPending}
+                    onChange={(event) => setItemTargetDate(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="planning-item-owner">Owner</Label>
+                  <Select id="planning-item-owner" value={itemOwnerId} disabled={isPending} onChange={(event) => setItemOwnerId(event.target.value)}>
+                    <option value="">Unassigned</option>
+                    {sortedUsers.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <FieldLabel
+                    htmlFor="planning-item-venue"
+                    help="Pick no venues for a global item, or select one or more venues to link this item. Tasks with a one per venue SOP setting fan out automatically."
+                  >
+                    Venue
+                  </FieldLabel>
+                  {isAdmin ? (
+                    <div className="rounded-[var(--radius-sm)] border border-[var(--hair)] bg-[var(--paper)] p-2">
+                      <VenueMultiSelect
+                        venues={venues.map((venue) => ({
+                          id: venue.id,
+                          name: venue.name,
+                          category: venue.category ?? "pub",
+                          isInternal: venue.isInternal
+                        } satisfies VenueOption))}
+                        selectedIds={itemVenueIds}
+                        onChange={setItemVenueIds}
+                        disabled={isPending}
+                        emptyLabel="Global item"
+                        emptyDescription="No venue-specific ownership or rollout."
+                      />
+                    </div>
+                  ) : (
+                    <Select id="planning-item-venue" value={itemVenueId} disabled={isPending} onChange={(event) => setItemVenueId(event.target.value)}>
+                      <option value="">Global</option>
+                      {venues.map((venue) => (
+                        <option key={venue.id} value={venue.id}>
+                          {venue.name}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
+                </div>
               </div>
+              <Button type="button" disabled={isPending} onClick={submitSingleItem}>
+                <Plus className="mr-1 h-4 w-4" aria-hidden="true" /> Add planning item
+              </Button>
             </div>
-            <Textarea
-              value={itemDescription}
-              rows={3}
-              maxLength={2000}
-              placeholder="Optional context"
+            <SopNotRequiredPicker
+              template={sopTemplate}
+              value={itemSopNotRequiredIds}
+              onChange={setItemSopNotRequiredIds}
               disabled={isPending}
-              onChange={(event) => setItemDescription(event.target.value)}
+              variant="rail"
+              className="xl:sticky xl:top-[72px] xl:self-start"
             />
-            <div className="grid gap-3 md:grid-cols-3">
-              <div className="space-y-1">
-                <Label htmlFor="planning-item-target">Target date</Label>
-                <Input
-                  id="planning-item-target"
-                  type="date"
-                  value={itemTargetDate}
-                  disabled={isPending}
-                  onChange={(event) => setItemTargetDate(event.target.value)}
-                />
+          </div>
+        ) : (
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="min-w-0 space-y-3">
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-1">
+                  <Label htmlFor="planning-series-title">Series title</Label>
+                  <Input
+                    id="planning-series-title"
+                    value={seriesTitle}
+                    maxLength={160}
+                    disabled={isPending}
+                    onChange={(event) => setSeriesTitle(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="planning-series-type">Planning type</Label>
+                  <Input
+                    id="planning-series-type"
+                    value={seriesType}
+                    maxLength={120}
+                    placeholder="Menu launch, ops change, etc."
+                    disabled={isPending}
+                    onChange={(event) => setSeriesType(event.target.value)}
+                  />
+                </div>
               </div>
-              <div className="space-y-1">
-                <Label htmlFor="planning-item-owner">Owner</Label>
-                <Select id="planning-item-owner" value={itemOwnerId} disabled={isPending} onChange={(event) => setItemOwnerId(event.target.value)}>
-                  <option value="">Unassigned</option>
-                  {sortedUsers.map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.name}
-                    </option>
-                  ))}
-                </Select>
+              <Textarea
+                value={seriesDescription}
+                rows={3}
+                maxLength={2000}
+                placeholder="Optional context"
+                disabled={isPending}
+                onChange={(event) => setSeriesDescription(event.target.value)}
+              />
+              <div className="grid gap-3 md:grid-cols-4">
+                <div className="space-y-1">
+                  <Label htmlFor="planning-series-frequency">Frequency</Label>
+                  <Select
+                    id="planning-series-frequency"
+                    value={frequency}
+                    disabled={isPending}
+                    onChange={(event) => setFrequency(event.target.value as RecurrenceFrequency)}
+                  >
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly">Monthly</option>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="planning-series-interval">Every</Label>
+                  <Input
+                    id="planning-series-interval"
+                    type="number"
+                    min={1}
+                    max={365}
+                    value={interval}
+                    disabled={isPending}
+                    onChange={(event) => setInterval(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="planning-series-start">Starts on</Label>
+                  <Input
+                    id="planning-series-start"
+                    type="date"
+                    value={startsOn}
+                    disabled={isPending}
+                    onChange={(event) => setStartsOn(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="planning-series-end">Ends on (optional)</Label>
+                  <Input
+                    id="planning-series-end"
+                    type="date"
+                    value={endsOn}
+                    disabled={isPending}
+                    onChange={(event) => setEndsOn(event.target.value)}
+                  />
+                </div>
               </div>
-              <div className="space-y-1">
-                <FieldLabel
-                  htmlFor="planning-item-venue"
-                  help="Pick no venues for a global item, or select one or more venues to link this item. Tasks with a one per venue SOP setting fan out automatically."
-                >
-                  Venue
-                </FieldLabel>
-                {isAdmin ? (
-                  <div className="rounded-[var(--radius-sm)] border border-[var(--hair)] bg-[var(--paper)] p-2">
-                    <VenueMultiSelect
-                      venues={venues.map((venue) => ({
-                        id: venue.id,
-                        name: venue.name,
-                        category: venue.category ?? "pub",
-                        isInternal: venue.isInternal
-                      } satisfies VenueOption))}
-                      selectedIds={itemVenueIds}
-                      onChange={setItemVenueIds}
-                      disabled={isPending}
-                      emptyLabel="Global item"
-                      emptyDescription="No venue-specific ownership or rollout."
-                    />
+
+              {frequency === "weekly" ? (
+                <fieldset className="space-y-2">
+                  <legend className="text-xs font-semibold uppercase tracking-[0.08em] text-subtle">Weekdays</legend>
+                  <div className="flex flex-wrap gap-2">
+                    {WEEKDAY_OPTIONS.map((weekday) => (
+                      <label key={weekday.value} className="inline-flex items-center gap-1 rounded-full border border-[var(--hair)] px-2 py-1 text-xs">
+                        <input
+                          type="checkbox"
+                          checked={weekdays.includes(weekday.value)}
+                          disabled={isPending}
+                          onChange={(event) => toggleWeekday(weekday.value, event.target.checked)}
+                        />
+                        {weekday.label}
+                      </label>
+                    ))}
                   </div>
-                ) : (
-                  <Select id="planning-item-venue" value={itemVenueId} disabled={isPending} onChange={(event) => setItemVenueId(event.target.value)}>
+                </fieldset>
+              ) : null}
+
+              {frequency === "monthly" ? (
+                <div className="space-y-1">
+                  <Label htmlFor="planning-series-monthday">Day of month</Label>
+                  <Input
+                    id="planning-series-monthday"
+                    type="number"
+                    min={1}
+                    max={31}
+                    value={monthday}
+                    disabled={isPending}
+                    onChange={(event) => setMonthday(event.target.value)}
+                  />
+                </div>
+              ) : null}
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-1">
+                  <Label htmlFor="planning-series-owner">Owner</Label>
+                  <Select
+                    id="planning-series-owner"
+                    value={seriesOwnerId}
+                    disabled={isPending}
+                    onChange={(event) => setSeriesOwnerId(event.target.value)}
+                  >
+                    <option value="">Unassigned</option>
+                    {sortedUsers.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="planning-series-venue">Venue</Label>
+                  <Select
+                    id="planning-series-venue"
+                    value={seriesVenueId}
+                    disabled={isPending}
+                    onChange={(event) => setSeriesVenueId(event.target.value)}
+                  >
                     <option value="">Global</option>
                     {venues.map((venue) => (
                       <option key={venue.id} value={venue.id}>
@@ -313,234 +460,22 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                       </option>
                     ))}
                   </Select>
-                )}
-              </div>
-            </div>
-            <Button type="button" disabled={isPending} onClick={submitSingleItem}>
-              <Plus className="mr-1 h-4 w-4" aria-hidden="true" /> Add planning item
-            </Button>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="space-y-1">
-                <Label htmlFor="planning-series-title">Series title</Label>
-                <Input
-                  id="planning-series-title"
-                  value={seriesTitle}
-                  maxLength={160}
-                  disabled={isPending}
-                  onChange={(event) => setSeriesTitle(event.target.value)}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="planning-series-type">Planning type</Label>
-                <Input
-                  id="planning-series-type"
-                  value={seriesType}
-                  maxLength={120}
-                  placeholder="Menu launch, ops change, etc."
-                  disabled={isPending}
-                  onChange={(event) => setSeriesType(event.target.value)}
-                />
-              </div>
-            </div>
-            <Textarea
-              value={seriesDescription}
-              rows={3}
-              maxLength={2000}
-              placeholder="Optional context"
-              disabled={isPending}
-              onChange={(event) => setSeriesDescription(event.target.value)}
-            />
-            <div className="grid gap-3 md:grid-cols-4">
-              <div className="space-y-1">
-                <Label htmlFor="planning-series-frequency">Frequency</Label>
-                <Select
-                  id="planning-series-frequency"
-                  value={frequency}
-                  disabled={isPending}
-                  onChange={(event) => setFrequency(event.target.value as RecurrenceFrequency)}
-                >
-                  <option value="daily">Daily</option>
-                  <option value="weekly">Weekly</option>
-                  <option value="monthly">Monthly</option>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="planning-series-interval">Every</Label>
-                <Input
-                  id="planning-series-interval"
-                  type="number"
-                  min={1}
-                  max={365}
-                  value={interval}
-                  disabled={isPending}
-                  onChange={(event) => setInterval(event.target.value)}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="planning-series-start">Starts on</Label>
-                <Input
-                  id="planning-series-start"
-                  type="date"
-                  value={startsOn}
-                  disabled={isPending}
-                  onChange={(event) => setStartsOn(event.target.value)}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="planning-series-end">Ends on (optional)</Label>
-                <Input
-                  id="planning-series-end"
-                  type="date"
-                  value={endsOn}
-                  disabled={isPending}
-                  onChange={(event) => setEndsOn(event.target.value)}
-                />
-              </div>
-            </div>
-
-            {frequency === "weekly" ? (
-              <fieldset className="space-y-2">
-                <legend className="text-xs font-semibold uppercase tracking-[0.08em] text-subtle">Weekdays</legend>
-                <div className="flex flex-wrap gap-2">
-                  {WEEKDAY_OPTIONS.map((weekday) => (
-                    <label key={weekday.value} className="inline-flex items-center gap-1 rounded-full border border-[var(--hair)] px-2 py-1 text-xs">
-                      <input
-                        type="checkbox"
-                        checked={weekdays.includes(weekday.value)}
-                        disabled={isPending}
-                        onChange={(event) => toggleWeekday(weekday.value, event.target.checked)}
-                      />
-                      {weekday.label}
-                    </label>
-                  ))}
                 </div>
-              </fieldset>
-            ) : null}
+              </div>
 
-            {frequency === "monthly" ? (
-              <div className="space-y-1">
-                <Label htmlFor="planning-series-monthday">Day of month</Label>
-                <Input
-                  id="planning-series-monthday"
-                  type="number"
-                  min={1}
-                  max={31}
-                  value={monthday}
-                  disabled={isPending}
-                  onChange={(event) => setMonthday(event.target.value)}
-                />
-              </div>
-            ) : null}
-
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="space-y-1">
-                <Label htmlFor="planning-series-owner">Owner</Label>
-                <Select
-                  id="planning-series-owner"
-                  value={seriesOwnerId}
-                  disabled={isPending}
-                  onChange={(event) => setSeriesOwnerId(event.target.value)}
-                >
-                  <option value="">Unassigned</option>
-                  {sortedUsers.map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.name}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="planning-series-venue">Venue</Label>
-                <Select
-                  id="planning-series-venue"
-                  value={seriesVenueId}
-                  disabled={isPending}
-                  onChange={(event) => setSeriesVenueId(event.target.value)}
-                >
-                  <option value="">Global</option>
-                  {venues.map((venue) => (
-                    <option key={venue.id} value={venue.id}>
-                      {venue.name}
-                    </option>
-                  ))}
-                </Select>
-              </div>
+              <Button type="button" disabled={isPending} onClick={submitSeries}>
+                <Repeat className="mr-1 h-4 w-4" aria-hidden="true" /> Create recurring series
+              </Button>
             </div>
-
-            <section className="space-y-2 rounded-[var(--radius-sm)] border border-[var(--hair)] p-3">
-              <div className="flex items-center justify-between">
-                <h4 className="text-sm font-semibold text-[var(--ink)]">Task templates</h4>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  disabled={isPending}
-                  onClick={() => setTemplates((current) => [...current, createTemplateRow()])}
-                >
-                  <Plus className="mr-1 h-4 w-4" aria-hidden="true" /> Add template
-                </Button>
-              </div>
-
-              <div className="space-y-2">
-                {templates.map((template) => (
-                  <div key={template.id} className="grid gap-2 md:grid-cols-[minmax(0,1fr)_220px_130px]">
-                    <Input
-                      value={template.title}
-                      maxLength={160}
-                      placeholder="Task title"
-                      disabled={isPending}
-                      onChange={(event) =>
-                        setTemplates((current) =>
-                          current.map((entry) =>
-                            entry.id === template.id ? { ...entry, title: event.target.value } : entry
-                          )
-                        )
-                      }
-                    />
-                    <Select
-                      value={template.assigneeId}
-                      disabled={isPending}
-                      onChange={(event) =>
-                        setTemplates((current) =>
-                          current.map((entry) =>
-                            entry.id === template.id ? { ...entry, assigneeId: event.target.value } : entry
-                          )
-                        )
-                      }
-                    >
-                      <option value="">To be determined</option>
-                      {sortedUsers.map((user) => (
-                        <option key={user.id} value={user.id}>
-                          {user.name}
-                        </option>
-                      ))}
-                    </Select>
-                    <Input
-                      type="number"
-                      min={-365}
-                      max={365}
-                      value={template.dueOffsetDays}
-                      disabled={isPending}
-                      placeholder="Due offset"
-                      onChange={(event) =>
-                        setTemplates((current) =>
-                          current.map((entry) =>
-                            entry.id === template.id ? { ...entry, dueOffsetDays: event.target.value } : entry
-                          )
-                        )
-                      }
-                    />
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            <Button type="button" disabled={isPending} onClick={submitSeries}>
-              <Repeat className="mr-1 h-4 w-4" aria-hidden="true" /> Create recurring series
-            </Button>
+            <SopNotRequiredPicker
+              template={sopTemplate}
+              value={seriesSopNotRequiredIds}
+              onChange={setSeriesSopNotRequiredIds}
+              disabled={isPending}
+              variant="rail"
+              note="The below items are standard SOP when submitting this recurring planning series, please tick any todos below that aren't required for each generated planning item so owners don't get alerted."
+              className="xl:sticky xl:top-[72px] xl:self-start"
+            />
           </div>
         )}
       </CardContent>

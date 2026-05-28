@@ -5,6 +5,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { ArrowRight, Calendar, Check, ChevronDown, ClipboardList, GripVertical, Pencil, Sparkles, Trash2, X } from "lucide-react";
 import { ApproveEventButton } from "@/components/events/approve-event-button";
+import { archiveDraftEventAction } from "@/actions/events";
 import {
   convertInspirationItemAction,
   deletePlanningItemAction,
@@ -847,6 +848,7 @@ export function InspirationItemCard({ item }: { item: PlanningInspirationItem })
 type EventOverlayCardProps = {
   event: PlanningEventOverlay;
   canApprove?: boolean;
+  onChanged?: () => void;
 };
 
 const EVENT_STATUS_BADGE_VARIANT: Record<string, "neutral" | "info" | "warning" | "success" | "danger"> = {
@@ -858,9 +860,24 @@ const EVENT_STATUS_BADGE_VARIANT: Record<string, "neutral" | "info" | "warning" 
   rejected: "danger",
 };
 
-export function EventOverlayCard({ event, canApprove }: EventOverlayCardProps) {
+export function EventOverlayCard({ event, canApprove, onChanged }: EventOverlayCardProps) {
   const statusTone = EVENT_STATUS_BADGE_VARIANT[event.status] ?? "neutral";
   const hasWebCopy = Boolean(event.publicTitle);
+  const [confirmArchive, setConfirmArchive] = useState(false);
+  const [isPending, startTransition] = useTransition();
+
+  function handleArchiveDraft() {
+    startTransition(async () => {
+      const result = await archiveDraftEventAction({ eventId: event.eventId });
+      if (!result.success) {
+        toast.error(result.message ?? "Could not archive the draft event.");
+        return;
+      }
+      toast.success(result.message ?? "Draft event archived.");
+      setConfirmArchive(false);
+      onChanged?.();
+    });
+  }
 
   return (
     <article aria-label={`Event: ${event.publicTitle ?? event.title}`} className="space-y-2 rounded-[8px] border border-[var(--hair)] bg-[var(--slate-tint)] p-2.5 shadow-card">
@@ -902,14 +919,41 @@ export function EventOverlayCard({ event, canApprove }: EventOverlayCardProps) {
       </div>
 
       <div className="flex flex-wrap items-center justify-end gap-1.5">
-        {canApprove && ["submitted", "needs_revisions"].includes(event.status) ? (
-          <ApproveEventButton eventId={event.eventId} size="sm" className="h-auto px-3 py-1 text-xs" hasWebCopy={hasWebCopy} />
-        ) : null}
-        <Link href={`/events/${event.eventId}`}>
-          <Button type="button" size="sm" variant="subtle">
-            <ArrowRight className="h-4 w-4" aria-hidden="true" /> Manage
-          </Button>
-        </Link>
+        {event.status === "draft" ? (
+          <>
+            {confirmArchive ? (
+              <>
+                <p className="text-xs font-medium text-[var(--burgundy)]">Archive draft?</p>
+                <Button type="button" size="sm" variant="ghost" disabled={isPending} onClick={() => setConfirmArchive(false)}>
+                  Cancel
+                </Button>
+                <Button type="button" size="sm" variant="destructive" disabled={isPending} onClick={handleArchiveDraft}>
+                  <Trash2 className="h-4 w-4" aria-hidden="true" /> {isPending ? "Archiving..." : "Confirm"}
+                </Button>
+              </>
+            ) : (
+              <Button type="button" size="sm" variant="ghost" disabled={isPending} onClick={() => setConfirmArchive(true)}>
+                <Trash2 className="h-4 w-4" aria-hidden="true" /> Archive draft
+              </Button>
+            )}
+            <Link href={`/events/${event.eventId}`}>
+              <Button type="button" size="sm" variant="subtle">
+                <Pencil className="h-4 w-4" aria-hidden="true" /> Continue draft
+              </Button>
+            </Link>
+          </>
+        ) : (
+          <>
+            {canApprove && ["submitted", "needs_revisions"].includes(event.status) ? (
+              <ApproveEventButton eventId={event.eventId} size="sm" className="h-auto px-3 py-1 text-xs" hasWebCopy={hasWebCopy} />
+            ) : null}
+            <Link href={`/events/${event.eventId}`}>
+              <Button type="button" size="sm" variant="subtle">
+                <ArrowRight className="h-4 w-4" aria-hidden="true" /> Manage
+              </Button>
+            </Link>
+          </>
+        )}
       </div>
     </article>
   );

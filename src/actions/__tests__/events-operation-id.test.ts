@@ -43,6 +43,7 @@ vi.mock("@/lib/artists", () => ({
 vi.mock("@/lib/notifications", () => ({
   sendAssigneeReassignmentEmail: vi.fn(),
   sendEventSubmittedEmail: vi.fn(),
+  sendNewEventAnnouncementEmail: vi.fn(),
   sendReviewDecisionEmail: vi.fn()
 }));
 vi.mock("@/lib/ai", () => ({

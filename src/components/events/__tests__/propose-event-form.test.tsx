@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ProposeEventForm } from "@/components/events/propose-event-form";
 
@@ -26,6 +26,7 @@ const venues = [
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
 });
 
 describe("ProposeEventForm idempotency keys", () => {
@@ -46,5 +47,20 @@ describe("ProposeEventForm idempotency keys", () => {
 
     expect(secondSnakeKey).toMatch(/[0-9a-f-]{36}/i);
     expect(secondSnakeKey).not.toBe(firstSnakeKey);
+  });
+
+  it("warns inline when the proposal has too little notice", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-28T12:00:00Z"));
+
+    render(<ProposeEventForm venues={venues} />);
+
+    fireEvent.change(screen.getByLabelText("When is it?"), {
+      target: { value: "2026-07-01T19:00" },
+    });
+
+    expect(screen.getByText(/should have been entered by/i).textContent).toBe(
+      "Short notice: this event should have been entered by Thursday, 30 April 2026."
+    );
   });
 });

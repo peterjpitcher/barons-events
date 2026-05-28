@@ -9,7 +9,7 @@ vi.mock("@/lib/supabase/admin", () => ({
   createSupabaseAdminClient: vi.fn(),
 }));
 
-import { generateSopChecklist, loadSopTemplate } from "@/lib/planning/sop";
+import { generateSopChecklist, loadSopTemplate, shouldMarkEventTodosNotRequired } from "@/lib/planning/sop";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -87,6 +87,24 @@ describe("generateSopChecklist", () => {
     await expect(
       generateSopChecklist("planning-item-abc", "2026-06-15", "user-xyz")
     ).rejects.toThrow("relation does not exist");
+  });
+});
+
+describe("shouldMarkEventTodosNotRequired", () => {
+  it("marks event todos N/A before the June 11 cutover", () => {
+    expect(shouldMarkEventTodosNotRequired("2026-06-10", "2026-05-28")).toBe(true);
+  });
+
+  it("leaves June 11 event todos active before they have passed", () => {
+    expect(shouldMarkEventTodosNotRequired("2026-06-11", "2026-05-28")).toBe(false);
+  });
+
+  it("marks event todos N/A after the June 11 cutover", () => {
+    expect(shouldMarkEventTodosNotRequired("2026-06-12", "2026-05-28")).toBe(true);
+  });
+
+  it("marks event todos N/A once the event date has passed", () => {
+    expect(shouldMarkEventTodosNotRequired("2026-06-11", "2026-06-12")).toBe(true);
   });
 });
 

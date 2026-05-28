@@ -5,7 +5,7 @@ import {
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/types";
 import { normaliseOptionalText } from "@/lib/normalise";
-import { generateSopChecklist } from "@/lib/planning/sop";
+import { generateSopChecklist, normaliseSopNotRequiredTemplateIds } from "@/lib/planning/sop";
 import type {
   CreatePlanningItemInput,
   CreatePlanningSeriesInput,
@@ -382,6 +382,9 @@ async function generateOccurrencesForSeries(series: PlanningSeriesRow, throughDa
 
   if (insertedRows.length) {
     const templates = await getSeriesTaskTemplates(series.id);
+    const sopNotRequiredTemplateIds = normaliseSopNotRequiredTemplateIds(
+      (series as PlanningSeriesRow & { sop_not_required_template_ids?: string[] | null }).sop_not_required_template_ids ?? []
+    );
     await createTasksFromTemplates({
       series,
       templates,
@@ -391,7 +394,9 @@ async function generateOccurrencesForSeries(series: PlanningSeriesRow, throughDa
     // Generate SOP checklist for each new planning item
     for (const item of insertedRows) {
       try {
-        await generateSopChecklist(item.id, item.target_date, series.created_by);
+        await generateSopChecklist(item.id, item.target_date, series.created_by, {
+          notRequiredTemplateIds: sopNotRequiredTemplateIds
+        });
       } catch (sopError) {
         console.error(`SOP generation failed for occurrence ${item.id}:`, sopError);
       }
@@ -600,6 +605,7 @@ export async function listPlanningBoardData(params?: {
     .select(
       "id,title,status,start_at,end_at,venue_space,venue_id,public_title,public_teaser,venue:venues!events_venue_id_fkey(name),event_venues(venue_id)"
     )
+    .is("deleted_at", null)
     .order("start_at", { ascending: true });
 
   if (!unbounded) {
@@ -867,6 +873,7 @@ export async function createPlanningSeries(payload: CreatePlanningSeriesInput): 
     recurrence_monthday: payload.recurrenceMonthday ?? null,
     starts_on: payload.startsOn,
     ends_on: payload.endsOn ?? null,
+    sop_not_required_template_ids: normaliseSopNotRequiredTemplateIds(payload.sopNotRequiredTemplateIds ?? []),
     is_active: true,
     generated_through: null
   };
@@ -943,6 +950,9 @@ export async function updatePlanningSeries(seriesId: string, updates: UpdatePlan
   }
   if (Object.prototype.hasOwnProperty.call(updates, "endsOn")) {
     updatePayload["ends_on"] = updates.endsOn ?? null;
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, "sopNotRequiredTemplateIds")) {
+    updatePayload["sop_not_required_template_ids"] = normaliseSopNotRequiredTemplateIds(updates.sopNotRequiredTemplateIds ?? []);
   }
   if (Object.prototype.hasOwnProperty.call(updates, "isActive")) {
     updatePayload["is_active"] = updates.isActive;

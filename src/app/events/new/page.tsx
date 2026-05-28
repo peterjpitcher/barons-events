@@ -7,6 +7,7 @@ import { listVenues } from "@/lib/venues";
 import { listEventTypes } from "@/lib/event-types";
 import { listArtists } from "@/lib/artists";
 import { listAssignableUsers } from "@/lib/users";
+import { loadSopTemplate } from "@/lib/planning/sop";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -42,12 +43,13 @@ export default async function NewEventPage({ searchParams }: PageProps) {
     searchParams?.then((params) => params as SearchParams).catch(() => ({} as SearchParams)) ??
     Promise.resolve({} as SearchParams);
 
-  const [resolvedSearchParams, venues, eventTypes, artists, assignableUsers] = await Promise.all([
+  const [resolvedSearchParams, venues, eventTypes, artists, assignableUsers, sopTemplate] = await Promise.all([
     searchParamsPromise,
     listVenues(),
     listEventTypes(),
     listArtists(),
-    listAssignableUsers()
+    listAssignableUsers(),
+    loadSopTemplate()
   ]);
   const eventVenues =
     user.role === "office_worker" && user.venueId
@@ -83,6 +85,7 @@ export default async function NewEventPage({ searchParams }: PageProps) {
         initialEndAt={initialEndAt}
         initialVenueId={initialVenueId}
         users={assignableUsers.map((u) => ({ id: u.id, name: u.name }))}
+        sopTemplate={sopTemplate}
       />
     </div>
   );

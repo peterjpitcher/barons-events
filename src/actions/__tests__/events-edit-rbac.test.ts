@@ -41,6 +41,7 @@ vi.mock("@/lib/artists", () => ({
 vi.mock("@/lib/notifications", () => ({
   sendAssigneeReassignmentEmail: vi.fn(),
   sendEventSubmittedEmail: vi.fn(),
+  sendNewEventAnnouncementEmail: vi.fn(),
   sendReviewDecisionEmail: vi.fn(),
 }));
 vi.mock("@/lib/ai", () => ({
@@ -264,7 +265,11 @@ describe("submitEventForReviewAction — create path venue rules", () => {
       createdEvent.title,
       createdEvent.start_at,
       createdEvent.venue_id,
-      USER_A
+      USER_A,
+      {
+        venueIds: [VENUE_A],
+        notRequiredTemplateIds: [],
+      }
     );
     expect(redirect).toHaveBeenCalledWith(`/events/${createdEvent.id}`);
   });
@@ -296,7 +301,11 @@ describe("submitEventForReviewAction — create path venue rules", () => {
       createdEvent.title,
       createdEvent.start_at,
       createdEvent.venue_id,
-      USER_A
+      USER_A,
+      {
+        venueIds: [VENUE_A],
+        notRequiredTemplateIds: [],
+      }
     );
     expect(redirect).toHaveBeenCalledWith(`/events/${createdEvent.id}`);
   });
@@ -312,7 +321,11 @@ describe("submitEventForReviewAction — create path venue rules", () => {
       createdEvent.title,
       createdEvent.start_at,
       createdEvent.venue_id,
-      USER_A
+      USER_A,
+      {
+        venueIds: [VENUE_A],
+        notRequiredTemplateIds: [],
+      }
     );
     expect(redirect).toHaveBeenCalledWith(`/events/${createdEvent.id}`);
   });

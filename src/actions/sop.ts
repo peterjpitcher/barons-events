@@ -645,7 +645,7 @@ export async function backfillSopChecklistsAction(): Promise<BackfillSopResult> 
     // ── Step 1: Events without a linked planning item ──────────────────────
     const { data: allEvents, error: eventsError } = await db
       .from("events")
-      .select("id, title, start_at, venue_id")
+      .select("id, title, start_at, venue_id, event_venues(venue_id)")
       .is("deleted_at", null);
 
     if (eventsError) throw new Error(`Failed to fetch events: ${eventsError.message}`);
@@ -664,12 +664,24 @@ export async function backfillSopChecklistsAction(): Promise<BackfillSopResult> 
     for (const event of allEvents ?? []) {
       if (linkedEventIds.has(event.id)) continue;
       try {
+        const linkedVenueIds = Array.from(
+          new Set(
+            [
+              event.venue_id,
+              ...(((event as { event_venues?: Array<{ venue_id: string | null }> }).event_venues ?? [])
+                .map((link) => link.venue_id))
+            ].filter((id): id is string => Boolean(id))
+          )
+        );
         await createEventPlanningItem(
           event.id,
           event.title,
           event.start_at,
           event.venue_id,
-          user.id
+          user.id,
+          {
+            venueIds: linkedVenueIds
+          }
         );
         eventsLinked++;
       } catch (err) {
@@ -682,7 +694,7 @@ export async function backfillSopChecklistsAction(): Promise<BackfillSopResult> 
     // generateSopChecklist is idempotent — returns 0 if already generated
     const { data: allItems, error: itemsError } = await db
       .from("planning_items")
-      .select("id, target_date")
+      .select("id, target_date, event_id")
       .neq("status", "cancelled");
 
     if (itemsError) throw new Error(`Failed to fetch planning items: ${itemsError.message}`);
@@ -694,7 +706,9 @@ export async function backfillSopChecklistsAction(): Promise<BackfillSopResult> 
       }
 
       try {
-        const count = await generateSopChecklist(item.id, item.target_date, user.id);
+        const count = await generateSopChecklist(item.id, item.target_date, user.id, {
+          applyEventTodoRules: Boolean(item.event_id)
+        });
         if (count > 0) {
           checklistsGenerated++;
         } else {

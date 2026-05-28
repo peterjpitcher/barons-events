@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Copy, ExternalLink, Loader2 } from "lucide-react";
 import { updateBookingSettingsAction } from "@/actions/events";
@@ -53,30 +53,12 @@ export function BookingSettingsCard({
   const [smsPromoEnabled, setSmsPromoEnabled] = useState(initialSmsPromoEnabled);
   const [bookingUrl, setBookingUrl] = useState(initialBookingUrl ?? "");
   const [isPending, startTransition] = useTransition();
-  const formRef = useRef<HTMLFormElement>(null);
-  const [isFormVisible, setIsFormVisible] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   // Keep local slug in sync when the prop changes (e.g. after save)
   useEffect(() => {
     setCurrentSlug(initialSeoSlug);
   }, [initialSeoSlug]);
-
-  useEffect(() => {
-    const node = formRef.current;
-    if (!node || typeof IntersectionObserver === "undefined") {
-      setIsFormVisible(true);
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      ([entry]) => setIsFormVisible(entry.isIntersecting),
-      { rootMargin: "0px 0px -15% 0px", threshold: 0 }
-    );
-    observer.observe(node);
-
-    return () => observer.disconnect();
-  }, []);
 
   const landingUrl = currentSlug ? `https://${LANDING_BASE}/${currentSlug}` : null;
   const bookingFormat = isBookingFormat(bookingType) ? bookingType : null;
@@ -142,7 +124,6 @@ export function BookingSettingsCard({
           <span className="font-mono text-xs">{LANDING_BASE}/…</span>
         </p>
         <form
-          ref={formRef}
           onSubmit={handleSave}
           onChange={() => setHasUnsavedChanges(true)}
           className="space-y-3"
@@ -347,19 +328,20 @@ export function BookingSettingsCard({
             </div>
           )}
 
-          {isFormVisible || hasUnsavedChanges ? (
-            <div className="fixed bottom-[4.75rem] right-4 z-[70] max-w-[calc(100vw-2rem)] sm:bottom-[5.25rem] sm:right-6">
-              <Button
-                type="submit"
-                variant="secondary"
-                disabled={isPending}
-                className="w-full justify-center rounded-[10px] shadow-card sm:w-auto"
-              >
-                {isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
-                {isPending ? "Saving..." : "Save booking settings"}
-              </Button>
-            </div>
-          ) : null}
+          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-[var(--hair)] pt-3">
+            {hasUnsavedChanges ? (
+              <p className="mr-auto text-xs font-medium text-[var(--amber)]">Unsaved booking changes</p>
+            ) : null}
+            <Button
+              type="submit"
+              variant="secondary"
+              disabled={isPending}
+              className="w-full justify-center sm:w-auto"
+            >
+              {isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
+              {isPending ? "Saving..." : "Save booking settings"}
+            </Button>
+          </div>
         </form>
       </CardContent>
     </Card>

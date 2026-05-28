@@ -21,7 +21,7 @@ import { canCreatePlanningItems, canManageAllPlanning, canViewPlanning } from "@
 import type { AppUser, UserRole } from "@/lib/types";
 import { createSupabaseActionClient, createSupabaseReadonlyClient } from "@/lib/supabase/server";
 import { generateInspirationItems } from "@/lib/planning/inspiration";
-import { generateSopChecklist, recalculateSopDates, updateBlockedStatus } from "@/lib/planning/sop";
+import { generateSopChecklist, normaliseSopNotRequiredTemplateIds, recalculateSopDates, updateBlockedStatus } from "@/lib/planning/sop";
 import { recordAuditLogEntry } from "@/lib/audit-log";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { canCreatePlanningForVenueSelection, canEditVenueLinkedPlanning } from "@/lib/visibility";
@@ -73,7 +73,8 @@ const createItemSchema = z.object({
   venueIds: z.array(z.string().uuid()).optional(),
   ownerId: optionalUuidSchema,
   targetDate: dateSchema,
-  status: planningStatusSchema.optional()
+  status: planningStatusSchema.optional(),
+  sopNotRequiredTemplateIds: z.array(z.string().uuid()).optional()
 });
 
 /** Calls the set_planning_item_venues helper to sync the join table. */
@@ -166,7 +167,9 @@ export async function createPlanningItemAction(input: unknown): Promise<Planning
     await syncPlanningItemVenueAttachments(item.id, venueIds);
 
     try {
-      await generateSopChecklist(item.id, item.target_date, user.id);
+      await generateSopChecklist(item.id, item.target_date, user.id, {
+        notRequiredTemplateIds: normaliseSopNotRequiredTemplateIds(parsed.data.sopNotRequiredTemplateIds ?? [])
+      });
     } catch (sopError) {
       console.error("SOP checklist generation failed:", sopError);
     }
@@ -378,6 +381,7 @@ const createSeriesSchema = z
     recurrenceMonthday: z.number().int().min(1).max(31).optional().nullable(),
     startsOn: dateSchema,
     endsOn: dateSchema.optional().nullable(),
+    sopNotRequiredTemplateIds: z.array(z.string().uuid()).optional(),
     taskTemplates: z.array(taskTemplateSchema).optional()
   })
   .superRefine((values, ctx) => {
@@ -442,6 +446,7 @@ export async function createPlanningSeriesAction(input: unknown): Promise<Planni
       recurrenceMonthday: parsed.data.recurrenceMonthday ?? null,
       startsOn: parsed.data.startsOn,
       endsOn: parsed.data.endsOn ?? null,
+      sopNotRequiredTemplateIds: normaliseSopNotRequiredTemplateIds(parsed.data.sopNotRequiredTemplateIds ?? []),
       taskTemplates: parsed.data.taskTemplates?.map((template) => ({
         title: template.title,
         defaultAssigneeId: template.defaultAssigneeId ? template.defaultAssigneeId : null,
@@ -508,6 +513,10 @@ export async function updatePlanningSeriesAction(input: unknown): Promise<Planni
       recurrenceMonthday: parsed.data.recurrenceMonthday ?? undefined,
       startsOn: parsed.data.startsOn,
       endsOn: parsed.data.endsOn ?? undefined,
+      sopNotRequiredTemplateIds:
+        parsed.data.sopNotRequiredTemplateIds === undefined
+          ? undefined
+          : normaliseSopNotRequiredTemplateIds(parsed.data.sopNotRequiredTemplateIds),
       taskTemplates: parsed.data.taskTemplates?.map((template) => ({
         title: template.title,
         defaultAssigneeId: template.defaultAssigneeId ? template.defaultAssigneeId : null,

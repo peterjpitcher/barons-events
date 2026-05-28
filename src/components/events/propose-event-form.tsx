@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { proposeEventAction } from "@/actions/pre-event";
@@ -20,8 +20,37 @@ type ProposeEventFormProps = {
   defaultVenueId?: string | null;
 };
 
+const REQUIRED_NOTICE_DAYS = 62;
+
+function todayIsoDate(): string {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function addDaysIsoDate(dateString: string, days: number): string {
+  const [year, month, day] = dateString.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function formatIsoDate(dateString: string): string {
+  const [year, month, day] = dateString.split("-").map(Number);
+  return new Intl.DateTimeFormat("en-GB", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC"
+  }).format(new Date(Date.UTC(year, month - 1, day)));
+}
+
 export function ProposeEventForm({ venues, defaultVenueId }: ProposeEventFormProps) {
   const [state, formAction, isPending] = useActionState(proposeEventAction, undefined);
+  const [startAt, setStartAt] = useState("");
   const [selectedVenueIds, setSelectedVenueIds] = useState<string[]>(() => {
     if (defaultVenueId && venues.some((v) => v.id === defaultVenueId)) {
       return [defaultVenueId];
@@ -42,6 +71,13 @@ export function ProposeEventForm({ venues, defaultVenueId }: ProposeEventFormPro
       : "00000000-0000-4000-8000-000000000003"
   );
   const router = useRouter();
+  const shortNoticeEnteredByDate = useMemo(() => {
+    if (!startAt) return null;
+    const eventDate = startAt.slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(eventDate)) return null;
+    const enteredByDate = addDaysIsoDate(eventDate, -REQUIRED_NOTICE_DAYS);
+    return enteredByDate < todayIsoDate() ? enteredByDate : null;
+  }, [startAt]);
 
   useEffect(() => {
     if (state?.message) {
@@ -69,7 +105,19 @@ export function ProposeEventForm({ venues, defaultVenueId }: ProposeEventFormPro
       </div>
       <div className="space-y-2">
         <Label htmlFor="propose-start">When is it?</Label>
-        <Input id="propose-start" name="startAt" type="datetime-local" required />
+        <Input
+          id="propose-start"
+          name="startAt"
+          type="datetime-local"
+          value={startAt}
+          required
+          onChange={(event) => setStartAt(event.target.value)}
+        />
+        {shortNoticeEnteredByDate ? (
+          <p className="rounded-[6px] border border-[var(--mustard)] bg-[var(--mustard-tint)] px-2 py-1.5 text-xs text-[var(--mustard-dark)]" role="status">
+            Short notice: this event should have been entered by {formatIsoDate(shortNoticeEnteredByDate)}.
+          </p>
+        ) : null}
       </div>
 
       <div className="space-y-2">

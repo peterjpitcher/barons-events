@@ -24,6 +24,7 @@ import { FieldError } from "@/components/ui/field-error";
 import { EventFormContext } from "@/components/events/event-form-context";
 import { WebsiteListingCard } from "@/components/events/website-listing-card";
 import { FloatingActionBar } from "@/components/events/floating-action-bar";
+import { SopNotRequiredPicker } from "@/components/planning/sop-not-required-picker";
 import {
   BOOKING_FORMAT_LABELS,
   BOOKING_FORMATS,
@@ -39,6 +40,7 @@ import type { EventSummary } from "@/lib/events";
 import type { UserRole } from "@/lib/types";
 import type { ArtistOption } from "@/lib/artists";
 import type { VenueRow } from "@/lib/venues";
+import type { SopTemplateTree } from "@/lib/planning/sop-types";
 
 export type EventFormProps = {
   mode: "create" | "edit";
@@ -52,6 +54,7 @@ export type EventFormProps = {
   initialEndAt?: string;
   initialVenueId?: string;
   users?: Array<{ id: string; name: string }>;
+  sopTemplate?: SopTemplateTree;
   /**
    * Gates the inline Delete button rendered inside the form actions. Caller
    * is responsible for computing this via canEditEventFromRow so the UI,
@@ -196,6 +199,7 @@ export function EventForm({
   initialEndAt,
   initialVenueId,
   users,
+  sopTemplate,
   canDelete = false,
   readOnly = false,
   debrief = null
@@ -424,6 +428,7 @@ export function EventForm({
   const [eventNotes, setEventNotes] = useState(defaultValues?.notes ?? "");
   const [managerResponsibleId, setManagerResponsibleId] = useState<string>((defaultValues as any)?.manager_responsible_id ?? "");
   const [managerDirty, setManagerDirty] = useState(Boolean((defaultValues as any)?.manager_responsible_id));
+  const [sopNotRequiredTemplateIds, setSopNotRequiredTemplateIds] = useState<string[]>([]);
   const [bookingType, setBookingType] = useState(defaultValues?.booking_type ?? "");
   const selectedBookingFormat = isBookingFormat(bookingType) ? bookingType : null;
   const isFreeBookingSelected = selectedBookingFormat ? isFreeBookingFormat(selectedBookingFormat) : false;
@@ -1753,6 +1758,8 @@ export function EventForm({
     </div>
   ) : null;
 
+  const showSopRail = mode === "create" && Boolean(sopTemplate);
+
   // ─── Two-column layout ────────────────────────────────────────────────────
 
   return (
@@ -1760,6 +1767,7 @@ export function EventForm({
       <form
         ref={formRef}
         action={draftAction}
+        className={!readOnly ? "pb-28" : undefined}
         noValidate
         onSubmit={handleSubmit}
         onChange={() => setIsDirty(true)}
@@ -1799,73 +1807,93 @@ export function EventForm({
         <button ref={proxyGenerateRef} type="submit" formAction={activeWebsiteCopyAction} data-intent="generate" aria-hidden="true" tabIndex={-1} className="sr-only" />
 
         <fieldset disabled={isPending || readOnly} className="disabled:opacity-60">
-          {/* Two-column layout */}
-          <div className="grid gap-4 lg:grid-cols-2">
-            {/* Left column: Event Details */}
-            <Card>
-              <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--navy)] px-4 py-2.5">
-                <CardTitle className="text-sm font-semibold uppercase tracking-wider !text-white">
-                  Event Details
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 p-3">
-                {/* Row 1: Title + Venue (side by side — already a grid) */}
-                {titleAndVenueFields}
+          <div className={cn("min-w-0", showSopRail ? "grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]" : "")}>
+            <div className="min-w-0">
+              {/* Two-column layout */}
+              <div className="grid gap-4 lg:grid-cols-2">
+                {/* Left column: Event Details */}
+                <Card>
+                  <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--navy)] px-4 py-2.5">
+                    <CardTitle className="text-sm font-semibold uppercase tracking-wider !text-white">
+                      Event Details
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3 p-3">
+                    {/* Row 1: Title + Venue (side by side — already a grid) */}
+                    {titleAndVenueFields}
 
-                {/* Row 2: Event type + Manager side by side */}
-                <div className="grid gap-3 md:grid-cols-2">
-                  <div>{eventTypeField}</div>
-                  <div>{managerResponsibleField}</div>
-                </div>
+                    {/* Row 2: Event type + Manager side by side */}
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div>{eventTypeField}</div>
+                      <div>{managerResponsibleField}</div>
+                    </div>
 
-                {/* Row 3: Timing (Start + End — already a grid) */}
-                {timingFields}
+                    {/* Row 3: Timing (Start + End — already a grid) */}
+                    {timingFields}
 
-                {/* Row 4: Spaces + Artists side by side */}
-                <div className="grid gap-3 md:grid-cols-2">
-                  <div>{spacesField}</div>
-                  <div>{artistsField}</div>
-                </div>
+                    {/* Row 4: Spaces + Artists side by side */}
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div>{spacesField}</div>
+                      <div>{artistsField}</div>
+                    </div>
 
-                {/* Row 5: Notes (full width textarea) */}
-                {notesField}
+                    {/* Row 5: Notes (full width textarea) */}
+                    {notesField}
 
-                {/* Row 6: Event image */}
-                {eventImageField}
-              </CardContent>
-            </Card>
+                    {/* Row 6: Event image */}
+                    {eventImageField}
+                  </CardContent>
+                </Card>
 
-            {/* Right column: Website Listing */}
-            <WebsiteListingCard
-              websiteFields={websiteFields}
-              generateAction={activeWebsiteCopyAction}
-              canGenerate={canGenerateWebsiteCopy}
-              readOnly={readOnly}
-            />
+                {/* Right column: Website Listing */}
+                <WebsiteListingCard
+                  websiteFields={websiteFields}
+                  generateAction={activeWebsiteCopyAction}
+                  canGenerate={canGenerateWebsiteCopy}
+                  readOnly={readOnly}
+                />
+              </div>
+
+              {/* Lower: Booking & Ticketing */}
+              <Card className="mt-4">
+                <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--navy)] px-4 py-2.5">
+                  <CardTitle className="text-sm font-semibold uppercase tracking-wider !text-white">
+                    Booking &amp; Ticketing
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 p-3">
+                  {promosFields}
+                  {headcountField}
+                  {bookingFields}
+                  {cutoffAndCancellationFields}
+                  {agePolicyAndAccessibilityFields}
+                  {termsField}
+                  {financialsSection}
+                  {goalsSection}
+                </CardContent>
+              </Card>
+            </div>
+
+            {showSopRail ? (
+              <SopNotRequiredPicker
+                template={sopTemplate}
+                value={sopNotRequiredTemplateIds}
+                onChange={setSopNotRequiredTemplateIds}
+                disabled={isPending || readOnly}
+                name="sopNotRequiredTemplateIds"
+                variant="rail"
+                className="xl:sticky xl:top-[72px] xl:self-start"
+              />
+            ) : null}
           </div>
-
-          {/* Lower: Booking & Ticketing */}
-          <Card className="mt-4">
-            <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--navy)] px-4 py-2.5">
-              <CardTitle className="text-sm font-semibold uppercase tracking-wider !text-white">
-                Booking &amp; Ticketing
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 p-3">
-              {promosFields}
-              {headcountField}
-              {bookingFields}
-              {cutoffAndCancellationFields}
-              {agePolicyAndAccessibilityFields}
-              {termsField}
-              {financialsSection}
-              {goalsSection}
-            </CardContent>
-          </Card>
         </fieldset>
       </form>
 
-      {!readOnly ? <FloatingActionBar /> : null}
+      {!readOnly ? (
+        <FloatingActionBar
+          className={showSopRail ? "xl:right-[calc(1.5rem+320px+1rem)]" : undefined}
+        />
+      ) : null}
 
       {artistModal}
       {termsModal}

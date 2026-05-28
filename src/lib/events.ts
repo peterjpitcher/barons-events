@@ -612,15 +612,40 @@ export async function createEventDraft(payload: {
  * Create a linked planning item for an event and generate SOP checklist.
  * Called after event creation.
  */
+type EventPlanningItemOptions = {
+  venueIds?: string[];
+  notRequiredTemplateIds?: string[];
+  applyEventTodoRules?: boolean;
+};
+
+async function syncPlanningItemVenues(planningItemId: string, venueIds: string[]): Promise<void> {
+  const db = createSupabaseAdminClient();
+
+  const { error } = await (db as any).rpc("set_planning_item_venues", {
+    p_item_id: planningItemId,
+    p_venue_ids: venueIds
+  });
+
+  if (error) {
+    console.error("syncPlanningItemVenues RPC failed:", error);
+  }
+}
+
 export async function createEventPlanningItem(
   eventId: string,
   eventTitle: string,
   startAt: string,
   venueId: string | null,
-  createdBy: string
+  createdBy: string,
+  options: EventPlanningItemOptions = {}
 ): Promise<void> {
   const db = createSupabaseAdminClient();
   const targetDate = startAt.slice(0, 10); // Extract YYYY-MM-DD from ISO timestamp
+  const venueIds = options.venueIds && options.venueIds.length > 0
+    ? options.venueIds
+    : venueId
+      ? [venueId]
+      : [];
 
   const { data: planningItem, error } = await db
     .from("planning_items")
@@ -638,7 +663,58 @@ export async function createEventPlanningItem(
 
   if (error) throw error;
 
-  await generateSopChecklist(planningItem.id, targetDate, createdBy);
+  await syncPlanningItemVenues(planningItem.id, venueIds);
+
+  await generateSopChecklist(planningItem.id, targetDate, createdBy, {
+    notRequiredTemplateIds: options.notRequiredTemplateIds,
+    applyEventTodoRules: options.applyEventTodoRules ?? true
+  });
+}
+
+export async function ensureEventPlanningItem(
+  eventId: string,
+  createdBy: string,
+  options: EventPlanningItemOptions = {}
+): Promise<void> {
+  const db = createSupabaseAdminClient();
+
+  const { data: existing, error: existingError } = await (db as any)
+    .from("planning_items")
+    .select("id")
+    .eq("event_id", eventId)
+    .maybeSingle();
+
+  if (existingError) throw existingError;
+  if (existing?.id) return;
+
+  const { data: event, error: eventError } = await (db as any)
+    .from("events")
+    .select("id,title,start_at,venue_id,event_venues(venue_id)")
+    .eq("id", eventId)
+    .maybeSingle();
+
+  if (eventError) throw eventError;
+  if (!event) return;
+
+  const linkedVenueIds = Array.from(
+    new Set(
+      ((event.event_venues ?? []) as Array<{ venue_id: string | null }>)
+        .map((link) => link.venue_id)
+        .filter((id): id is string => Boolean(id))
+    )
+  );
+
+  await createEventPlanningItem(
+    event.id,
+    event.title,
+    event.start_at,
+    event.venue_id,
+    createdBy,
+    {
+      ...options,
+      venueIds: options.venueIds && options.venueIds.length > 0 ? options.venueIds : linkedVenueIds
+    }
+  );
 }
 
 export async function updateEventDraft(eventId: string, updates: Partial<EventRow> & Record<string, unknown>, actorId?: string | null) {

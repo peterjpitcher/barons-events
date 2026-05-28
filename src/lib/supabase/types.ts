@@ -177,6 +177,7 @@ export interface Database {
           recurrence_monthday: number | null;
           starts_on: string;
           ends_on: string | null;
+          sop_not_required_template_ids: string[];
           is_active: boolean;
           generated_through: string | null;
           created_at: string;

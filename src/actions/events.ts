@@ -8,7 +8,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth";
 import { canReviewEvents, canProposeEvents, canEditEvent } from "@/lib/roles";
 import { loadEventEditContext } from "@/lib/events/edit-context";
-import { appendEventVersion, createEventDraft, createEventPlanningItem, recordApproval, softDeleteEvent, updateEventDraft, updateEventAssignee } from "@/lib/events";
+import { appendEventVersion, createEventDraft, createEventPlanningItem, ensureEventPlanningItem, recordApproval, softDeleteEvent, updateEventDraft, updateEventAssignee } from "@/lib/events";
 import {
   buildSaveEventDraftPayload,
   callSaveEventDraftRpc,
@@ -21,11 +21,12 @@ import { eventDraftSchema, eventFormSchema, bookingUrlSchema } from "@/lib/valid
 import { getFieldErrors } from "@/lib/form-errors";
 import type { ActionResult, EventStatus } from "@/lib/types";
 import type { Database } from "@/lib/supabase/database.types";
-import { sendAssigneeReassignmentEmail, sendEventSubmittedEmail, sendReviewDecisionEmail } from "@/lib/notifications";
+import { sendAssigneeReassignmentEmail, sendEventSubmittedEmail, sendNewEventAnnouncementEmail, sendReviewDecisionEmail } from "@/lib/notifications";
 import { recordAuditLogEntry } from "@/lib/audit-log";
 import { generateTermsAndConditions, generateWebsiteCopy, type GeneratedWebsiteCopy } from "@/lib/ai";
 import { isBookingFormat, isFreeBookingFormat, type BookingFormat } from "@/lib/booking-format";
 import { normaliseEventDateTimeForStorage } from "@/lib/datetime";
+import { normaliseSopNotRequiredTemplateIds } from "@/lib/planning/sop";
 import {
   normaliseOptionalText as normaliseOptionalTextField,
   normaliseOptionalNumber as normaliseOptionalNumberField,
@@ -811,6 +812,9 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
   const fallbackVenueId = typeof fallbackVenueIdValue === "string" ? fallbackVenueIdValue : "";
   const requestedVenueIds =
     rawVenueIds.length > 0 ? rawVenueIds : fallbackVenueId ? [fallbackVenueId] : [];
+  const sopNotRequiredTemplateIds = normaliseSopNotRequiredTemplateIds(
+    formData.getAll("sopNotRequiredTemplateIds")
+  );
 
   const venueIds = requestedVenueIds;
   if (!canOfficeWorkerUseVenueSelection(user, venueIds)) {
@@ -956,6 +960,16 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
     }
 
     if (result.success) {
+      if (isCreate && result.eventId) {
+        try {
+          await ensureEventPlanningItem(result.eventId, user.id, {
+            venueIds,
+            notRequiredTemplateIds: sopNotRequiredTemplateIds
+          });
+        } catch (sopError) {
+          console.error(`[event-save:${operationId.slice(0, 8)}] RPC planning item generation failed:`, sopError);
+        }
+      }
       revalidatePath("/events");
       if (result.eventId) revalidatePath(`/events/${result.eventId}`);
       logEventAction({
@@ -1211,7 +1225,11 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
         created.title,
         created.start_at,
         created.venue_id,
-        user.id
+        user.id,
+        {
+          venueIds,
+          notRequiredTemplateIds: sopNotRequiredTemplateIds
+        }
       );
     } catch (sopError) {
       console.error(`[event-save:${operationId.slice(0, 8)}] SOP checklist generation failed:`, sopError);
@@ -1341,6 +1359,7 @@ export async function submitEventForReviewAction(
     }
     const idempotencyKey = readIdempotencyKey(formData);
     const expectedUpdatedAt = readExpectedUpdatedAt(formData);
+    const preSubmitContext = await loadEventEditContext(parsedId.data);
     const assigneeId = (() => {
       const parsed = reviewerFallback.safeParse(assigneeOverride);
       return parsed.success ? parsed.data ?? null : null;
@@ -1366,6 +1385,9 @@ export async function submitEventForReviewAction(
     }
 
     if (result.success) {
+      if (preSubmitContext?.status === "draft") {
+        void sendNewEventAnnouncementEmail(parsedId.data);
+      }
       revalidatePath(`/events/${parsedId.data}`);
       revalidatePath("/events");
       revalidatePath("/reviews");
@@ -1403,6 +1425,9 @@ export async function submitEventForReviewAction(
       const fallbackVenueId = typeof fallbackVenueIdValue === "string" ? fallbackVenueIdValue : "";
       const requestedVenueIds =
         rawVenueIds.length > 0 ? rawVenueIds : fallbackVenueId ? [fallbackVenueId] : [];
+      const sopNotRequiredTemplateIds = normaliseSopNotRequiredTemplateIds(
+        formData.getAll("sopNotRequiredTemplateIds")
+      );
       const venueIds = requestedVenueIds;
       if (!canOfficeWorkerUseVenueSelection(user, venueIds)) {
         return {
@@ -1524,7 +1549,11 @@ export async function submitEventForReviewAction(
           created.title,
           created.start_at,
           created.venue_id,
-          user.id
+          user.id,
+          {
+            venueIds,
+            notRequiredTemplateIds: sopNotRequiredTemplateIds
+          }
         );
       } catch (sopError) {
         console.error(`[event-submit:${operationId.slice(0, 8)}] SOP checklist generation failed:`, sopError);
@@ -1660,6 +1689,9 @@ export async function submitEventForReviewAction(
       });
 
       await sendReviewDecisionEmail(targetEventId, "approved");
+      if (existingEvent.status === "draft") {
+        void sendNewEventAnnouncementEmail(targetEventId);
+      }
 
       revalidatePath(`/events/${targetEventId}`);
       revalidatePath("/events");
@@ -1753,6 +1785,9 @@ export async function submitEventForReviewAction(
       });
 
       await sendEventSubmittedEmail(targetEventId);
+      if (statusBefore === "draft") {
+        void sendNewEventAnnouncementEmail(targetEventId);
+      }
 
       revalidatePath(`/events/${targetEventId}`);
       revalidatePath("/events");
@@ -2316,6 +2351,81 @@ const uuidFormatSchema = z.string().regex(
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
   "Invalid UUID"
 );
+
+const archiveDraftEventSchema = z.object({
+  eventId: uuidFormatSchema,
+});
+
+export type ArchiveDraftEventInput = z.infer<typeof archiveDraftEventSchema>;
+
+export async function archiveDraftEventAction(input: ArchiveDraftEventInput): Promise<ActionResult> {
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect("/login");
+  }
+
+  const parsed = archiveDraftEventSchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, message: "Invalid event reference." };
+  }
+
+  const { eventId } = parsed.data;
+  const ctx = await loadEventEditContext(eventId);
+  if (!ctx) {
+    return { success: false, message: "Event not found." };
+  }
+  if (!canEditEvent(user.role, user.id, user.venueId, ctx)) {
+    return { success: false, message: "You don't have permission to archive this draft event." };
+  }
+  if (ctx.status !== "draft") {
+    return { success: false, message: "Only draft events can be archived from the planning board." };
+  }
+
+  const supabase = createSupabaseAdminClient();
+  const archivedAt = new Date().toISOString();
+
+  try {
+    const { data: archivedEvent, error: updateError } = await supabase
+      .from("events")
+      .update({
+        deleted_at: archivedAt,
+        deleted_by: user.id,
+        updated_at: archivedAt,
+      })
+      .eq("id", eventId)
+      .eq("status", "draft")
+      .is("deleted_at", null)
+      .select("id")
+      .maybeSingle();
+
+    if (updateError || !archivedEvent) {
+      return { success: false, message: "Could not archive the draft event." };
+    }
+
+    await recordAuditLogEntry({
+      entity: "event",
+      entityId: eventId,
+      action: "event.deleted",
+      actorId: user.id,
+      meta: {
+        status: "draft",
+        archivedFrom: "planning_board",
+        changes: ["Draft archived"],
+      },
+    });
+
+    revalidatePath("/planning");
+    revalidatePath("/events");
+    revalidatePath(`/events/${eventId}`);
+    revalidatePath("/");
+
+    return { success: true, message: "Draft event archived." };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "Unknown error";
+    console.error("archiveDraftEventAction failed:", detail, error);
+    return { success: false, message: "Could not archive the draft event. Please try again." };
+  }
+}
 
 export async function revertToDraftAction(
   _: ActionResult | undefined,

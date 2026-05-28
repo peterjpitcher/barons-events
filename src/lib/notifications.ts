@@ -31,6 +31,14 @@ type EventContext = EventRow & {
   debrief: DebriefRow | null;
 };
 
+type AnnouncementEventContext = EventRow & {
+  venue: { name: string | null } | null;
+  event_venues?: Array<{
+    venue_id: string | null;
+    venue: { name: string | null } | null;
+  }> | null;
+};
+
 type EmailContent = {
   headline: string;
   intro: string;
@@ -688,6 +696,47 @@ async function listUsersByRole(role: UserRow["role"]): Promise<Pick<UserRow, "id
   return (data ?? []) as Pick<UserRow, "id" | "email" | "full_name">[];
 }
 
+async function fetchAnnouncementEventContext(eventId: string): Promise<AnnouncementEventContext | null> {
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await (supabase as any)
+    .from("events")
+    .select(
+      `
+      *,
+      venue:venues!events_venue_id_fkey(name),
+      event_venues(venue_id, venue:venues(name))
+    `
+    )
+    .eq("id", eventId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Could not fetch event for announcement: ${error.message}`);
+  }
+
+  return (data as AnnouncementEventContext) ?? null;
+}
+
+async function listNewEventAnnouncementRecipients(
+  venueIds: Set<string>
+): Promise<Array<Pick<UserRow, "id" | "email" | "full_name" | "venue_id">>> {
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await (supabase as any)
+    .from("users")
+    .select("id,email,full_name,venue_id")
+    .is("deactivated_at", null)
+    .not("email", "is", null)
+    .order("full_name", { ascending: true });
+
+  if (error) {
+    throw new Error(`Could not list users for event announcement: ${error.message}`);
+  }
+
+  return ((data ?? []) as Array<Pick<UserRow, "id" | "email" | "full_name" | "venue_id">>)
+    .filter((user) => Boolean(user.email))
+    .filter((user) => !user.venue_id || venueIds.has(user.venue_id));
+}
+
 const dateFormatter = new Intl.DateTimeFormat("en-GB", {
   weekday: "short",
   day: "numeric",
@@ -766,6 +815,71 @@ export async function sendEventSubmittedEmail(eventId: string) {
     });
   } catch (error) {
     console.warn("Failed to send submission email", error);
+  }
+}
+
+export async function sendNewEventAnnouncementEmail(eventId: string): Promise<void> {
+  if (!areOperationalEmailsEnabled()) {
+    logNotificationSkipped("sendNewEventAnnouncementEmail", { eventId });
+    return;
+  }
+  const resend = getResendClient();
+  if (!resend) return;
+
+  try {
+    const event = await fetchAnnouncementEventContext(eventId);
+    if (!event) return;
+
+    const venueIds = new Set(
+      [
+        event.venue_id,
+        ...((event.event_venues ?? []).map((link) => link.venue_id))
+      ].filter((id): id is string => Boolean(id))
+    );
+    const venueNames = Array.from(
+      new Set(
+        [
+          event.venue?.name,
+          ...((event.event_venues ?? []).map((link) => link.venue?.name))
+        ].filter((name): name is string => Boolean(name))
+      )
+    );
+
+    const recipients = await listNewEventAnnouncementRecipients(venueIds);
+    if (!recipients.length) return;
+
+    const subject = `New event coming soon: ${event.title}`;
+    const venueLabel = venueNames.length ? venueNames.join(", ") : "Venue to be confirmed";
+
+    await Promise.allSettled(
+      recipients.map((recipient) => {
+        const { html, text } = renderEmailTemplate({
+          headline: "New event coming soon!",
+          intro: `${buildGreeting(recipient)} "${event.title}" has just been added to BaronsHub.`,
+          body: [
+            "The plan is now live for the team, with dates, venue details and next steps ready to review.",
+            "Open the event to see what is coming up and where your team fits in."
+          ],
+          button: { label: "Open event", url: eventLink(eventId) },
+          meta: [
+            `Event: ${event.title}`,
+            `Venue: ${venueLabel}`,
+            `When: ${formatEventWindow(event)}`,
+            formatSpacesLabel(event.venue_space)
+          ]
+        });
+
+        return resend.emails.send({
+          from: RESEND_FROM_ADDRESS,
+          to: recipient.email,
+          subject,
+          html,
+          text
+        });
+      })
+    );
+  } catch (error) {
+    console.warn("Failed to send new event announcement email", error);
   }
 }
 

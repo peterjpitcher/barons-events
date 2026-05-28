@@ -141,6 +141,7 @@ export type CreatePlanningSeriesInput = {
   recurrenceMonthday?: number | null;
   startsOn: string;
   endsOn?: string | null;
+  sopNotRequiredTemplateIds?: string[];
   taskTemplates?: SeriesTaskTemplateInput[];
 };
 
@@ -158,6 +159,7 @@ export type UpdatePlanningSeriesInput = {
   endsOn?: string | null;
   isActive?: boolean;
   generatedThrough?: string | null;
+  sopNotRequiredTemplateIds?: string[];
   taskTemplates?: SeriesTaskTemplateInput[];
 };
 

@@ -1,16 +1,15 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CalendarRange, Check, LayoutGrid, List, MoveHorizontal, Pin, Plus, RefreshCw, Search, Users } from "lucide-react";
+import { CalendarRange, Check, LayoutGrid, List, MoveHorizontal, Plus, RefreshCw, Search, Users } from "lucide-react";
 import { movePlanningItemDateAction, refreshInspirationItemsAction, togglePlanningTaskStatusAction } from "@/actions/planning";
 import { PlanningAlertStrip } from "@/components/planning/planning-alert-strip";
 import { PlanningCalendarView } from "@/components/planning/planning-calendar-view";
 import { PlanningItemCard, EventOverlayCard, InspirationItemCard } from "@/components/planning/planning-item-card";
-import { PlanningItemEditor } from "@/components/planning/planning-item-editor";
 import { PlanningListView } from "@/components/planning/planning-list-view";
-import { PlanningModal } from "@/components/planning/planning-modal";
 import { UnifiedTodoList } from "@/components/todos/unified-todo-list";
 import type { PlanningViewEntry } from "@/components/planning/view-types";
 import { Input } from "@/components/ui/input";
@@ -77,6 +76,20 @@ function sortByDateThenTitle<T extends { targetDate: string; title: string }>(ro
 }
 
 type ViewMode = "board" | "calendar" | "list" | "todos_by_person";
+type StatusScope = "open" | "closed" | "all";
+
+function isClosedPlanningStatus(status: PlanningItem["status"]): boolean {
+  return status === "done" || status === "cancelled";
+}
+
+function isClosedEventStatus(status: string): boolean {
+  return status === "completed" || status === "rejected" || status === "cancelled";
+}
+
+function matchesStatusScope(isClosed: boolean, scope: StatusScope): boolean {
+  if (scope === "all") return true;
+  return scope === "closed" ? isClosed : !isClosed;
+}
 
 const BUCKET_TONE_CLASS: Record<PlanningBucketKey, string> = {
   past: "bg-[var(--burgundy)]",
@@ -238,17 +251,21 @@ function TodoQueueRail({
 export function PlanningBoard({ data, calendarData, venues, canApproveEvents, userRole, currentUserId, currentUserVenueId, queueItems = [] }: PlanningBoardProps) {
   const router = useRouter();
   const [viewMode, setViewMode] = useState<ViewMode>("board");
-  const [isCreateModalOpen, setCreateModalOpen] = useState(false);
   const [showLater, setShowLater] = useState(false);
+  const [statusScope, setStatusScope] = useState<StatusScope>("open");
   const [search, setSearch] = useState("");
   const [venueFilter, setVenueFilter] = useState("");
   const [eventVisibility, setEventVisibility] = useState<"with_events" | "planning_only">("with_events");
   const [todoAlertFilter, setTodoAlertFilter] = useState<TodoAlertFilter | null>(null);
   const [isPending, startTransition] = useTransition();
+  const scopeData = statusScope === "open" ? data : calendarData ?? data;
 
   const filteredPlanningItems = useMemo(() => {
     const needle = search.trim().toLowerCase();
-    return data.planningItems.filter((item) => {
+    return scopeData.planningItems.filter((item) => {
+      if (!matchesStatusScope(isClosedPlanningStatus(item.status), statusScope)) {
+        return false;
+      }
       if (venueFilter && item.venueId !== venueFilter) {
         return false;
       }
@@ -263,11 +280,14 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
         .toLowerCase();
       return haystack.includes(needle);
     });
-  }, [data.planningItems, search, venueFilter]);
+  }, [scopeData.planningItems, search, statusScope, venueFilter]);
 
   const filteredEvents = useMemo(() => {
     const needle = search.trim().toLowerCase();
-    return data.events.filter((event) => {
+    return scopeData.events.filter((event) => {
+      if (!matchesStatusScope(isClosedEventStatus(event.status), statusScope)) {
+        return false;
+      }
       if (venueFilter && event.venueId !== venueFilter) {
         return false;
       }
@@ -279,7 +299,12 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
       const haystack = [event.title, event.venueName ?? "", event.venueSpace ?? "", event.status].join(" ").toLowerCase();
       return haystack.includes(needle);
     });
-  }, [data.events, search, venueFilter]);
+  }, [scopeData.events, search, statusScope, venueFilter]);
+
+  const visibleInspirationItems = useMemo(
+    () => (statusScope === "closed" ? [] : data.inspirationItems),
+    [data.inspirationItems, statusScope]
+  );
 
   const visibleEvents = useMemo(
     () => (eventVisibility === "with_events" ? filteredEvents : []),
@@ -338,13 +363,13 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
     const map: Record<PlanningBucketKey, PlanningInspirationItem[]> = {
       past: [], '0_30': [], '31_60': [], '61_90': [], later: [],
     };
-    for (const item of data.inspirationItems) {
+    for (const item of visibleInspirationItems) {
       const offset = daysBetween(data.today, item.eventDate);
       const bucket = bucketForPlanningOffset(offset);
       map[bucket].push(item);
     }
     return map;
-  }, [data.inspirationItems, data.today]);
+  }, [data.today, visibleInspirationItems]);
 
   const combinedByBucket = useMemo(() => {
     const typeOrder: Record<string, number> = { planning: 0, event: 1, inspiration: 2 };
@@ -403,7 +428,7 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
       startAt: event.startAt
     }));
 
-    const inspirationEntries: PlanningViewEntry[] = data.inspirationItems.map((item) => ({
+    const inspirationEntries: PlanningViewEntry[] = visibleInspirationItems.map((item) => ({
       id: `inspiration-${item.id}`,
       source: "inspiration",
       targetDate: item.eventDate,
@@ -418,7 +443,7 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
       if (lo !== ro) return lo - ro;
       return left.title.localeCompare(right.title);
     });
-  }, [filteredPlanningItems, visibleEvents, data.inspirationItems]);
+  }, [filteredPlanningItems, visibleEvents, visibleInspirationItems]);
 
   // ─── Calendar dataset ─────────────────────────────────────────────────────
   // The calendar view needs historic activity that's trimmed out of the
@@ -427,18 +452,9 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
   // callers still work.
   const calendarSource = calendarData ?? data;
 
-  // Client-side toggle to hide `done`/`cancelled` planning items and
-  // `completed`/`rejected` events. Defaults to SHOWING them so the
-  // calendar honours the "every event and planning item" contract when
-  // navigating historic months — the toggle lets the user hide them to
-  // focus on open work.
-  const [showDoneCancelled, setShowDoneCancelled] = useState(true);
-
   const calendarCombinedEntries = useMemo<PlanningViewEntry[]>(() => {
     const sourceOrder: Record<string, number> = { planning: 0, event: 1, inspiration: 2 };
     const needle = search.trim().toLowerCase();
-    const hiddenPlanningStatuses = new Set(["done", "cancelled"]);
-    const hiddenEventStatuses = new Set(["completed", "rejected"]);
 
     const matchesSearch = (haystack: string): boolean =>
       !needle.length || haystack.toLowerCase().includes(needle);
@@ -446,7 +462,7 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
     const planningEntries: PlanningViewEntry[] = calendarSource.planningItems
       .filter((item) => {
         if (venueFilter && item.venueId !== venueFilter) return false;
-        if (!showDoneCancelled && hiddenPlanningStatuses.has(item.status)) return false;
+        if (!matchesStatusScope(isClosedPlanningStatus(item.status), statusScope)) return false;
         const taskValue = item.tasks.map((task) => task.title).join(" ");
         return matchesSearch(
           [item.title, item.typeLabel, item.description ?? "", item.ownerName ?? "", taskValue].join(" ")
@@ -467,7 +483,7 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
         ? calendarSource.events
             .filter((event) => {
               if (venueFilter && event.venueId !== venueFilter) return false;
-              if (!showDoneCancelled && hiddenEventStatuses.has(event.status)) return false;
+              if (!matchesStatusScope(isClosedEventStatus(event.status), statusScope)) return false;
               return matchesSearch(
                 [event.title, event.venueName ?? "", event.venueSpace ?? "", event.status].join(" ")
               );
@@ -491,7 +507,7 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
       if (lo !== ro) return lo - ro;
       return left.title.localeCompare(right.title);
     });
-  }, [calendarSource, search, venueFilter, eventVisibility, showDoneCancelled]);
+  }, [calendarSource, search, venueFilter, eventVisibility, statusScope]);
 
   function switchView(mode: ViewMode): void {
     setViewMode(mode);
@@ -559,7 +575,7 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
             <span className="h-1 w-1 rounded-full bg-[var(--hair-strong)]" />
             <span>{visibleEvents.length} events</span>
             <span className="h-1 w-1 rounded-full bg-[var(--hair-strong)]" />
-            <span>{data.inspirationItems.length} inspiration</span>
+            <span>{visibleInspirationItems.length} inspiration</span>
             <span className="h-1 w-1 rounded-full bg-[var(--hair-strong)]" />
             <span className="text-[var(--ink-soft)]">Updated now</span>
           </>
@@ -567,8 +583,10 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
         actions={
           <>
             {userRole && canCreatePlanningItems(userRole, currentUserVenueId) && (
-              <Button type="button" onClick={() => setCreateModalOpen(true)}>
-                <Plus className="h-4 w-4" aria-hidden="true" /> New item
+              <Button asChild>
+                <Link href="/planning/new">
+                  <Plus className="h-4 w-4" aria-hidden="true" /> New item
+                </Link>
               </Button>
             )}
             <div className="inline-flex h-8 items-center rounded-[7px] border border-[var(--hair)] bg-[var(--paper)] p-1">
@@ -621,6 +639,7 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
             // Clear search/venue filters so counts match the alert strip numbers
             setSearch("");
             setVenueFilter("");
+            setStatusScope("open");
           }
           if (viewMode !== "todos_by_person") {
             setViewMode("todos_by_person");
@@ -629,28 +648,34 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
       />
 
       <section className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          className="inline-flex h-7 items-center gap-1.5 rounded-[7px] border border-[var(--hair)] bg-[var(--paper)] px-2.5 text-xs font-medium text-[var(--ink)]"
-        >
-          <Pin className="h-3.5 w-3.5 text-[var(--mustard)]" aria-hidden="true" />
-          All open items
-        </button>
-        <div className="h-5 w-px bg-[var(--hair)]" />
-        <div className="relative">
+        <div className="flex h-8 w-full items-center md:w-44">
+          <Select
+            value={statusScope}
+            onChange={(event) => setStatusScope(event.target.value as StatusScope)}
+            className="h-8 w-full py-0 text-xs leading-4"
+            aria-label="Item status scope"
+          >
+            <option value="open">All open items</option>
+            <option value="closed">Completed / cancelled</option>
+            <option value="all">All items</option>
+          </Select>
+        </div>
+        <div className="h-6 w-px bg-[var(--hair)]" />
+        <div className="relative h-8 w-full md:w-64">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--ink-soft)]" aria-hidden="true" />
           <Input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search"
-            className="h-7 w-full pl-8 pr-9 text-xs md:w-64"
+            className="h-8 w-full pl-8 pr-9 text-xs"
           />
           <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2">
             <Kbd>/</Kbd>
           </span>
         </div>
-        <div className="h-5 w-px bg-[var(--hair)]" />
-        <Select value={venueFilter} onChange={(event) => setVenueFilter(event.target.value)} className="h-7 w-full py-1 text-xs md:w-56">
+        <div className="h-6 w-px bg-[var(--hair)]" />
+        <div className="flex h-8 w-full items-center md:w-56">
+          <Select value={venueFilter} onChange={(event) => setVenueFilter(event.target.value)} className="h-8 w-full py-0 text-xs leading-4">
             <option value="">All venues</option>
             {venues.map((venue) => (
               <option key={venue.id} value={venue.id}>
@@ -658,20 +683,23 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
               </option>
             ))}
           </Select>
+        </div>
+        <div className="flex h-8 w-full items-center md:w-48">
           <Select
             value={eventVisibility}
             onChange={(event) => setEventVisibility(event.target.value as "with_events" | "planning_only")}
-            className="h-7 w-full py-1 text-xs md:w-48"
+            className="h-8 w-full py-0 text-xs leading-4"
           >
             <option value="with_events">Planning + events</option>
             <option value="planning_only">Planning only</option>
           </Select>
-          {viewMode === "board" ? (
-            <Button type="button" variant={showLater ? "secondary" : "ghost"} size="sm" onClick={() => setShowLater((current) => !current)}>
-              <MoveHorizontal className="mr-1 h-4 w-4" aria-hidden="true" />
-              {showLater ? "Hide 90+" : "Show 90+"}
-            </Button>
-          ) : null}
+        </div>
+        {viewMode === "board" ? (
+          <Button type="button" variant={showLater ? "secondary" : "ghost"} size="sm" onClick={() => setShowLater((current) => !current)}>
+            <MoveHorizontal className="mr-1 h-4 w-4" aria-hidden="true" />
+            {showLater ? "Hide 90+" : "Show 90+"}
+          </Button>
+        ) : null}
         <span className="ml-auto font-brand-mono text-[0.625rem] uppercase tracking-[0.05em] text-[var(--ink-soft)]">
           {combinedEntries.length} shown
         </span>
@@ -736,7 +764,14 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
                       if (row.type === "inspiration") {
                         return <InspirationItemCard key={row.item.id} item={row.item} />;
                       }
-                      return <EventOverlayCard key={row.event.id} event={row.event} canApprove={canApproveEvents} />;
+                      return (
+                        <EventOverlayCard
+                          key={row.event.id}
+                          event={row.event}
+                          canApprove={canApproveEvents}
+                          onChanged={refreshBoard}
+                        />
+                      );
                     })}
                   </div>
 
@@ -753,22 +788,10 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
 
       {viewMode === "calendar" ? (
         <div className="space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-[8px] border border-[var(--hair)] bg-[var(--paper)] p-2 shadow-card">
+          <div className="rounded-[8px] border border-[var(--hair)] bg-[var(--paper)] p-2 shadow-card">
             <p className="text-xs text-[var(--ink-muted)]">
-              Calendar shows every event and planning item across all time.
-              {showDoneCancelled
-                ? " Completed and cancelled items are visible."
-                : " Completed and cancelled items are currently hidden."}
+              Calendar follows the status, venue, source, and search filters above across the full historic dataset.
             </p>
-            <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-[var(--ink)]">
-              <input
-                type="checkbox"
-                className="h-4 w-4 accent-[var(--navy)]"
-                checked={showDoneCancelled}
-                onChange={(event) => setShowDoneCancelled(event.target.checked)}
-              />
-              Show completed / cancelled
-            </label>
           </div>
           <PlanningCalendarView
             today={data.today}
@@ -809,25 +832,6 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
           onOpenPlanningItemId={(id) => router.push(`/planning/${id}`)}
         />
       ) : null}
-
-      <PlanningModal
-        open={isCreateModalOpen}
-        onClose={() => setCreateModalOpen(false)}
-        title="Create planning work"
-        description="Add one-off actions or recurring series without crowding the board."
-      >
-        <PlanningItemEditor
-          today={data.today}
-          users={data.users}
-          venues={venues.map((venue) => ({ id: venue.id, name: venue.name }))}
-          currentUserId={currentUserId}
-          isAdministrator={userRole === "administrator"}
-          onChanged={() => {
-            setCreateModalOpen(false);
-            refreshBoard();
-          }}
-        />
-      </PlanningModal>
 
       {isPending ? <p className="text-sm text-subtle">Saving planning updates…</p> : null}
     </div>
