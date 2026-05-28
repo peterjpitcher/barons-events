@@ -27,6 +27,7 @@ import { generateTermsAndConditions, generateWebsiteCopy, type GeneratedWebsiteC
 import { isBookingFormat, isFreeBookingFormat, type BookingFormat } from "@/lib/booking-format";
 import { normaliseEventDateTimeForStorage } from "@/lib/datetime";
 import { normaliseSopNotRequiredTemplateIds } from "@/lib/planning/sop";
+import { getOrCreateTrackedBookingUrl, type TrackedBookingUrlStatus } from "@/lib/event-booking-links";
 import {
   normaliseOptionalText as normaliseOptionalTextField,
   normaliseOptionalNumber as normaliseOptionalNumberField,
@@ -2512,7 +2513,11 @@ const bookingSettingsSchema = z.object({
 });
 
 export type UpdateBookingSettingsInput = z.infer<typeof bookingSettingsSchema>;
-export type UpdateBookingSettingsResult = ActionResult & { seoSlug?: string | null };
+export type UpdateBookingSettingsResult = ActionResult & {
+  seoSlug?: string | null;
+  bookingUrl?: string | null;
+  bookingUrlTrackingStatus?: TrackedBookingUrlStatus;
+};
 
 /**
  * Save booking settings (booking_enabled, total_capacity, max_tickets_per_booking).
@@ -2556,7 +2561,7 @@ export async function updateBookingSettingsAction(
   // verified above via loadEventEditContext.
   const { data: event, error: fetchError } = await supabase
     .from("events")
-    .select("id, title, start_at, venue_id, seo_slug, booking_type")
+    .select("id, title, public_title, start_at, venue_id, seo_slug, booking_type")
     .eq("id", eventId)
     .maybeSingle();
 
@@ -2564,7 +2569,25 @@ export async function updateBookingSettingsAction(
     return { success: false, message: "Event not found." };
   }
 
-  const nextBookingUrl = bookingUrl ?? null;
+  let trackedBookingUrl: Awaited<ReturnType<typeof getOrCreateTrackedBookingUrl>>;
+  try {
+    trackedBookingUrl = await getOrCreateTrackedBookingUrl({
+      url: bookingUrl ?? null,
+      eventId,
+      eventTitle: event.public_title?.trim() || event.title,
+      eventStartAt: event.start_at,
+      eventCampaignName: event.seo_slug ?? event.public_title ?? event.title,
+      createdBy: user.id
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "Unknown error";
+    if (detail.startsWith("Booking link") || detail.startsWith("That short link")) {
+      return { success: false, message: detail };
+    }
+    console.error("updateBookingSettings tracked link creation failed:", error);
+    return { success: false, message: "Could not prepare the tracked booking link. Please try again." };
+  }
+  const nextBookingUrl = trackedBookingUrl.url;
 
   // Auto-generate slug when enabling bookings for the first time
   let seoSlug: string | null = event.seo_slug ?? null;
@@ -2606,7 +2629,14 @@ export async function updateBookingSettingsAction(
       entityId: eventId,
       action: "event.booking_settings_updated",
       actorId: user.id,
-      meta: { bookingEnabled, totalCapacity, maxTicketsPerBooking, bookingNotesEnabled: bookingNotesEnabled ?? false, bookingUrl: nextBookingUrl }
+      meta: {
+        bookingEnabled,
+        totalCapacity,
+        maxTicketsPerBooking,
+        bookingNotesEnabled: bookingNotesEnabled ?? false,
+        bookingUrl: nextBookingUrl,
+        bookingUrlTrackingStatus: trackedBookingUrl.status
+      }
     });
   } catch (auditError) {
     // Booking settings save itself succeeded — audit failure is logged but
@@ -2615,5 +2645,18 @@ export async function updateBookingSettingsAction(
     console.error("updateBookingSettings audit log entry failed:", auditError);
   }
   revalidatePath(`/events/${eventId}`);
-  return { success: true, message: "Booking settings saved.", seoSlug };
+  const trackedMessage =
+    trackedBookingUrl.status === "created"
+      ? " Booking link was shortened for tracking."
+      : trackedBookingUrl.status === "reused"
+        ? " Booking link was replaced with an existing tracked short link."
+        : "";
+
+  return {
+    success: true,
+    message: `Booking settings saved.${trackedMessage}`,
+    seoSlug,
+    bookingUrl: nextBookingUrl,
+    bookingUrlTrackingStatus: trackedBookingUrl.status
+  };
 }

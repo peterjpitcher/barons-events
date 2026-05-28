@@ -656,4 +656,150 @@ describe("updateBookingSettingsAction", () => {
     expect(result.success).toBe(false);
     expect(result.message).toMatch(/event not found/i);
   });
+
+  it("shortens and UTM-tags a new external booking link before saving", async () => {
+    getUserMock.mockResolvedValue({ id: USER_A, role: "administrator", venueId: null });
+    loadCtxMock.mockResolvedValue({
+      venueId: VENUE_A,
+      managerResponsibleId: USER_A,
+      createdBy: USER_A,
+      status: "approved",
+      deletedAt: null,
+    });
+
+    const eventUpdate = vi.fn(() => ({
+      eq: vi.fn().mockResolvedValue({ error: null }),
+    }));
+    const shortLinkInsert = vi.fn(() => ({
+      select: vi.fn(() => ({
+        single: vi.fn().mockResolvedValue({ data: { code: "abc12345" }, error: null }),
+      })),
+    }));
+    const from = vi.fn((table: string) => {
+      if (table === "events") {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              maybeSingle: vi.fn().mockResolvedValue({
+                data: {
+                  id: EVENT_ID,
+                  title: "The Congakeyz - FREE Live Music | Meade Hall",
+                  public_title: "The Congakeyz - Free Live Music",
+                  start_at: "2026-06-04T19:00:00.000Z",
+                  venue_id: VENUE_A,
+                  seo_slug: "the-congakeyz-free-live-music",
+                  booking_type: "free_standing",
+                },
+                error: null,
+              }),
+            })),
+          })),
+          update: eventUpdate,
+        };
+      }
+      if (table === "short_links") {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              limit: vi.fn().mockResolvedValue({ data: [], error: null }),
+              maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+            })),
+          })),
+          insert: shortLinkInsert,
+        };
+      }
+      return {};
+    });
+    vi.mocked(createSupabaseAdminClient).mockReturnValue({ from } as never);
+
+    const result = await updateBookingSettingsAction({
+      eventId: EVENT_ID,
+      bookingEnabled: true,
+      totalCapacity: 100,
+      maxTicketsPerBooking: 5,
+      bookingUrl: "https://tickets.example.com/buy?ref=partner",
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.bookingUrl).toBe("https://l.baronspubs.com/abc12345");
+    expect(result.bookingUrlTrackingStatus).toBe("created");
+    expect(shortLinkInsert).toHaveBeenCalledWith(expect.objectContaining({
+      link_type: "booking",
+      created_by: USER_A,
+      destination: expect.stringContaining("utm_source=baronshub"),
+    }));
+    expect(shortLinkInsert).toHaveBeenCalledWith(expect.objectContaining({
+      destination: expect.stringContaining("utm_campaign=the_congakeyz_free_live_music"),
+    }));
+    expect(eventUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      booking_url: "https://l.baronspubs.com/abc12345",
+    }));
+  });
+
+  it("keeps an existing Links & QR Codes short link unchanged", async () => {
+    getUserMock.mockResolvedValue({ id: USER_A, role: "administrator", venueId: null });
+    loadCtxMock.mockResolvedValue({
+      venueId: VENUE_A,
+      managerResponsibleId: USER_A,
+      createdBy: USER_A,
+      status: "approved",
+      deletedAt: null,
+    });
+
+    const eventUpdate = vi.fn(() => ({
+      eq: vi.fn().mockResolvedValue({ error: null }),
+    }));
+    const shortLinkInsert = vi.fn();
+    const from = vi.fn((table: string) => {
+      if (table === "events") {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              maybeSingle: vi.fn().mockResolvedValue({
+                data: {
+                  id: EVENT_ID,
+                  title: "Existing short link event",
+                  public_title: null,
+                  start_at: "2026-06-04T19:00:00.000Z",
+                  venue_id: VENUE_A,
+                  seo_slug: "existing-short-link-event",
+                  booking_type: "free_standing",
+                },
+                error: null,
+              }),
+            })),
+          })),
+          update: eventUpdate,
+        };
+      }
+      if (table === "short_links") {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              maybeSingle: vi.fn().mockResolvedValue({ data: { code: "deadbeef" }, error: null }),
+            })),
+          })),
+          insert: shortLinkInsert,
+        };
+      }
+      return {};
+    });
+    vi.mocked(createSupabaseAdminClient).mockReturnValue({ from } as never);
+
+    const result = await updateBookingSettingsAction({
+      eventId: EVENT_ID,
+      bookingEnabled: true,
+      totalCapacity: 100,
+      maxTicketsPerBooking: 5,
+      bookingUrl: "https://l.baronspubs.com/deadbeef",
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.bookingUrl).toBe("https://l.baronspubs.com/deadbeef");
+    expect(result.bookingUrlTrackingStatus).toBe("already-shortened");
+    expect(shortLinkInsert).not.toHaveBeenCalled();
+    expect(eventUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      booking_url: "https://l.baronspubs.com/deadbeef",
+    }));
+  });
 });

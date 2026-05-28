@@ -76,7 +76,7 @@ export function BookingSettingsCard({
     }
 
     if (trimmedBookingUrl && !/^https?:\/\//i.test(trimmedBookingUrl)) {
-      toast.error("Booking link must be a full URL starting with https://");
+      toast.error("Booking link must be a full URL starting with http:// or https://");
       return;
     }
 
@@ -94,6 +94,9 @@ export function BookingSettingsCard({
       if (result.success) {
         toast.success(result.message ?? "Booking settings saved.");
         setHasUnsavedChanges(false);
+        if ("bookingUrl" in result) {
+          setBookingUrl(result.bookingUrl ?? "");
+        }
         if (result.seoSlug && !currentSlug) {
           setCurrentSlug(result.seoSlug);
         }
