@@ -13,28 +13,29 @@ import { FieldError } from "@/components/ui/field-error";
 
 type ManagerProps = {
   eventTypes: EventTypeRow[];
+  canEdit: boolean;
 };
 
 const errorInputClass = "!border-[var(--burgundy)] focus-visible:!border-[var(--burgundy)]";
 
-export function EventTypesManager({ eventTypes }: ManagerProps) {
+export function EventTypesManager({ eventTypes, canEdit }: ManagerProps) {
   return (
     <div className="space-y-5">
-      <CreateEventTypeForm />
+      {canEdit ? <CreateEventTypeForm /> : null}
       <div className="space-y-4">
         <div className="grid gap-4 md:hidden">
           {eventTypes.map((type) => (
-            <EventTypeCardMobile key={type.id} type={type} />
+            <EventTypeCardMobile key={type.id} type={type} canEdit={canEdit} />
           ))}
           {eventTypes.length === 0 ? (
             <Card>
               <CardContent className="py-8 text-center text-subtle">
-                No event types yet. Add the first one above.
+                {canEdit ? "No event types yet. Add the first one above." : "No event types yet."}
               </CardContent>
             </Card>
           ) : null}
         </div>
-        <EventTypeDesktopList eventTypes={eventTypes} />
+        <EventTypeDesktopList eventTypes={eventTypes} canEdit={canEdit} />
       </div>
     </div>
   );
@@ -86,7 +87,7 @@ function CreateEventTypeForm() {
   );
 }
 
-function EventTypeCardMobile({ type }: { type: EventTypeRow }) {
+function EventTypeCardMobile({ type, canEdit }: { type: EventTypeRow; canEdit: boolean }) {
   const [updateState, updateAction] = useActionState(updateEventTypeAction, undefined);
   const [deleteState, deleteAction] = useActionState(deleteEventTypeAction, undefined);
   const router = useRouter();
@@ -134,25 +135,28 @@ function EventTypeCardMobile({ type }: { type: EventTypeRow }) {
               aria-invalid={Boolean(labelError)}
               aria-describedby={labelError ? labelErrorId : undefined}
               className={labelError ? errorInputClass : undefined}
+              disabled={!canEdit}
             />
             <FieldError id={labelErrorId} message={labelError} />
           </div>
-          <SubmitButton label="Save" pendingLabel="Saving..." />
+          {canEdit ? <SubmitButton label="Save" pendingLabel="Saving..." /> : null}
         </form>
-        <form action={deleteAction} className="inline-flex">
-          <input type="hidden" name="typeId" value={type.id} />
-          <SubmitButton label="Remove" pendingLabel="Removing..." variant="destructive" />
-        </form>
+        {canEdit ? (
+          <form action={deleteAction} className="inline-flex">
+            <input type="hidden" name="typeId" value={type.id} />
+            <SubmitButton label="Remove" pendingLabel="Removing..." variant="destructive" />
+          </form>
+        ) : null}
       </CardContent>
     </Card>
   );
 }
 
-function EventTypeDesktopList({ eventTypes }: { eventTypes: EventTypeRow[] }) {
+function EventTypeDesktopList({ eventTypes, canEdit }: { eventTypes: EventTypeRow[]; canEdit: boolean }) {
   if (eventTypes.length === 0) {
     return (
       <div className="hidden rounded-[var(--radius)] border border-[var(--hair)] bg-[var(--paper)] py-8 text-center text-subtle md:block">
-        No event types yet. Add the first one above.
+        {canEdit ? "No event types yet. Add the first one above." : "No event types yet."}
       </div>
     );
   }
@@ -162,18 +166,18 @@ function EventTypeDesktopList({ eventTypes }: { eventTypes: EventTypeRow[] }) {
       <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] gap-4 border-b border-[var(--hair)] bg-[var(--canvas-2)] px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-subtle">
         <div>Event type</div>
         <div>Added</div>
-        <div className="text-right">Actions</div>
+        <div className="text-right">{canEdit ? "Actions" : ""}</div>
       </div>
       <ul>
         {eventTypes.map((type, index) => (
-          <EventTypeDesktopRow key={type.id} type={type} isFirst={index === 0} />
+          <EventTypeDesktopRow key={type.id} type={type} isFirst={index === 0} canEdit={canEdit} />
         ))}
       </ul>
     </div>
   );
 }
 
-function EventTypeDesktopRow({ type, isFirst }: { type: EventTypeRow; isFirst: boolean }) {
+function EventTypeDesktopRow({ type, isFirst, canEdit }: { type: EventTypeRow; isFirst: boolean; canEdit: boolean }) {
   const [updateState, updateAction] = useActionState(updateEventTypeAction, undefined);
   const [deleteState, deleteAction] = useActionState(deleteEventTypeAction, undefined);
   const router = useRouter();
@@ -229,16 +233,19 @@ function EventTypeDesktopRow({ type, isFirst }: { type: EventTypeRow; isFirst: b
               aria-invalid={Boolean(labelError)}
               aria-describedby={labelError ? labelErrorId : undefined}
               className={labelError ? errorInputClass : undefined}
+              disabled={!canEdit}
             />
             <FieldError id={labelErrorId} message={labelError} />
           </div>
-          <SubmitButton label="Save" pendingLabel="Saving..." className="justify-self-end" />
+          {canEdit ? <SubmitButton label="Save" pendingLabel="Saving..." className="justify-self-end" /> : null}
         </form>
         <p className="text-sm text-subtle">Added {formattedDate}</p>
-        <form action={deleteAction} className="flex justify-end">
-          <input type="hidden" name="typeId" value={type.id} />
-          <SubmitButton label="Remove" pendingLabel="Removing..." variant="destructive" />
-        </form>
+        {canEdit ? (
+          <form action={deleteAction} className="flex justify-end">
+            <input type="hidden" name="typeId" value={type.id} />
+            <SubmitButton label="Remove" pendingLabel="Removing..." variant="destructive" />
+          </form>
+        ) : <span />}
       </div>
     </li>
   );

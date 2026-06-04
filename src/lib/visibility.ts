@@ -36,10 +36,8 @@ export function isLinkedToVenue(resource: VenueLinkedResource, venueId: string |
 }
 
 export function canViewVenueLinkedResource(user: AppUser, resource: VenueLinkedResource): boolean {
-  if (user.role === "administrator" || user.role === "executive") return true;
-  if (user.role !== "office_worker") return false;
-  if (!user.venueId) return true;
-  return isLinkedToVenue(resource, user.venueId);
+  void resource;
+  return user.role === "administrator" || user.role === "office_worker" || user.role === "executive";
 }
 
 export function canOfficeWorkerUseVenueSelection(user: AppUser, venueIds: string[]): boolean {

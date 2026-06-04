@@ -757,7 +757,7 @@ describe("roles.ts — final capability functions", () => {
 
   describe("canProposeEvents", () => {
     it("administrator can propose", () => expect(canProposeEvents("administrator")).toBe(true));
-    it("office_worker can propose (no venueId required)", () => expect(canProposeEvents("office_worker")).toBe(true));
+    it("office_worker cannot propose", () => expect(canProposeEvents("office_worker")).toBe(false));
     it("executive cannot propose", () => expect(canProposeEvents("executive")).toBe(false));
   });
 
@@ -770,7 +770,7 @@ describe("roles.ts — final capability functions", () => {
       deletedAt: null,
     };
 
-    it("admin always passes (except no admin override here — admin can edit any non-deleted event)", () => {
+    it("administrator can edit any event", () => {
       expect(canEditEvent("administrator", "user-x", null, base)).toBe(true);
     });
 
@@ -778,70 +778,20 @@ describe("roles.ts — final capability functions", () => {
       expect(canEditEvent("administrator", "user-x", null, { ...base, deletedAt: "2026-01-01T00:00:00Z" })).toBe(true);
     });
 
-    it("soft-deleted rejects non-admin (including manager)", () => {
+    it("office_worker cannot edit even as manager on their venue", () => {
+      expect(canEditEvent("office_worker", "user-manager", "venue-A", base)).toBe(false);
+    });
+
+    it("office_worker cannot edit even as creator on draft", () => {
+      expect(canEditEvent("office_worker", "user-creator", "venue-X", { ...base, status: "draft" })).toBe(false);
+    });
+
+    it("office_worker cannot edit soft-deleted event", () => {
       expect(canEditEvent("office_worker", "user-manager", "venue-A", { ...base, deletedAt: "2026-01-01T00:00:00Z" })).toBe(false);
     });
 
-    it("executive cannot edit even as creator on draft (role gate precedes creator clause)", () => {
+    it("executive cannot edit even as creator on draft", () => {
       expect(canEditEvent("executive", "user-creator", null, { ...base, status: "draft" })).toBe(false);
-    });
-
-    it("creator can edit own draft", () => {
-      expect(canEditEvent("office_worker", "user-creator", "venue-X", { ...base, status: "draft" })).toBe(true);
-    });
-
-    it("creator can edit own needs_revisions", () => {
-      expect(canEditEvent("office_worker", "user-creator", "venue-X", { ...base, status: "needs_revisions" })).toBe(true);
-    });
-
-    it("creator cannot edit own pending_approval (submitted)", () => {
-      expect(canEditEvent("office_worker", "user-creator", "venue-X", { ...base, status: "pending_approval" })).toBe(false);
-    });
-
-    it("office_worker without venueId cannot edit approved event they didn't create", () => {
-      expect(canEditEvent("office_worker", "user-manager", null, base)).toBe(false);
-    });
-
-    it("office_worker at wrong venue cannot edit", () => {
-      expect(canEditEvent("office_worker", "user-manager", "venue-B", base)).toBe(false);
-    });
-
-    it("office_worker manager can edit when their venue is linked through event_venues", () => {
-      expect(canEditEvent("office_worker", "user-manager", "venue-B", {
-        ...base,
-        venueIds: ["venue-A", "venue-B"],
-      })).toBe(true);
-    });
-
-    it("office_worker manager cannot edit when their venue is not linked through event_venues", () => {
-      expect(canEditEvent("office_worker", "user-manager", "venue-C", {
-        ...base,
-        venueIds: ["venue-A", "venue-B"],
-      })).toBe(false);
-    });
-
-    it("office_worker at right venue but not manager_responsible cannot edit", () => {
-      expect(canEditEvent("office_worker", "user-other", "venue-A", base)).toBe(false);
-    });
-
-    it("office_worker manager at right venue can edit approved event", () => {
-      expect(canEditEvent("office_worker", "user-manager", "venue-A", base)).toBe(true);
-    });
-
-    it("office_worker manager can transition approved → cancelled (read-side passes for both)", () => {
-      expect(canEditEvent("office_worker", "user-manager", "venue-A", { ...base, status: "cancelled" })).toBe(true);
-    });
-
-    it("office_worker manager cannot edit completed event", () => {
-      expect(canEditEvent("office_worker", "user-manager", "venue-A", { ...base, status: "completed" })).toBe(false);
-    });
-
-    it("office_worker manager cannot edit rejected event", () => {
-      expect(canEditEvent("office_worker", "user-manager", "venue-A", { ...base, status: "rejected" })).toBe(false);
-    });
-
-    it("office_worker manager cannot edit pending_approval (admin review window)", () => {
-      expect(canEditEvent("office_worker", "user-manager", "venue-A", { ...base, status: "pending_approval" })).toBe(false);
     });
   });
 
@@ -859,24 +809,21 @@ describe("roles.ts — final capability functions", () => {
     it("executive cannot review", () => expect(canReviewEvents("executive")).toBe(false));
   });
 
-  describe("canManageBookings (venue_id-dependent)", () => {
+  describe("canManageBookings", () => {
     it("administrator can manage bookings", () => expect(canManageBookings("administrator")).toBe(true));
-    it("office_worker WITH venueId can manage bookings", () => expect(canManageBookings("office_worker", "v1")).toBe(true));
-    it("office_worker WITHOUT venueId cannot manage bookings", () => expect(canManageBookings("office_worker")).toBe(false));
+    it("office_worker cannot manage bookings", () => expect(canManageBookings("office_worker", "v1")).toBe(false));
     it("executive cannot manage bookings", () => expect(canManageBookings("executive")).toBe(false));
   });
 
-  describe("canManageCustomers (venue_id-dependent)", () => {
+  describe("canManageCustomers", () => {
     it("administrator can manage customers", () => expect(canManageCustomers("administrator")).toBe(true));
-    it("office_worker WITH venueId can manage customers", () => expect(canManageCustomers("office_worker", "v1")).toBe(true));
-    it("office_worker WITHOUT venueId cannot manage customers", () => expect(canManageCustomers("office_worker")).toBe(false));
+    it("office_worker cannot manage customers", () => expect(canManageCustomers("office_worker", "v1")).toBe(false));
     it("executive cannot manage customers", () => expect(canManageCustomers("executive")).toBe(false));
   });
 
-  describe("canManageArtists (venue_id-dependent)", () => {
+  describe("canManageArtists", () => {
     it("administrator can manage artists", () => expect(canManageArtists("administrator")).toBe(true));
-    it("office_worker WITH venueId can manage artists", () => expect(canManageArtists("office_worker", "v1")).toBe(true));
-    it("office_worker WITHOUT venueId cannot manage artists", () => expect(canManageArtists("office_worker")).toBe(false));
+    it("office_worker cannot manage artists", () => expect(canManageArtists("office_worker", "v1")).toBe(false));
     it("executive cannot manage artists", () => expect(canManageArtists("executive")).toBe(false));
   });
 
@@ -906,42 +853,34 @@ describe("roles.ts — final capability functions", () => {
   });
 
   describe("canViewBookings", () => {
-    it("admin and office_worker can view bookings", () => {
+    it("all roles can view bookings", () => {
       expect(canViewBookings("administrator")).toBe(true);
       expect(canViewBookings("office_worker")).toBe(true);
-    });
-    it("executive cannot view bookings", () => {
-      expect(canViewBookings("executive")).toBe(false);
+      expect(canViewBookings("executive")).toBe(true);
     });
   });
 
   describe("canViewCustomers", () => {
-    it("admin and office_worker can view customers", () => {
+    it("all roles can view customers", () => {
       expect(canViewCustomers("administrator")).toBe(true);
       expect(canViewCustomers("office_worker")).toBe(true);
-    });
-    it("executive cannot view customers", () => {
-      expect(canViewCustomers("executive")).toBe(false);
+      expect(canViewCustomers("executive")).toBe(true);
     });
   });
 
   describe("canViewArtists", () => {
-    it("admin and office_worker can view artists", () => {
+    it("all roles can view artists", () => {
       expect(canViewArtists("administrator")).toBe(true);
       expect(canViewArtists("office_worker")).toBe(true);
-    });
-    it("executive cannot view artists", () => {
-      expect(canViewArtists("executive")).toBe(false);
+      expect(canViewArtists("executive")).toBe(true);
     });
   });
 
   describe("canViewReviews", () => {
-    it("admin and office_worker can view reviews", () => {
+    it("all roles can view reviews", () => {
       expect(canViewReviews("administrator")).toBe(true);
       expect(canViewReviews("office_worker")).toBe(true);
-    });
-    it("executive cannot view reviews", () => {
-      expect(canViewReviews("executive")).toBe(false);
+      expect(canViewReviews("executive")).toBe(true);
     });
   });
 
@@ -984,6 +923,6 @@ describe("roles.ts — final capability functions", () => {
   describe("canViewSopTemplate", () => {
     it("administrator can view", () => expect(canViewSopTemplate("administrator")).toBe(true));
     it("executive can view", () => expect(canViewSopTemplate("executive")).toBe(true));
-    it("office_worker cannot view", () => expect(canViewSopTemplate("office_worker")).toBe(false));
+    it("office_worker can view", () => expect(canViewSopTemplate("office_worker")).toBe(true));
   });
 });

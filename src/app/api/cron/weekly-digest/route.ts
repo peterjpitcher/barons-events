@@ -1,7 +1,7 @@
 import "server-only";
 import { NextResponse } from "next/server";
 import { verifyCronSecret } from "@/lib/cron-auth";
-import { sendWeeklyDigestEmail } from "@/lib/notifications";
+import { sendMandatoryWeeklyUpdateEmail } from "@/lib/notifications";
 
 export async function GET(request: Request): Promise<NextResponse> {
   if (!verifyCronSecret(request.headers.get("authorization"))) {
@@ -15,7 +15,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   }));
 
   try {
-    const result = await sendWeeklyDigestEmail();
+    const result = await sendMandatoryWeeklyUpdateEmail();
 
     console.log(JSON.stringify({
       event: "cron.completed",

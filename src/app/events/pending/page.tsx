@@ -13,7 +13,6 @@ export const metadata = {
 export default async function PendingProposalsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (user.role !== "administrator") redirect("/unauthorized");
 
   const db = createSupabaseAdminClient();
    
@@ -83,7 +82,7 @@ export default async function PendingProposalsPage() {
           ) : (
             <ul className="space-y-3">
               {proposals.map((p) => (
-                <PendingProposalRow key={p.id} proposal={p} />
+                <PendingProposalRow key={p.id} proposal={p} canDecide={user.role === "administrator"} />
               ))}
             </ul>
           )}

@@ -6,11 +6,18 @@ import { getPlanningItemDetail } from "@/lib/planning";
 import { AuditTrailPanel } from "@/components/audit/audit-trail-panel";
 import { AttachmentsPanel } from "@/components/attachments/attachments-panel";
 import { listPlanningItemAttachmentsRollup } from "@/lib/attachments";
+import { InternalNotesPanel } from "@/components/internal-notes/internal-notes-panel";
+import { listInternalNotes } from "@/lib/internal-notes";
 import { listAssignableUsers } from "@/lib/users";
 import { listVenues } from "@/lib/venues";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { canEditVenueLinkedPlanning } from "@/lib/visibility";
-import { PlanningItemEditorShell } from "./planning-item-editor-shell";
+import { PlanningItemEditorShell, PlanningStatusControl } from "./planning-item-editor-shell";
 import { PageHeader } from "@/components/ui/design-primitives";
+import { PlanningOverflowMenu } from "@/components/planning/planning-overflow-menu";
+import { SopDrawer } from "@/components/events/sop-drawer";
+import { Button } from "@/components/ui/button";
+import { formatDate } from "@/lib/utils/format";
 
 export const metadata = {
   title: "Planning item · BaronsHub 1.1",
@@ -30,11 +37,18 @@ export default async function PlanningItemDetailPage({
   const item = await getPlanningItemDetail(planningItemId, user);
   if (!item) notFound();
 
-  const [attachments, users, venueRows] = await Promise.all([
+  const [attachments, users, venueRows, internalNotes, userPrefsResult] = await Promise.all([
     listPlanningItemAttachmentsRollup(planningItemId),
     listAssignableUsers(),
-    listVenues()
+    listVenues(),
+    listInternalNotes("planning_item", planningItemId),
+    createSupabaseAdminClient()
+      .from("users")
+      .select("sop_drawer_pinned")
+      .eq("id", user.id)
+      .maybeSingle()
   ]);
+  const userPrefs = userPrefsResult.data;
 
   const canUploadAttachments = canEditVenueLinkedPlanning(user, { venueId: item.venueId, venues: item.venues });
 
@@ -58,11 +72,16 @@ export default async function PlanningItemDetailPage({
 
   return (
     <div className="app-page">
-      <Link href="/planning" className="text-sm text-subtle underline">
-        ← Back to planning
-      </Link>
       <PageHeader
-        eyebrow="Planning item"
+        eyebrow={
+          <span className="inline-flex items-center gap-1">
+            <Link href="/planning" className="hover:text-[var(--ink)]">
+              Planning
+            </Link>
+            <span aria-hidden="true">/</span>
+            <span>Detail</span>
+          </span>
+        }
         title={item.title}
         description="Manage the item details, SOP tasks, attachments, and audit trail."
         meta={
@@ -72,25 +91,42 @@ export default async function PlanningItemDetailPage({
             <span>{item.tasks.length} task{item.tasks.length === 1 ? "" : "s"}</span>
           </>
         }
+        actions={
+          <>
+            <PlanningStatusControl
+              itemId={item.id}
+              status={item.status}
+              disabled={!canUploadAttachments}
+            />
+            <PlanningOverflowMenu
+              itemId={item.id}
+              canDelete={canUploadAttachments}
+            />
+          </>
+        }
       />
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <div className="space-y-4">
-          {/* Full edit surface — matches the modal experience the planning
-              board used to open. All inline editors (title, venues, dates,
-              tasks, notes, attachments, status) live here. */}
-          <PlanningItemEditorShell
-            item={item}
-            users={planningUsers}
-            venues={planningVenues}
-            currentUserId={user.id}
-          />
-          <AuditTrailPanel
-            entityType="planning"
-            entityId={item.id}
-            description="Everything that's happened on this planning item, oldest first."
-          />
-        </div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-subtle">
+        <span>
+          <span className="font-semibold text-[var(--ink)]">Manager:</span>{" "}
+          {item.ownerName ?? "Unassigned"}
+        </span>
+        <span>
+          <span className="font-semibold text-[var(--ink)]">Target:</span>{" "}
+          {formatDate(item.targetDate)}
+        </span>
+        <Button id={`sop-drawer-trigger-${item.id}`} type="button" variant="secondary" size="sm">
+          SOP
+        </Button>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <PlanningItemEditorShell
+          item={item}
+          users={planningUsers}
+          venues={planningVenues}
+          canEdit={canUploadAttachments}
+        />
         <AttachmentsPanel
           parentType="planning_item"
           parentId={item.id}
@@ -102,6 +138,30 @@ export default async function PlanningItemDetailPage({
           description="Files on this planning item and every task under it."
         />
       </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <InternalNotesPanel
+          parentType="planning_item"
+          parentId={item.id}
+          notes={internalNotes}
+          canAdd={canUploadAttachments}
+        />
+        <AuditTrailPanel
+          entityType="planning"
+          entityId={item.id}
+          description="Everything that's happened on this planning item, oldest first."
+        />
+      </div>
+      <SopDrawer
+        tasks={item.tasks}
+        users={planningUsers}
+        itemId={item.id}
+        currentUserId={user.id}
+        readOnly={!canUploadAttachments}
+        initiallyPinned={Boolean(userPrefs?.sop_drawer_pinned)}
+        externalTriggerId={`sop-drawer-trigger-${item.id}`}
+        title="ALL TODO ITEMS FOR THIS PLANNING ITEM"
+      />
     </div>
   );
 }

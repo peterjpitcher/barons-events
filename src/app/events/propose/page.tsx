@@ -18,11 +18,7 @@ export default async function ProposeEventPage() {
   if (!canProposeEvents(user.role)) redirect("/unauthorized");
 
   const venueRows = await listVenues();
-  const proposalVenueRows =
-    user.role === "office_worker" && user.venueId
-      ? venueRows.filter((venue) => venue.id === user.venueId)
-      : venueRows;
-  const venues: VenueOption[] = proposalVenueRows.map((v) => ({
+  const venues: VenueOption[] = venueRows.map((v) => ({
     id: v.id,
     name: v.name,
 
@@ -35,11 +31,11 @@ export default async function ProposeEventPage() {
       <PageHeader
         eyebrow="New proposal"
         title="Propose an event"
-        description="Give just a title, date and short description. An administrator will review it before the full form is opened."
+        description="Give just a title, date and short description before the full event form is opened."
         meta={<span>{venues.length} available venue{venues.length === 1 ? "" : "s"}</span>}
       />
       <section className="rounded-[10px] border border-[var(--hair)] bg-[var(--paper)] p-4 shadow-card">
-          <ProposeEventForm venues={venues} defaultVenueId={user.venueId ?? null} />
+          <ProposeEventForm venues={venues} defaultVenueId={null} />
           <p className="mt-4 text-xs text-subtle">
             Need to submit a fully-detailed event straight away? <Link className="underline" href="/events/new">Use the full event form.</Link>
           </p>

@@ -22,6 +22,8 @@ type VenueMultiSelectProps = {
   defaultExpanded?: boolean;
   /** Whether an empty selection is valid. Use for global planning items. */
   allowEmpty?: boolean;
+  /** Optional global option. "empty" emits no venues; "all" emits every visible venue. */
+  globalSelectionMode?: "empty" | "all" | false;
   /** Label shown for an empty valid selection. */
   emptyLabel?: string;
   /** Helper copy for an empty valid selection. */
@@ -38,6 +40,7 @@ export function VenueMultiSelect({
   hiddenFieldName,
   defaultExpanded,
   allowEmpty = true,
+  globalSelectionMode,
   emptyLabel = "Global",
   emptyDescription = "Applies across the whole business, not a specific venue.",
   placeholder = "Choose venues"
@@ -65,6 +68,17 @@ export function VenueMultiSelect({
     () => selectedIds.map((id) => venueById.get(id)).filter((venue): venue is VenueOption => Boolean(venue)),
     [selectedIds, venueById]
   );
+  const allVenueIds = useMemo(() => sortedVenues.map((venue) => venue.id), [sortedVenues]);
+  const globalMode = globalSelectionMode === undefined ? (allowEmpty ? "empty" : false) : globalSelectionMode;
+  const allVenuesSelected =
+    sortedVenues.length > 0 &&
+    allVenueIds.every((id) => selected.has(id));
+  const globalOptionActive =
+    globalMode === "empty"
+      ? selectedIds.length === 0
+      : globalMode === "all"
+        ? allVenuesSelected
+        : false;
 
   useEffect(() => {
     if (!isOpen) return;
@@ -100,14 +114,22 @@ export function VenueMultiSelect({
     emit(Array.from(next));
   }
 
+  function chooseGlobal() {
+    if (disabled || !globalMode) return;
+    emit(globalMode === "all" ? allVenueIds : []);
+  }
+
   const summary = useMemo(() => {
+    if (globalOptionActive) return emptyLabel;
     if (selectedVenues.length === 0) return allowEmpty ? emptyLabel : placeholder;
     if (selectedVenues.length === 1) return selectedVenues[0].name;
     return `${selectedVenues.length} venues selected`;
-  }, [allowEmpty, emptyLabel, placeholder, selectedVenues]);
+  }, [allowEmpty, emptyLabel, globalOptionActive, placeholder, selectedVenues]);
 
   const helperText =
-    selectedVenues.length === 0
+    globalOptionActive
+      ? emptyDescription
+      : selectedVenues.length === 0
       ? allowEmpty ? emptyDescription : "Select one or more venues."
       : selectedVenues.length === venues.length ? "All venues selected." : "Click to change.";
 
@@ -126,7 +148,7 @@ export function VenueMultiSelect({
           disabled && "cursor-not-allowed bg-[var(--canvas-2)] opacity-70"
         )}
       >
-        {selectedVenues.length === 0 && allowEmpty ? (
+        {globalOptionActive || (selectedVenues.length === 0 && allowEmpty) ? (
           <Globe2 className="h-4 w-4 shrink-0 text-[var(--ink-soft)]" aria-hidden="true" />
         ) : (
           <MapPin className="h-4 w-4 shrink-0 text-[var(--ink-soft)]" aria-hidden="true" />
@@ -149,10 +171,36 @@ export function VenueMultiSelect({
           className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-[8px] border border-[var(--hair)] bg-[var(--paper)] shadow-card"
         >
           <div className="max-h-72 overflow-y-auto p-1.5">
-            {allowEmpty && selectedIds.length === 0 ? (
-              <div className="mb-1 rounded-[7px] bg-[var(--paper-tint)] px-2.5 py-2 text-xs text-subtle">
-                <span className="font-medium text-[var(--ink)]">{emptyLabel}</span> is currently active.
-              </div>
+            {globalMode ? (
+              <button
+                type="button"
+                disabled={disabled || (globalMode === "all" && allVenueIds.length === 0)}
+                onClick={chooseGlobal}
+                className={cn(
+                  "mb-1 flex w-full items-start gap-2 rounded-[7px] px-2.5 py-2 text-left text-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mustard)]",
+                  globalOptionActive ? "bg-[var(--mustard-tint)] text-[var(--ink)]" : "text-[var(--ink)] hover:bg-[var(--paper-tint)]",
+                  disabled && "cursor-not-allowed opacity-60"
+                )}
+              >
+                <span
+                  className={cn(
+                    "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border",
+                    globalOptionActive
+                      ? "border-[var(--mustard)] bg-[var(--mustard)]"
+                      : "border-[var(--hair-strong)] bg-white"
+                  )}
+                  aria-hidden="true"
+                >
+                  {globalOptionActive ? <Check className="h-3 w-3 text-[var(--ink-on-mustard)]" /> : null}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-1.5 font-medium">
+                    <Globe2 className="h-3.5 w-3.5 text-[var(--ink-soft)]" aria-hidden="true" />
+                    {emptyLabel}
+                  </span>
+                  <span className="mt-0.5 block text-xs text-subtle">{emptyDescription}</span>
+                </span>
+              </button>
             ) : null}
             {sortedVenues.length > 0 ? (
               <ul className="space-y-1" role="listbox" aria-multiselectable="true">

@@ -12,7 +12,7 @@ export const metadata = {
 export default async function OpeningHoursPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (user.role !== "administrator") redirect("/unauthorized");
+  const canEdit = user.role === "administrator";
 
   const [venues, serviceTypes, venueServices, allHours, overrides] = await Promise.all([
     listVenues(),
@@ -29,6 +29,7 @@ export default async function OpeningHoursPage() {
       venueServices={venueServices}
       allHours={allHours}
       overrides={overrides}
+      canEdit={canEdit}
     />
   );
 }

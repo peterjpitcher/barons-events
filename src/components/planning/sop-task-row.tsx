@@ -77,6 +77,12 @@ export function SopTaskRow({ task, allTasks, users, onStatusChange, onChanged, p
   const [savingNotes, setSavingNotes] = useState(false);
   const hasNotes = Boolean(task.notes && task.notes.trim().length);
 
+  useEffect(() => {
+    if (!notesOpen) {
+      setNotesDraft(task.notes ?? "");
+    }
+  }, [notesOpen, task.notes]);
+
   const isOpen = task.status === "open";
   const isDone = task.status === "done";
   const isNotRequired = task.status === "not_required";

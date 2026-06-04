@@ -11,11 +11,45 @@ export type AttachmentRow = {
   planning_item_id: string | null;
   planning_task_id: string | null;
   original_filename: string;
+  display_name: string | null;
   mime_type: string;
   size_bytes: number;
   uploaded_at: string | null;
   uploaded_by: string | null;
+  current_version_id: string | null;
+  attachment_versions?: Array<{
+    id: string;
+    version_no: number;
+    original_filename: string;
+    mime_type: string;
+    size_bytes: number;
+    uploaded_by: string | null;
+    created_at: string;
+  }> | null;
 };
+
+const ATTACHMENT_SELECT = `
+  id,
+  event_id,
+  planning_item_id,
+  planning_task_id,
+  original_filename,
+  display_name,
+  mime_type,
+  size_bytes,
+  uploaded_at,
+  uploaded_by,
+  current_version_id,
+  attachment_versions(
+    id,
+    version_no,
+    original_filename,
+    mime_type,
+    size_bytes,
+    uploaded_by,
+    created_at
+  )
+`;
 
 function toSummary(row: AttachmentRow): AttachmentSummary {
   const parent = row.event_id
@@ -23,13 +57,28 @@ function toSummary(row: AttachmentRow): AttachmentSummary {
     : row.planning_item_id
       ? ("planning_item" as const)
       : ("planning_task" as const);
+  const versions = [...(row.attachment_versions ?? [])]
+    .sort((left, right) => right.version_no - left.version_no)
+    .map((version) => ({
+      id: version.id,
+      versionNo: version.version_no,
+      originalFilename: version.original_filename,
+      mimeType: version.mime_type,
+      sizeBytes: version.size_bytes,
+      uploadedAt: version.created_at,
+      uploadedBy: version.uploaded_by,
+    }));
   return {
     id: row.id,
     originalFilename: row.original_filename,
+    displayName: row.display_name,
     mimeType: row.mime_type,
     sizeBytes: row.size_bytes,
     uploadedAt: row.uploaded_at,
     uploadedBy: row.uploaded_by,
+    currentVersionId: row.current_version_id,
+    versionCount: versions.length,
+    versions,
     parent,
     parentId: row.event_id ?? row.planning_item_id ?? row.planning_task_id ?? ""
   };
@@ -54,7 +103,7 @@ export async function listAttachmentsForParent(
    
   const { data } = await (db as any)
     .from("attachments")
-    .select("id, event_id, planning_item_id, planning_task_id, original_filename, mime_type, size_bytes, uploaded_at, uploaded_by")
+    .select(ATTACHMENT_SELECT)
     .eq(column, parentId)
     .eq("upload_status", "uploaded")
     .is("deleted_at", null)
@@ -76,7 +125,7 @@ export async function listEventAttachmentsRollup(eventId: string): Promise<Attac
    
   const { data: direct } = await (db as any)
     .from("attachments")
-    .select("id, event_id, planning_item_id, planning_task_id, original_filename, mime_type, size_bytes, uploaded_at, uploaded_by")
+    .select(ATTACHMENT_SELECT)
     .eq("event_id", eventId)
     .eq("upload_status", "uploaded")
     .is("deleted_at", null);
@@ -93,9 +142,9 @@ export async function listEventAttachmentsRollup(eventId: string): Promise<Attac
   let itemAttachments: AttachmentRow[] = [];
   if (itemIds.length > 0) {
      
-    const { data: items } = await (db as any)
-      .from("attachments")
-      .select("id, event_id, planning_item_id, planning_task_id, original_filename, mime_type, size_bytes, uploaded_at, uploaded_by")
+      const { data: items } = await (db as any)
+        .from("attachments")
+        .select(ATTACHMENT_SELECT)
       .in("planning_item_id", itemIds)
       .eq("upload_status", "uploaded")
       .is("deleted_at", null);
@@ -115,7 +164,7 @@ export async function listEventAttachmentsRollup(eventId: string): Promise<Attac
        
       const { data: tasks } = await (db as any)
         .from("attachments")
-        .select("id, event_id, planning_item_id, planning_task_id, original_filename, mime_type, size_bytes, uploaded_at, uploaded_by")
+        .select(ATTACHMENT_SELECT)
         .in("planning_task_id", taskIds)
         .eq("upload_status", "uploaded")
         .is("deleted_at", null);
@@ -142,7 +191,7 @@ export async function listPlanningItemAttachmentsRollup(itemId: string): Promise
    
   const { data: direct } = await (db as any)
     .from("attachments")
-    .select("id, event_id, planning_item_id, planning_task_id, original_filename, mime_type, size_bytes, uploaded_at, uploaded_by")
+    .select(ATTACHMENT_SELECT)
     .eq("planning_item_id", itemId)
     .eq("upload_status", "uploaded")
     .is("deleted_at", null);
@@ -157,9 +206,9 @@ export async function listPlanningItemAttachmentsRollup(itemId: string): Promise
   let taskAttachments: AttachmentRow[] = [];
   if (taskIds.length > 0) {
      
-    const { data: tasks } = await (db as any)
-      .from("attachments")
-      .select("id, event_id, planning_item_id, planning_task_id, original_filename, mime_type, size_bytes, uploaded_at, uploaded_by")
+      const { data: tasks } = await (db as any)
+        .from("attachments")
+        .select(ATTACHMENT_SELECT)
       .in("planning_task_id", taskIds)
       .eq("upload_status", "uploaded")
       .is("deleted_at", null);
@@ -170,4 +219,3 @@ export async function listPlanningItemAttachmentsRollup(itemId: string): Promise
   combined.sort((a, b) => (b.uploaded_at ?? "").localeCompare(a.uploaded_at ?? ""));
   return combined.map(toSummary);
 }
-

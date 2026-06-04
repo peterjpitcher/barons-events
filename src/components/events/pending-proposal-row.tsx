@@ -21,7 +21,7 @@ type PendingProposal = {
   creatorName: string;
 };
 
-export function PendingProposalRow({ proposal }: { proposal: PendingProposal }) {
+export function PendingProposalRow({ proposal, canDecide = false }: { proposal: PendingProposal; canDecide?: boolean }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [showRejectForm, setShowRejectForm] = useState(false);
@@ -135,30 +135,32 @@ export function PendingProposalRow({ proposal }: { proposal: PendingProposal }) 
             </Link>
             .
           </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="primary"
-              size="sm"
-              disabled={isPending}
-              onClick={handleApprove}
-              aria-label={`Approve proposal ${proposal.title}`}
-            >
-              <Check className="mr-1 h-4 w-4" aria-hidden="true" /> Approve
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={isPending}
-              onClick={() => setShowRejectForm((v) => !v)}
-              aria-label={`Reject proposal ${proposal.title}`}
-              aria-pressed={showRejectForm}
-            >
-              <X className="mr-1 h-4 w-4" aria-hidden="true" /> Reject
-            </Button>
-          </div>
-          {showRejectForm ? (
+          {canDecide ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                disabled={isPending}
+                onClick={handleApprove}
+                aria-label={`Approve proposal ${proposal.title}`}
+              >
+                <Check className="mr-1 h-4 w-4" aria-hidden="true" /> Approve
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={isPending}
+                onClick={() => setShowRejectForm((v) => !v)}
+                aria-label={`Reject proposal ${proposal.title}`}
+                aria-pressed={showRejectForm}
+              >
+                <X className="mr-1 h-4 w-4" aria-hidden="true" /> Reject
+              </Button>
+            </div>
+          ) : null}
+          {canDecide && showRejectForm ? (
             <div className="space-y-2 rounded-[var(--radius-sm)] border border-dashed border-[var(--hair)] p-3">
               <label htmlFor={`reject-reason-${proposal.id}`} className="text-xs font-medium text-subtle">
                 Rejection reason

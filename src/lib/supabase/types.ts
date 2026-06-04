@@ -15,6 +15,11 @@ export interface Database {
           email: string;
           full_name: string | null;
           role: string;
+          is_central_events_lead: boolean;
+          debrief_pinned: boolean;
+          planning_queue_pinned: boolean;
+          sop_drawer_pinned: boolean;
+          weekly_digest_last_sent_on: string | null;
           todo_digest_frequency: string;
           todo_digest_last_sent_on: string | null;
           venue_id: string | null;
@@ -195,6 +200,7 @@ export interface Database {
           type_label: string;
           venue_id: string | null;
           owner_id: string | null;
+          event_id: string | null;
           target_date: string;
           status: string;
           created_by: string;
@@ -227,6 +233,67 @@ export interface Database {
           created_by: string;
           created_at: string;
           updated_at: string;
+        };
+      };
+      internal_notes: {
+        Row: {
+          id: string;
+          entity_type: "event" | "planning_item";
+          entity_id: string;
+          body: string;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          entity_type: "event" | "planning_item";
+          entity_id: string;
+          body: string;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          entity_type?: "event" | "planning_item";
+          entity_id?: string;
+          body?: string;
+          created_by?: string | null;
+          created_at?: string;
+        };
+      };
+      attachment_versions: {
+        Row: {
+          id: string;
+          attachment_id: string;
+          version_no: number;
+          storage_path: string;
+          original_filename: string;
+          mime_type: string;
+          size_bytes: number;
+          uploaded_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          attachment_id: string;
+          version_no: number;
+          storage_path: string;
+          original_filename: string;
+          mime_type: string;
+          size_bytes: number;
+          uploaded_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          attachment_id?: string;
+          version_no?: number;
+          storage_path?: string;
+          original_filename?: string;
+          mime_type?: string;
+          size_bytes?: number;
+          uploaded_by?: string | null;
+          created_at?: string;
         };
       };
       audit_log: {

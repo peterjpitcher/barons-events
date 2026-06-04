@@ -16,6 +16,7 @@ type OpeningHoursPageShellProps = {
   venueServices: VenueServiceRow[];
   allHours: OpeningHoursRow[];
   overrides: OpeningOverrideRow[];
+  canEdit: boolean;
 };
 
 export function OpeningHoursPageShell({
@@ -23,7 +24,8 @@ export function OpeningHoursPageShell({
   serviceTypes,
   venueServices,
   allHours,
-  overrides
+  overrides,
+  canEdit
 }: OpeningHoursPageShellProps) {
   // Venue filter: empty set = nothing selected (initial state)
   const [selectedVenueIds, setSelectedVenueIds] = useState<Set<string>>(() => new Set());
@@ -99,7 +101,7 @@ export function OpeningHoursPageShell({
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Venues</CardTitle>
           <CardDescription>
-            Select which venues to view and edit. You can work with one, several, or all at once.
+            Select which venues to view. Administrators can edit one, several, or all at once.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -168,7 +170,7 @@ export function OpeningHoursPageShell({
           <CardContent className="space-y-4">
             {selectedVenues.length === 0 ? (
               <p className="text-sm text-subtle">
-                Select one or more venues above to view and edit their standard weekly hours.
+                Select one or more venues above to view their standard weekly hours.
               </p>
             ) : (
               <>
@@ -183,7 +185,7 @@ export function OpeningHoursPageShell({
                   venues={selectedVenues}
                   serviceTypes={serviceTypes}
                   openingHours={activeVenueHours}
-                  canEdit
+                  canEdit={canEdit}
                 />
               </>
             )}
@@ -207,7 +209,7 @@ export function OpeningHoursPageShell({
             serviceTypes={serviceTypes}
             overrides={filteredOverrides}
             onOverridesChange={setLocalOverrides}
-            canEdit
+            canEdit={canEdit}
             defaultSelectedVenueIds={selectedVenueIds}
           />
         </CardContent>

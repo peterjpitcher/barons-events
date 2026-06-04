@@ -103,8 +103,8 @@ beforeEach(() => {
   });
   getUserMock.mockResolvedValue({
     id: USER_A,
-    role: "office_worker",
-    venueId: VENUE_A
+    role: "administrator",
+    venueId: null
   });
   mocks.loadCtxMock.mockResolvedValue({
     venueId: VENUE_A,

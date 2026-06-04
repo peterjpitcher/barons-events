@@ -914,6 +914,7 @@ export async function getStatusCounts(): Promise<Record<EventStatus, number>> {
     "needs_revisions",
     "approved",
     "rejected",
+    "cancelled",
     "completed"
   ] as const;
   const results = await Promise.all(
@@ -934,6 +935,7 @@ export async function getStatusCounts(): Promise<Record<EventStatus, number>> {
     needs_revisions: 0,
     approved: 0,
     rejected: 0,
+    cancelled: 0,
     completed: 0
   };
 

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { AppUser, UserRole } from "@/lib/types";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getDashboardTodoItems } from "@/lib/dashboard";
+import { canProposeEvents } from "@/lib/roles";
 import { londonDateString } from "@/lib/planning/utils";
 import type { TodoItem, TodoSource } from "@/components/todos/todo-item-types";
 import { Avatar } from "@/components/ui/design-primitives";
@@ -40,30 +41,30 @@ const NAV_SECTIONS: NavSection[] = [
         href: "/events",
         roles: ["administrator", "office_worker", "executive"],
         children: [
-          { label: "Pending proposals", href: "/events/pending", roles: ["administrator"] }
+          { label: "Pending proposals", href: "/events/pending", roles: ["administrator", "office_worker", "executive"] }
         ]
       },
       { label: "30/60/90 Planning", href: "/planning", roles: ["administrator", "office_worker", "executive"] },
-      { label: "Reviews", href: "/reviews", roles: ["administrator", "office_worker"] },
+      { label: "Reviews", href: "/reviews", roles: ["administrator", "office_worker", "executive"] },
       { label: "Debriefs", href: "/debriefs", roles: ["administrator", "office_worker", "executive"] }
     ]
   },
   {
     label: "Operations",
     items: [
-      { label: "Bookings", href: "/bookings", roles: ["administrator", "office_worker"] },
-      { label: "Customers", href: "/customers", roles: ["administrator", "office_worker"] },
-      { label: "Artists", href: "/artists", roles: ["administrator", "office_worker"] },
-      { label: "Links & QR Codes", href: "/links", roles: ["administrator"] }
+      { label: "Bookings", href: "/bookings", roles: ["administrator", "office_worker", "executive"] },
+      { label: "Customers", href: "/customers", roles: ["administrator", "office_worker", "executive"] },
+      { label: "Artists", href: "/artists", roles: ["administrator", "office_worker", "executive"] },
+      { label: "Links & QR Codes", href: "/links", roles: ["administrator", "office_worker", "executive"] }
     ]
   },
   {
     label: "Manage",
     items: [
-      { label: "Venues", href: "/venues", roles: ["administrator"] },
-      { label: "Opening Hours", href: "/opening-hours", roles: ["administrator"] },
-      { label: "Users", href: "/users", roles: ["administrator"] },
-      { label: "Settings", href: "/settings", roles: ["administrator"] }
+      { label: "Venues", href: "/venues", roles: ["administrator", "office_worker", "executive"] },
+      { label: "Opening Hours", href: "/opening-hours", roles: ["administrator", "office_worker", "executive"] },
+      { label: "Users", href: "/users", roles: ["administrator", "office_worker", "executive"] },
+      { label: "Settings", href: "/settings", roles: ["administrator", "office_worker", "executive"] }
     ]
   }
 ];
@@ -102,17 +103,17 @@ async function loadShellTodos(user: AppUser): Promise<{ items: TodoItem[]; error
 export async function AppShell({ user, children }: AppShellProps) {
   const todayIso = new Date().toISOString().slice(0, 10);
 
-  // Admins see "Pending proposals" only when there's a non-zero queue, with
-  // a count badge. Non-admins never see this item regardless.
+  // Show "Pending proposals" only when there's a non-zero queue, with a count
+  // badge. Non-admins can read the queue but cannot decide proposals.
   const [pendingCount, todoResult] = await Promise.all([
-    user.role === "administrator" ? countPendingProposals() : Promise.resolve(0),
+    countPendingProposals(),
     loadShellTodos(user)
   ]);
 
   const openTodoCount = todoResult.items.length;
   const reviewTodoCount = todoResult.items.filter((item) => item.source === "review").length;
   const overdueTodoCount = todoResult.items.filter((item) => item.urgency === "overdue").length;
-  const canProposeEvents = user.role === "administrator" || user.role === "office_worker";
+  const canCreateEvents = canProposeEvents(user.role);
 
   const sections = NAV_SECTIONS.map((section) => ({
     ...section,
@@ -217,7 +218,7 @@ export async function AppShell({ user, children }: AppShellProps) {
           ))}
         </nav>
         <div className="mt-auto shrink-0 space-y-2">
-          {canProposeEvents ? (
+          {canCreateEvents ? (
             <NavCalloutLink href="/events/propose" label="Propose an event" />
           ) : null}
           <div className="flex items-center gap-2 rounded-[8px] border border-[var(--rail-border)] bg-[var(--rail-surface)] p-2">
@@ -236,11 +237,11 @@ export async function AppShell({ user, children }: AppShellProps) {
         <AppTopBar
           user={{ email: user.email, fullName: user.fullName, role: user.role }}
           sections={sections}
-          utilityNavItems={canProposeEvents ? [{ label: "Propose an event", href: "/events/propose" }] : []}
+          utilityNavItems={canCreateEvents ? [{ label: "Propose an event", href: "/events/propose" }] : []}
           todos={todoResult.items}
           failedSources={todoResult.errors}
           pendingProposalCount={pendingCount}
-          mobileNav={<MobileNav sections={sections} todayIso={todayIso} showProposeEvent={canProposeEvents} />}
+          mobileNav={<MobileNav sections={sections} todayIso={todayIso} showProposeEvent={canCreateEvents} />}
         />
         <main id="main-content" className="flex-1 bg-[var(--canvas)] px-4 py-5 md:px-5 md:py-5">{children}</main>
       </div>

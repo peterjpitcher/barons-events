@@ -40,6 +40,44 @@ function changedDebriefFields(previous: Record<string, unknown> | null, next: Re
   return changes;
 }
 
+async function completeDebriefSopTask(eventId: string, userId: string): Promise<void> {
+  const admin = createSupabaseAdminClient();
+  const [{ data: planningItems }, { data: templates }] = await Promise.all([
+    (admin as any).from("planning_items").select("id").eq("event_id", eventId),
+    (admin as any).from("sop_task_templates").select("id").eq("template_key", "debrief")
+  ]);
+  const planningItemIds = ((planningItems ?? []) as Array<{ id: string }>).map((row) => row.id);
+  const templateIds = ((templates ?? []) as Array<{ id: string }>).map((row) => row.id);
+  if (planningItemIds.length === 0 || templateIds.length === 0) return;
+
+  const { data: updatedTasks, error } = await (admin as any)
+    .from("planning_tasks")
+    .update({
+      status: "done",
+      completed_at: new Date().toISOString(),
+      completed_by: userId
+    })
+    .in("planning_item_id", planningItemIds)
+    .in("sop_template_task_id", templateIds)
+    .eq("status", "open")
+    .select("id, planning_item_id");
+
+  if (error) {
+    console.warn("completeDebriefSopTask failed", error);
+    return;
+  }
+
+  for (const task of (updatedTasks ?? []) as Array<{ id: string; planning_item_id: string }>) {
+    await recordAuditLogEntry({
+      entity: "planning_task",
+      entityId: task.id,
+      action: "planning_task.debrief_autocompleted",
+      actorId: userId,
+      meta: { event_id: eventId, planning_item_id: task.planning_item_id }
+    });
+  }
+}
+
 export async function submitDebriefAction(
   _: ActionResult | undefined,
   formData: FormData
@@ -209,6 +247,8 @@ export async function submitDebriefAction(
         salesUpliftPercent: savedDebrief.sales_uplift_percent
       }
     });
+
+    await completeDebriefSopTask(values.eventId, user.id);
 
     await sendPostEventDigestEmail(values.eventId);
     // Separate mailing list (administrators' digest goes via sendPostEventDigestEmail;

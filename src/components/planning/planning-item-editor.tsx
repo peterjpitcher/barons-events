@@ -8,6 +8,7 @@ import { VenueMultiSelect, type VenueOption } from "@/components/venues/venue-mu
 import { SopNotRequiredPicker } from "@/components/planning/sop-not-required-picker";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { FieldError } from "@/components/ui/field-error";
 import { FieldLabel } from "@/components/ui/field-label";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -44,25 +45,40 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
 
   // Non-admin users default to themselves as owner (RLS requires owner_id = auth.uid())
   const defaultOwnerId = isAdmin ? "" : (currentUserId ?? "");
+  const defaultVenueId = !isAdmin && venues.length === 1 ? venues[0].id : "";
 
   const sortedUsers = useMemo(
     () => [...users].sort((left, right) => left.name.localeCompare(right.name)),
     [users]
   );
+  const venueOptions = useMemo(
+    () => venues.map((venue) => ({
+      id: venue.id,
+      name: venue.name,
+      category: venue.category ?? "pub",
+      isInternal: venue.isInternal
+    } satisfies VenueOption)),
+    [venues]
+  );
+  const defaultVenueIds = useMemo(
+    () => (isAdmin ? venueOptions.map((venue) => venue.id) : []),
+    [isAdmin, venueOptions]
+  );
 
   const [itemTitle, setItemTitle] = useState("");
   const [itemType, setItemType] = useState("");
   const [itemDescription, setItemDescription] = useState("");
-  const [itemVenueId, setItemVenueId] = useState("");
-  const [itemVenueIds, setItemVenueIds] = useState<string[]>([]);
+  const [itemVenueId, setItemVenueId] = useState(defaultVenueId);
+  const [itemVenueIds, setItemVenueIds] = useState<string[]>(defaultVenueIds);
   const [itemOwnerId, setItemOwnerId] = useState(defaultOwnerId);
   const [itemTargetDate, setItemTargetDate] = useState(today);
   const [itemSopNotRequiredIds, setItemSopNotRequiredIds] = useState<string[]>([]);
+  const [singleFieldErrors, setSingleFieldErrors] = useState<Record<string, string>>({});
 
   const [seriesTitle, setSeriesTitle] = useState("");
   const [seriesType, setSeriesType] = useState("");
   const [seriesDescription, setSeriesDescription] = useState("");
-  const [seriesVenueId, setSeriesVenueId] = useState("");
+  const [seriesVenueId, setSeriesVenueId] = useState(defaultVenueId);
   const [seriesOwnerId, setSeriesOwnerId] = useState(defaultOwnerId);
   const [frequency, setFrequency] = useState<RecurrenceFrequency>("weekly");
   const [interval, setInterval] = useState("1");
@@ -71,16 +87,26 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
   const [startsOn, setStartsOn] = useState(today);
   const [endsOn, setEndsOn] = useState("");
   const [seriesSopNotRequiredIds, setSeriesSopNotRequiredIds] = useState<string[]>([]);
+  const [seriesFieldErrors, setSeriesFieldErrors] = useState<Record<string, string>>({});
 
-  function runAction<T>(work: () => Promise<T>, successMessage: string) {
+  function runAction<T>(
+    work: () => Promise<T>,
+    successMessage: string,
+    onSuccess: () => void,
+    setFieldErrors: (errors: Record<string, string>) => void,
+  ) {
     startTransition(async () => {
+      setFieldErrors({});
       const result: unknown = await work();
       if (result && typeof result === "object" && "success" in result && !(result as { success: boolean }).success) {
-        toast.error((result as { message?: string }).message ?? "Could not save planning data.");
+        const actionResult = result as { message?: string; fieldErrors?: Record<string, string> };
+        setFieldErrors(actionResult.fieldErrors ?? {});
+        toast.error(actionResult.message ?? "Could not save planning data.");
         return;
       }
 
       toast.success(successMessage);
+      onSuccess();
       onChanged();
     });
   }
@@ -89,18 +115,19 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
     setItemTitle("");
     setItemType("");
     setItemDescription("");
-    setItemVenueId("");
-    setItemVenueIds([]);
+    setItemVenueId(defaultVenueId);
+    setItemVenueIds(defaultVenueIds);
     setItemOwnerId(defaultOwnerId);
     setItemTargetDate(today);
     setItemSopNotRequiredIds([]);
+    setSingleFieldErrors({});
   }
 
   function resetSeriesForm() {
     setSeriesTitle("");
     setSeriesType("");
     setSeriesDescription("");
-    setSeriesVenueId("");
+    setSeriesVenueId(defaultVenueId);
     setSeriesOwnerId(defaultOwnerId);
     setFrequency("weekly");
     setInterval("1");
@@ -109,11 +136,18 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
     setStartsOn(today);
     setEndsOn("");
     setSeriesSopNotRequiredIds([]);
+    setSeriesFieldErrors({});
   }
 
   function submitSingleItem() {
+    setSingleFieldErrors({});
     if (!itemTitle.trim() || !itemType.trim() || !itemTargetDate) {
       toast.error("Add title, planning type, and target date.");
+      setSingleFieldErrors({
+        ...(!itemTitle.trim() ? { title: "Add a title" } : {}),
+        ...(!itemType.trim() ? { typeLabel: "Add a planning type" } : {}),
+        ...(!itemTargetDate ? { targetDate: "Choose a target date" } : {})
+      });
       return;
     }
 
@@ -137,10 +171,10 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
           status: "planned",
           sopNotRequiredTemplateIds: itemSopNotRequiredIds
         }),
-      successMessage
+      successMessage,
+      resetSingleForm,
+      setSingleFieldErrors
     );
-
-    resetSingleForm();
   }
 
   function toggleWeekday(dayValue: number, checked: boolean) {
@@ -154,14 +188,21 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
   }
 
   function submitSeries() {
+    setSeriesFieldErrors({});
     if (!seriesTitle.trim() || !seriesType.trim() || !startsOn) {
       toast.error("Add series title, planning type, and start date.");
+      setSeriesFieldErrors({
+        ...(!seriesTitle.trim() ? { title: "Add a title" } : {}),
+        ...(!seriesType.trim() ? { typeLabel: "Add a planning type" } : {}),
+        ...(!startsOn ? { startsOn: "Choose a start date" } : {})
+      });
       return;
     }
 
     const recurrenceInterval = Number(interval);
     if (!Number.isInteger(recurrenceInterval) || recurrenceInterval < 1) {
       toast.error("Recurrence interval must be a whole number.");
+      setSeriesFieldErrors({ recurrenceInterval: "Use a whole number of 1 or more" });
       return;
     }
 
@@ -183,10 +224,10 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
           endsOn: endsOn || null,
           sopNotRequiredTemplateIds: seriesSopNotRequiredIds
         }),
-      "Recurring series created."
+      "Recurring series created.",
+      resetSeriesForm,
+      setSeriesFieldErrors
     );
-
-    resetSeriesForm();
   }
 
   return (
@@ -219,8 +260,11 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                     value={itemTitle}
                     maxLength={160}
                     disabled={isPending}
+                    aria-invalid={Boolean(singleFieldErrors.title)}
+                    aria-describedby="planning-item-title-error"
                     onChange={(event) => setItemTitle(event.target.value)}
                   />
+                  <FieldError id="planning-item-title-error" message={singleFieldErrors.title} />
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="planning-item-type">Planning type</Label>
@@ -230,8 +274,11 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                     maxLength={120}
                     placeholder="Menu launch, ops change, etc."
                     disabled={isPending}
+                    aria-invalid={Boolean(singleFieldErrors.typeLabel)}
+                    aria-describedby="planning-item-type-error"
                     onChange={(event) => setItemType(event.target.value)}
                   />
+                  <FieldError id="planning-item-type-error" message={singleFieldErrors.typeLabel} />
                 </div>
               </div>
               <Textarea
@@ -250,8 +297,11 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                     type="date"
                     value={itemTargetDate}
                     disabled={isPending}
+                    aria-invalid={Boolean(singleFieldErrors.targetDate)}
+                    aria-describedby="planning-item-target-error"
                     onChange={(event) => setItemTargetDate(event.target.value)}
                   />
+                  <FieldError id="planning-item-target-error" message={singleFieldErrors.targetDate} />
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="planning-item-owner">Owner</Label>
@@ -267,29 +317,31 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                 <div className="space-y-1">
                   <FieldLabel
                     htmlFor="planning-item-venue"
-                    help="Pick no venues for a global item, or select one or more venues to link this item. Tasks with a one per venue SOP setting fan out automatically."
+                    help="Use Global item for all venues, or select one or more specific venues. Tasks with a one per venue SOP setting fan out automatically."
                   >
-                    Venue
+                    Venues
                   </FieldLabel>
                   {isAdmin ? (
-                    <div className="rounded-[var(--radius-sm)] border border-[var(--hair)] bg-[var(--paper)] p-2">
-                      <VenueMultiSelect
-                        venues={venues.map((venue) => ({
-                          id: venue.id,
-                          name: venue.name,
-                          category: venue.category ?? "pub",
-                          isInternal: venue.isInternal
-                        } satisfies VenueOption))}
-                        selectedIds={itemVenueIds}
-                        onChange={setItemVenueIds}
-                        disabled={isPending}
-                        emptyLabel="Global item"
-                        emptyDescription="No venue-specific ownership or rollout."
-                      />
-                    </div>
+                    <VenueMultiSelect
+                      venues={venueOptions}
+                      selectedIds={itemVenueIds}
+                      onChange={setItemVenueIds}
+                      disabled={isPending}
+                      allowEmpty={false}
+                      globalSelectionMode="all"
+                      emptyLabel="Global item"
+                      emptyDescription="All venues are included."
+                      placeholder="Choose venues"
+                    />
                   ) : (
-                    <Select id="planning-item-venue" value={itemVenueId} disabled={isPending} onChange={(event) => setItemVenueId(event.target.value)}>
-                      <option value="">Global</option>
+                    <Select
+                      id="planning-item-venue"
+                      value={itemVenueId}
+                      disabled={isPending}
+                      aria-invalid={Boolean(singleFieldErrors.venueId ?? singleFieldErrors.venueIds)}
+                      aria-describedby="planning-item-venue-error"
+                      onChange={(event) => setItemVenueId(event.target.value)}
+                    >
                       {venues.map((venue) => (
                         <option key={venue.id} value={venue.id}>
                           {venue.name}
@@ -297,6 +349,7 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                       ))}
                     </Select>
                   )}
+                  <FieldError id="planning-item-venue-error" message={singleFieldErrors.venueId ?? singleFieldErrors.venueIds} />
                 </div>
               </div>
               <Button type="button" disabled={isPending} onClick={submitSingleItem}>
@@ -323,8 +376,11 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                     value={seriesTitle}
                     maxLength={160}
                     disabled={isPending}
+                    aria-invalid={Boolean(seriesFieldErrors.title)}
+                    aria-describedby="planning-series-title-error"
                     onChange={(event) => setSeriesTitle(event.target.value)}
                   />
+                  <FieldError id="planning-series-title-error" message={seriesFieldErrors.title} />
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="planning-series-type">Planning type</Label>
@@ -334,8 +390,11 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                     maxLength={120}
                     placeholder="Menu launch, ops change, etc."
                     disabled={isPending}
+                    aria-invalid={Boolean(seriesFieldErrors.typeLabel)}
+                    aria-describedby="planning-series-type-error"
                     onChange={(event) => setSeriesType(event.target.value)}
                   />
+                  <FieldError id="planning-series-type-error" message={seriesFieldErrors.typeLabel} />
                 </div>
               </div>
               <Textarea
@@ -369,8 +428,11 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                     max={365}
                     value={interval}
                     disabled={isPending}
+                    aria-invalid={Boolean(seriesFieldErrors.recurrenceInterval)}
+                    aria-describedby="planning-series-interval-error"
                     onChange={(event) => setInterval(event.target.value)}
                   />
+                  <FieldError id="planning-series-interval-error" message={seriesFieldErrors.recurrenceInterval} />
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="planning-series-start">Starts on</Label>
@@ -379,8 +441,11 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                     type="date"
                     value={startsOn}
                     disabled={isPending}
+                    aria-invalid={Boolean(seriesFieldErrors.startsOn)}
+                    aria-describedby="planning-series-start-error"
                     onChange={(event) => setStartsOn(event.target.value)}
                   />
+                  <FieldError id="planning-series-start-error" message={seriesFieldErrors.startsOn} />
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="planning-series-end">Ends on (optional)</Label>
@@ -389,8 +454,11 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                     type="date"
                     value={endsOn}
                     disabled={isPending}
+                    aria-invalid={Boolean(seriesFieldErrors.endsOn)}
+                    aria-describedby="planning-series-end-error"
                     onChange={(event) => setEndsOn(event.target.value)}
                   />
+                  <FieldError id="planning-series-end-error" message={seriesFieldErrors.endsOn} />
                 </div>
               </div>
 
@@ -451,15 +519,18 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                     id="planning-series-venue"
                     value={seriesVenueId}
                     disabled={isPending}
+                    aria-invalid={Boolean(seriesFieldErrors.venueId)}
+                    aria-describedby="planning-series-venue-error"
                     onChange={(event) => setSeriesVenueId(event.target.value)}
                   >
-                    <option value="">Global</option>
+                    {isAdmin ? <option value="">Global</option> : null}
                     {venues.map((venue) => (
                       <option key={venue.id} value={venue.id}>
                         {venue.name}
                       </option>
                     ))}
                   </Select>
+                  <FieldError id="planning-series-venue-error" message={seriesFieldErrors.venueId} />
                 </div>
               </div>
 

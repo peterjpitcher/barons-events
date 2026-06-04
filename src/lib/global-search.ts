@@ -1,6 +1,6 @@
 import "server-only";
 
-import { canViewArtists, canViewBookings, canViewCustomers, canViewDebriefs, canManageLinks, canManageUsers, canManageVenues } from "@/lib/roles";
+import { canViewArtists, canViewBookings, canViewCustomers, canViewDebriefs } from "@/lib/roles";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { AppUser } from "@/lib/types";
 import { canViewVenueLinkedResource } from "@/lib/visibility";
@@ -388,8 +388,6 @@ export async function searchWorkspace(
     }),
 
     runSource("users", async () => {
-      if (!canManageUsers(user.role)) return [];
-
       const { data, error } = await db
         .from("users")
         .select("id,full_name,email,role,venue:venues!users_venue_id_fkey(name)")
@@ -423,8 +421,6 @@ export async function searchWorkspace(
     }),
 
     runSource("venues", async () => {
-      if (!canManageVenues(user.role)) return [];
-
       const { data, error } = await db
         .from("venues")
         .select("id,name,address,category,is_internal")
@@ -597,8 +593,6 @@ export async function searchWorkspace(
     }),
 
     runSource("short-links", async () => {
-      if (!canManageLinks(user.role)) return [];
-
       const { data, error } = await db
         .from("short_links")
         .select("id,name,code,destination,link_type,clicks")

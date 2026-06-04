@@ -156,7 +156,7 @@ export function AppTopBar({
       rows.push({
         id: "overdue",
         title: `${overdue.length} overdue todo${overdue.length === 1 ? "" : "s"}`,
-        meta: "Your queue",
+        meta: "MY TODO ITEMS",
         href: "/",
         unread: true,
       });

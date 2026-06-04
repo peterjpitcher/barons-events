@@ -182,6 +182,7 @@ const statusLabels: Record<string, string> = {
   needs_revisions: "Needs tweaks",
   approved: "Approved",
   rejected: "Rejected",
+  cancelled: "Cancelled",
   completed: "Completed",
 };
 
@@ -193,6 +194,7 @@ const statusTones: Record<string, Tone> = {
   needs_revisions: "warning",
   approved: "success",
   rejected: "danger",
+  cancelled: "danger",
   completed: "success",
 };
 
@@ -476,6 +478,8 @@ function statusIssueLabel(status: string): string {
       return "Needs revisions";
     case "rejected":
       return "Rejected";
+    case "cancelled":
+      return "Cancelled";
     case "draft":
       return "Still in draft";
     default:
@@ -829,6 +833,7 @@ export async function getRecentActivity(limit = 10): Promise<Array<{
   const safeActions = [
     "event.approved",
     "event.rejected",
+    "event.cancelled",
     "event.completed",
     "event.submitted",
     "event.debrief_updated",
@@ -872,6 +877,7 @@ export async function getRecentActivity(limit = 10): Promise<Array<{
   const actionLabels: Record<string, string> = {
     "event.approved": "approved an event",
     "event.rejected": "rejected an event",
+    "event.cancelled": "cancelled an event",
     "event.completed": "completed an event",
     "event.submitted": "submitted an event",
     "event.debrief_updated": "submitted a debrief",

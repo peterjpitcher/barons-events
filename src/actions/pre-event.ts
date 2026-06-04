@@ -9,16 +9,15 @@ import { createSupabaseActionClient } from "@/lib/supabase/server";
 import { canProposeEvents } from "@/lib/roles";
 import { recordAuditLogEntry } from "@/lib/audit-log";
 import type { ActionResult } from "@/lib/types";
-import { canOfficeWorkerUseVenueSelection } from "@/lib/visibility";
 import { callProposeEventDraftRpc } from "@/lib/events/save-rpc";
 import { logEventAction } from "@/lib/observability/event-action-log";
 import { normaliseEventDateTimeForStorage } from "@/lib/datetime";
+import { sendProposalSubmittedEmailOnce } from "@/lib/notifications";
 
 /**
  * Wave 3 — pre-event approval server actions.
  *
- * proposeEventAction: venue manager (or administrator) submits a
- * bare-bones proposal for multiple venues. Calls
+ * proposeEventAction: administrator submits a bare-bones proposal for multiple venues. Calls
  * create_multi_venue_event_proposals RPC. No event_type / venue_space /
  * end_at required; no SOP generated until approval.
  *
@@ -60,6 +59,12 @@ function readProposalIdempotencyKey(formData: FormData): string {
   return randomUUID();
 }
 
+function proposalEventIdFromRpcResponse(data: unknown): string | null {
+  if (!data || typeof data !== "object") return null;
+  const eventId = (data as { event_id?: unknown }).event_id;
+  return typeof eventId === "string" ? eventId : null;
+}
+
 export async function proposeEventAction(
   _: ActionResult | undefined,
   formData: FormData
@@ -87,9 +92,6 @@ export async function proposeEventAction(
 
   if (!canProposeEvents(user.role)) {
     return { success: false, message: "You don't have permission to propose events.", operationId };
-  }
-  if (!canOfficeWorkerUseVenueSelection(user, parsed.data.venueIds)) {
-    return { success: false, message: "You can only propose events for your assigned venue.", operationId };
   }
 
   // WF-003 v3.1: pre-validate venue IDs with explicit error handling so a DB
@@ -126,6 +128,15 @@ export async function proposeEventAction(
 
     if (result.success) {
       revalidatePath("/events");
+      if (result.eventId) {
+        sendProposalSubmittedEmailOnce({
+          eventId: result.eventId,
+          idempotencyKey,
+          userId: user.id
+        }).catch((notificationError) => {
+          console.warn(`[event-propose:${operationId.slice(0, 8)}] Proposal notification failed`, notificationError);
+        });
+      }
     }
 
     logEventAction({
@@ -162,6 +173,16 @@ export async function proposeEventAction(
 
   revalidatePath("/events");
   const venueCount = parsed.data.venueIds.length;
+  const eventId = proposalEventIdFromRpcResponse(data);
+  if (eventId) {
+    sendProposalSubmittedEmailOnce({
+      eventId,
+      idempotencyKey,
+      userId: user.id
+    }).catch((notificationError) => {
+      console.warn(`[event-propose:${operationId.slice(0, 8)}] Proposal notification failed`, notificationError);
+    });
+  }
   return {
     success: true,
     message:

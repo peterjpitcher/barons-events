@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { getDashboardTodoItems } from "@/lib/dashboard";
 import { listPlanningBoardData } from "@/lib/planning";
 import { londonDateString } from "@/lib/planning/utils";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { listVenues } from "@/lib/venues";
 import { canReviewEvents, canViewPlanning } from "@/lib/roles";
 
@@ -22,7 +23,7 @@ export default async function PlanningPage() {
     redirect("/unauthorized");
   }
 
-  const [venues, boardData, calendarData, queueResult] = await Promise.all([
+  const [venues, boardData, calendarData, queueResult, userPrefsResult] = await Promise.all([
     listVenues(),
     listPlanningBoardData({
       user,
@@ -38,8 +39,14 @@ export default async function PlanningPage() {
       unbounded: true,
       includeAllStatuses: true
     }),
-    getDashboardTodoItems(user, londonDateString()).catch(() => ({ items: [], errors: [] }))
+    getDashboardTodoItems(user, londonDateString()).catch(() => ({ items: [], errors: [] })),
+    createSupabaseAdminClient()
+      .from("users")
+      .select("planning_queue_pinned")
+      .eq("id", user.id)
+      .maybeSingle()
   ]);
+  const userPrefs = userPrefsResult.data;
   const visibleVenues =
     user.role === "office_worker" && user.venueId
       ? venues.filter((venue) => venue.id === user.venueId)
@@ -61,6 +68,7 @@ export default async function PlanningPage() {
       currentUserId={user.id}
       currentUserVenueId={user.venueId}
       queueItems={queueResult.items}
+      queueInitiallyPinned={Boolean(userPrefs?.planning_queue_pinned)}
     />
   );
 }

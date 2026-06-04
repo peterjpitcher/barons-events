@@ -8,7 +8,6 @@ import { PageHeader } from "@/components/ui/design-primitives";
 export default async function LinksPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (user.role !== "administrator") redirect("/unauthorized");
 
   const links = await listShortLinks();
   const canEdit = canManageLinks(user.role);

@@ -41,9 +41,9 @@ const executive: AppUser = {
 };
 
 describe("venue-linked visibility", () => {
-  it("lets assigned office workers see only linked resources", () => {
+  it("lets assigned office workers see all linked resources", () => {
     expect(canViewVenueLinkedResource(assignedOfficeWorker, { venue_id: "venue-a" })).toBe(true);
-    expect(canViewVenueLinkedResource(assignedOfficeWorker, { venue_id: "venue-b" })).toBe(false);
+    expect(canViewVenueLinkedResource(assignedOfficeWorker, { venue_id: "venue-b" })).toBe(true);
     expect(
       canViewVenueLinkedResource(assignedOfficeWorker, {
         venue_id: "venue-b",

@@ -69,11 +69,12 @@ describe("requestAttachmentUploadAction — event parent authz", () => {
     adminClient.from.mockImplementation(() => ({ insert: vi.fn().mockResolvedValue({ error: null }) }));
   });
 
-  it("manager_responsible OW on approved event can upload", async () => {
+  it("manager_responsible OW on approved event cannot upload", async () => {
     getCurrentUserMock.mockResolvedValue({ id: MANAGER_ID, role: "office_worker", venueId: VENUE_A });
     loadEventEditContextMock.mockResolvedValue(approvedAtA);
     const result = await requestAttachmentUploadAction(validUploadInput());
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.message).toMatch(/permission/i);
   });
 
   it("non-manager OW at same venue is rejected", async () => {
@@ -243,14 +244,14 @@ describe("getAttachmentUrlAction — parent visibility authz", () => {
     expect(result.success).toBe(true);
   });
 
-  it("rejects an office worker from another venue before issuing a signed URL", async () => {
+  it("allows an office worker from another venue to download an event attachment", async () => {
     getCurrentUserMock.mockResolvedValue({ id: OTHER_OW_ID, role: "office_worker", venueId: VENUE_B });
     setupDownload({ event_id: EVENT_1, venueId: VENUE_A });
 
     const result = await getAttachmentUrlAction({ attachmentId: ATTACHMENT_1 });
 
-    expect(result.success).toBe(false);
-    expect(adminClient.storage.from).not.toHaveBeenCalled();
+    expect(result.success).toBe(true);
+    expect(adminClient.storage.from).toHaveBeenCalled();
   });
 });
 
@@ -300,12 +301,12 @@ describe("deleteAttachmentAction — event parent authz", () => {
     return f;
   }
 
-  it("manager_responsible OW can delete event-parented attachment", async () => {
+  it("manager_responsible OW cannot delete event-parented attachment", async () => {
     getCurrentUserMock.mockResolvedValue({ id: MANAGER_ID, role: "office_worker", venueId: VENUE_A });
     setupAttachmentRow({ event_id: EVENT_1, uploaded_by: OTHER_OW_ID });
     loadEventEditContextMock.mockResolvedValue(approvedAtA);
     const result = await deleteAttachmentAction(undefined, fd(ATTACHMENT_1));
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(false);
   });
 
   it("uploader who is not manager cannot delete event-parented attachment", async () => {

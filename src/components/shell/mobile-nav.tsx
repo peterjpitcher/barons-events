@@ -34,11 +34,23 @@ export function MobileNav({ sections, todayIso, showProposeEvent = false }: Mobi
 
   useEffect(() => {
     if (!drawerOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    const previousPaddingRight = document.body.style.paddingRight;
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+    document.body.style.overflow = "hidden";
+    if (scrollbarWidth > 0) {
+      document.body.style.paddingRight = `${scrollbarWidth}px`;
+    }
+
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") close();
     }
     document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previousOverflow;
+      document.body.style.paddingRight = previousPaddingRight;
+    };
   }, [drawerOpen, close]);
 
   return (
@@ -61,7 +73,7 @@ export function MobileNav({ sections, todayIso, showProposeEvent = false }: Mobi
       ) : null}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-72 bg-[var(--navy)] px-4 py-5 shadow-card transition-transform duration-200 ease-in-out md:hidden ${
+        className={`fixed inset-y-0 left-0 z-50 w-72 overflow-y-auto bg-[var(--navy)] px-4 py-5 shadow-card transition-transform duration-200 ease-in-out md:hidden ${
           drawerOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >

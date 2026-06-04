@@ -51,10 +51,7 @@ export default async function NewEventPage({ searchParams }: PageProps) {
     listAssignableUsers(),
     loadSopTemplate()
   ]);
-  const eventVenues =
-    user.role === "office_worker" && user.venueId
-      ? venues.filter((venue) => venue.id === user.venueId)
-      : venues;
+  const eventVenues = venues;
   const initialStartAt = parseDateParam(resolvedSearchParams.startAt);
   const initialEndAt =
     parseDateParam(resolvedSearchParams.endAt) ??
@@ -64,9 +61,7 @@ export default async function NewEventPage({ searchParams }: PageProps) {
   // "New event" must start blank so events are not accidentally filed to the
   // wrong site.
   const initialVenueId =
-    user.role === "office_worker" && user.venueId
-      ? user.venueId
-      : requestedVenueId && eventVenues.some((venue) => venue.id === requestedVenueId)
+    requestedVenueId && eventVenues.some((venue) => venue.id === requestedVenueId)
         ? requestedVenueId
         : undefined;
 

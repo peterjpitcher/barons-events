@@ -24,6 +24,7 @@ const STATUS_BADGE_VARIANT: Record<
   needs_revisions: "warning",
   approved: "success",
   rejected: "danger",
+  cancelled: "danger",
   completed: "neutral",
 };
 
@@ -35,6 +36,7 @@ const STATUS_LABEL: Record<EventStatus, string> = {
   needs_revisions: "Needs Revisions",
   approved: "Approved",
   rejected: "Rejected",
+  cancelled: "Cancelled",
   completed: "Completed",
 };
 

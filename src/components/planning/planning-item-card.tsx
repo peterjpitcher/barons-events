@@ -5,7 +5,8 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { ArrowRight, Calendar, Check, ChevronDown, ClipboardList, GripVertical, Pencil, Sparkles, Trash2, X } from "lucide-react";
 import { ApproveEventButton } from "@/components/events/approve-event-button";
-import { archiveDraftEventAction } from "@/actions/events";
+import { StatusDropdown } from "@/components/events/status-dropdown";
+import { archiveDraftEventAction, updateEventStatusAction } from "@/actions/events";
 import {
   convertInspirationItemAction,
   deletePlanningItemAction,
@@ -852,12 +853,15 @@ type EventOverlayCardProps = {
 };
 
 const EVENT_STATUS_BADGE_VARIANT: Record<string, "neutral" | "info" | "warning" | "success" | "danger"> = {
+  pending_approval: "info",
+  approved_pending_details: "info",
   draft: "neutral",
   submitted: "info",
   needs_revisions: "warning",
   approved: "success",
   completed: "success",
   rejected: "danger",
+  cancelled: "danger",
 };
 
 export function EventOverlayCard({ event, canApprove, onChanged }: EventOverlayCardProps) {
@@ -865,6 +869,14 @@ export function EventOverlayCard({ event, canApprove, onChanged }: EventOverlayC
   const hasWebCopy = Boolean(event.publicTitle);
   const [confirmArchive, setConfirmArchive] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const statusOptions =
+    canApprove && event.status === "approved"
+      ? [
+          { value: "approved" as const, label: "Approved" },
+          { value: "completed" as const, label: "Completed" },
+          { value: "cancelled" as const, label: "Cancelled" }
+        ]
+      : [];
 
   function handleArchiveDraft() {
     startTransition(async () => {
@@ -892,7 +904,27 @@ export function EventOverlayCard({ event, canApprove, onChanged }: EventOverlayC
             <p className="line-clamp-2 text-xs text-[var(--ink-muted)]">{event.publicTeaser}</p>
           )}
         </div>
-        <Badge variant={statusTone}>{event.status.replace(/_/g, " ")}</Badge>
+        {statusOptions.length > 0 ? (
+          <StatusDropdown
+            value="approved"
+            label="Event status"
+            options={statusOptions}
+            className="shrink-0"
+            toneByValue={{
+              approved: "success",
+              completed: "success",
+              cancelled: "danger"
+            }}
+            onChangeStatus={(status) =>
+              status === "approved"
+                ? Promise.resolve({ success: true, message: "Event status is already approved." })
+                : updateEventStatusAction({ eventId: event.eventId, status })
+            }
+            onChanged={onChanged}
+          />
+        ) : (
+          <Badge variant={statusTone}>{event.status.replace(/_/g, " ")}</Badge>
+        )}
       </header>
 
       <div className="grid gap-1.5 text-xs text-[var(--ink-muted)] md:grid-cols-2">

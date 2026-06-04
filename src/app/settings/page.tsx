@@ -25,9 +25,7 @@ export default async function SettingsPage() {
   if (!user) {
     redirect("/login");
   }
-  if (user.role !== "administrator") {
-    redirect("/unauthorized");
-  }
+  const canEdit = user.role === "administrator";
 
   const db = createSupabaseAdminClient();
 
@@ -84,6 +82,7 @@ export default async function SettingsPage() {
           accountantSalesReportEmail={accountantSalesReportEmail}
           updatedAt={businessSettings?.updated_at ?? null}
           updatedBy={businessSettings?.updated_by ?? null}
+          canEdit={canEdit}
         />
       ),
     },
@@ -91,19 +90,19 @@ export default async function SettingsPage() {
       value: "slt",
       label: "SLT Distribution",
       description: "Senior leadership team members receive a BCC'd email whenever a debrief is submitted.",
-      content: <SltMembersManager members={members} candidates={candidates} />,
+      content: <SltMembersManager members={members} candidates={candidates} canEdit={canEdit} />,
     },
     {
       value: "event-types",
       label: "Event Types",
       description: "Keep this list focused on the programming that fits your pubs.",
-      content: <EventTypesManager eventTypes={eventTypes} />,
+      content: <EventTypesManager eventTypes={eventTypes} canEdit={canEdit} />,
     },
     {
       value: "service-types",
       label: "Service Types",
       description: "These categories appear as rows in the weekly opening hours grid for each venue.",
-      content: <ServiceTypesManager serviceTypes={serviceTypes} />,
+      content: <ServiceTypesManager serviceTypes={serviceTypes} canEdit={canEdit} />,
     },
     ...(canViewSopTemplate(user.role)
       ? [
@@ -114,7 +113,7 @@ export default async function SettingsPage() {
             content: (
               <div className="space-y-4">
                 <SopTemplateEditor />
-                <SopBackfillButton />
+                {canEdit ? <SopBackfillButton /> : null}
               </div>
             ),
           },
@@ -124,7 +123,7 @@ export default async function SettingsPage() {
       value: "archived-artists",
       label: "Archived Artists",
       description: "Archived artists are hidden from planning flows but can be restored here.",
-      content: <ArchivedArtistsManager artists={archivedArtists} />,
+      content: <ArchivedArtistsManager artists={archivedArtists} canEdit={canEdit} />,
     },
   ];
 

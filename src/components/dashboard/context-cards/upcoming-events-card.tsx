@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import type { UserRole } from "@/lib/types";
+import { canProposeEvents } from "@/lib/roles";
 
 export type UpcomingEvent = {
   id: string;
@@ -14,10 +15,9 @@ export type UpcomingEvent = {
 type UpcomingEventsCardProps = {
   events: UpcomingEvent[] | null;
   userRole: UserRole;
-  hasVenue: boolean;
 };
 
-export function UpcomingEventsCard({ events, userRole, hasVenue }: UpcomingEventsCardProps): React.ReactNode {
+export function UpcomingEventsCard({ events, userRole }: UpcomingEventsCardProps): React.ReactNode {
   if (!events) {
     return (
       <Card>
@@ -40,7 +40,7 @@ export function UpcomingEventsCard({ events, userRole, hasVenue }: UpcomingEvent
         {events.length === 0 ? (
           <div className="text-sm text-subtle">
             <p>No upcoming events.</p>
-            {(userRole === "administrator" || (userRole === "office_worker" && hasVenue)) && (
+            {canProposeEvents(userRole) && (
               <Button asChild size="sm" className="mt-2">
                 <Link href="/events/new">New Event</Link>
               </Button>

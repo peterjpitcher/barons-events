@@ -70,7 +70,7 @@ describe("listEventsForUser", () => {
     vi.clearAllMocks();
   });
 
-  it("venue-scopes assigned office_worker event reads after loading rows", async () => {
+  it("leaves assigned office_worker event reads global after loading rows", async () => {
     const { proxy, calls } = buildQueryMock({
       data: [
         {
@@ -98,7 +98,7 @@ describe("listEventsForUser", () => {
 
     const events = await listEventsForUser(officeWorker);
 
-    expect(events.map((event) => event.id)).toEqual(["event-1"]);
+    expect(events.map((event) => event.id)).toEqual(["event-1", "event-2"]);
     expect(calls).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ method: "select" }),

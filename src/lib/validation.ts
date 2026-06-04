@@ -169,28 +169,45 @@ export const decisionSchema = z.object({
   feedback: z.string().max(1000).optional()
 });
 
-export const debriefSchema = z.object({
-  eventId: z.string().uuid(),
-  attendance: optionalInteger(0, 100000),
-  baselineAttendance: optionalInteger(0, 100000),
-  wetTakings: optionalNumberMin(0),
-  foodTakings: optionalNumberMin(0),
-  baselineWetTakings: optionalNumberMin(0),
-  baselineFoodTakings: optionalNumberMin(0),
-  promoEffectiveness: optionalInteger(1, 5),
-  highlights: optionalText(1000),
-  issues: optionalText(1000),
-  guestSentimentNotes: optionalText(2000),
-  operationalNotes: optionalText(2000),
-  wouldBookAgain: z.preprocess(
-    (value) => {
-      if (typeof value !== "string") return undefined;
-      if (value === "yes") return true;
-      if (value === "no") return false;
-      return undefined;
-    },
-    z.boolean().optional()
-  ),
-  nextTimeActions: optionalText(2000),
-  labourHours: optionalNumberMin(0)
-});
+export const debriefSchema = z
+  .object({
+    eventId: z.string().uuid(),
+    attendance: optionalInteger(0, 100000),
+    baselineAttendance: optionalInteger(0, 100000),
+    wetTakings: optionalNumberMin(0),
+    foodTakings: optionalNumberMin(0),
+    baselineWetTakings: optionalNumberMin(0),
+    baselineFoodTakings: optionalNumberMin(0),
+    promoEffectiveness: optionalInteger(1, 5),
+    highlights: optionalText(1000),
+    issues: optionalText(1000),
+    guestSentimentNotes: optionalText(2000),
+    operationalNotes: optionalText(2000),
+    wouldBookAgain: z.preprocess(
+      (value) => {
+        if (typeof value !== "string") return undefined;
+        if (value === "yes") return true;
+        if (value === "no") return false;
+        return undefined;
+      },
+      z.boolean().optional()
+    ),
+    nextTimeActions: optionalText(2000),
+    labourHours: optionalNumberMin(0)
+  })
+  .superRefine((values, ctx) => {
+    if (values.baselineWetTakings === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Add normal wet takings, or enter 0",
+        path: ["baselineWetTakings"]
+      });
+    }
+    if (values.baselineFoodTakings === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Add normal food takings, or enter 0",
+        path: ["baselineFoodTakings"]
+      });
+    }
+  });

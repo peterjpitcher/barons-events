@@ -22,6 +22,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
 import { FieldError } from "@/components/ui/field-error";
 import { EventFormContext } from "@/components/events/event-form-context";
+import { EventDebriefInline } from "@/components/events/event-debrief-inline";
 import { WebsiteListingCard } from "@/components/events/website-listing-card";
 import { FloatingActionBar } from "@/components/events/floating-action-bar";
 import { SopNotRequiredPicker } from "@/components/planning/sop-not-required-picker";
@@ -88,6 +89,9 @@ export type EventFormProps = {
     submitted_at: string;
     [key: string]: unknown;
   } | null;
+  canSubmitDebrief?: boolean;
+  debriefInitiallyPinned?: boolean;
+  reserveFloatingActionSpace?: boolean;
 };
 
 function toLocalInputValue(date?: string | null) {
@@ -202,7 +206,10 @@ export function EventForm({
   sopTemplate,
   canDelete = false,
   readOnly = false,
-  debrief = null
+  debrief = null,
+  canSubmitDebrief = false,
+  debriefInitiallyPinned = false,
+  reserveFloatingActionSpace = true
 }: EventFormProps) {
   const [draftState, draftAction, isSavingPending] = useActionState(saveEventDraftAction, undefined);
   const [submitState, submitAction, isSubmittingPending] = useActionState(submitEventForReviewAction, undefined);
@@ -1767,7 +1774,7 @@ export function EventForm({
       <form
         ref={formRef}
         action={draftAction}
-        className={!readOnly ? "pb-28" : undefined}
+        className={!readOnly && reserveFloatingActionSpace ? "pb-28" : undefined}
         noValidate
         onSubmit={handleSubmit}
         onChange={() => setIsDirty(true)}
@@ -1842,6 +1849,15 @@ export function EventForm({
 
                     {/* Row 6: Event image */}
                     {eventImageField}
+
+                    {mode === "edit" && defaultValues?.id && canSubmitDebrief ? (
+                      <EventDebriefInline
+                        eventId={defaultValues.id}
+                        hasDebrief={Boolean(debrief)}
+                        submittedAt={debrief?.submitted_at ?? null}
+                        initiallyPinned={debriefInitiallyPinned}
+                      />
+                    ) : null}
                   </CardContent>
                 </Card>
 
@@ -1891,7 +1907,7 @@ export function EventForm({
 
       {!readOnly ? (
         <FloatingActionBar
-          className={showSopRail ? "xl:right-[calc(1.5rem+320px+1rem)]" : undefined}
+          className={showSopRail ? "xl:right-[calc(1.5rem_+_320px_+_1rem_+_var(--sop-drawer-reserved-width,0px))]" : undefined}
         />
       ) : null}
 

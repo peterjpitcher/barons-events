@@ -323,6 +323,8 @@ function HoursCell({
   canEdit: boolean;
   onChange: (updates: Partial<CellState>) => void;
 }) {
+  const groupName = useId();
+
   if (!hasService) {
     return (
       <span className="inline-flex items-center rounded-full bg-[var(--canvas-2)] px-2 py-1 text-xs text-subtle">
@@ -351,8 +353,6 @@ function HoursCell({
       </span>
     );
   }
-
-  const groupName = useId();
 
   return (
     <div className="space-y-1.5">

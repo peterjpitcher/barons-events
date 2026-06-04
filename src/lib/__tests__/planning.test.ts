@@ -133,6 +133,7 @@ function item(overrides: Partial<PlanningItem>): PlanningItem {
   return {
     id: "item-1",
     source: "planning",
+    eventId: null,
     seriesId: null,
     occurrenceOn: null,
     isException: false,
@@ -145,6 +146,8 @@ function item(overrides: Partial<PlanningItem>): PlanningItem {
     ownerId: null,
     ownerName: null,
     targetDate: "2026-05-25",
+    startAt: null,
+    endAt: null,
     status: "planned",
     createdBy: "user-1",
     tasks: [],

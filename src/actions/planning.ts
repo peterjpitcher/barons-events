@@ -35,6 +35,7 @@ export type PlanningActionResult = {
 const uuidSchema = z.string().uuid();
 const optionalUuidSchema = z.union([z.string().uuid(), z.literal(""), z.null(), z.undefined()]);
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD");
+const optionalDateTimeSchema = z.union([z.string().datetime(), z.literal(""), z.null(), z.undefined()]);
 const planningStatusSchema = z.enum(["planned", "in_progress", "blocked", "done", "cancelled"]);
 const taskStatusSchema = z.enum(["open", "done", "not_required"]);
 const frequencySchema = z.enum(["daily", "weekly", "monthly"]);
@@ -73,6 +74,8 @@ const createItemSchema = z.object({
   venueIds: z.array(z.string().uuid()).optional(),
   ownerId: optionalUuidSchema,
   targetDate: dateSchema,
+  startAt: optionalDateTimeSchema,
+  endAt: optionalDateTimeSchema,
   status: planningStatusSchema.optional(),
   sopNotRequiredTemplateIds: z.array(z.string().uuid()).optional()
 });
@@ -109,6 +112,42 @@ async function loadPlanningSeriesAccess(seriesId: string) {
     .eq("id", seriesId)
     .maybeSingle();
   return data as { id: string; venue_id: string | null } | null;
+}
+
+async function loadTaskRouteContext(taskId: string): Promise<{ planningItemId: string | null; eventId: string | null }> {
+  const db = createSupabaseAdminClient();
+  const { data: task } = await db
+    .from("planning_tasks")
+    .select("planning_item_id")
+    .eq("id", taskId)
+    .maybeSingle();
+
+  const planningItemId = task?.planning_item_id ?? null;
+  if (!planningItemId) {
+    return { planningItemId: null, eventId: null };
+  }
+
+  const { data: item } = await db
+    .from("planning_items")
+    .select("event_id")
+    .eq("id", planningItemId)
+    .maybeSingle();
+
+  return {
+    planningItemId,
+    eventId: item?.event_id ?? null
+  };
+}
+
+function revalidatePlanningRouteContext(context: { planningItemId?: string | null; eventId?: string | null }): void {
+  revalidatePath("/planning");
+  if (context.planningItemId) {
+    revalidatePath(`/planning/${context.planningItemId}`);
+  }
+  if (context.eventId) {
+    revalidatePath(`/events/${context.eventId}`);
+  }
+  revalidatePath("/");
 }
 
 async function ensureCanManagePlanningItem(
@@ -158,6 +197,8 @@ export async function createPlanningItemAction(input: unknown): Promise<Planning
       venueId: primaryVenueId,
       ownerId: parsed.data.ownerId ? parsed.data.ownerId : null,
       targetDate: parsed.data.targetDate,
+      startAt: parsed.data.startAt || null,
+      endAt: parsed.data.endAt || null,
       status: (parsed.data.status ?? "planned") as PlanningItemStatus,
       createdBy: user.id
     });
@@ -206,6 +247,8 @@ const updateItemSchema = z.object({
   venueIds: z.array(z.string().uuid()).optional(),
   ownerId: optionalUuidSchema,
   targetDate: dateSchema.optional(),
+  startAt: optionalDateTimeSchema,
+  endAt: optionalDateTimeSchema,
   status: planningStatusSchema.optional()
 });
 
@@ -252,8 +295,10 @@ export async function updatePlanningItemAction(input: unknown): Promise<Planning
       typeLabel: parsed.data.typeLabel,
       // Only touch venue_id when the caller actually sent a venue update.
       ...(effectiveVenueIds !== null ? { venueId: primaryVenueId } : {}),
-      ownerId: parsed.data.ownerId ? parsed.data.ownerId : null,
+      ...(parsed.data.ownerId !== undefined ? { ownerId: parsed.data.ownerId ? parsed.data.ownerId : null } : {}),
       targetDate: parsed.data.targetDate,
+      ...(parsed.data.startAt !== undefined ? { startAt: parsed.data.startAt || null } : {}),
+      ...(parsed.data.endAt !== undefined ? { endAt: parsed.data.endAt || null } : {}),
       status: parsed.data.status as PlanningItemStatus | undefined
     });
 
@@ -923,6 +968,7 @@ export async function updatePlanningTaskAction(input: unknown): Promise<Planning
     // Ownership check: non-admins can only update tasks on their own planning items
     const ownershipError = await ensureOwnsParentItemOfTask(user.id, user.role, user.venueId, parsed.data.taskId);
     if (ownershipError) return ownershipError;
+    const routeContext = await loadTaskRouteContext(parsed.data.taskId);
 
     if (parsed.data.status && parsed.data.status !== "open") {
       const db = createSupabaseAdminClient();
@@ -974,7 +1020,7 @@ export async function updatePlanningTaskAction(input: unknown): Promise<Planning
       }).catch(() => {});
     }
 
-    revalidatePath("/planning");
+    revalidatePlanningRouteContext(routeContext);
     return { success: true, message: "Task updated." };
   } catch (error) {
     console.error("Failed to update planning task", error);
@@ -990,6 +1036,7 @@ export async function togglePlanningTaskStatusAction(input: unknown): Promise<Pl
     // Ownership check: non-admins can only toggle tasks on their own planning items
     const ownershipError = await ensureOwnsParentItemOfTask(user.id, user.role, user.venueId, parsed.data.taskId);
     if (ownershipError) return ownershipError;
+    const routeContext = await loadTaskRouteContext(parsed.data.taskId);
 
     if (parsed.data.status !== "open") {
       const db = createSupabaseAdminClient();
@@ -1021,8 +1068,7 @@ export async function togglePlanningTaskStatusAction(input: unknown): Promise<Pl
     } catch (blockErr) {
       console.error("Failed to update blocked status:", blockErr);
     }
-    revalidatePath("/planning");
-    revalidatePath("/");
+    revalidatePlanningRouteContext(routeContext);
     return { success: true };
   } catch (err: unknown) {
     return { success: false, message: err instanceof Error ? err.message : "Failed to update task status" };

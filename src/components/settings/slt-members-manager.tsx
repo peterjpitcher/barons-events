@@ -12,9 +12,10 @@ type UserOption = { id: string; name: string; email: string };
 type SltMembersManagerProps = {
   members: UserOption[];
   candidates: UserOption[];
+  canEdit: boolean;
 };
 
-export function SltMembersManager({ members, candidates }: SltMembersManagerProps) {
+export function SltMembersManager({ members, candidates, canEdit }: SltMembersManagerProps) {
   const [selected, setSelected] = useState("");
   const [isPending, startTransition] = useTransition();
 
@@ -51,33 +52,35 @@ export function SltMembersManager({ members, candidates }: SltMembersManagerProp
 
   return (
     <div className="space-y-4">
-      <div className="flex items-end gap-2">
-        <div className="flex-1 space-y-1">
-          <label htmlFor="slt-add" className="text-sm font-medium">
-            Add SLT member
-          </label>
-          <Select
-            id="slt-add"
-            value={selected}
-            onChange={(event) => setSelected(event.target.value)}
-            disabled={isPending || availableCandidates.length === 0}
-          >
-            <option value="">
-              {availableCandidates.length === 0
-                ? "No eligible users to add"
-                : "Select a user..."}
-            </option>
-            {availableCandidates.map((user) => (
-              <option key={user.id} value={user.id}>
-                {user.name} ({user.email})
+      {canEdit ? (
+        <div className="flex items-end gap-2">
+          <div className="flex-1 space-y-1">
+            <label htmlFor="slt-add" className="text-sm font-medium">
+              Add SLT member
+            </label>
+            <Select
+              id="slt-add"
+              value={selected}
+              onChange={(event) => setSelected(event.target.value)}
+              disabled={isPending || availableCandidates.length === 0}
+            >
+              <option value="">
+                {availableCandidates.length === 0
+                  ? "No eligible users to add"
+                  : "Select a user..."}
               </option>
-            ))}
-          </Select>
+              {availableCandidates.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.name} ({user.email})
+                </option>
+              ))}
+            </Select>
+          </div>
+          <Button type="button" onClick={handleAdd} disabled={isPending || !selected}>
+            <UserPlus className="mr-1 h-4 w-4" aria-hidden="true" /> Add
+          </Button>
         </div>
-        <Button type="button" onClick={handleAdd} disabled={isPending || !selected}>
-          <UserPlus className="mr-1 h-4 w-4" aria-hidden="true" /> Add
-        </Button>
-      </div>
+      ) : null}
 
       <div className="space-y-1">
         <h4 className="text-sm font-semibold text-[var(--ink)]">Current SLT members</h4>
@@ -91,16 +94,18 @@ export function SltMembersManager({ members, candidates }: SltMembersManagerProp
                   <p className="text-sm font-medium text-[var(--ink)]">{member.name}</p>
                   <p className="text-xs text-subtle">{member.email}</p>
                 </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={isPending}
-                  onClick={() => handleRemove(member.id)}
-                  aria-label={`Remove ${member.name} from SLT`}
-                >
-                  <Trash2 className="h-4 w-4" aria-hidden="true" />
-                </Button>
+                {canEdit ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={isPending}
+                    onClick={() => handleRemove(member.id)}
+                    aria-label={`Remove ${member.name} from SLT`}
+                  >
+                    <Trash2 className="h-4 w-4" aria-hidden="true" />
+                  </Button>
+                ) : null}
               </li>
             ))}
           </ul>

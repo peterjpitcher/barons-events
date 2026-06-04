@@ -1,8 +1,8 @@
 ---
 generated: true
-last_updated: 2026-05-07T00:00:00Z
+last_updated: 2026-06-04T00:00:00Z
 source: session-setup
-project: barons-events-mvp
+project: baronshub
 ---
 
 # Architecture Docs
@@ -13,19 +13,19 @@ project: barons-events-mvp
 
 | Document | Description | Status |
 |----------|-------------|--------|
-| [[overview]] | Tech stack, integrations, auth model, env vars | 2026-05-07 |
-| [[routes]] | All page, API, cron, and webhook routes | 2026-05-07 |
-| [[server-actions]] | All server actions with tables, auth, revalidation | 2026-05-07 |
-| [[data-model]] | Database tables referenced in code (stub for DB agent) | 2026-05-07 |
-| [[relationships]] | Cross-reference map: tables, actions, routes, integrations | 2026-05-07 |
+| [[overview]] | Tech stack, integrations, auth model, env vars | 2026-06-04 |
+| [[routes]] | All page, API, cron, and webhook routes | 2026-06-04 |
+| [[server-actions]] | All server actions with tables, auth, audit | 2026-06-04 |
+| [[data-model]] | Database tables referenced in code (stub for DB agent) | 2026-06-04 |
+| [[relationships]] | Cross-reference map: tables, actions, routes, integrations | 2026-06-04 |
 
 ## Quick Stats
 
-- **30** page routes (24 authenticated, 6 public)
-- **20** API/cron/webhook routes (8 public API, 10 cron, 2 auth/webhook)
-- **17** server action files with **~85** exported actions
-- **~25** database tables referenced in code
-- **8** external integrations (Supabase, Resend, Twilio, QR Code, Upstash, Turnstile, libphonenumber, React Email)
+- **33** page routes (25 authenticated, 8 public)
+- **27** API/cron/webhook routes (8 public API, 12 cron, 2 webhooks, plus auth/search/payment)
+- **18** server action files with **~75** exported actions
+- **~30** database tables referenced in code
+- **8** external integrations (Supabase, Resend, Twilio, Stripe, QR Code, OpenAI, Turnstile, Upstash KV)
 
 ## How to Use
 

@@ -19,7 +19,8 @@ const userUpdateSchema = z.object({
   userId: z.string().uuid(),
   fullName: z.string().max(120).optional(),
   role: z.enum(["administrator", "office_worker", "executive"]),
-  venueId: z.union([z.string().uuid(), z.literal(""), z.null(), z.undefined()])
+  venueId: z.union([z.string().uuid(), z.literal(""), z.null(), z.undefined()]),
+  isCentralEventsLead: z.boolean()
 });
 
 export async function updateUserAction(
@@ -38,7 +39,8 @@ export async function updateUserAction(
     userId: formData.get("userId"),
     fullName: typeof formData.get("fullName") === "string" ? formData.get("fullName") : undefined,
     role: typeof formData.get("role") === "string" ? formData.get("role") : "",
-    venueId: formData.get("venueId")
+    venueId: formData.get("venueId"),
+    isCentralEventsLead: formData.get("isCentralEventsLead") === "on"
   });
 
   if (!parsed.success) {
@@ -53,15 +55,50 @@ export async function updateUserAction(
     const supabase = await createSupabaseActionClient();
     const { data: currentUserData } = await supabase
       .from("users")
-      .select("role, venue_id")
+      .select("role, venue_id, is_central_events_lead, deactivated_at")
       .eq("id", parsed.data.userId)
       .single();
+
+    if (parsed.data.isCentralEventsLead && currentUserData?.deactivated_at) {
+      return { success: false, message: "Reactivate this user before making them central events lead." };
+    }
 
     await updateUser(parsed.data.userId, {
       fullName: parsed.data.fullName ?? null,
       role: parsed.data.role,
       venueId: parsed.data.venueId ? parsed.data.venueId : null
     });
+
+    const centralLeadChanged = Boolean(currentUserData?.is_central_events_lead) !== parsed.data.isCentralEventsLead;
+    if (parsed.data.isCentralEventsLead) {
+      const adminDb = createSupabaseAdminClient();
+      const { data: targetUser, error: targetError } = await adminDb
+        .from("users")
+        .select("id, deactivated_at")
+        .eq("id", parsed.data.userId)
+        .maybeSingle();
+      if (targetError || !targetUser) {
+        throw new Error(targetError?.message ?? "User not found");
+      }
+      const { error: clearError } = await adminDb
+        .from("users")
+        .update({ is_central_events_lead: false })
+        .neq("id", parsed.data.userId);
+      if (clearError) throw new Error(clearError.message);
+
+      const { error: setError } = await adminDb
+        .from("users")
+        .update({ is_central_events_lead: true })
+        .eq("id", parsed.data.userId);
+      if (setError) throw new Error(setError.message);
+    } else if (currentUserData?.is_central_events_lead) {
+      const adminDb = createSupabaseAdminClient();
+      const { error: clearTargetError } = await adminDb
+        .from("users")
+        .update({ is_central_events_lead: false })
+        .eq("id", parsed.data.userId);
+      if (clearTargetError) throw new Error(clearTargetError.message);
+    }
 
     const nextVenueId = parsed.data.venueId ? parsed.data.venueId : null;
     const accessChanged =
@@ -96,6 +133,7 @@ export async function updateUserAction(
     const changedFields: string[] = [];
     if ((currentUserData?.role ?? null) !== parsed.data.role) changedFields.push("role");
     if ((currentUserData?.venue_id ?? null) !== nextVenueId) changedFields.push("venue_id");
+    if (centralLeadChanged) changedFields.push("is_central_events_lead");
     if (parsed.data.fullName !== undefined) changedFields.push("full_name");
 
     await recordAuditLogEntry({
@@ -105,6 +143,16 @@ export async function updateUserAction(
       actorId: currentUser.id,
       meta: { changed_fields: changedFields }
     });
+
+    if (centralLeadChanged) {
+      await recordAuditLogEntry({
+        entity: "user",
+        entityId: parsed.data.userId,
+        action: "user.central_lead_set",
+        actorId: currentUser.id,
+        meta: { is_central_events_lead: parsed.data.isCentralEventsLead }
+      });
+    }
 
     revalidatePath("/users");
     return { success: true, message: "User updated." };

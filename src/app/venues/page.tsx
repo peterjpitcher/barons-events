@@ -17,9 +17,7 @@ export default async function VenuesPage() {
   if (!user) {
     redirect("/login");
   }
-  if (user.role !== "administrator") {
-    redirect("/unauthorized");
-  }
+  const canEdit = user.role === "administrator";
 
   const [venues, reviewers, assignableUsers] = await Promise.all([
     listVenues(),
@@ -46,7 +44,12 @@ export default async function VenuesPage() {
           </p>
         </CardContent>
       </Card>
-      <VenuesManager venues={venues} reviewers={reviewers} users={assignableUsers.map((u) => ({ id: u.id, name: u.name }))} />
+      <VenuesManager
+        venues={venues}
+        reviewers={reviewers}
+        users={assignableUsers.map((u) => ({ id: u.id, name: u.name }))}
+        canEdit={canEdit}
+      />
     </div>
   );
 }

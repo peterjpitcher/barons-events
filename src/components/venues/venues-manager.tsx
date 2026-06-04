@@ -24,15 +24,16 @@ type VenuesManagerProps = {
   venues: VenueRow[];
   reviewers: ReviewerOption[];
   users: UserOption[];
+  canEdit: boolean;
 };
 
 const errorInputClass = "!border-[var(--burgundy)] focus-visible:!border-[var(--burgundy)]";
 
-export function VenuesManager({ venues, reviewers, users }: VenuesManagerProps) {
+export function VenuesManager({ venues, reviewers, users, canEdit }: VenuesManagerProps) {
   return (
     <div className="space-y-5">
-      <VenueCreateForm reviewers={reviewers} users={users} />
-      <VenueTable venues={venues} reviewers={reviewers} users={users} />
+      {canEdit ? <VenueCreateForm reviewers={reviewers} users={users} /> : null}
+      <VenueTable venues={venues} reviewers={reviewers} users={users} canEdit={canEdit} />
     </div>
   );
 }
@@ -124,11 +125,13 @@ function VenueCreateForm({ reviewers, users }: { reviewers: ReviewerOption[]; us
   );
 }
 
-function VenueTable({ venues, reviewers, users }: VenuesManagerProps) {
+function VenueTable({ venues, reviewers, users, canEdit }: VenuesManagerProps) {
   if (venues.length === 0) {
     return (
       <Card>
-        <CardContent className="py-8 text-center text-subtle">No venues yet. Add your first location above.</CardContent>
+        <CardContent className="py-8 text-center text-subtle">
+          {canEdit ? "No venues yet. Add your first location above." : "No venues yet."}
+        </CardContent>
       </Card>
     );
   }
@@ -145,12 +148,12 @@ function VenueTable({ venues, reviewers, users }: VenuesManagerProps) {
             <th scope="col" className="px-4 py-3">Default Reviewer</th>
             <th scope="col" className="px-4 py-3">Google Review URL</th>
             <th scope="col" className="px-4 py-3">Hours</th>
-            <th scope="col" className="px-4 py-3 text-right">Actions</th>
+            <th scope="col" className="px-4 py-3 text-right">{canEdit ? "Actions" : ""}</th>
           </tr>
         </thead>
         <tbody>
           {venues.map((venue) => (
-            <VenueRowEditor key={venue.id} venue={venue} reviewers={reviewers} users={users} />
+            <VenueRowEditor key={venue.id} venue={venue} reviewers={reviewers} users={users} canEdit={canEdit} />
           ))}
         </tbody>
       </table>
@@ -158,7 +161,17 @@ function VenueTable({ venues, reviewers, users }: VenuesManagerProps) {
   );
 }
 
-function VenueRowEditor({ venue, reviewers, users }: { venue: VenueRow; reviewers: ReviewerOption[]; users: UserOption[] }) {
+function VenueRowEditor({
+  venue,
+  reviewers,
+  users,
+  canEdit
+}: {
+  venue: VenueRow;
+  reviewers: ReviewerOption[];
+  users: UserOption[];
+  canEdit: boolean;
+}) {
   const [state, formAction] = useActionState(updateVenueAction, undefined);
   const [deleteState, deleteAction] = useActionState(deleteVenueAction, undefined);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -205,6 +218,7 @@ function VenueRowEditor({ venue, reviewers, users }: { venue: VenueRow; reviewer
                 aria-invalid={Boolean(nameError)}
                 aria-describedby={nameError ? nameErrorId : undefined}
                 className={cn(nameError ? errorInputClass : undefined)}
+                disabled={!canEdit}
               />
               <FieldError id={nameErrorId} message={nameError} />
             </div>
@@ -217,6 +231,7 @@ function VenueRowEditor({ venue, reviewers, users }: { venue: VenueRow; reviewer
                 name="category"
                  
                 defaultValue={(venue as any).category ?? "pub"}
+                disabled={!canEdit}
               >
                 <option value="pub">🍺 Pub</option>
                 <option value="cafe">☕ Cafe</option>
@@ -229,6 +244,7 @@ function VenueRowEditor({ venue, reviewers, users }: { venue: VenueRow; reviewer
                   name="isInternal"
                   defaultChecked={Boolean((venue as any).is_internal)}
                   className="h-4 w-4"
+                  disabled={!canEdit}
                 />
                 Internal
               </label>
@@ -241,6 +257,7 @@ function VenueRowEditor({ venue, reviewers, users }: { venue: VenueRow; reviewer
                 id={`venue-manager-${venue.id}`}
                 name="defaultManagerResponsibleId"
                 defaultValue={venue.default_manager_responsible_id ?? ""}
+                disabled={!canEdit}
               >
                 <option value="">No default manager</option>
                 {users.map((u) => (
@@ -254,7 +271,12 @@ function VenueRowEditor({ venue, reviewers, users }: { venue: VenueRow; reviewer
               <label className="sr-only" htmlFor={`venue-approver-${venue.id}`}>
                 Default approver
               </label>
-              <Select id={`venue-approver-${venue.id}`} name="defaultApproverId" defaultValue={venue.default_approver_id ?? ""}>
+              <Select
+                id={`venue-approver-${venue.id}`}
+                name="defaultApproverId"
+                defaultValue={venue.default_approver_id ?? ""}
+                disabled={!canEdit}
+              >
                 <option value="">No default approver</option>
                 {reviewers.map((reviewer) => (
                   <option key={reviewer.id} value={reviewer.id}>
@@ -273,6 +295,7 @@ function VenueRowEditor({ venue, reviewers, users }: { venue: VenueRow; reviewer
                 type="url"
                 defaultValue={venue.google_review_url ?? ""}
                 placeholder="Google Review URL"
+                disabled={!canEdit}
               />
             </div>
           </form>
@@ -284,30 +307,34 @@ function VenueRowEditor({ venue, reviewers, users }: { venue: VenueRow; reviewer
             </Button>
           </div>
           <div className="flex items-start justify-end gap-1">
-            <Button
-              type="submit"
-              variant="secondary"
-              size="sm"
-              aria-label={`Save ${venue.name}`}
-              form={`venue-form-${venue.id}`}
-            >
-              <Save className="h-4 w-4" aria-hidden="true" />
-            </Button>
-            <form ref={deleteFormRef} action={deleteAction}>
-              <input type="hidden" name="venueId" value={venue.id} />
-              <Button type="button" variant="destructive" size="sm" aria-label={`Delete ${venue.name}`} onClick={() => setDeleteConfirmOpen(true)}>
-                <Trash2 className="h-4 w-4" aria-hidden="true" />
-              </Button>
-            </form>
-            <ConfirmDialog
-              open={deleteConfirmOpen}
-              title={`Delete ${venue.name}?`}
-              description="This will permanently remove the venue. Events linked to it may be affected."
-              confirmLabel="Delete"
-              variant="danger"
-              onConfirm={() => { setDeleteConfirmOpen(false); deleteFormRef.current?.requestSubmit(); }}
-              onCancel={() => setDeleteConfirmOpen(false)}
-            />
+            {canEdit ? (
+              <>
+                <Button
+                  type="submit"
+                  variant="secondary"
+                  size="sm"
+                  aria-label={`Save ${venue.name}`}
+                  form={`venue-form-${venue.id}`}
+                >
+                  <Save className="h-4 w-4" aria-hidden="true" />
+                </Button>
+                <form ref={deleteFormRef} action={deleteAction}>
+                  <input type="hidden" name="venueId" value={venue.id} />
+                  <Button type="button" variant="destructive" size="sm" aria-label={`Delete ${venue.name}`} onClick={() => setDeleteConfirmOpen(true)}>
+                    <Trash2 className="h-4 w-4" aria-hidden="true" />
+                  </Button>
+                </form>
+                <ConfirmDialog
+                  open={deleteConfirmOpen}
+                  title={`Delete ${venue.name}?`}
+                  description="This will permanently remove the venue. Events linked to it may be affected."
+                  confirmLabel="Delete"
+                  variant="danger"
+                  onConfirm={() => { setDeleteConfirmOpen(false); deleteFormRef.current?.requestSubmit(); }}
+                  onCancel={() => setDeleteConfirmOpen(false)}
+                />
+              </>
+            ) : null}
           </div>
         </div>
       </td>

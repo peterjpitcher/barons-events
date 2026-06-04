@@ -16,30 +16,33 @@ import { FieldError } from "@/components/ui/field-error";
 
 type ManagerProps = {
   serviceTypes: ServiceTypeRow[];
+  canEdit: boolean;
 };
 
 const errorInputClass = "!border-[var(--burgundy)] focus-visible:!border-[var(--burgundy)]";
 
-export function ServiceTypesManager({ serviceTypes }: ManagerProps) {
+export function ServiceTypesManager({ serviceTypes, canEdit }: ManagerProps) {
   return (
     <div className="space-y-4">
-      <CreateServiceTypeForm />
+      {canEdit ? <CreateServiceTypeForm /> : null}
       {serviceTypes.length > 0 ? (
         <div className="overflow-hidden rounded-[var(--radius)] border border-[var(--hair)] bg-[var(--paper)]">
           <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-4 border-b border-[var(--hair)] bg-[var(--canvas-2)] px-4 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-subtle">
             <div>Service type</div>
-            <div className="text-right">Save</div>
-            <div className="text-right">Remove</div>
+            <div className="text-right">{canEdit ? "Save" : ""}</div>
+            <div className="text-right">{canEdit ? "Remove" : ""}</div>
           </div>
           <ul>
             {serviceTypes.map((type) => (
-              <ServiceTypeRow key={type.id} type={type} />
+              <ServiceTypeRow key={type.id} type={type} canEdit={canEdit} />
             ))}
           </ul>
         </div>
       ) : (
         <p className="text-sm text-subtle">
-          No service types yet. Add the first one above — these appear as rows in the weekly opening hours grid.
+          {canEdit
+            ? "No service types yet. Add the first one above — these appear as rows in the weekly opening hours grid."
+            : "No service types yet."}
         </p>
       )}
     </div>
@@ -83,7 +86,7 @@ function CreateServiceTypeForm() {
   );
 }
 
-function ServiceTypeRow({ type }: { type: ServiceTypeRow }) {
+function ServiceTypeRow({ type, canEdit }: { type: ServiceTypeRow; canEdit: boolean }) {
   const [updateState, updateAction] = useActionState(updateServiceTypeAction, undefined);
   const [deleteState, deleteAction] = useActionState(deleteServiceTypeAction, undefined);
   const router = useRouter();
@@ -127,14 +130,17 @@ function ServiceTypeRow({ type }: { type: ServiceTypeRow }) {
               aria-invalid={Boolean(nameError)}
               aria-describedby={nameError ? nameErrorId : undefined}
               className={nameError ? errorInputClass : undefined}
+              disabled={!canEdit}
             />
             <FieldError id={nameErrorId} message={nameError} />
           </div>
-          <SubmitButton label="Save" pendingLabel="Saving…" size="sm" variant="secondary" />
-          <form action={deleteAction}>
-            <input type="hidden" name="typeId" value={type.id} />
-            <SubmitButton label="Remove" pendingLabel="Removing…" variant="destructive" size="sm" />
-          </form>
+          {canEdit ? <SubmitButton label="Save" pendingLabel="Saving…" size="sm" variant="secondary" /> : <span />}
+          {canEdit ? (
+            <form action={deleteAction}>
+              <input type="hidden" name="typeId" value={type.id} />
+              <SubmitButton label="Remove" pendingLabel="Removing…" variant="destructive" size="sm" />
+            </form>
+          ) : <span />}
         </div>
       </form>
     </li>

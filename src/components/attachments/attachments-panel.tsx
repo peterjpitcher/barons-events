@@ -12,7 +12,7 @@ type AttachmentsPanelProps = {
   attachments: AttachmentSummary[];
   /** Whether the viewer may upload new attachments to this parent. */
   canUpload: boolean;
-  /** Viewer ID — used to compare against uploaded_by for delete visibility. */
+  /** Viewer ID — used to compare against uploaded_by for non-event delete visibility. */
   viewerId: string;
   /** True when the viewer is an administrator (full delete rights). */
   isAdmin: boolean;
@@ -41,7 +41,7 @@ export function AttachmentsPanel({
   const router = useRouter();
 
   const canDelete = (attachment: AttachmentSummary) =>
-    isAdmin || attachment.uploadedBy === viewerId;
+    parentType === "event" ? isAdmin : isAdmin || attachment.uploadedBy === viewerId;
 
   const body = (
     <div className="space-y-3">
@@ -55,6 +55,7 @@ export function AttachmentsPanel({
       <AttachmentList
         attachments={attachments}
         canDelete={canDelete}
+        canManage={canDelete}
         onChanged={() => router.refresh()}
       />
     </div>

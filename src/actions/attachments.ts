@@ -110,6 +110,144 @@ export type RequestAttachmentUploadResult =
   | { success: true; attachmentId: string; uploadUrl: string; storagePath: string; uploadToken: string }
   | { success: false; message: string };
 
+export type RequestAttachmentVersionUploadResult =
+  | { success: true; attachmentId: string; uploadUrl: string; storagePath: string; versionNo: number; uploadToken: string }
+  | { success: false; message: string };
+
+async function recordAttachmentUploadFailure(args: {
+  attachmentId: string;
+  userId: string;
+  reason: string;
+  markAttachmentFailed?: boolean;
+}): Promise<void> {
+  const db = createSupabaseAdminClient();
+  if (args.markAttachmentFailed !== false) {
+    await (db as any)
+      .from("attachments")
+      .update({ upload_status: "failed", uploaded_at: new Date().toISOString() })
+      .eq("id", args.attachmentId);
+  }
+
+  await recordAuditLogEntry({
+    entity: "attachment",
+    entityId: args.attachmentId,
+    action: "attachment.upload_failed",
+    actorId: args.userId,
+    meta: { reason: args.reason }
+  });
+}
+
+async function verifyUploadedObject(args: {
+  storagePath: string;
+  declaredMimeType: string;
+  attachmentId: string;
+  userId: string;
+  markAttachmentFailed?: boolean;
+}): Promise<ActionResult | null> {
+  const db = createSupabaseAdminClient();
+  const { data: existing, error: existErr } = await (db as any)
+    .storage.from("task-attachments")
+    .createSignedUrl(args.storagePath, 30);
+  if (existErr || !existing?.signedUrl) {
+    await recordAttachmentUploadFailure({
+      attachmentId: args.attachmentId,
+      userId: args.userId,
+      reason: "storage_object_missing",
+      markAttachmentFailed: args.markAttachmentFailed
+    });
+    return { success: false, message: "Upload not yet visible in storage. Retry in a moment." };
+  }
+
+  try {
+    const response = await fetch(existing.signedUrl, { headers: { Range: "bytes=0-16383" } });
+    if (!response.ok && response.status !== 206) {
+      console.error("verifyUploadedObject sniff fetch failed:", response.status);
+      await (db as unknown as { storage: { from: (b: string) => { remove: (p: string[]) => Promise<unknown> } } })
+        .storage.from("task-attachments")
+        .remove([args.storagePath]);
+      await recordAttachmentUploadFailure({
+        attachmentId: args.attachmentId,
+        userId: args.userId,
+        reason: "sniff_fetch_failed",
+        markAttachmentFailed: args.markAttachmentFailed
+      });
+      return { success: false, message: "Upload verification failed." };
+    }
+    const buffer = Buffer.from(await response.arrayBuffer());
+    const detected = await fileTypeFromBuffer(buffer);
+    if (!detected || !detectedTypeMatchesDeclared(args.declaredMimeType, detected.mime)) {
+      console.warn(
+        "verifyUploadedObject MIME mismatch:",
+        { declared: args.declaredMimeType, detected: detected?.mime }
+      );
+      await (db as unknown as { storage: { from: (b: string) => { remove: (p: string[]) => Promise<unknown> } } })
+        .storage.from("task-attachments")
+        .remove([args.storagePath]);
+      await recordAttachmentUploadFailure({
+        attachmentId: args.attachmentId,
+        userId: args.userId,
+        reason: "mime_mismatch",
+        markAttachmentFailed: args.markAttachmentFailed
+      });
+      return {
+        success: false,
+        message: "File contents don't match the declared type. Upload rejected."
+      };
+    }
+  } catch (sniffError) {
+    console.error("verifyUploadedObject sniff threw:", sniffError);
+    return { success: false, message: "Could not verify upload. Try again in a moment." };
+  }
+
+  return null;
+}
+
+async function revalidateAttachmentParentPaths(parent: {
+  event_id?: string | null;
+  planning_item_id?: string | null;
+  planning_task_id?: string | null;
+}): Promise<void> {
+  revalidatePath("/planning");
+
+  if (parent.event_id) {
+    revalidatePath(`/events/${parent.event_id}`);
+    revalidatePath("/events");
+    return;
+  }
+
+  const db = createSupabaseAdminClient();
+  if (parent.planning_item_id) {
+    revalidatePath(`/planning/${parent.planning_item_id}`);
+    const { data: item } = await (db as any)
+      .from("planning_items")
+      .select("event_id")
+      .eq("id", parent.planning_item_id)
+      .maybeSingle();
+    if (item?.event_id) {
+      revalidatePath(`/events/${item.event_id}`);
+    }
+    return;
+  }
+
+  if (parent.planning_task_id) {
+    const { data: task } = await (db as any)
+      .from("planning_tasks")
+      .select("planning_item_id, planning_item:planning_items(event_id)")
+      .eq("id", parent.planning_task_id)
+      .maybeSingle();
+    const planningItemId = task?.planning_item_id ?? null;
+    const planningItemRelation = Array.isArray(task?.planning_item)
+      ? task.planning_item[0]
+      : task?.planning_item;
+    if (planningItemId) {
+      revalidatePath(`/planning/${planningItemId}`);
+    }
+    if (planningItemRelation?.event_id) {
+      revalidatePath(`/events/${planningItemRelation.event_id}`);
+    }
+  }
+}
+
 export async function requestAttachmentUploadAction(
   input: z.infer<typeof requestUploadSchema>
 ): Promise<RequestAttachmentUploadResult> {
@@ -149,6 +287,7 @@ export async function requestAttachmentUploadAction(
     id: attachmentId,
     storage_path: storagePath,
     original_filename: safeName,
+    display_name: safeName,
     mime_type: parsed.data.mimeType,
     size_bytes: parsed.data.sizeBytes,
     upload_status: "pending",
@@ -190,7 +329,7 @@ export async function confirmAttachmentUploadAction(
    
   const { data: row, error: readErr } = await (db as any)
     .from("attachments")
-    .select("id, uploaded_by, event_id, planning_item_id, planning_task_id, storage_path, mime_type, upload_status")
+    .select("id, uploaded_by, event_id, planning_item_id, planning_task_id, storage_path, original_filename, display_name, mime_type, size_bytes, upload_status")
     .eq("id", parsed.data.attachmentId)
     .maybeSingle();
 
@@ -207,61 +346,43 @@ export async function confirmAttachmentUploadAction(
     return { success: true, message: "Already confirmed." };
   }
 
-   
-  const { data: existing, error: existErr } = await (db as any)
-    .storage.from("task-attachments")
-    .createSignedUrl(row.storage_path, 30);
-  if (existErr || !existing?.signedUrl) {
-    return { success: false, message: "Upload not yet visible in storage. Retry in a moment." };
+  const verificationError = await verifyUploadedObject({
+    storagePath: row.storage_path,
+    declaredMimeType: row.mime_type,
+    attachmentId: parsed.data.attachmentId,
+    userId: user.id
+  });
+  if (verificationError) {
+    return verificationError;
   }
 
-  // Sniff the first 16 KB to verify the uploaded bytes match the declared
-  // MIME type. Renamed executables or content mismatches are rejected and the
-  // storage object is removed. file-type is robust for all allowed formats
-  // except legacy .doc/.xls/.ppt (all OLE CFB — we can't disambiguate).
-  try {
-    const response = await fetch(existing.signedUrl, { headers: { Range: "bytes=0-16383" } });
-    if (!response.ok && response.status !== 206) {
-      console.error("confirmAttachmentUploadAction sniff fetch failed:", response.status);
-      await (db as unknown as { storage: { from: (b: string) => { remove: (p: string[]) => Promise<unknown> } } })
-        .storage.from("task-attachments")
-        .remove([row.storage_path]);
-       
-      await (db as any)
-        .from("attachments")
-        .update({ upload_status: "failed", uploaded_at: new Date().toISOString() })
-        .eq("id", parsed.data.attachmentId);
-      return { success: false, message: "Upload verification failed." };
-    }
-    const buffer = Buffer.from(await response.arrayBuffer());
-    const detected = await fileTypeFromBuffer(buffer);
-    if (!detected || !detectedTypeMatchesDeclared(row.mime_type, detected.mime)) {
-      console.warn(
-        "confirmAttachmentUploadAction MIME mismatch:",
-        { declared: row.mime_type, detected: detected?.mime }
-      );
-      await (db as unknown as { storage: { from: (b: string) => { remove: (p: string[]) => Promise<unknown> } } })
-        .storage.from("task-attachments")
-        .remove([row.storage_path]);
-       
-      await (db as any)
-        .from("attachments")
-        .update({ upload_status: "failed", uploaded_at: new Date().toISOString() })
-        .eq("id", parsed.data.attachmentId);
-      return {
-        success: false,
-        message: "File contents don't match the declared type. Upload rejected."
-      };
-    }
-  } catch (sniffError) {
-    console.error("confirmAttachmentUploadAction sniff threw:", sniffError);
-    return { success: false, message: "Could not verify upload. Try again in a moment." };
+  const { data: version, error: versionError } = await (db as any)
+    .from("attachment_versions")
+    .insert({
+      attachment_id: parsed.data.attachmentId,
+      version_no: 1,
+      storage_path: row.storage_path,
+      original_filename: row.original_filename,
+      mime_type: row.mime_type,
+      size_bytes: row.size_bytes,
+      uploaded_by: user.id
+    })
+    .select("id")
+    .single();
+  if (versionError || !version) {
+    console.error("confirmAttachmentUploadAction version insert failed:", versionError);
+    return { success: false, message: "Could not record attachment version." };
   }
 
-   
+  const uploadedAt = new Date().toISOString();
   const { error: updateErr } = await (db as any)
     .from("attachments")
-    .update({ upload_status: "uploaded", uploaded_at: new Date().toISOString() })
+    .update({
+      upload_status: "uploaded",
+      uploaded_at: uploadedAt,
+      display_name: row.display_name ?? row.original_filename,
+      current_version_id: version.id
+    })
     .eq("id", parsed.data.attachmentId);
   if (updateErr) {
     return { success: false, message: "Could not mark attachment uploaded." };
@@ -275,11 +396,226 @@ export async function confirmAttachmentUploadAction(
     meta: { mime_type: row.mime_type, storage_path: row.storage_path }
   });
 
-  revalidatePath("/planning");
+  await revalidateAttachmentParentPaths(row);
   return { success: true, message: "Attachment uploaded." };
 }
 
 const deleteSchema = z.object({ attachmentId: z.string().uuid() });
+
+const renameSchema = z.object({
+  attachmentId: z.string().uuid(),
+  displayName: z.string().trim().min(1, "Add a filename").max(180)
+});
+
+export async function renameAttachmentAction(
+  _: ActionResult | undefined,
+  formData: FormData
+): Promise<ActionResult> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, message: "You must be signed in." };
+
+  const parsed = renameSchema.safeParse({
+    attachmentId: formData.get("attachmentId"),
+    displayName: formData.get("displayName")
+  });
+  if (!parsed.success) {
+    return { success: false, message: parsed.error.issues[0]?.message ?? "Check the filename." };
+  }
+
+  const db = createSupabaseAdminClient();
+  const { data: row } = await (db as any)
+    .from("attachments")
+    .select("uploaded_by, event_id, planning_item_id, planning_task_id, display_name, original_filename")
+    .eq("id", parsed.data.attachmentId)
+    .maybeSingle();
+  if (!row) return { success: false, message: "Attachment not found." };
+  if (!(await canEditAttachment(user, row))) {
+    return { success: false, message: "You don't have permission to rename this attachment." };
+  }
+
+  const displayName = sanitiseFilename(parsed.data.displayName);
+  const { error } = await (db as any)
+    .from("attachments")
+    .update({ display_name: displayName })
+    .eq("id", parsed.data.attachmentId);
+  if (error) return { success: false, message: "Could not rename attachment." };
+
+  await recordAuditLogEntry({
+    entity: "attachment",
+    entityId: parsed.data.attachmentId,
+    action: "attachment.renamed",
+    actorId: user.id,
+    meta: {
+      previous_display_name: row.display_name ?? row.original_filename,
+      display_name: displayName
+    }
+  });
+
+  await revalidateAttachmentParentPaths(row);
+  return { success: true, message: "Filename updated." };
+}
+
+const requestVersionUploadSchema = z.object({
+  attachmentId: z.string().uuid(),
+  originalFilename: z.string().min(1).max(180),
+  mimeType: z.string().min(1),
+  sizeBytes: z.number().int().positive().max(MAX_SIZE_BYTES)
+});
+
+export async function requestAttachmentVersionUploadAction(
+  input: z.infer<typeof requestVersionUploadSchema>
+): Promise<RequestAttachmentVersionUploadResult> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, message: "You must be signed in." };
+
+  const parsed = requestVersionUploadSchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, message: parsed.error.issues[0]?.message ?? "Invalid upload request." };
+  }
+  if (!ALLOWED_MIME_TYPES.has(parsed.data.mimeType)) {
+    return { success: false, message: "That file type is not supported." };
+  }
+
+  const db = createSupabaseAdminClient();
+  const { data: row } = await (db as any)
+    .from("attachments")
+    .select("id, uploaded_by, event_id, planning_item_id, planning_task_id")
+    .eq("id", parsed.data.attachmentId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (!row) return { success: false, message: "Attachment not found." };
+  if (!(await canEditAttachment(user, row))) {
+    return { success: false, message: "You don't have permission to upload a new version." };
+  }
+
+  const { data: latest } = await (db as any)
+    .from("attachment_versions")
+    .select("version_no")
+    .eq("attachment_id", parsed.data.attachmentId)
+    .order("version_no", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const versionNo = Number(latest?.version_no ?? 0) + 1;
+  const ext = safeExtensionFromMime(parsed.data.mimeType);
+  const storagePath = `${parsed.data.attachmentId}/v${versionNo}-${crypto.randomUUID()}.${ext}`;
+
+  const { data: signed, error: signErr } = await (db as any)
+    .storage.from("task-attachments")
+    .createSignedUploadUrl(storagePath);
+  if (signErr || !signed) {
+    console.error("requestAttachmentVersionUploadAction sign failed:", signErr);
+    return { success: false, message: "Could not prepare upload." };
+  }
+
+  return {
+    success: true,
+    attachmentId: parsed.data.attachmentId,
+    uploadUrl: signed.signedUrl,
+    storagePath,
+    versionNo,
+    uploadToken: signed.token ?? ""
+  };
+}
+
+const confirmVersionSchema = z.object({
+  attachmentId: z.string().uuid(),
+  storagePath: z.string().min(1).max(500),
+  versionNo: z.coerce.number().int().positive(),
+  originalFilename: z.string().min(1).max(180),
+  mimeType: z.string().min(1),
+  sizeBytes: z.coerce.number().int().positive().max(MAX_SIZE_BYTES)
+});
+
+export async function confirmAttachmentVersionUploadAction(
+  _: ActionResult | undefined,
+  formData: FormData
+): Promise<ActionResult> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, message: "You must be signed in." };
+
+  const parsed = confirmVersionSchema.safeParse({
+    attachmentId: formData.get("attachmentId"),
+    storagePath: formData.get("storagePath"),
+    versionNo: formData.get("versionNo"),
+    originalFilename: formData.get("originalFilename"),
+    mimeType: formData.get("mimeType"),
+    sizeBytes: formData.get("sizeBytes")
+  });
+  if (!parsed.success) {
+    return { success: false, message: parsed.error.issues[0]?.message ?? "Missing version upload reference." };
+  }
+  if (!ALLOWED_MIME_TYPES.has(parsed.data.mimeType)) {
+    return { success: false, message: "That file type is not supported." };
+  }
+
+  const db = createSupabaseAdminClient();
+  const { data: row } = await (db as any)
+    .from("attachments")
+    .select("id, uploaded_by, event_id, planning_item_id, planning_task_id")
+    .eq("id", parsed.data.attachmentId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (!row) return { success: false, message: "Attachment not found." };
+  if (!(await canEditAttachment(user, row))) {
+    return { success: false, message: "You don't have permission to confirm this version." };
+  }
+
+  const verificationError = await verifyUploadedObject({
+    storagePath: parsed.data.storagePath,
+    declaredMimeType: parsed.data.mimeType,
+    attachmentId: parsed.data.attachmentId,
+    userId: user.id,
+    markAttachmentFailed: false
+  });
+  if (verificationError) {
+    return verificationError;
+  }
+
+  const safeName = sanitiseFilename(parsed.data.originalFilename);
+  const { data: version, error: versionError } = await (db as any)
+    .from("attachment_versions")
+    .insert({
+      attachment_id: parsed.data.attachmentId,
+      version_no: parsed.data.versionNo,
+      storage_path: parsed.data.storagePath,
+      original_filename: safeName,
+      mime_type: parsed.data.mimeType,
+      size_bytes: parsed.data.sizeBytes,
+      uploaded_by: user.id
+    })
+    .select("id")
+    .single();
+  if (versionError || !version) {
+    console.error("confirmAttachmentVersionUploadAction version insert failed:", versionError);
+    return { success: false, message: "Could not record the new version." };
+  }
+
+  const { error: updateError } = await (db as any)
+    .from("attachments")
+    .update({
+      current_version_id: version.id,
+      storage_path: parsed.data.storagePath,
+      original_filename: safeName,
+      mime_type: parsed.data.mimeType,
+      size_bytes: parsed.data.sizeBytes,
+      uploaded_at: new Date().toISOString(),
+      uploaded_by: user.id,
+      upload_status: "uploaded"
+    })
+    .eq("id", parsed.data.attachmentId);
+  if (updateError) return { success: false, message: "Could not activate the new version." };
+
+  await recordAuditLogEntry({
+    entity: "attachment",
+    entityId: parsed.data.attachmentId,
+    action: "attachment.version_uploaded",
+    actorId: user.id,
+    meta: { version_no: parsed.data.versionNo, mime_type: parsed.data.mimeType }
+  });
+
+  await revalidateAttachmentParentPaths(row);
+  return { success: true, message: "New version uploaded." };
+}
 
 export async function deleteAttachmentAction(
   _: ActionResult | undefined,
@@ -321,11 +657,12 @@ export async function deleteAttachmentAction(
     meta: {}
   });
 
-  revalidatePath("/planning");
+  await revalidateAttachmentParentPaths(row);
   return { success: true, message: "Attachment deleted." };
 }
 
 const urlSchema = z.object({ attachmentId: z.string().uuid() });
+const versionUrlSchema = z.object({ versionId: z.string().uuid() });
 
 export type GetAttachmentUrlResult =
   | { success: true; url: string; expiresInSeconds: number }
@@ -361,6 +698,53 @@ export async function getAttachmentUrlAction(
   const { data: signed, error: signErr } = await (db as any)
     .storage.from("task-attachments")
     .createSignedUrl(row.storage_path, ttl);
+
+  if (signErr || !signed) {
+    return { success: false, message: "Could not issue download URL." };
+  }
+
+  return { success: true, url: signed.signedUrl, expiresInSeconds: ttl };
+}
+
+export async function getAttachmentVersionUrlAction(
+  input: z.infer<typeof versionUrlSchema>
+): Promise<GetAttachmentUrlResult> {
+  const user = await getCurrentUser();
+  if (!user) return { success: false, message: "You must be signed in." };
+
+  const parsed = versionUrlSchema.safeParse(input);
+  if (!parsed.success) return { success: false, message: "Missing attachment version reference." };
+
+  const db = createSupabaseAdminClient();
+  const { data: version, error } = await (db as any)
+    .from("attachment_versions")
+    .select(`
+      storage_path,
+      size_bytes,
+      attachment:attachments(
+        uploaded_by,
+        upload_status,
+        deleted_at,
+        event_id,
+        planning_item_id,
+        planning_task_id
+      )
+    `)
+    .eq("id", parsed.data.versionId)
+    .maybeSingle();
+
+  if (error || !version) return { success: false, message: "Attachment version not found." };
+  const attachment = Array.isArray(version.attachment) ? version.attachment[0] : version.attachment;
+  if (!attachment || attachment.deleted_at) return { success: false, message: "Attachment no longer available." };
+  if (attachment.upload_status !== "uploaded") return { success: false, message: "Upload still in progress." };
+  if (!(await canViewAttachment(user, attachment))) {
+    return { success: false, message: "You don't have permission to download this attachment." };
+  }
+
+  const ttl = version.size_bytes <= 20_000_000 ? 300 : 1800;
+  const { data: signed, error: signErr } = await (db as any)
+    .storage.from("task-attachments")
+    .createSignedUrl(version.storage_path, ttl);
 
   if (signErr || !signed) {
     return { success: false, message: "Could not issue download URL." };

@@ -167,6 +167,7 @@ export function DebriefForm({ eventId, defaults, labourRateGbp = 12.71, readOnly
             onChange={(event) => setBaselineWetTakings(event.target.value)}
             placeholder="e.g. 1900"
             disabled={readOnly}
+            required
           />
         </div>
         <div className="space-y-2">
@@ -181,6 +182,7 @@ export function DebriefForm({ eventId, defaults, labourRateGbp = 12.71, readOnly
             onChange={(event) => setBaselineFoodTakings(event.target.value)}
             placeholder="e.g. 620"
             disabled={readOnly}
+            required
           />
         </div>
       </div>

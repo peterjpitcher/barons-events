@@ -14,7 +14,6 @@ import { sendBookingConfirmationSms } from "@/lib/sms";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { upsertCustomerForBooking, linkBookingToCustomer } from "@/lib/customers";
 import { verifyTurnstile } from "@/lib/turnstile";
-import { isLinkedToVenue } from "@/lib/visibility";
 import { isBookingFormat, isPaidBookingFormat, type BookingFormat } from "@/lib/booking-format";
 import { processRefund } from "@/lib/payments/service";
 
@@ -508,28 +507,6 @@ export async function cancelBookingAction(
     return { success: false, error: "Booking not found." };
   }
   const actualEventId = booking.event_id;
-
-  if (user.role !== "administrator") {
-    // Office worker — verify event is linked to their venue.
-    const { data: event, error: eventError } = await db
-      .from("events")
-      .select("venue_id, event_venues(venue_id)")
-      .eq("id", actualEventId)
-      .single();
-    if (
-      eventError ||
-      !event ||
-      !isLinkedToVenue(
-        {
-          venue_id: event.venue_id,
-          event_venues: (event as { event_venues?: Array<{ venue_id: string | null }> | null }).event_venues ?? []
-        },
-        user.venueId
-      )
-    ) {
-      return { success: false, error: "You can only cancel bookings for events at your venue." };
-    }
-  }
 
   try {
     await cancelBooking(bookingId);

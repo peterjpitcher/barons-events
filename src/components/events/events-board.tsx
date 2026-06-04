@@ -24,7 +24,7 @@ import {
   X
 } from "lucide-react";
 import type { EventSummary } from "@/lib/events";
-import { canReviewEvents } from "@/lib/roles";
+import { canProposeEvents, canReviewEvents } from "@/lib/roles";
 import type { AppUser } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -64,6 +64,7 @@ const statusConfig: Record<
   needs_revisions: { label: "Needs tweaks", tone: "warning" },
   approved: { label: "Approved", tone: "success" },
   rejected: { label: "Rejected", tone: "danger" },
+  cancelled: { label: "Cancelled", tone: "danger" },
   completed: { label: "Completed", tone: "success" }
 };
 
@@ -99,6 +100,10 @@ const statusAccentStyles: Record<
     badge: "bg-[var(--burgundy)] text-white border border-[var(--burgundy)]",
     dot: "bg-[var(--paper)]"
   },
+  cancelled: {
+    badge: "bg-[var(--burgundy)] text-white border border-[var(--burgundy)]",
+    dot: "bg-[var(--paper)]"
+  },
   completed: {
     badge: "bg-[var(--sage-dark)] text-white border border-[var(--sage-dark)]",
     dot: "bg-[var(--paper)]"
@@ -113,7 +118,8 @@ const statusSortOrder: Record<EventSummary["status"], number> = {
   needs_revisions: 2,
   approved: 3,
   completed: 4,
-  rejected: 5
+  rejected: 5,
+  cancelled: 6
 };
 
 const localStorageKey = "events-board-view";
@@ -176,10 +182,8 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
   const rawVenue = searchParams.get("venueId") ?? "all";
   const rawMatrixStart = searchParams.get("start");
   const myVenueId = user.venueId ?? null;
-  const createScopeVenueId =
-    user.role === "administrator" ? undefined : user.role === "office_worker" ? myVenueId ?? null : null;
-  const canCreate =
-    user.role === "administrator" || (user.role === "office_worker" && typeof createScopeVenueId === "string");
+  const createScopeVenueId = user.role === "administrator" ? undefined : null;
+  const canCreate = canProposeEvents(user.role);
 
   const canApproveEvent = useCallback(
     (event: EventSummary) => {
@@ -484,7 +488,7 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
     setSelectedVenueId(value);
   }, []);
 
-  const heading = user.role === "office_worker" ? "My events" : "Events overview";
+  const heading = "Events overview";
 
   return (
     <div className="app-page">

@@ -1,9 +1,7 @@
 import { redirect } from "next/navigation";
-import { CommunicationPreferencesForm } from "@/components/account/communication-preferences-form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/design-primitives";
 import { getCurrentUser } from "@/lib/auth";
-import { normaliseTodoDigestFrequency } from "@/lib/communication-preferences";
 import { createSupabaseReadonlyClient } from "@/lib/supabase/server";
 
 export default async function AccountPage(): Promise<React.ReactNode> {
@@ -13,7 +11,7 @@ export default async function AccountPage(): Promise<React.ReactNode> {
   const db = await createSupabaseReadonlyClient();
   const { data, error } = await db
     .from("users")
-    .select("todo_digest_frequency, todo_digest_last_sent_on")
+    .select("weekly_digest_last_sent_on")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -32,13 +30,22 @@ export default async function AccountPage(): Promise<React.ReactNode> {
       <Card>
         <CardHeader>
           <CardTitle>Communication Preferences</CardTitle>
-          <CardDescription>Choose how often BaronsHub 1.1 sends your open todo list.</CardDescription>
+          <CardDescription>The weekly BaronsHub update is sent every Tuesday morning.</CardDescription>
         </CardHeader>
-        <CardContent>
-          <CommunicationPreferencesForm
-            todoDigestFrequency={normaliseTodoDigestFrequency(data?.todo_digest_frequency)}
-            todoDigestLastSentOn={data?.todo_digest_last_sent_on ?? null}
-          />
+        <CardContent className="space-y-2 text-sm text-subtle">
+          <p>
+            This update is mandatory for active users and includes newly approved events, your to-dos due now or within 14 days, and recent debriefs.
+          </p>
+          {data?.weekly_digest_last_sent_on ? (
+            <p>
+              Last weekly update sent on {new Date(`${data.weekly_digest_last_sent_on}T00:00:00Z`).toLocaleDateString("en-GB", {
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+                timeZone: "UTC",
+              })}
+            </p>
+          ) : null}
         </CardContent>
       </Card>
     </div>

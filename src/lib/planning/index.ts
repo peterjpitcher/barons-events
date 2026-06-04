@@ -188,6 +188,7 @@ function toPlanningItem(row: RawPlanningItemRow): PlanningItem {
   return {
     id: row.id,
     source: "planning",
+    eventId: row.event_id ?? null,
     seriesId: row.series_id,
     occurrenceOn: row.occurrence_on,
     isException: Boolean(row.is_exception),
@@ -200,6 +201,8 @@ function toPlanningItem(row: RawPlanningItemRow): PlanningItem {
     ownerId: row.owner_id,
     ownerName: owner?.full_name ?? owner?.email ?? null,
     targetDate: row.target_date,
+    startAt: (row as any).start_at ?? null,
+    endAt: (row as any).end_at ?? null,
     status: row.status as PlanningItemStatus,
     createdBy: row.created_by,
     tasks
@@ -524,20 +527,7 @@ export async function listPlanningBoardData(params?: {
     .from("planning_items")
     .select(
       `
-      id,
-      series_id,
-      occurrence_on,
-      is_exception,
-      title,
-      description,
-      type_label,
-      venue_id,
-      owner_id,
-      target_date,
-      status,
-      created_by,
-      created_at,
-      updated_at,
+      *,
       venue:venues!planning_items_venue_id_fkey(id,name),
       planning_item_venues(venue_id, is_primary, venue:venues(id,name)),
       owner:users!planning_items_owner_id_fkey(id,full_name,email),
@@ -588,7 +578,7 @@ export async function listPlanningBoardData(params?: {
       throw new Error(`Could not load planning items: ${itemsError.message}`);
     }
   } else {
-    planningItems = ((itemData ?? []) as RawPlanningItemRow[])
+    planningItems = ((itemData ?? []) as unknown as RawPlanningItemRow[])
       .map((row) => toPlanningItem(row))
       .filter((item) =>
         params?.user
@@ -612,7 +602,7 @@ export async function listPlanningBoardData(params?: {
     eventsQuery = eventsQuery.gte("start_at", startLowerIso).lte("start_at", startUpperIso);
   }
   if (!includeAllStatuses) {
-    eventsQuery = eventsQuery.not("status", "in", '("completed","rejected")');
+    eventsQuery = eventsQuery.not("status", "in", '("completed","rejected","cancelled")');
   }
 
   const { data: eventData, error: eventsError } = await eventsQuery;
@@ -672,20 +662,7 @@ export async function getPlanningItemDetail(itemId: string, user?: AppUser): Pro
     .from("planning_items")
     .select(
       `
-      id,
-      series_id,
-      occurrence_on,
-      is_exception,
-      title,
-      description,
-      type_label,
-      venue_id,
-      owner_id,
-      target_date,
-      status,
-      created_by,
-      created_at,
-      updated_at,
+      *,
       venue:venues!planning_items_venue_id_fkey(id,name),
       planning_item_venues(venue_id, is_primary, venue:venues(id,name)),
       owner:users!planning_items_owner_id_fkey(id,full_name,email),
@@ -718,7 +695,7 @@ export async function getPlanningItemDetail(itemId: string, user?: AppUser): Pro
     throw new Error(`Could not load planning item: ${error.message}`);
   }
   if (!data) return null;
-  const item = toPlanningItem(data as RawPlanningItemRow);
+  const item = toPlanningItem(data as unknown as RawPlanningItemRow);
   if (user && !canViewVenueLinkedResource(user, { venueId: item.venueId, venues: item.venues })) {
     return null;
   }
@@ -772,6 +749,8 @@ export async function createPlanningItem(payload: CreatePlanningItemInput): Prom
     venue_id: payload.venueId ?? null,
     owner_id: payload.ownerId ?? null,
     target_date: payload.targetDate,
+    ...(payload.startAt !== undefined ? { start_at: payload.startAt } : {}),
+    ...(payload.endAt !== undefined ? { end_at: payload.endAt } : {}),
     status: payload.status ?? "planned",
     created_by: payload.createdBy
   };
@@ -818,6 +797,12 @@ export async function updatePlanningItem(itemId: string, updates: UpdatePlanning
   }
   if (Object.prototype.hasOwnProperty.call(updates, "targetDate")) {
     updatePayload["target_date"] = updates.targetDate;
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, "startAt")) {
+    updatePayload["start_at"] = updates.startAt ?? null;
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, "endAt")) {
+    updatePayload["end_at"] = updates.endAt ?? null;
   }
   if (Object.prototype.hasOwnProperty.call(updates, "status")) {
     updatePayload["status"] = updates.status;

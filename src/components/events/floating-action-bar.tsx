@@ -24,7 +24,7 @@ export function FloatingActionBar({ className }: FloatingActionBarProps): React.
   return (
     <div
       className={cn(
-        "fixed bottom-4 right-4 z-[70] flex max-w-[calc(100vw-2rem)] flex-col-reverse items-stretch gap-2 rounded-[10px] border border-[var(--hair)] bg-[var(--paper)]/95 p-2 shadow-card backdrop-blur sm:bottom-6 sm:right-6 sm:flex-row sm:items-center",
+        "fixed bottom-4 right-[calc(1rem_+_var(--sop-drawer-reserved-width,0px))] z-[70] flex max-w-[calc(100vw_-_2rem_-_var(--sop-drawer-reserved-width,0px))] flex-col-reverse items-stretch gap-2 rounded-[10px] border border-[var(--hair)] bg-[var(--paper)]/95 p-2 shadow-card backdrop-blur sm:bottom-6 sm:right-[calc(1.5rem_+_var(--sop-drawer-reserved-width,0px))] sm:flex-row sm:items-center",
         className
       )}
     >

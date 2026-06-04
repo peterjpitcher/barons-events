@@ -5,10 +5,8 @@ import { BookingSettingsCard } from "@/components/events/booking-settings-card";
 import { EventPageHeader } from "@/components/events/event-page-header";
 import { SopDrawer } from "@/components/events/sop-drawer";
 import { DecisionForm } from "@/components/reviews/decision-form";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Select } from "@/components/ui/select";
-import { SubmitButton } from "@/components/ui/submit-button";
 import { getCurrentUser } from "@/lib/auth";
 import { getEventDetail } from "@/lib/events";
 import { EVENT_GOALS_BY_VALUE, humanizeGoalValue, parseGoalFocus } from "@/lib/event-goals";
@@ -17,16 +15,16 @@ import { listVenues } from "@/lib/venues";
 import { listEventTypes } from "@/lib/event-types";
 import { listArtists } from "@/lib/artists";
 import { listAssignableUsers, getUsersByIds } from "@/lib/users";
-import { updateAssigneeAction } from "@/actions/events";
 import { parseVenueSpaces } from "@/lib/venue-spaces";
 import { formatCurrency, formatPercent } from "@/lib/utils/format";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { canViewBookings, canViewPlanning } from "@/lib/roles";
+import { canSubmitDebriefForEvent, canViewBookings, canViewPlanning } from "@/lib/roles";
 import { canEditEventFromRow } from "@/lib/events/edit-context";
 import { AttachmentsPanel } from "@/components/attachments/attachments-panel";
 import { ProposalDecisionCard } from "@/components/events/proposal-decision-card";
 import { listEventAttachmentsRollup } from "@/lib/attachments";
-import { isLinkedToVenue } from "@/lib/visibility";
+import { InternalNotesPanel } from "@/components/internal-notes/internal-notes-panel";
+import { listInternalNotes } from "@/lib/internal-notes";
 import type { EventStatus } from "@/lib/types";
 import type { PlanningTask, PlanningPerson, PlanningTaskStatus } from "@/lib/planning/types";
 
@@ -38,6 +36,7 @@ const statusCopy: Record<string, { label: string; tone: "neutral" | "info" | "su
   needs_revisions: { label: "Needs tweaks", tone: "warning" },
   approved: { label: "Approved", tone: "success" },
   rejected: { label: "Rejected", tone: "danger" },
+  cancelled: { label: "Cancelled", tone: "danger" },
   completed: { label: "Completed", tone: "success" }
 };
 
@@ -65,12 +64,6 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
     notFound();
   }
 
-  // Venue-scoped permission: office_worker can act on events at their venue (not just events they created)
-  const isVenueScoped =
-    user.role === "office_worker" &&
-    user.venueId != null &&
-    isLinkedToVenue({ venue_id: event.venue_id, venues: event.venues }, user.venueId);
-
   // Shared row projection for edit-context gating. All six fields come from
   // getEventDetail (SELECT *) so no widening is required.
   const eventRowForEdit = {
@@ -97,24 +90,31 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
     (user.role === "administrator" && ["submitted", "needs_revisions"].includes(event.status));
   const canPreReview =
     user.role === "administrator" && event.status === "pending_approval";
-  const canSubmitDebrief =
-    (isVenueScoped && ["approved", "completed"].includes(event.status)) ||
-    (user.role === "administrator" && ["approved", "completed"].includes(event.status));
-  const canUpdateAssignee = user.role === "administrator";
+  const canViewEventPlanning = canViewPlanning(user.role);
+  const canSubmitDebrief = canSubmitDebriefForEvent(user.role, user.id, user.venueId, {
+    venueId: event.venue_id,
+    venueIds: event.venues.map((venue) => venue.id),
+    managerResponsibleId: event.manager_responsible_id,
+    createdBy: event.created_by,
+    status: event.status,
+    deletedAt: event.deleted_at
+  });
 
-  const reassignAssignee = async (formData: FormData) => {
-    "use server";
-    await updateAssigneeAction(formData);
-  };
-
-  const [venues, assignableUsers, eventTypes, auditLog, artists, attachments] = await Promise.all([
+  const [venues, assignableUsers, eventTypes, auditLog, artists, attachments, internalNotes, userPrefsResult] = await Promise.all([
     listVenues(),
     listAssignableUsers(),
     listEventTypes(),
     listAuditLogForEvent(event.id),
     listArtists(),
-    listEventAttachmentsRollup(event.id)
+    listEventAttachmentsRollup(event.id),
+    listInternalNotes("event", event.id),
+    createSupabaseAdminClient()
+      .from("users")
+      .select("sop_drawer_pinned, debrief_pinned")
+      .eq("id", user.id)
+      .maybeSingle()
   ]);
+  const userPrefs = userPrefsResult.data;
 
   // SEC-005 follow-up: attachment upload follows the unified event-edit rule,
   // not the legacy same-venue check. Non-manager OWs at the same venue no
@@ -124,7 +124,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
   // ─── Fetch linked planning item & SOP tasks for this event ────────────────
   let sopTasks: PlanningTask[] = [];
   let sopPlanningItemId: string | null = null;
-  if (canViewPlanning(user.role)) {
+  if (canViewEventPlanning) {
     const db = createSupabaseAdminClient();
     const { data: planningItem } = await db
       .from("planning_items")
@@ -335,53 +335,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
     };
   });
 
-  const currentAssigneeName = resolveUserName(event.assignee_id);
-
   // ─── Shared right-column cards ────────────────────────────────────────────
-
-  const assignmentCard = (
-    <Card>
-      <CardHeader className="border-b border-[var(--hair)] bg-[var(--paper-tint)] px-4 py-3">
-        <CardTitle className="font-brand-mono text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-[var(--ink-muted)]">Assignment</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="mb-4 text-sm text-muted">Send the next action to the right teammate.</p>
-        {canUpdateAssignee ? (
-          <form className="space-y-3 text-sm" action={reassignAssignee}>
-            <div className="space-y-2">
-              <label htmlFor="assigneeId" className="font-semibold text-[var(--ink)]">
-                Assignee
-              </label>
-              <Select
-                id="assigneeId"
-                name="assigneeId"
-                defaultValue={event.assignee_id ?? ""}
-                aria-label="Choose assignee"
-              >
-                <option value="">Unassigned</option>
-                {assignableUsers.map((person) => (
-                  <option key={person.id} value={person.id}>
-                    {person.name} · {person.role.replace(/_/g, " ")}
-                  </option>
-                ))}
-              </Select>
-              <p className="text-xs text-subtle">
-                Assign the next action to a reviewer, planner, or the submitting venue manager.
-              </p>
-            </div>
-            <input type="hidden" name="eventId" value={event.id} />
-            <div className="flex justify-end">
-              <SubmitButton label="Update" pendingLabel="Updating..." variant="secondary" className="px-4 py-1" />
-            </div>
-          </form>
-        ) : (
-          <p className="text-sm text-muted">
-            <span className="font-semibold text-[var(--ink)]">Assignee:</span> {currentAssigneeName}
-          </p>
-        )}
-      </CardContent>
-    </Card>
-  );
 
   const reviewDecisionCard = canReview ? (
     <Card>
@@ -394,35 +348,6 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
       </CardContent>
     </Card>
   ) : null;
-
-  const reviewerTimelineCard = (
-    <Card>
-      <CardHeader className="border-b border-[var(--hair)] bg-[var(--paper-tint)] px-4 py-3">
-        <CardTitle className="font-brand-mono text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-[var(--ink-muted)]">Reviewer timeline</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <p className="text-sm text-muted">Quick view of submissions and reviewer notes.</p>
-        {event.approvals.length === 0 ? (
-          <p className="text-sm text-subtle">No reviewer decisions recorded yet.</p>
-        ) : (
-          event.approvals.map((entry) => (
-            <div
-              key={entry.id}
-              className="rounded-[8px] border border-[var(--hair)] bg-[var(--paper)] px-4 py-3 text-sm shadow-card"
-            >
-              <p className="font-semibold text-[var(--ink)] capitalize">{entry.decision.replace(/_/g, " ")}</p>
-              <p className="text-xs text-subtle">
-                {resolveUserName(entry.reviewer_id)} · {new Date(entry.decided_at).toLocaleString("en-GB")}
-              </p>
-              {entry.feedback_text ? (
-                <p className="mt-2 text-[var(--ink)]">{entry.feedback_text}</p>
-              ) : null}
-            </div>
-          ))
-        )}
-      </CardContent>
-    </Card>
-  );
 
   const auditTrailCard = (
     <Card>
@@ -470,32 +395,6 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
       </CardContent>
     </Card>
   );
-
-  const debriefSubmitCard = canSubmitDebrief ? (
-    <Card>
-      <CardHeader className="border-b border-[var(--hair)] bg-[var(--paper-tint)] px-4 py-3">
-        <CardTitle className="font-brand-mono text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-[var(--ink-muted)]">Post-event debrief</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="mb-4 text-sm text-muted">Capture attendance and takings as soon as possible.</p>
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="text-sm text-muted">
-          {event.debrief ? (
-            <p>
-              Debrief submitted {new Date(event.debrief.submitted_at).toLocaleDateString("en-GB")}. You can update
-              it if figures change.
-            </p>
-          ) : (
-            <p>No debrief yet. Please add it after the event.</p>
-          )}
-        </div>
-          <Button asChild variant="secondary">
-            <Link href={`/debriefs/${event.id}`}>{event.debrief ? "Update debrief" : "Add debrief"}</Link>
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  ) : null;
 
   const debriefSnapshotCard = event.debrief ? (
     <Card>
@@ -562,13 +461,6 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
 
       {/* Quick info bar */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-subtle">
-        <span>
-          <span className="font-semibold text-[var(--ink)]">Assignee:</span> {currentAssigneeName}
-        </span>
-        <span>
-          <span className="font-semibold text-[var(--ink)]">Created by:</span>{" "}
-          {event.created_by === user.id ? "You" : resolveUserName(event.created_by)}
-        </span>
         {event.manager_responsible_id ? (
           <span>
             <span className="font-semibold text-[var(--ink)]">Manager:</span>{" "}
@@ -578,6 +470,11 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
         {canViewEventBookings ? (
           <Button asChild variant="secondary" size="sm">
             <Link href={`/events/${event.id}/bookings`}>Bookings</Link>
+          </Button>
+        ) : null}
+        {canViewEventPlanning ? (
+          <Button id={`sop-drawer-trigger-${event.id}`} type="button" variant="secondary" size="sm">
+            SOP
           </Button>
         ) : null}
       </div>
@@ -596,6 +493,9 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
         canDelete={canDelete}
         readOnly={!canEdit}
         debrief={event.debrief}
+        canSubmitDebrief={canSubmitDebrief}
+        debriefInitiallyPinned={Boolean(userPrefs?.debrief_pinned)}
+        reserveFloatingActionSpace={false}
       />
 
       {/* Lower cards grid */}
@@ -624,24 +524,30 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
           isAdmin={user.role === "administrator"}
           description="Files attached to this event or any of its planning tasks."
         />
+        <InternalNotesPanel
+          parentType="event"
+          parentId={event.id}
+          notes={internalNotes}
+          canAdd={canEdit}
+        />
         {canPreReview ? (
           <ProposalDecisionCard eventId={event.id} eventTitle={event.title} />
         ) : null}
         {reviewDecisionCard}
-        {assignmentCard}
-        {reviewerTimelineCard}
         {auditTrailCard}
-        {debriefSubmitCard}
         {debriefSnapshotCard}
       </div>
 
-      {sopPlanningItemId && sopTasks.length > 0 ? (
+      {canViewEventPlanning ? (
         <SopDrawer
           tasks={sopTasks}
           users={assignableUsers.map((u) => ({ id: u.id, name: u.name, email: u.email, role: u.role }))}
           itemId={sopPlanningItemId}
           currentUserId={user.id}
           readOnly={!canEdit}
+          initiallyPinned={Boolean(userPrefs?.sop_drawer_pinned)}
+          externalTriggerId={`sop-drawer-trigger-${event.id}`}
+          title="ALL TODO ITEMS FOR THIS EVENT"
         />
       ) : null}
     </div>

@@ -309,7 +309,6 @@ export default async function OverviewPage(): Promise<React.ReactNode> {
               <UpcomingEventsCard
                 events={upcomingEvents}
                 userRole={user.role}
-                hasVenue={Boolean(user.venueId)}
               />
             </>
           )}
@@ -322,7 +321,6 @@ export default async function OverviewPage(): Promise<React.ReactNode> {
               <UpcomingEventsCard
                 events={upcomingEvents}
                 userRole={user.role}
-                hasVenue={Boolean(user.venueId)}
               />
             </>
           )}

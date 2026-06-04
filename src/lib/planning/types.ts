@@ -56,6 +56,7 @@ export type PlanningTask = {
 export type PlanningItem = {
   id: string;
   source: "planning";
+  eventId: string | null;
   seriesId: string | null;
   occurrenceOn: string | null;
   isException: boolean;
@@ -70,6 +71,8 @@ export type PlanningItem = {
   ownerId: string | null;
   ownerName: string | null;
   targetDate: string;
+  startAt: string | null;
+  endAt: string | null;
   status: PlanningItemStatus;
   createdBy: string;
   tasks: PlanningTask[];
@@ -170,6 +173,8 @@ export type CreatePlanningItemInput = {
   venueId?: string | null;
   ownerId?: string | null;
   targetDate: string;
+  startAt?: string | null;
+  endAt?: string | null;
   status?: PlanningItemStatus;
   createdBy: string;
 };
@@ -181,6 +186,8 @@ export type UpdatePlanningItemInput = {
   venueId?: string | null;
   ownerId?: string | null;
   targetDate?: string;
+  startAt?: string | null;
+  endAt?: string | null;
   status?: PlanningItemStatus;
 };
 

@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/ui/design-primitives";
 
 export const metadata = {
   title: "Users · BaronsHub 1.1",
-  description: "Manage workspace access for planners, reviewers, and venue managers."
+  description: "Manage workspace access for administrators and office workers."
 };
 
 export default async function UsersPage() {
@@ -16,9 +16,7 @@ export default async function UsersPage() {
   if (!user) {
     redirect("/login");
   }
-  if (user.role !== "administrator") {
-    redirect("/unauthorized");
-  }
+  const canEdit = user.role === "administrator";
 
   const [users, venues] = await Promise.all([listUsersWithAuthData(), listVenues()]);
 
@@ -30,41 +28,34 @@ export default async function UsersPage() {
         description="Invite team members, adjust roles, and link venues in one place."
         meta={<span>{users.length} user{users.length === 1 ? "" : "s"}</span>}
       />
-      <Card>
+      <Card className="overflow-hidden">
         <CardHeader>
           <CardTitle>Role model</CardTitle>
           <CardDescription>Each role maps to the operational permissions used throughout BaronsHub 1.1.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4 text-sm text-[var(--ink)]">
+        <CardContent className="space-y-3 text-sm text-[var(--ink)]">
           <p className="text-subtle">
             Invites send through Supabase auth instantly; role tweaks apply as soon as you save.
           </p>
-          <div className="grid gap-3 md:grid-cols-3">
-            <div className="rounded-[var(--radius)] border border-[var(--hair)] bg-[var(--paper-tint)] p-3 shadow-card">
+          <div className="grid overflow-hidden rounded-[var(--radius)] border border-[var(--hair)] bg-[var(--paper-tint)] md:grid-cols-2 md:divide-x md:divide-y-0 divide-y divide-[var(--hair)]">
+            <div className="p-3">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-subtle">Administrator</p>
               <p className="mt-2 text-sm">
                 Full access to manage venues, users, and events. Can approve requests, review submissions, edit anything, and
                 see every report. Use for the core planning team only.
               </p>
             </div>
-            <div className="rounded-[var(--radius)] border border-[var(--hair)] bg-[var(--paper-tint)] p-3 shadow-card">
+            <div className="p-3">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-subtle">Office Worker</p>
               <p className="mt-2 text-sm">
-                Creates and edits their own venue&apos;s events, submits drafts, and completes debriefs. They can see feedback
-                but not other venues or staffing info.
-              </p>
-            </div>
-            <div className="rounded-[var(--radius)] border border-[var(--hair)] bg-[var(--paper-tint)] p-3 shadow-card">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-subtle">Executive</p>
-              <p className="mt-2 text-sm">
-                Read-only snapshot for leadership. They can browse the dashboard and timelines but can&apos;t edit events or leave
-                decisions.
+                Read access across the workspace. Event creation, event edits, and Operations/Manage edits require an
+                administrator.
               </p>
             </div>
           </div>
         </CardContent>
       </Card>
-      <UsersManager users={users} venues={venues} currentUserId={user.id} />
+      <UsersManager users={users} venues={venues} currentUserId={user.id} canEdit={canEdit} />
     </div>
   );
 }

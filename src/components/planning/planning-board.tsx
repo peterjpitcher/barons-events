@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CalendarRange, Check, LayoutGrid, List, MoveHorizontal, Plus, RefreshCw, Search, Users } from "lucide-react";
+import { CalendarRange, Check, ClipboardList, LayoutGrid, List, MoveHorizontal, Pin, PinOff, Plus, RefreshCw, Search, Users } from "lucide-react";
 import { movePlanningItemDateAction, refreshInspirationItemsAction, togglePlanningTaskStatusAction } from "@/actions/planning";
+import { setUserPinPreferenceAction } from "@/actions/user-preferences";
 import { PlanningAlertStrip } from "@/components/planning/planning-alert-strip";
 import { PlanningCalendarView } from "@/components/planning/planning-calendar-view";
 import { PlanningItemCard, EventOverlayCard, InspirationItemCard } from "@/components/planning/planning-item-card";
@@ -29,7 +30,7 @@ import type {
 import { bucketForDayOffset, daysBetween, planningItemsToTodoItems } from "@/lib/planning/utils";
 import { canCreatePlanningItems, canManageAllPlanning } from "@/lib/roles";
 import type { UserRole } from "@/lib/types";
-import { canEditVenueLinkedPlanning } from "@/lib/visibility";
+import { cn } from "@/lib/utils";
 
 type PlanningBoardProps = {
   data: PlanningBoardData;
@@ -43,6 +44,7 @@ type PlanningBoardProps = {
   currentUserId?: string;
   currentUserVenueId?: string | null;
   queueItems?: TodoItem[];
+  queueInitiallyPinned?: boolean;
 };
 
 type BucketConfig = {
@@ -163,14 +165,55 @@ function TodoQueueRail({
   items,
   onToggle,
   onOpen,
+  initiallyPinned = false,
 }: {
   items: TodoItem[];
   onToggle: (item: TodoItem) => void;
   onOpen: (item: TodoItem) => void;
+  initiallyPinned?: boolean;
 }) {
+  const router = useRouter();
   const [optimisticallyDone, setOptimisticallyDone] = useState<Set<string>>(new Set());
+  const [open, setOpen] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [pinned, setPinned] = useState(initiallyPinned);
+  const originalBodyPaddingRef = useRef<string | null>(null);
+  const originalDrawerOffsetRef = useRef<string | null>(null);
   const visibleItems = items.filter((item) => !optimisticallyDone.has(item.id));
   const doneCount = items.length - visibleItems.length;
+  const expanded = pinned || open || hovered || focused;
+
+  useEffect(() => {
+    if (originalBodyPaddingRef.current === null) {
+      originalBodyPaddingRef.current = document.body.style.paddingRight;
+    }
+    if (originalDrawerOffsetRef.current === null) {
+      originalDrawerOffsetRef.current = document.documentElement.style.getPropertyValue("--planning-queue-drawer-reserved-width");
+    }
+
+    const media = window.matchMedia("(min-width: 1024px)");
+    function syncBodyPadding(): void {
+      const reservedWidth = pinned && media.matches ? "22rem" : "3rem";
+      document.body.style.paddingRight = reservedWidth;
+      document.documentElement.style.setProperty("--planning-queue-drawer-reserved-width", reservedWidth);
+    }
+
+    syncBodyPadding();
+    media.addEventListener("change", syncBodyPadding);
+
+    return () => {
+      media.removeEventListener("change", syncBodyPadding);
+      if (originalBodyPaddingRef.current !== null) {
+        document.body.style.paddingRight = originalBodyPaddingRef.current;
+      }
+      if (originalDrawerOffsetRef.current) {
+        document.documentElement.style.setProperty("--planning-queue-drawer-reserved-width", originalDrawerOffsetRef.current);
+      } else {
+        document.documentElement.style.removeProperty("--planning-queue-drawer-reserved-width");
+      }
+    };
+  }, [pinned]);
 
   function handleToggle(item: TodoItem) {
     if (!item.canToggle || !item.planningTaskId) {
@@ -181,74 +224,157 @@ function TodoQueueRail({
     onToggle(item);
   }
 
-  return (
-    <aside className="sticky top-[66px] flex w-full flex-col gap-2 rounded-[10px] border border-[var(--hair)] bg-[var(--paper)] p-3 xl:w-[288px]">
-      <header className="flex items-baseline justify-between gap-2 border-b border-[var(--hair)] pb-2">
-        <div className="flex items-baseline gap-2">
-          <h2 className="font-brand-serif text-[15px] font-medium text-[var(--navy)]">Your queue</h2>
-          <span className="font-brand-mono text-[0.625rem] uppercase tracking-[0.04em] text-[var(--ink-soft)]">
-            {visibleItems.length} open
-          </span>
-        </div>
-        <span className="font-brand-mono text-[0.6rem] uppercase tracking-[0.06em] text-[var(--ink-soft)]">
-          {doneCount}/{items.length} done
-        </span>
-      </header>
+  async function setPinnedPreference(nextPinned: boolean): Promise<void> {
+    setPinned(nextPinned);
+    setOpen(nextPinned);
+    const result = await setUserPinPreferenceAction({
+      preference: "planning_queue_pinned",
+      value: nextPinned
+    });
+    if (!result.success) {
+      setPinned(!nextPinned);
+      toast.error(result.message ?? "Could not save queue preference.");
+    } else {
+      router.refresh();
+    }
+  }
 
-      {items.length === 0 ? (
-        <p className="py-6 text-center text-sm text-[var(--ink-muted)]">No assigned todos right now.</p>
-      ) : (
-        <div className="flex flex-col gap-3">
-          {QUEUE_GROUPS.map((group) => {
-            const rows = visibleItems.filter((item) => item.urgency === group.key).slice(0, group.key === "later" ? 4 : 8);
-            if (rows.length === 0) return null;
-            return (
-              <section key={group.key}>
-                <div className={`mb-1.5 flex items-center gap-2 font-brand-mono text-[0.6rem] font-semibold uppercase tracking-[0.14em] ${group.colorClass}`}>
-                  <span className={`h-2 w-2 rounded-full ${group.dotClass}`} />
-                  <span>{group.label}</span>
-                  <span className={`ml-auto rounded-full px-1.5 py-0.5 ${group.bgClass}`}>{rows.length}</span>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  {rows.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-start gap-2 rounded-[6px] border border-[var(--hair)] bg-[var(--canvas-2)] px-2 py-1.5"
-                    >
-                      <button
-                        type="button"
-                        aria-label={item.canToggle ? `Mark ${item.title} done` : `Open ${item.title}`}
-                        className="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border border-[var(--hair-strong)] bg-[var(--paper)] text-white hover:border-[var(--sage)] hover:bg-[var(--sage)]"
-                        onClick={() => handleToggle(item)}
-                      >
-                        <Check className="h-2.5 w-2.5" aria-hidden="true" />
-                      </button>
-                      <button
-                        type="button"
-                        className="min-w-0 flex-1 text-left"
-                        onClick={() => onOpen(item)}
-                      >
-                        <span className="block text-xs leading-snug text-[var(--ink)]">{item.title}</span>
-                        <span className="mt-1 flex min-w-0 items-center gap-1.5 font-brand-mono text-[0.58rem] uppercase tracking-[0.04em] text-[var(--ink-muted)]">
-                          <Avatar name={item.assigneeName ?? item.venueName ?? item.source} size={14} />
-                          <span>{item.source}</span>
-                          <span className="text-[var(--hair-strong)]">.</span>
-                          <span className="truncate">{item.parentTitle ?? item.venueName ?? item.subtitle}</span>
-                        </span>
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            );
-          })}
-        </div>
+  return (
+    <aside
+      className={cn(
+        "fixed bottom-0 right-0 top-0 z-40 flex flex-col border-l bg-[var(--paper)] shadow-card transition-[width] duration-200 ease-out",
+        expanded ? "w-[min(22rem,calc(100vw-3rem))] border-[var(--hair)]" : "w-12 border-[var(--mustard-dark)]"
       )}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => {
+        setHovered(false);
+        if (!pinned) setOpen(false);
+      }}
+      onFocus={() => setFocused(true)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          setFocused(false);
+          if (!pinned) setOpen(false);
+        }
+      }}
+      aria-label="MY TODO ITEMS drawer"
+    >
+      <div className="flex min-h-0 flex-1">
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className={cn(
+            "flex w-12 flex-none flex-col items-center justify-between gap-3 px-2 py-5 text-white transition-colors",
+            expanded ? "bg-[var(--navy)] hover:bg-[var(--navy-700)]" : "bg-[var(--mustard)] hover:bg-[var(--mustard-dark)]"
+          )}
+          aria-label={`Open MY TODO ITEMS - ${visibleItems.length} open`}
+        >
+          <ClipboardList className="h-5 w-5 flex-none" aria-hidden="true" />
+          <span
+            className="min-h-0 flex-1 text-sm font-semibold tracking-[0.08em] text-white"
+            style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
+          >
+            MY TODO ITEMS
+          </span>
+          <span className="rounded-full bg-[var(--paper)]/80 px-1.5 py-0.5 text-xs font-semibold text-[var(--navy)]">
+            {visibleItems.length}
+          </span>
+        </button>
+
+        <div
+          className={`min-w-0 flex-1 overflow-hidden transition-opacity duration-150 ${
+            expanded ? "opacity-100" : "pointer-events-none opacity-0"
+          }`}
+          aria-hidden={!expanded}
+        >
+          <div className="flex h-full flex-col">
+            <div className="flex items-center justify-between gap-3 border-b border-[var(--hair)] bg-[var(--navy)] px-5 py-3 text-white">
+              <div className="flex min-w-0 items-center gap-2">
+                <ClipboardList className="h-4 w-4 text-white" aria-hidden="true" />
+                <h2 className="truncate text-sm font-semibold tracking-wider">MY TODO ITEMS</h2>
+                <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs font-semibold text-white">
+                  {visibleItems.length} open
+                </span>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="text-white hover:bg-white/10 hover:text-white focus-visible:outline-white"
+                onClick={() => void setPinnedPreference(!pinned)}
+                aria-label={pinned ? "Unpin todo drawer" : "Pin todo drawer"}
+                aria-pressed={pinned}
+              >
+                {pinned ? <PinOff className="h-4 w-4" aria-hidden="true" /> : <Pin className="h-4 w-4" aria-hidden="true" />}
+              </Button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+              <div className="mb-3 flex items-center justify-between gap-2 font-brand-mono text-[0.6rem] uppercase tracking-[0.06em] text-[var(--ink-soft)]">
+                <span>{doneCount}/{items.length} done</span>
+                <span>{items.length} assigned</span>
+              </div>
+
+              {items.length === 0 ? (
+                <p className="rounded-[8px] border border-[var(--hair)] bg-[var(--paper-tint)] px-3 py-6 text-center text-sm text-[var(--ink-muted)]">
+                  No assigned todos right now.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {QUEUE_GROUPS.map((group) => {
+                    const rows = visibleItems.filter((item) => item.urgency === group.key).slice(0, group.key === "later" ? 4 : 8);
+                    if (rows.length === 0) return null;
+                    return (
+                      <section key={group.key}>
+                        <div className={`mb-1.5 flex items-center gap-2 font-brand-mono text-[0.6rem] font-semibold uppercase tracking-[0.14em] ${group.colorClass}`}>
+                          <span className={`h-2 w-2 rounded-full ${group.dotClass}`} />
+                          <span>{group.label}</span>
+                          <span className={`ml-auto rounded-full px-1.5 py-0.5 ${group.bgClass}`}>{rows.length}</span>
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          {rows.map((item) => (
+                            <div
+                              key={item.id}
+                              className="flex items-start gap-2 rounded-[6px] border border-[var(--hair)] bg-[var(--canvas-2)] px-2 py-1.5"
+                            >
+                              <button
+                                type="button"
+                                aria-label={item.canToggle ? `Mark ${item.title} done` : `Open ${item.title}`}
+                                className="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border border-[var(--hair-strong)] bg-[var(--paper)] text-white hover:border-[var(--sage)] hover:bg-[var(--sage)]"
+                                onClick={() => handleToggle(item)}
+                              >
+                                <Check className="h-2.5 w-2.5" aria-hidden="true" />
+                              </button>
+                              <button
+                                type="button"
+                                className="min-w-0 flex-1 text-left"
+                                onClick={() => onOpen(item)}
+                              >
+                                <span className="block text-xs leading-snug text-[var(--ink)]">{item.title}</span>
+                                <span className="mt-1 flex min-w-0 items-center gap-1.5 font-brand-mono text-[0.58rem] uppercase tracking-[0.04em] text-[var(--ink-muted)]">
+                                  <Avatar name={item.assigneeName ?? item.venueName ?? item.source} size={14} />
+                                  <span>{item.source}</span>
+                                  <span className="text-[var(--hair-strong)]">.</span>
+                                  <span className="truncate">{item.parentTitle ?? item.venueName ?? item.subtitle}</span>
+                                </span>
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
     </aside>
   );
 }
 
-export function PlanningBoard({ data, calendarData, venues, canApproveEvents, userRole, currentUserId, currentUserVenueId, queueItems = [] }: PlanningBoardProps) {
+export function PlanningBoard({ data, calendarData, venues, canApproveEvents, userRole, currentUserId, currentUserVenueId, queueItems = [], queueInitiallyPinned = false }: PlanningBoardProps) {
   const router = useRouter();
   const [viewMode, setViewMode] = useState<ViewMode>("board");
   const [showLater, setShowLater] = useState(false);
@@ -263,6 +389,9 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
   const filteredPlanningItems = useMemo(() => {
     const needle = search.trim().toLowerCase();
     return scopeData.planningItems.filter((item) => {
+      if (item.eventId) {
+        return false;
+      }
       if (!matchesStatusScope(isClosedPlanningStatus(item.status), statusScope)) {
         return false;
       }
@@ -461,6 +590,7 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
 
     const planningEntries: PlanningViewEntry[] = calendarSource.planningItems
       .filter((item) => {
+        if (item.eventId) return false;
         if (venueFilter && item.venueId !== venueFilter) return false;
         if (!matchesStatusScope(isClosedPlanningStatus(item.status), statusScope)) return false;
         const taskValue = item.tasks.map((task) => task.title).join(" ");
@@ -706,7 +836,7 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
       </section>
 
       {viewMode === "board" ? (
-        <section className="grid gap-4 xl:grid-cols-[1fr_288px]">
+        <section>
           <div className={`grid gap-3 ${
             visibleBuckets.length === 5 ? "2xl:grid-cols-5" :
             visibleBuckets.length === 4 ? "2xl:grid-cols-4" :
@@ -735,19 +865,6 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
                   <div className="space-y-2">
                     {rows.map((row) => {
                       if (row.type === "planning") {
-                        const canEditItem = userRole && currentUserId
-                          ? canEditVenueLinkedPlanning(
-                              {
-                                id: currentUserId,
-                                role: userRole,
-                                venueId: currentUserVenueId ?? null,
-                                email: "",
-                                fullName: null,
-                                deactivatedAt: null
-                              },
-                              { venueId: row.item.venueId, venues: row.item.venues }
-                            )
-                          : false;
                         return (
                           <PlanningItemCard
                             key={row.item.id}
@@ -756,7 +873,7 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
                             venues={venues}
                             onChanged={refreshBoard}
                             compact
-                            onOpenDetails={canEditItem ? (planningItem) => router.push(`/planning/${planningItem.id}`) : undefined}
+                            onOpenDetails={(planningItem) => router.push(`/planning/${planningItem.id}`)}
                             currentUserId={currentUserId}
                           />
                         );
@@ -777,12 +894,11 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
 
                   {rows.length === 0 ? (
                     <p className="rounded-[8px] border border-dashed border-[var(--hair)] px-3 py-5 text-center text-sm text-[var(--ink-soft)]">No items match your filter</p>
-                  ) : null}
-                </article>
-              );
-            })}
+              ) : null}
+            </article>
+          );
+        })}
           </div>
-          <TodoQueueRail items={queueItems} onToggle={toggleQueueItem} onOpen={openQueueItem} />
         </section>
       ) : null}
 
@@ -796,9 +912,7 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
           <PlanningCalendarView
             today={data.today}
             entries={calendarCombinedEntries}
-            onOpenPlanningItem={userRole && canCreatePlanningItems(userRole, currentUserVenueId)
-              ? (item) => router.push(`/planning/${item.id}`)
-              : undefined}
+            onOpenPlanningItem={(item) => router.push(`/planning/${item.id}`)}
             onMovePlanningItem={userRole && canCreatePlanningItems(userRole, currentUserVenueId)
               ? movePlanningItemInCalendar
               : undefined}
@@ -810,9 +924,7 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
         <PlanningListView
           today={data.today}
           entries={combinedEntries}
-          onOpenPlanningItem={userRole && canCreatePlanningItems(userRole, currentUserVenueId)
-            ? (item) => router.push(`/planning/${item.id}`)
-            : undefined}
+          onOpenPlanningItem={(item) => router.push(`/planning/${item.id}`)}
         />
       ) : null}
 
@@ -832,6 +944,13 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
           onOpenPlanningItemId={(id) => router.push(`/planning/${id}`)}
         />
       ) : null}
+
+      <TodoQueueRail
+        items={queueItems}
+        onToggle={toggleQueueItem}
+        onOpen={openQueueItem}
+        initiallyPinned={queueInitiallyPinned}
+      />
 
       {isPending ? <p className="text-sm text-subtle">Saving planning updates…</p> : null}
     </div>

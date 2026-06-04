@@ -3,13 +3,9 @@ import type { UserRole } from "./types";
 /**
  * Role capability model — FINAL (3-role)
  *
- * administrator — full platform access
- * office_worker — venue-scoped write (if venueId set) or global read/proposal access (if no venueId)
+ * administrator — full platform write access
+ * office_worker — read-only access unless a non-admin workspace workflow explicitly allows writing
  * executive     — read-only observer
- *
- * Functions accepting venueId use it as a capability switch:
- * office_worker + venueId = venue-scoped write access
- * office_worker + no venueId = global read access; event proposals allowed, planning writes blocked
  */
 
 /** Convenience: check if user is an administrator */
@@ -17,9 +13,9 @@ export function isAdministrator(role: UserRole): boolean {
   return role === "administrator";
 }
 
-/** Can propose or submit an event (any venue; admin triages). */
+/** Can propose or submit an event. Event creation is administrator-only. */
 export function canProposeEvents(role: UserRole): boolean {
-  return role === "administrator" || role === "office_worker";
+  return role === "administrator";
 }
 
 /** Context an edit check needs about the event being edited. */
@@ -39,30 +35,10 @@ export function canEditEvent(
   userVenueId: string | null,
   event: EventEditContext,
 ): boolean {
-  if (event.deletedAt !== null) {
-    return role === "administrator";
-  }
-
-  if (role === "administrator") return true;
-  if (role !== "office_worker") return false;
-
-  if (
-    event.createdBy === userId &&
-    (event.status === "draft" || event.status === "needs_revisions")
-  ) {
-    return true;
-  }
-
-  if (!userVenueId) return false;
-  const linkedVenueIds = new Set<string>();
-  if (event.venueId) linkedVenueIds.add(event.venueId);
-  for (const venueId of event.venueIds ?? []) {
-    if (venueId) linkedVenueIds.add(venueId);
-  }
-  if (!linkedVenueIds.has(userVenueId)) return false;
-  if (event.managerResponsibleId !== userId) return false;
-  if (event.status !== "approved" && event.status !== "cancelled") return false;
-  return true;
+  void userId;
+  void userVenueId;
+  void event;
+  return role === "administrator";
 }
 
 /** Context a debrief submit/edit check needs about the parent event. */
@@ -102,6 +78,7 @@ export function canSubmitDebriefForEvent(
 
 /** Can view events (all roles) */
 export function canViewEvents(role: UserRole): boolean {
+  void role;
   return true;
 }
 
@@ -110,25 +87,22 @@ export function canReviewEvents(role: UserRole): boolean {
   return role === "administrator";
 }
 
-/** Can manage bookings (admin always; office_worker only with venueId) */
+/** Can manage bookings */
 export function canManageBookings(role: UserRole, venueId?: string | null): boolean {
-  if (role === "administrator") return true;
-  if (role === "office_worker" && venueId) return true;
-  return false;
+  void venueId;
+  return role === "administrator";
 }
 
-/** Can manage customers (admin always; office_worker only with venueId) */
+/** Can manage customers */
 export function canManageCustomers(role: UserRole, venueId?: string | null): boolean {
-  if (role === "administrator") return true;
-  if (role === "office_worker" && venueId) return true;
-  return false;
+  void venueId;
+  return role === "administrator";
 }
 
-/** Can manage artists (admin always; office_worker only with venueId) */
+/** Can manage artists */
 export function canManageArtists(role: UserRole, venueId?: string | null): boolean {
-  if (role === "administrator") return true;
-  if (role === "office_worker" && venueId) return true;
-  return false;
+  void venueId;
+  return role === "administrator";
 }
 
 /** Can create debriefs (admin always; office_worker only with venueId) */
@@ -147,27 +121,32 @@ export function canEditDebrief(role: UserRole, isCreator: boolean): boolean {
 
 /** Can view/read debriefs (all roles) */
 export function canViewDebriefs(role: UserRole): boolean {
+  void role;
   return true;
 }
 
-/** Can view bookings list (admin + office_worker; not executive) */
+/** Can view bookings list */
 export function canViewBookings(role: UserRole): boolean {
-  return role === "administrator" || role === "office_worker";
+  void role;
+  return true;
 }
 
-/** Can view customers list (admin + office_worker; not executive) */
+/** Can view customers list */
 export function canViewCustomers(role: UserRole): boolean {
-  return role === "administrator" || role === "office_worker";
+  void role;
+  return true;
 }
 
-/** Can view artists directory (admin + office_worker; not executive) */
+/** Can view artists directory */
 export function canViewArtists(role: UserRole): boolean {
-  return role === "administrator" || role === "office_worker";
+  void role;
+  return true;
 }
 
-/** Can view the review pipeline read-only (admin + office_worker; not executive) */
+/** Can view the review pipeline read-only */
 export function canViewReviews(role: UserRole): boolean {
-  return role === "administrator" || role === "office_worker";
+  void role;
+  return true;
 }
 
 /** Can create new planning items */
@@ -187,6 +166,7 @@ export function canManageAllPlanning(role: UserRole): boolean {
 
 /** Can view the planning workspace */
 export function canViewPlanning(role: UserRole): boolean {
+  void role;
   return true;
 }
 
@@ -212,7 +192,8 @@ export function canManageLinks(role: UserRole): boolean {
 
 /** Can view the SOP template configuration */
 export function canViewSopTemplate(role: UserRole): boolean {
-  return role === "administrator" || role === "executive";
+  void role;
+  return true;
 }
 
 /** Can create, edit, or delete SOP template sections and tasks */

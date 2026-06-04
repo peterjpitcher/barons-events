@@ -11,9 +11,10 @@ import { SubmitButton } from "@/components/ui/submit-button";
 
 type ArchivedArtistsManagerProps = {
   artists: ArtistOption[];
+  canEdit: boolean;
 };
 
-export function ArchivedArtistsManager({ artists }: ArchivedArtistsManagerProps) {
+export function ArchivedArtistsManager({ artists, canEdit }: ArchivedArtistsManagerProps) {
   const [state, formAction] = useActionState(restoreArtistAction, undefined);
   const router = useRouter();
 
@@ -39,7 +40,7 @@ export function ArchivedArtistsManager({ artists }: ArchivedArtistsManagerProps)
             <th className="px-4 py-3">Artist</th>
             <th className="px-4 py-3">Type</th>
             <th className="px-4 py-3">Contact</th>
-            <th className="px-4 py-3 text-right">Actions</th>
+            <th className="px-4 py-3 text-right">{canEdit ? "Actions" : ""}</th>
           </tr>
         </thead>
         <tbody>
@@ -53,10 +54,12 @@ export function ArchivedArtistsManager({ artists }: ArchivedArtistsManagerProps)
                   <Button asChild variant="ghost" size="sm">
                     <Link href={`/artists/${artist.id}`}>View</Link>
                   </Button>
-                  <form action={formAction}>
-                    <input type="hidden" name="artistId" value={artist.id} />
-                    <SubmitButton label="Restore" pendingLabel="Restoring..." size="sm" />
-                  </form>
+                  {canEdit ? (
+                    <form action={formAction}>
+                      <input type="hidden" name="artistId" value={artist.id} />
+                      <SubmitButton label="Restore" pendingLabel="Restoring..." size="sm" />
+                    </form>
+                  ) : null}
                 </div>
               </td>
             </tr>

@@ -76,7 +76,7 @@ describe("proposeEventAction", () => {
   });
 
   it("overwrites client-supplied created_by with authenticated user id", async () => {
-    getUserMock.mockResolvedValue({ id: "ow-1", role: "office_worker", venueId: null });
+    getUserMock.mockResolvedValue({ id: "admin-1", role: "administrator", venueId: null });
     selectInMock.mockResolvedValue({
       data: [{ id: VENUE_A }],
       error: null,
@@ -95,13 +95,13 @@ describe("proposeEventAction", () => {
     expect(rpcMock).toHaveBeenCalledWith(
       "create_multi_venue_event_proposals",
       expect.objectContaining({
-        p_payload: expect.objectContaining({ created_by: "ow-1" }),
+        p_payload: expect.objectContaining({ created_by: "admin-1" }),
       }),
     );
   });
 
-  it("allows an unassigned office_worker to propose for any existing venue", async () => {
-    getUserMock.mockResolvedValue({ id: "ow-1", role: "office_worker", venueId: null });
+  it("allows an administrator to propose for any existing venue", async () => {
+    getUserMock.mockResolvedValue({ id: "admin-1", role: "administrator", venueId: null });
     selectInMock.mockResolvedValue({
       data: [{ id: VENUE_B }],
       error: null,
@@ -128,7 +128,7 @@ describe("proposeEventAction", () => {
   });
 
   it("normalises naive proposal times as London local time before calling the legacy RPC", async () => {
-    getUserMock.mockResolvedValue({ id: "ow-1", role: "office_worker", venueId: null });
+    getUserMock.mockResolvedValue({ id: "admin-1", role: "administrator", venueId: null });
     selectInMock.mockResolvedValue({
       data: [{ id: VENUE_A }],
       error: null,
@@ -153,7 +153,7 @@ describe("proposeEventAction", () => {
     );
   });
 
-  it("rejects a venue-assigned office_worker proposing off-venue", async () => {
+  it("rejects a venue-assigned office_worker before venue validation", async () => {
     getUserMock.mockResolvedValue({ id: "ow-1", role: "office_worker", venueId: VENUE_A });
 
     const result = await proposeEventAction(undefined, fd({
@@ -164,18 +164,13 @@ describe("proposeEventAction", () => {
     }));
 
     expect(result.success).toBe(false);
-    expect(result.message).toMatch(/assigned venue/i);
+    expect(result.message).toMatch(/permission/i);
     expect(selectInMock).not.toHaveBeenCalled();
     expect(rpcMock).not.toHaveBeenCalled();
   });
 
-  it("allows a venue-assigned office_worker to propose for their assigned venue", async () => {
+  it("rejects a venue-assigned office_worker for their assigned venue", async () => {
     getUserMock.mockResolvedValue({ id: "ow-1", role: "office_worker", venueId: VENUE_A });
-    selectInMock.mockResolvedValue({
-      data: [{ id: VENUE_A }],
-      error: null,
-    });
-    rpcMock.mockResolvedValue({ data: { event_id: "e1" }, error: null });
 
     const result = await proposeEventAction(undefined, fd({
       title: "Test",
@@ -184,12 +179,14 @@ describe("proposeEventAction", () => {
       venueIds: VENUE_A,
     }));
 
-    expect(result.success).toBe(true);
-    expect(rpcMock).toHaveBeenCalled();
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/permission/i);
+    expect(selectInMock).not.toHaveBeenCalled();
+    expect(rpcMock).not.toHaveBeenCalled();
   });
 
   it("returns retryable error when venue query fails", async () => {
-    getUserMock.mockResolvedValue({ id: "ow-1", role: "office_worker", venueId: null });
+    getUserMock.mockResolvedValue({ id: "admin-1", role: "administrator", venueId: null });
     selectInMock.mockResolvedValue({ data: null, error: { message: "DB down" } });
 
     const result = await proposeEventAction(undefined, fd({
@@ -204,7 +201,7 @@ describe("proposeEventAction", () => {
   });
 
   it("rejects when a venue id is not found", async () => {
-    getUserMock.mockResolvedValue({ id: "ow-1", role: "office_worker", venueId: null });
+    getUserMock.mockResolvedValue({ id: "admin-1", role: "administrator", venueId: null });
     selectInMock.mockResolvedValue({
       data: [{ id: VENUE_A }],
       error: null,
@@ -223,7 +220,7 @@ describe("proposeEventAction", () => {
 
   it("calls propose_event_draft with operation and idempotency keys when the RPC flag is enabled", async () => {
     process.env.EVENT_SAVE_USE_RPC = "true";
-    getUserMock.mockResolvedValue({ id: "ow-1", role: "office_worker", venueId: null });
+    getUserMock.mockResolvedValue({ id: "admin-1", role: "administrator", venueId: null });
     selectInMock.mockResolvedValue({
       data: [{ id: VENUE_A }, { id: VENUE_B }],
       error: null,
@@ -265,7 +262,7 @@ describe("proposeEventAction", () => {
 
   it("normalises naive proposal times as London local time before calling the authenticated RPC", async () => {
     process.env.EVENT_SAVE_USE_RPC = "true";
-    getUserMock.mockResolvedValue({ id: "ow-1", role: "office_worker", venueId: null });
+    getUserMock.mockResolvedValue({ id: "admin-1", role: "administrator", venueId: null });
     selectInMock.mockResolvedValue({
       data: [{ id: VENUE_A }],
       error: null,

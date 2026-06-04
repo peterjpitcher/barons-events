@@ -8,6 +8,7 @@ export type AppUserRow = Database["public"]["Tables"]["users"]["Row"];
 export type EnrichedUser = AppUserRow & {
   emailConfirmedAt: Date | null;
   lastSignInAt: Date | null;
+  lastActiveAt: Date | null;
   deactivated_at: string | null;
   deactivated_by: string | null;
 };
@@ -28,6 +29,11 @@ type AuthMeta = {
   lastSignInAt: Date | null;
 };
 
+type SessionActivityRow = {
+  user_id: string | null;
+  last_activity_at: string | null;
+};
+
 export async function listUsersWithAuthData(): Promise<EnrichedUser[]> {
   // 1. Fetch public users table
   const supabase = await createSupabaseReadonlyClient();
@@ -39,6 +45,9 @@ export async function listUsersWithAuthData(): Promise<EnrichedUser[]> {
   if (usersError) {
     throw new Error(`Could not load users: ${usersError.message}`);
   }
+
+  const users = publicUsers ?? [];
+  const userIds = users.map((user) => user.id);
 
   // 2. Page through auth users using the API's nextPage cursor.
   //    Default page size is 50 — use 1000 to minimise round-trips.
@@ -68,15 +77,38 @@ export async function listUsersWithAuthData(): Promise<EnrichedUser[]> {
     ])
   );
 
+  const sessionActivityMap = new Map<string, Date>();
+  if (userIds.length > 0) {
+    const { data: sessionRows, error: sessionError } = await adminClient
+      .from("app_sessions")
+      .select("user_id,last_activity_at")
+      .in("user_id", userIds);
+
+    if (sessionError) {
+      throw new Error(`Could not fetch session activity: ${sessionError.message}`);
+    }
+
+    for (const row of (sessionRows ?? []) as SessionActivityRow[]) {
+      if (!row.user_id || !row.last_activity_at) continue;
+      const activityAt = new Date(row.last_activity_at);
+      if (Number.isNaN(activityAt.getTime())) continue;
+      const current = sessionActivityMap.get(row.user_id);
+      if (!current || activityAt > current) {
+        sessionActivityMap.set(row.user_id, activityAt);
+      }
+    }
+  }
+
   // 4. Merge: public users drive the list. Missing auth record → treat as pending.
   //    deactivated_at/deactivated_by come from the DB row (post-migration) but aren't
   //    in the generated Supabase types yet — coerce with defaults for type safety.
-  return (publicUsers ?? []).map((user) => {
+  return users.map((user) => {
     const meta = authMap.get(user.id) ?? { emailConfirmedAt: null, lastSignInAt: null };
     const row = user as AppUserRow & { deactivated_at?: string | null; deactivated_by?: string | null };
     return {
       ...user,
       ...meta,
+      lastActiveAt: sessionActivityMap.get(user.id) ?? null,
       deactivated_at: row.deactivated_at ?? null,
       deactivated_by: row.deactivated_by ?? null,
     };

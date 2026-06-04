@@ -48,6 +48,7 @@ export type EventStatus =
   | "needs_revisions"
   | "approved"
   | "rejected"
+  | "cancelled"
   | "completed";
 
 /** Re-export FieldErrors so consumers only need one import. */

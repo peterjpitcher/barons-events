@@ -6,6 +6,7 @@ import { formatSpacesLabel } from "@/lib/venue-spaces";
 import { getTodayLondonIsoDate, formatInLondon } from "@/lib/datetime";
 import { addDays } from "@/lib/planning/utils";
 import { normaliseTodoDigestFrequency, shouldSendTodoDigestToday } from "@/lib/communication-preferences";
+import { resolveCentralEventsLeadRecipients } from "@/lib/central-events-lead";
 import {
   buildMonthlySalesReportAttachments,
   renderMonthlySalesReportEmail,
@@ -33,6 +34,15 @@ type EventContext = EventRow & {
 
 type AnnouncementEventContext = EventRow & {
   venue: { name: string | null } | null;
+  event_venues?: Array<{
+    venue_id: string | null;
+    venue: { name: string | null } | null;
+  }> | null;
+};
+
+type ProposalEventContext = EventRow & {
+  venue: { name: string | null } | null;
+  creator: Pick<UserRow, "id" | "email" | "full_name"> | null;
   event_venues?: Array<{
     venue_id: string | null;
     venue: { name: string | null } | null;
@@ -754,6 +764,13 @@ function formatEventWindow(event: EventRow): string {
   return `${dateFormatter.format(start)} · ${timeFormatter.format(start)} – ${timeFormatter.format(end)}`;
 }
 
+function formatProposalStart(value: string | null): string {
+  if (!value) return "Date not set";
+  const start = new Date(value);
+  if (Number.isNaN(start.getTime())) return "Date not set";
+  return `${dateFormatter.format(start)} · ${timeFormatter.format(start)}`;
+}
+
 function eventLink(eventId: string): string {
   return `${APP_BASE_URL}/events/${eventId}`;
 }
@@ -775,6 +792,135 @@ function buildGreeting(user: Pick<UserRow, "full_name"> | null | undefined, fall
     return `Hi ${user.full_name},`;
   }
   return `${fallback},`;
+}
+
+async function fetchProposalEventContext(eventId: string): Promise<ProposalEventContext | null> {
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await (supabase as any)
+    .from("events")
+    .select(
+      `
+      *,
+      venue:venues!events_venue_id_fkey(name),
+      creator:users!events_created_by_fkey(id,full_name,email),
+      event_venues(venue_id, venue:venues(name))
+    `
+    )
+    .eq("id", eventId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Could not fetch proposal event for notification: ${error.message}`);
+  }
+
+  return (data as ProposalEventContext) ?? null;
+}
+
+async function claimProposalEmailSend(params: {
+  eventId: string;
+  idempotencyKey: string;
+  userId: string;
+}): Promise<boolean> {
+  const db = createSupabaseAdminClient();
+  const now = new Date().toISOString();
+  const response = {
+    success: true,
+    event_id: params.eventId,
+    proposal_email: "claimed"
+  };
+
+  const { error: insertError } = await (db as any)
+    .from("event_save_idempotency")
+    .upsert(
+      {
+        idempotency_key: params.idempotencyKey,
+        user_id: params.userId,
+        event_id: params.eventId,
+        response,
+        created_at: now,
+      },
+      { onConflict: "idempotency_key,user_id", ignoreDuplicates: true }
+    );
+
+  if (insertError) {
+    throw new Error(`Could not create proposal email idempotency row: ${insertError.message}`);
+  }
+
+  const { data, error } = await (db as any)
+    .from("event_save_idempotency")
+    .update({
+      event_id: params.eventId,
+      proposal_email_sent_at: now,
+    })
+    .eq("idempotency_key", params.idempotencyKey)
+    .eq("user_id", params.userId)
+    .is("proposal_email_sent_at", null)
+    .select("idempotency_key")
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Could not claim proposal email send: ${error.message}`);
+  }
+
+  return Boolean(data);
+}
+
+export async function sendProposalSubmittedEmailOnce(params: {
+  eventId: string;
+  idempotencyKey: string;
+  userId: string;
+}): Promise<void> {
+  if (!areOperationalEmailsEnabled()) {
+    logNotificationSkipped("sendProposalSubmittedEmailOnce", { eventId: params.eventId });
+    return;
+  }
+  const resend = getResendClient();
+  if (!resend) return;
+
+  try {
+    const shouldSend = await claimProposalEmailSend(params);
+    if (!shouldSend) return;
+
+    const [event, recipients] = await Promise.all([
+      fetchProposalEventContext(params.eventId),
+      resolveCentralEventsLeadRecipients(),
+    ]);
+    if (!event || recipients.length === 0) return;
+
+    const venueNames = event.event_venues && event.event_venues.length > 0
+      ? event.event_venues.map((entry) => entry.venue?.name).filter((name): name is string => Boolean(name))
+      : [event.venue?.name ?? "Unknown venue"];
+    const uniqueVenues = [...new Set(venueNames)];
+    const creatorName = event.creator?.full_name ?? event.creator?.email ?? "A BaronsHub user";
+    const notes = typeof event.notes === "string" && event.notes.trim().length > 0
+      ? event.notes.trim()
+      : "No proposal notes supplied.";
+
+    const { html, text } = renderEmailTemplate({
+      headline: "New event proposal submitted",
+      intro: `${creatorName} submitted "${event.title}" for review.`,
+      body: [
+        notes,
+      ],
+      button: { label: "Review proposal", url: eventLink(event.id) },
+      meta: [
+        `Event: ${event.title}`,
+        `Date: ${formatProposalStart(event.start_at)}`,
+        `Venue: ${uniqueVenues.join(", ")}`,
+        `Submitted by: ${creatorName}`,
+      ]
+    });
+
+    await resend.emails.send({
+      from: RESEND_FROM_ADDRESS,
+      to: recipients.map((recipient) => recipient.email),
+      subject: `New event proposal: ${event.title}`,
+      html,
+      text
+    });
+  } catch (error) {
+    console.warn("Failed to send proposal submitted email", error);
+  }
 }
 
 export async function sendEventSubmittedEmail(eventId: string) {
@@ -1385,6 +1531,298 @@ export async function sendDebriefSubmittedToSltEmail(eventId: string): Promise<v
     console.warn("Failed to send SLT debrief email", error);
     // No throw — debrief submission is already authoritative.
   }
+}
+
+/**
+ * Mandatory Tuesday weekly update.
+ *
+ * Sends to every active user once per ISO week. Personal to-dos are per-user;
+ * approved/debriefed sections are venue-scoped when a user has `venue_id`,
+ * otherwise global.
+ */
+export async function sendMandatoryWeeklyUpdateEmail(): Promise<{ sent: number; failed: number; skippedAssignees: number }> {
+  if (!areOperationalEmailsEnabled()) {
+    logNotificationSkipped("sendMandatoryWeeklyUpdateEmail");
+    return { sent: 0, failed: 0, skippedAssignees: 0 };
+  }
+  const resend = getResendClient();
+  if (!resend) return { sent: 0, failed: 0, skippedAssignees: 0 };
+
+  const todayLondon = getTodayLondonIsoDate();
+  const weekday = new Date(`${todayLondon}T12:00:00Z`).getUTCDay();
+  if (weekday !== 2) {
+    return { sent: 0, failed: 0, skippedAssignees: 0 };
+  }
+
+  function isoWeekStart(value: string): string {
+    const date = new Date(`${value}T12:00:00Z`);
+    const dayOffset = (date.getUTCDay() + 6) % 7;
+    date.setUTCDate(date.getUTCDate() - dayOffset);
+    return date.toISOString().slice(0, 10);
+  }
+
+  function firstRelation<T>(value: T | T[] | null | undefined): T | null {
+    return Array.isArray(value) ? value[0] ?? null : value ?? null;
+  }
+
+  function eventVenueIds(event: { venue_id?: string | null; event_venues?: Array<{ venue_id: string | null }> | null }): Set<string> {
+    const ids = new Set<string>();
+    if (event.venue_id) ids.add(event.venue_id);
+    for (const link of event.event_venues ?? []) {
+      if (link.venue_id) ids.add(link.venue_id);
+    }
+    return ids;
+  }
+
+  function formatEventDate(value: string | null): string {
+    if (!value) return "Date not set";
+    return formatInLondon(value).date;
+  }
+
+  function formatUplift(value: number | null | undefined): string {
+    return typeof value === "number" && Number.isFinite(value) ? `${value.toFixed(1)}%` : "N/A";
+  }
+
+  const db = createSupabaseAdminClient();
+  const weekStart = isoWeekStart(todayLondon);
+  const todoDueLimit = addDays(todayLondon, 14);
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  const [usersResult, assigneeRowsResult, legacyTasksResult, approvalAuditResult, debriefsResult] = await Promise.all([
+    db
+      .from("users")
+      .select("id, email, full_name, venue_id, weekly_digest_last_sent_on")
+      .is("deactivated_at", null),
+    (db as any)
+      .from("planning_task_assignees")
+      .select(`
+        user_id,
+        planning_task:planning_tasks!inner(
+          id, title, due_date, assignee_id, status,
+          planning_item:planning_items!inner(id, title, event:events(id, title, venue_id, event_venues(venue_id)))
+        )
+      `)
+      .not("user_id", "is", null),
+    (db as any)
+      .from("planning_tasks")
+      .select(`
+        id, title, due_date, assignee_id, status,
+        planning_item:planning_items!inner(id, title, event:events(id, title, venue_id, event_venues(venue_id)))
+      `)
+      .eq("status", "open")
+      .not("assignee_id", "is", null),
+    db
+      .from("audit_log")
+      .select("entity_id, created_at")
+      .eq("entity", "event")
+      .eq("action", "event.approved")
+      .gte("created_at", sevenDaysAgo),
+    (db as any)
+      .from("debriefs")
+      .select("event_id, submitted_at, sales_uplift_percent, event:events(id, title, start_at, venue_id, venue:venues!events_venue_id_fkey(name), event_venues(venue_id))")
+      .gte("submitted_at", sevenDaysAgo)
+  ]);
+
+  if (usersResult.error) throw new Error(`Could not load digest users: ${usersResult.error.message}`);
+  if (assigneeRowsResult.error) throw new Error(`Could not load assigned planning tasks: ${assigneeRowsResult.error.message}`);
+  if (legacyTasksResult.error) throw new Error(`Could not load legacy planning tasks: ${legacyTasksResult.error.message}`);
+  if (approvalAuditResult.error) throw new Error(`Could not load approved event audit rows: ${approvalAuditResult.error.message}`);
+  if (debriefsResult.error) throw new Error(`Could not load debrief rows: ${debriefsResult.error.message}`);
+
+  type WeeklyUser = {
+    id: string;
+    email: string;
+    full_name: string | null;
+    venue_id: string | null;
+    weekly_digest_last_sent_on: string | null;
+  };
+  type WeeklyTask = {
+    id: string;
+    title: string;
+    dueDate: string | null;
+    planningTitle: string;
+    eventTitle: string | null;
+  };
+
+  const users = ((usersResult.data ?? []) as WeeklyUser[])
+    .filter((user) => Boolean(user.email))
+    .filter((user) => !user.weekly_digest_last_sent_on || isoWeekStart(user.weekly_digest_last_sent_on) !== weekStart);
+  const userMap = new Map(users.map((user) => [user.id, user]));
+  const tasksByUser = new Map<string, Map<string, WeeklyTask>>();
+  const taskIdsWithAssigneeRows = new Set<string>();
+  let skippedAssignees = 0;
+
+  function normaliseWeeklyTask(rawTask: unknown): WeeklyTask | null {
+    const task = firstRelation(rawTask as Record<string, unknown> | Array<Record<string, unknown>> | null);
+    if (!task || (task.status && task.status !== "open")) return null;
+    const dueDate = typeof task.due_date === "string" ? task.due_date : null;
+    if (!dueDate || dueDate > todoDueLimit) return null;
+
+    const planningItem = firstRelation(task.planning_item as Record<string, unknown> | Array<Record<string, unknown>> | null);
+    if (!planningItem) return null;
+    const event = firstRelation(planningItem.event as Record<string, unknown> | Array<Record<string, unknown>> | null);
+
+    return {
+      id: String(task.id),
+      title: String(task.title ?? "Untitled task"),
+      dueDate,
+      planningTitle: String(planningItem.title ?? "Untitled planning item"),
+      eventTitle: event ? String(event.title ?? "Untitled event") : null
+    };
+  }
+
+  function addTask(userId: string | null | undefined, task: WeeklyTask | null): void {
+    if (!userId || !task) return;
+    if (!userMap.has(userId)) {
+      skippedAssignees++;
+      return;
+    }
+    const tasks = tasksByUser.get(userId) ?? new Map<string, WeeklyTask>();
+    tasks.set(task.id, task);
+    tasksByUser.set(userId, tasks);
+  }
+
+  for (const row of (assigneeRowsResult.data ?? []) as Array<Record<string, unknown>>) {
+    const task = normaliseWeeklyTask(row.planning_task ?? row.planning_tasks);
+    if (task) taskIdsWithAssigneeRows.add(task.id);
+    addTask(typeof row.user_id === "string" ? row.user_id : null, task);
+  }
+
+  for (const rawTask of (legacyTasksResult.data ?? []) as Array<Record<string, unknown>>) {
+    const task = normaliseWeeklyTask(rawTask);
+    if (task && taskIdsWithAssigneeRows.has(task.id)) continue;
+    addTask(typeof rawTask.assignee_id === "string" ? rawTask.assignee_id : null, task);
+  }
+
+  const approvedEventIds = [...new Set(((approvalAuditResult.data ?? []) as Array<{ entity_id: string | null }>).map((row) => row.entity_id).filter((id): id is string => Boolean(id)))];
+  const approvedEvents = approvedEventIds.length > 0
+    ? await (db as any)
+      .from("events")
+      .select("id, title, start_at, venue_id, venue:venues!events_venue_id_fkey(name), event_venues(venue_id)")
+      .in("id", approvedEventIds)
+      .is("deleted_at", null)
+    : { data: [], error: null };
+  if (approvedEvents.error) throw new Error(`Could not load approved events: ${approvedEvents.error.message}`);
+
+  type WeeklyEvent = {
+    id: string;
+    title: string;
+    start_at: string | null;
+    venue_id: string | null;
+    venue: { name: string | null } | Array<{ name: string | null }> | null;
+    event_venues?: Array<{ venue_id: string | null }> | null;
+  };
+  type WeeklyDebrief = {
+    event_id: string;
+    submitted_at: string;
+    sales_uplift_percent: number | null;
+    event: WeeklyEvent | WeeklyEvent[] | null;
+  };
+
+  const approvedRows = (approvedEvents.data ?? []) as WeeklyEvent[];
+  const debriefRows = (debriefsResult.data ?? []) as WeeklyDebrief[];
+
+  function inUserScope(user: WeeklyUser, event: WeeklyEvent): boolean {
+    if (!user.venue_id) return true;
+    return eventVenueIds(event).has(user.venue_id);
+  }
+
+  let sent = 0;
+  let failed = 0;
+
+  for (const user of users) {
+    try {
+      const todoTasks = Array.from(tasksByUser.get(user.id)?.values() ?? [])
+        .sort((a, b) => (a.dueDate ?? "").localeCompare(b.dueDate ?? "") || a.title.localeCompare(b.title));
+      const userApproved = approvedRows.filter((event) => inUserScope(user, event));
+      const userDebriefs = debriefRows
+        .map((row) => ({ ...row, event: firstRelation(row.event) }))
+        .filter((row): row is WeeklyDebrief & { event: WeeklyEvent } => {
+          const event = row.event;
+          return Boolean(event) && inUserScope(user, event as WeeklyEvent);
+        });
+
+      const body: string[] = [];
+      body.push("Approved events in the last 7 days:");
+      if (userApproved.length === 0) {
+        body.push("  No newly approved events for your scope.");
+      } else {
+        for (const event of userApproved.slice(0, 20)) {
+          const venue = firstRelation(event.venue);
+          body.push(`  • ${event.title} — ${formatEventDate(event.start_at)}, ${venue?.name ?? "Unknown venue"}`);
+        }
+      }
+
+      body.push("", "Your to-dos due now or in the next 14 days:");
+      if (todoTasks.length === 0) {
+        body.push("  No open to-dos. Nice work, you are all caught up.");
+      } else {
+        for (const task of todoTasks.slice(0, 50)) {
+          const due = task.dueDate ? formatInLondon(`${task.dueDate}T00:00:00Z`).date : "TBD";
+          const context = task.eventTitle ? `${task.planningTitle} / ${task.eventTitle}` : task.planningTitle;
+          body.push(`  • ${task.title} — ${due} (${context})`);
+        }
+        if (todoTasks.length > 50) {
+          body.push(`  …and ${todoTasks.length - 50} more to-dos in BaronsHub.`);
+        }
+      }
+
+      body.push("", "Events debriefed in the last 7 days:");
+      if (userDebriefs.length === 0) {
+        body.push("  No debriefs submitted for your scope.");
+      } else {
+        for (const debrief of userDebriefs.slice(0, 20)) {
+          const venue = firstRelation(debrief.event.venue);
+          body.push(
+            `  • ${debrief.event.title} — ${formatEventDate(debrief.event.start_at)}, ${venue?.name ?? "Unknown venue"}, uplift ${formatUplift(debrief.sales_uplift_percent)}`
+          );
+        }
+      }
+
+      const { html, text } = renderEmailTemplate({
+        headline: "Weekly BaronsHub update",
+        intro: `${buildGreeting({ full_name: user.full_name }, "Hello")} here is your weekly BaronsHub update.`,
+        body,
+        button: { label: "Open BaronsHub", url: plannerDashboardLink() },
+        footerNote: "This mandatory weekly update is sent every Tuesday."
+      });
+
+      await resend.emails.send({
+        from: RESEND_FROM_ADDRESS,
+        to: [user.email],
+        subject: "Your weekly BaronsHub update",
+        html,
+        text
+      });
+
+      const { error: sentUpdateError } = await db
+        .from("users")
+        .update({ weekly_digest_last_sent_on: todayLondon })
+        .eq("id", user.id);
+      if (sentUpdateError) {
+        console.error(`sendMandatoryWeeklyUpdateEmail: failed to record sent date for ${user.id}`, sentUpdateError);
+      }
+
+      sent++;
+    } catch (error) {
+      console.error(`sendMandatoryWeeklyUpdateEmail: failed for user ${user.id}`, error);
+      failed++;
+    }
+  }
+
+  try {
+    await db.from("audit_log").insert({
+      entity: "digest",
+      entity_id: weekStart,
+      action: "digest.batch_sent",
+      actor_id: null,
+      meta: { sent, failed, skipped_assignees: skippedAssignees, weekly_update: true, date: todayLondon } as unknown as Database["public"]["Tables"]["audit_log"]["Row"]["meta"]
+    });
+  } catch (auditError) {
+    console.error("sendMandatoryWeeklyUpdateEmail: failed to record audit entry", auditError);
+  }
+
+  return { sent, failed, skippedAssignees };
 }
 
 /**

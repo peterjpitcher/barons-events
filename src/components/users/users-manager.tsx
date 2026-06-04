@@ -23,6 +23,7 @@ type UsersManagerProps = {
   users: EnrichedUser[];
   venues: VenueRow[];
   currentUserId: string;
+  canEdit: boolean;
 };
 
 const roleLabels: Record<AppUserRow["role"], string> = {
@@ -32,15 +33,23 @@ const roleLabels: Record<AppUserRow["role"], string> = {
 };
 
 const errorInputClass = "!border-[var(--burgundy)] focus-visible:!border-[var(--burgundy)]";
+const desktopUserGridClass =
+  "grid-cols-[minmax(13rem,1.45fr)_minmax(13rem,1.25fr)_minmax(11rem,0.9fr)_minmax(13rem,1.15fr)_minmax(6rem,0.55fr)_minmax(7.5rem,auto)]";
 
-export function UsersManager({ users, venues, currentUserId }: UsersManagerProps) {
+function formatUserActivity(user: EnrichedUser): string {
+  if (user.lastActiveAt) return `Last active ${formatRelativeTime(user.lastActiveAt)}`;
+  if (user.lastSignInAt) return `Last sign-in ${formatRelativeTime(user.lastSignInAt)}`;
+  return "No activity yet";
+}
+
+export function UsersManager({ users, venues, currentUserId, canEdit }: UsersManagerProps) {
   return (
     <div className="space-y-5">
-      <InviteUserForm venues={venues} />
+      {canEdit ? <InviteUserForm venues={venues} /> : null}
       <div className="space-y-4">
         <div className="grid gap-4 md:hidden">
           {users.map((user) => (
-            <UserCardMobile key={user.id} user={user} venues={venues} currentUserId={currentUserId} />
+            <UserCardMobile key={user.id} user={user} venues={venues} currentUserId={currentUserId} canEdit={canEdit} />
           ))}
           {users.length === 0 ? (
             <Card>
@@ -48,7 +57,7 @@ export function UsersManager({ users, venues, currentUserId }: UsersManagerProps
             </Card>
           ) : null}
         </div>
-        <UserDesktopList users={users} venues={venues} currentUserId={currentUserId} />
+        <UserDesktopList users={users} venues={venues} currentUserId={currentUserId} canEdit={canEdit} />
       </div>
     </div>
   );
@@ -81,7 +90,12 @@ function InviteUserForm({ venues }: { venues: VenueRow[] }) {
         <CardDescription>Send an email invite and set their initial role and venue link.</CardDescription>
       </CardHeader>
       <CardContent>
-        <form ref={formRef} action={formAction} className="grid gap-4 md:grid-cols-2" noValidate>
+        <form
+          ref={formRef}
+          action={formAction}
+          className="grid gap-4 md:grid-cols-2 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1.1fr)_minmax(11rem,0.75fr)_minmax(14rem,1fr)_auto] xl:items-start"
+          noValidate
+        >
           <div className="space-y-2">
             <Label htmlFor="invite-email">Email</Label>
             <Input
@@ -146,8 +160,8 @@ function InviteUserForm({ venues }: { venues: VenueRow[] }) {
             </Select>
             <FieldError id="invite-venue-error" message={venueIdError} />
           </div>
-          <div className="md:col-span-2">
-            <SubmitButton label="Send invite" pendingLabel="Sending..." />
+          <div className="md:col-span-2 xl:col-span-1 xl:flex xl:h-full xl:items-end xl:justify-end">
+            <SubmitButton label="Send invite" pendingLabel="Sending..." className="w-full xl:w-auto" />
           </div>
         </form>
       </CardContent>
@@ -155,7 +169,17 @@ function InviteUserForm({ venues }: { venues: VenueRow[] }) {
   );
 }
 
-function UserCardMobile({ user, venues, currentUserId }: { user: EnrichedUser; venues: VenueRow[]; currentUserId: string }) {
+function UserCardMobile({
+  user,
+  venues,
+  currentUserId,
+  canEdit
+}: {
+  user: EnrichedUser;
+  venues: VenueRow[];
+  currentUserId: string;
+  canEdit: boolean;
+}) {
   const [state, formAction] = useActionState(updateUserAction, undefined);
   const router = useRouter();
 
@@ -170,6 +194,7 @@ function UserCardMobile({ user, venues, currentUserId }: { user: EnrichedUser; v
   }, [state, router]);
 
   const isDeactivated = Boolean(user.deactivated_at);
+  const activityLabel = formatUserActivity(user);
 
   return (
     <Card className={isDeactivated ? "opacity-60" : undefined}>
@@ -186,7 +211,7 @@ function UserCardMobile({ user, venues, currentUserId }: { user: EnrichedUser; v
             />
             <span className="text-xs text-[var(--ink-muted)]">
               {isDeactivated ? "Deactivated" : user.emailConfirmedAt ? "Active" : "Pending"}
-              {!isDeactivated && <>{" · "}{formatRelativeTime(user.lastSignInAt)}</>}
+              {!isDeactivated && <>{" · "}{activityLabel}</>}
             </span>
           </div>
         </div>
@@ -194,7 +219,7 @@ function UserCardMobile({ user, venues, currentUserId }: { user: EnrichedUser; v
           <p className="flex-shrink-0 rounded-full bg-muted-surface px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--ink-muted)]">
             {roleLabels[user.role]}
           </p>
-          <UserActionsMenu user={user} currentUserId={currentUserId} />
+          {canEdit ? <UserActionsMenu user={user} currentUserId={currentUserId} /> : null}
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -207,11 +232,12 @@ function UserCardMobile({ user, venues, currentUserId }: { user: EnrichedUser; v
               name="fullName"
               defaultValue={user.full_name ?? ""}
               placeholder="Full name"
+              disabled={!canEdit}
             />
           </div>
           <div className="space-y-2">
             <Label htmlFor={`role-${user.id}`}>Role</Label>
-            <Select id={`role-${user.id}`} name="role" defaultValue={user.role}>
+            <Select id={`role-${user.id}`} name="role" defaultValue={user.role} disabled={!canEdit}>
               {Object.entries(roleLabels).map(([value, label]) => (
                 <option key={value} value={value}>
                   {label}
@@ -221,7 +247,7 @@ function UserCardMobile({ user, venues, currentUserId }: { user: EnrichedUser; v
           </div>
           <div className="space-y-2 md:col-span-2">
             <Label htmlFor={`venue-${user.id}`}>Linked venue (optional)</Label>
-            <Select id={`venue-${user.id}`} name="venueId" defaultValue={user.venue_id ?? ""}>
+            <Select id={`venue-${user.id}`} name="venueId" defaultValue={user.venue_id ?? ""} disabled={!canEdit}>
               <option value="">No linked venue</option>
               {venues.map((venue) => (
                 <option key={venue.id} value={venue.id}>
@@ -230,16 +256,29 @@ function UserCardMobile({ user, venues, currentUserId }: { user: EnrichedUser; v
               ))}
             </Select>
           </div>
-          <div className="md:col-span-2 flex justify-end">
-            <SubmitButton
-              label="Save changes"
-              pendingLabel="Saving..."
-              icon={<Save className="h-4 w-4" aria-hidden="true" />}
-              hideLabel
+          <label className="flex items-center gap-2 rounded-[var(--radius-sm)] border border-[var(--hair)] bg-[var(--canvas-2)] px-3 py-2 text-sm text-[var(--ink)] md:col-span-2">
+            <input
+              type="checkbox"
+              name="isCentralEventsLead"
+              defaultChecked={user.is_central_events_lead}
+              className="h-4 w-4 rounded border-[var(--hair)]"
+              disabled={!canEdit}
             />
-          </div>
+            <span>Central events lead</span>
+          </label>
+          {canEdit ? (
+            <div className="md:col-span-2 flex justify-end">
+              <SubmitButton
+                label="Save changes"
+                pendingLabel="Saving..."
+                icon={<Save className="h-4 w-4" aria-hidden="true" />}
+                hideLabel
+                size="icon"
+              />
+            </div>
+          ) : null}
         </form>
-        {!user.emailConfirmedAt && !isDeactivated && (
+        {canEdit && !user.emailConfirmedAt && !isDeactivated && (
           <ResendInviteButton
             userId={user.id}
             email={user.email}
@@ -251,7 +290,7 @@ function UserCardMobile({ user, venues, currentUserId }: { user: EnrichedUser; v
   );
 }
 
-function UserDesktopList({ users, venues, currentUserId }: UsersManagerProps) {
+function UserDesktopList({ users, venues, currentUserId, canEdit }: UsersManagerProps) {
   if (users.length === 0) {
     return (
       <div className="hidden rounded-[var(--radius)] border border-[var(--hair)] bg-[var(--paper)] py-8 text-center text-subtle md:block">
@@ -261,24 +300,43 @@ function UserDesktopList({ users, venues, currentUserId }: UsersManagerProps) {
   }
 
   return (
-    <div className="hidden overflow-hidden rounded-[var(--radius)] border border-[var(--hair)] bg-[var(--paper)] md:block">
-      <div className="grid grid-cols-[minmax(0,2.5fr)_minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,2fr)_auto] gap-4 border-b border-[var(--hair)] bg-[var(--canvas-2)] px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-subtle">
-        <div>Name</div>
-        <div>Email</div>
-        <div>Role</div>
-        <div>Linked venue</div>
-        <div className="text-right">Actions</div>
+    <div className="hidden overflow-x-auto rounded-[var(--radius)] border border-[var(--hair)] bg-[var(--paper)] shadow-card md:block">
+      <div className="min-w-[1080px]">
+        <div className={`grid ${desktopUserGridClass} gap-4 border-b border-[var(--hair)] bg-[var(--canvas-2)] px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-subtle`}>
+          <div>Name</div>
+          <div>Email</div>
+          <div>Role</div>
+          <div>Linked venue</div>
+          <div>Lead</div>
+          <div className="text-right">Actions</div>
+        </div>
+        <ul className="divide-y divide-[var(--hair)]">
+          {users.map((user) => (
+            <UserDesktopRow
+              key={user.id}
+              user={user}
+              venues={venues}
+              currentUserId={currentUserId}
+              canEdit={canEdit}
+            />
+          ))}
+        </ul>
       </div>
-      <ul>
-        {users.map((user, index) => (
-          <UserDesktopRow key={user.id} user={user} venues={venues} isFirst={index === 0} currentUserId={currentUserId} />
-        ))}
-      </ul>
     </div>
   );
 }
 
-function UserDesktopRow({ user, venues, isFirst, currentUserId }: { user: EnrichedUser; venues: VenueRow[]; isFirst: boolean; currentUserId: string }) {
+function UserDesktopRow({
+  user,
+  venues,
+  currentUserId,
+  canEdit
+}: {
+  user: EnrichedUser;
+  venues: VenueRow[];
+  currentUserId: string;
+  canEdit: boolean;
+}) {
   const [state, formAction] = useActionState(updateUserAction, undefined);
   const router = useRouter();
 
@@ -293,16 +351,15 @@ function UserDesktopRow({ user, venues, isFirst, currentUserId }: { user: Enrich
   }, [state, router]);
 
   const isDeactivated = Boolean(user.deactivated_at);
+  const activityLabel = formatUserActivity(user);
 
   return (
     <li
-      className={`border-[var(--hair)] px-5 py-4 ${
-        isFirst ? "border-b" : "border-y"
-      } hover:bg-[var(--paper-tint)] ${isDeactivated ? "opacity-60" : ""}`}
+      className={`px-5 py-3 transition-colors hover:bg-[var(--paper-tint)] ${isDeactivated ? "opacity-60" : ""}`}
     >
-      <form action={formAction} className="grid grid-cols-[minmax(0,2.5fr)_minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,2fr)_auto] items-center gap-4">
+      <form action={formAction} className={`grid ${desktopUserGridClass} items-start gap-4`}>
         <input type="hidden" name="userId" value={user.id} />
-        <div className="flex flex-col gap-1">
+        <div className="min-w-0 space-y-1">
           <label className="sr-only" htmlFor={`desktop-fullName-${user.id}`}>
             Full name
           </label>
@@ -311,6 +368,7 @@ function UserDesktopRow({ user, venues, isFirst, currentUserId }: { user: Enrich
             name="fullName"
             defaultValue={user.full_name ?? ""}
             placeholder="Full name"
+            disabled={!canEdit}
           />
           <div className="flex items-center gap-1.5">
             <span
@@ -321,19 +379,20 @@ function UserDesktopRow({ user, venues, isFirst, currentUserId }: { user: Enrich
             />
             <span className="text-xs text-[var(--ink-muted)]">
               {isDeactivated ? "Deactivated" : user.emailConfirmedAt ? "Active" : "Pending"}
-              {!isDeactivated && <>{" · "}{formatRelativeTime(user.lastSignInAt)}</>}
+              {!isDeactivated && <>{" · "}{activityLabel}</>}
             </span>
           </div>
         </div>
-        <div className="space-y-1">
-          <span className="text-xs font-medium uppercase tracking-[0.18em] text-subtle">Email</span>
-          <p className="truncate text-sm text-[var(--ink)]">{user.email}</p>
+        <div className="min-w-0 pt-2">
+          <p className="truncate text-sm text-[var(--ink)]" title={user.email}>
+            {user.email}
+          </p>
         </div>
-        <div className="flex flex-col gap-1">
+        <div className="min-w-0">
           <label className="sr-only" htmlFor={`desktop-role-${user.id}`}>
             Role
           </label>
-          <Select id={`desktop-role-${user.id}`} name="role" defaultValue={user.role}>
+          <Select id={`desktop-role-${user.id}`} name="role" defaultValue={user.role} disabled={!canEdit}>
             {Object.entries(roleLabels).map(([value, label]) => (
               <option key={value} value={value}>
                 {label}
@@ -341,11 +400,11 @@ function UserDesktopRow({ user, venues, isFirst, currentUserId }: { user: Enrich
             ))}
           </Select>
         </div>
-        <div className="flex flex-col gap-1">
+        <div className="min-w-0">
           <label className="sr-only" htmlFor={`desktop-venue-${user.id}`}>
             Linked venue
           </label>
-          <Select id={`desktop-venue-${user.id}`} name="venueId" defaultValue={user.venue_id ?? ""}>
+          <Select id={`desktop-venue-${user.id}`} name="venueId" defaultValue={user.venue_id ?? ""} disabled={!canEdit}>
             <option value="">No linked venue</option>
             {venues.map((venue) => (
               <option key={venue.id} value={venue.id}>
@@ -354,23 +413,41 @@ function UserDesktopRow({ user, venues, isFirst, currentUserId }: { user: Enrich
             ))}
           </Select>
         </div>
-        <div className="flex items-center justify-end gap-2">
-          <SubmitButton
-            label="Save changes"
-            pendingLabel="Saving..."
-            icon={<Save className="h-4 w-4" aria-hidden="true" />}
-            hideLabel
+        <label className="inline-flex items-center gap-2 pt-2 text-sm text-[var(--ink)]">
+          <input
+            type="checkbox"
+            name="isCentralEventsLead"
+            defaultChecked={user.is_central_events_lead}
+            className="h-4 w-4 rounded border-[var(--hair)]"
+            disabled={!canEdit}
           />
-          <UserActionsMenu user={user} currentUserId={currentUserId} />
+          <span className="sr-only">Central events lead</span>
+          <span aria-hidden="true">{user.is_central_events_lead ? "Lead" : "No"}</span>
+        </label>
+        <div className="flex min-w-0 items-start justify-end gap-2 pt-0.5">
+          {canEdit ? (
+            <>
+              <SubmitButton
+                label="Save changes"
+                pendingLabel="Saving..."
+                icon={<Save className="h-4 w-4" aria-hidden="true" />}
+                hideLabel
+                size="icon"
+              />
+              <UserActionsMenu user={user} currentUserId={currentUserId} />
+            </>
+          ) : null}
         </div>
       </form>
-      {!user.emailConfirmedAt && !isDeactivated && (
-        <div className="mt-2 pl-1">
-          <ResendInviteButton
-            userId={user.id}
-            email={user.email}
-            fullName={user.full_name}
-          />
+      {canEdit && !user.emailConfirmedAt && !isDeactivated && (
+        <div className={`mt-2 grid ${desktopUserGridClass} gap-4`}>
+          <div>
+            <ResendInviteButton
+              userId={user.id}
+              email={user.email}
+              fullName={user.full_name}
+            />
+          </div>
         </div>
       )}
     </li>

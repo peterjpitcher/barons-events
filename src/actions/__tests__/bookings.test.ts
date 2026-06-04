@@ -826,34 +826,6 @@ describe("cancelBookingAction", () => {
     vi.mocked(createSupabaseAdminClient).mockReturnValue({ from: mockFrom } as never);
   }
 
-  function mockAdminBookingAndEventLookup(
-    eventId: string,
-    event: { venue_id: string | null; event_venues?: Array<{ venue_id: string | null }> | null }
-  ) {
-    const mockFrom = vi.fn((table: string) => {
-      if (table === "event_bookings") {
-        return {
-          select: vi.fn(() => ({
-            eq: vi.fn(() => ({
-              single: vi.fn().mockResolvedValue({ data: { event_id: eventId }, error: null })
-            }))
-          }))
-        };
-      }
-      if (table === "events") {
-        return {
-          select: vi.fn(() => ({
-            eq: vi.fn(() => ({
-              single: vi.fn().mockResolvedValue({ data: event, error: null })
-            }))
-          }))
-        };
-      }
-      return {};
-    });
-    vi.mocked(createSupabaseAdminClient).mockReturnValue({ from: mockFrom } as never);
-  }
-
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.BOOKING_UPDATE_TOKEN_SECRET = "test-booking-update-secret-with-32-chars";
@@ -884,7 +856,7 @@ describe("cancelBookingAction", () => {
     expect(mockCancelBooking).toHaveBeenCalledWith("booking-id");
   });
 
-  it("allows a venue worker to cancel a booking for an event linked to their venue", async () => {
+  it("rejects office workers before booking lookup even when venue-linked", async () => {
     mockGetCurrentUser.mockResolvedValue({
       id: "user-123",
       email: "staff@example.com",
@@ -893,36 +865,34 @@ describe("cancelBookingAction", () => {
       venueId: "venue-a",
       deactivatedAt: null,
     });
-    mockAdminBookingAndEventLookup("event-id", {
-      venue_id: "venue-b",
-      event_venues: [{ venue_id: "venue-b" }, { venue_id: "venue-a" }]
-    });
-    mockCancelBooking.mockResolvedValue(undefined);
-
-    const result = await cancelBookingAction("booking-id", "event-id");
-
-    expect(result.success).toBe(true);
-    expect(mockCancelBooking).toHaveBeenCalledWith("booking-id");
-  });
-
-  it("rejects a venue worker when the event is not linked to their venue", async () => {
-    mockGetCurrentUser.mockResolvedValue({
-      id: "user-123",
-      email: "staff@example.com",
-      fullName: "Staff User",
-      role: "office_worker",
-      venueId: "venue-a",
-      deactivatedAt: null,
-    });
-    mockAdminBookingAndEventLookup("event-id", {
-      venue_id: "venue-b",
-      event_venues: [{ venue_id: "venue-b" }]
-    });
+    const mockFrom = vi.fn();
+    vi.mocked(createSupabaseAdminClient).mockReturnValue({ from: mockFrom } as never);
 
     const result = await cancelBookingAction("booking-id", "event-id");
 
     expect(result.success).toBe(false);
-    expect(result.error).toMatch(/your venue/i);
+    expect(result.error).toMatch(/permission/i);
+    expect(mockFrom).not.toHaveBeenCalled();
+    expect(mockCancelBooking).not.toHaveBeenCalled();
+  });
+
+  it("rejects executives before booking lookup", async () => {
+    mockGetCurrentUser.mockResolvedValue({
+      id: "user-123",
+      email: "exec@example.com",
+      fullName: "Exec User",
+      role: "executive",
+      venueId: null,
+      deactivatedAt: null,
+    });
+    const mockFrom = vi.fn();
+    vi.mocked(createSupabaseAdminClient).mockReturnValue({ from: mockFrom } as never);
+
+    const result = await cancelBookingAction("booking-id", "event-id");
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/permission/i);
+    expect(mockFrom).not.toHaveBeenCalled();
     expect(mockCancelBooking).not.toHaveBeenCalled();
   });
 

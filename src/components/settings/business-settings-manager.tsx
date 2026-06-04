@@ -13,6 +13,7 @@ type BusinessSettingsManagerProps = {
   accountantSalesReportEmail: string;
   updatedAt: string | null;
   updatedBy: string | null;
+  canEdit: boolean;
 };
 
 export function BusinessSettingsManager({
@@ -20,7 +21,8 @@ export function BusinessSettingsManager({
   accountantSalesReportEnabled,
   accountantSalesReportEmail,
   updatedAt,
-  updatedBy
+  updatedBy,
+  canEdit
 }: BusinessSettingsManagerProps) {
   const [state, formAction] = useActionState(updateBusinessSettingsAction, undefined);
 
@@ -43,6 +45,7 @@ export function BusinessSettingsManager({
           min={0.01}
           max={999.99}
           defaultValue={labourRateGbp.toFixed(2)}
+          disabled={!canEdit}
         />
         <p className="text-xs text-subtle">
           Used in the post-event debrief to estimate labour cost. Changes take effect on the next debrief submitted.
@@ -58,6 +61,7 @@ export function BusinessSettingsManager({
             type="email"
             defaultValue={accountantSalesReportEmail}
             autoComplete="email"
+            disabled={!canEdit}
           />
           <p className="text-xs text-subtle">
             Monthly paid booking sales are emailed on the first of each month for the previous calendar month.
@@ -69,6 +73,7 @@ export function BusinessSettingsManager({
             type="checkbox"
             defaultChecked={accountantSalesReportEnabled}
             className="mt-1 h-4 w-4 rounded border-[var(--hair)]"
+            disabled={!canEdit}
           />
           <span>
             Send the monthly accountant sales report automatically, including months with no completed paid sales.
@@ -83,7 +88,7 @@ export function BusinessSettingsManager({
         </p>
       ) : null}
 
-      <SubmitButton label="Save settings" pendingLabel="Saving..." variant="primary" />
+      {canEdit ? <SubmitButton label="Save settings" pendingLabel="Saving..." variant="primary" /> : null}
     </form>
   );
 }

@@ -1,0 +1,6 @@
+-- Remote migration history sync.
+--
+-- The linked Supabase database contains this applied migration version, but the
+-- corresponding migration file is not present in the repository. Keeping this
+-- no-op file lets Supabase CLI compare local and remote migration history
+-- without removing remote history.

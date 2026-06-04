@@ -217,29 +217,23 @@ function setupSuccessfulCreateSubmitMocks() {
 describe("submitEventForReviewAction — create path venue rules", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("office_worker with no venueId is permitted by capability (no pinning)", async () => {
+  it("office_worker with no venueId is rejected before venue checks", async () => {
     getUserMock.mockResolvedValue({ id: USER_A, role: "office_worker", venueId: null });
-    // No event context needed for create-path capability check; we expect
-    // the action to proceed past the guard. The downstream path will fail
-    // for other reasons (e.g. missing required fields), but the first
-    // message must NOT be the permission rejection.
     const result = await submitEventForReviewAction(undefined, formData({
       venueIds: VENUE_A,
       title: "T",
       startAt: "2026-05-01T10:00:00Z",
     }));
-    // The guard is satisfied — we must not see the legacy venue-not-linked
-    // or venue-mismatch rejection strings anywhere.
-    expect(result.message ?? "").not.toMatch(/not linked to a venue/i);
-    expect(result.message ?? "").not.toMatch(/own venue|venue mismatch/i);
-    expect(result.message ?? "").not.toMatch(/don't have permission/i);
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/don't have permission/i);
+    expect(createEventDraft).not.toHaveBeenCalled();
   });
 
-  it("venue-assigned office_worker cannot create for a different venue", async () => {
+  it("venue-assigned office_worker cannot create for any venue", async () => {
     getUserMock.mockResolvedValue({ id: USER_A, role: "office_worker", venueId: VENUE_A });
     const result = await submitEventForReviewAction(undefined, validFullEventForm({ venueIds: VENUE_B }));
     expect(result.success).toBe(false);
-    expect(result.message).toMatch(/assigned venue/i);
+    expect(result.message).toMatch(/don't have permission/i);
     expect(createEventDraft).not.toHaveBeenCalled();
   });
 
@@ -290,50 +284,32 @@ describe("submitEventForReviewAction — create path venue rules", () => {
     );
   });
 
-  it("office_worker full-form submit redirects to the created event", async () => {
-    const createdEvent = setupSuccessfulCreateSubmitMocks();
+  it("office_worker full-form submit is rejected", async () => {
+    setupSuccessfulCreateSubmitMocks();
     getUserMock.mockResolvedValue({ id: USER_A, role: "office_worker", venueId: null });
 
-    await expect(submitEventForReviewAction(undefined, validFullEventForm())).rejects.toThrow("NEXT_REDIRECT");
+    const result = await submitEventForReviewAction(undefined, validFullEventForm());
 
-    expect(createEventPlanningItem).toHaveBeenCalledWith(
-      createdEvent.id,
-      createdEvent.title,
-      createdEvent.start_at,
-      createdEvent.venue_id,
-      USER_A,
-      {
-        venueIds: [VENUE_A],
-        notRequiredTemplateIds: [],
-      }
-    );
-    expect(redirect).toHaveBeenCalledWith(`/events/${createdEvent.id}`);
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/don't have permission/i);
+    expect(createEventPlanningItem).not.toHaveBeenCalled();
   });
 
-  it("venue-assigned office_worker can submit for their assigned venue", async () => {
-    const createdEvent = setupSuccessfulCreateSubmitMocks();
+  it("venue-assigned office_worker cannot submit for their assigned venue", async () => {
+    setupSuccessfulCreateSubmitMocks();
     getUserMock.mockResolvedValue({ id: USER_A, role: "office_worker", venueId: VENUE_A });
 
-    await expect(submitEventForReviewAction(undefined, validFullEventForm())).rejects.toThrow("NEXT_REDIRECT");
+    const result = await submitEventForReviewAction(undefined, validFullEventForm());
 
-    expect(createEventPlanningItem).toHaveBeenCalledWith(
-      createdEvent.id,
-      createdEvent.title,
-      createdEvent.start_at,
-      createdEvent.venue_id,
-      USER_A,
-      {
-        venueIds: [VENUE_A],
-        notRequiredTemplateIds: [],
-      }
-    );
-    expect(redirect).toHaveBeenCalledWith(`/events/${createdEvent.id}`);
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/don't have permission/i);
+    expect(createEventPlanningItem).not.toHaveBeenCalled();
   });
 
   it("redirects to the created event if a post-create side effect fails", async () => {
     const createdEvent = setupSuccessfulCreateSubmitMocks();
     vi.mocked(syncEventArtists).mockRejectedValueOnce(new Error("artist sync failed"));
-    getUserMock.mockResolvedValue({ id: USER_A, role: "office_worker", venueId: null });
+    getUserMock.mockResolvedValue({ id: USER_A, role: "administrator", venueId: null });
 
     await expect(submitEventForReviewAction(undefined, validFullEventForm())).rejects.toThrow("NEXT_REDIRECT");
 
@@ -344,23 +320,23 @@ describe("submitEventForReviewAction — create path venue rules", () => {
 describe("saveEventDraftAction — create path venue rules", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("office_worker with no venueId is permitted by capability (no pinning)", async () => {
+  it("office_worker with no venueId is rejected before venue checks", async () => {
     getUserMock.mockResolvedValue({ id: USER_A, role: "office_worker", venueId: null });
     const result = await saveEventDraftAction(undefined, formData({
       venueIds: VENUE_A,
       title: "T",
       startAt: "2026-05-01T10:00:00Z",
     }));
-    expect(result.message ?? "").not.toMatch(/not linked to a venue/i);
-    expect(result.message ?? "").not.toMatch(/own venue|venue mismatch/i);
-    expect(result.message ?? "").not.toMatch(/don't have permission/i);
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/don't have permission/i);
+    expect(createEventDraft).not.toHaveBeenCalled();
   });
 
-  it("venue-assigned office_worker cannot save draft for a different venue", async () => {
+  it("venue-assigned office_worker cannot save drafts", async () => {
     getUserMock.mockResolvedValue({ id: USER_A, role: "office_worker", venueId: VENUE_A });
     const result = await saveEventDraftAction(undefined, validFullEventForm({ venueIds: VENUE_B }));
     expect(result.success).toBe(false);
-    expect(result.message).toMatch(/assigned venue/i);
+    expect(result.message).toMatch(/don't have permission/i);
     expect(createEventDraft).not.toHaveBeenCalled();
   });
 
@@ -381,7 +357,7 @@ describe("saveEventDraftAction — create path venue rules", () => {
 describe("saveEventDraftAction — update path (canEditEvent)", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("manager_responsible office_worker at own venue on approved event passes guard", async () => {
+  it("manager_responsible office_worker at own venue on approved event is rejected", async () => {
     getUserMock.mockResolvedValue({ id: USER_A, role: "office_worker", venueId: VENUE_A });
     loadCtxMock.mockResolvedValue({
       venueId: VENUE_A,
@@ -397,9 +373,8 @@ describe("saveEventDraftAction — update path (canEditEvent)", () => {
       title: "T",
       startAt: "2026-05-01T10:00:00Z",
     }));
-    // Permission guard passed; later logic may fail but NOT with the
-    // permission rejection message.
-    expect(result.message ?? "").not.toMatch(/don't have permission to edit/i);
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/don't have permission to edit/i);
   });
 
   it("office_worker at right venue but not manager_responsible is rejected", async () => {
@@ -469,7 +444,7 @@ describe("submitEventForReviewAction — update path (canEditEvent)", () => {
     expect(result.message).toMatch(/don't have permission to edit/i);
   });
 
-  it("manager_responsible office_worker at own venue passes guard", async () => {
+  it("manager_responsible office_worker at own venue is rejected", async () => {
     getUserMock.mockResolvedValue({ id: USER_A, role: "office_worker", venueId: VENUE_A });
     loadCtxMock.mockResolvedValue({
       venueId: VENUE_A,
@@ -482,7 +457,8 @@ describe("submitEventForReviewAction — update path (canEditEvent)", () => {
     const result = await submitEventForReviewAction(undefined, formData({
       eventId: EVENT_ID,
     }));
-    expect(result.message ?? "").not.toMatch(/don't have permission to edit/i);
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/don't have permission to edit/i);
   });
 });
 
@@ -578,14 +554,13 @@ describe("deleteEventAction", () => {
 describe("generateWebsiteCopyFromFormAction", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("allows office_worker with no venueId (canProposeEvents)", async () => {
+  it("rejects office_worker with no venueId", async () => {
     getUserMock.mockResolvedValue({ id: USER_A, role: "office_worker", venueId: null });
     const result = await generateWebsiteCopyFromFormAction(undefined, formData({
       title: "T",
     }));
-    // Permission passes; downstream AI call may fail, but NOT with
-    // "Only administrators or venue managers".
-    expect(result.message ?? "").not.toMatch(/only administrators or venue managers/i);
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/permission/i);
   });
 
   it("rejects executive", async () => {

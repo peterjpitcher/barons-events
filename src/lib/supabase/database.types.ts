@@ -234,7 +234,9 @@ export type Database = {
       attachments: {
         Row: {
           created_at: string
+          current_version_id: string | null
           deleted_at: string | null
+          display_name: string | null
           event_id: string | null
           id: string
           mime_type: string
@@ -249,7 +251,9 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          current_version_id?: string | null
           deleted_at?: string | null
+          display_name?: string | null
           event_id?: string | null
           id?: string
           mime_type: string
@@ -264,7 +268,9 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          current_version_id?: string | null
           deleted_at?: string | null
+          display_name?: string | null
           event_id?: string | null
           id?: string
           mime_type?: string
@@ -278,6 +284,13 @@ export type Database = {
           uploaded_by?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "attachments_current_version_id_fkey"
+            columns: ["current_version_id"]
+            isOneToOne: false
+            referencedRelation: "attachment_versions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "attachments_event_id_fkey"
             columns: ["event_id"]
@@ -301,6 +314,57 @@ export type Database = {
           },
           {
             foreignKeyName: "attachments_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      attachment_versions: {
+        Row: {
+          attachment_id: string
+          created_at: string
+          id: string
+          mime_type: string
+          original_filename: string
+          size_bytes: number
+          storage_path: string
+          uploaded_by: string | null
+          version_no: number
+        }
+        Insert: {
+          attachment_id: string
+          created_at?: string
+          id?: string
+          mime_type: string
+          original_filename: string
+          size_bytes: number
+          storage_path: string
+          uploaded_by?: string | null
+          version_no: number
+        }
+        Update: {
+          attachment_id?: string
+          created_at?: string
+          id?: string
+          mime_type?: string
+          original_filename?: string
+          size_bytes?: number
+          storage_path?: string
+          uploaded_by?: string | null
+          version_no?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attachment_versions_attachment_id_fkey"
+            columns: ["attachment_id"]
+            isOneToOne: false
+            referencedRelation: "attachments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attachment_versions_uploaded_by_fkey"
             columns: ["uploaded_by"]
             isOneToOne: false
             referencedRelation: "users"
@@ -907,6 +971,7 @@ export type Database = {
           created_at: string
           event_id: string | null
           idempotency_key: string
+          proposal_email_sent_at: string | null
           response: Json
           user_id: string
         }
@@ -914,6 +979,7 @@ export type Database = {
           created_at?: string
           event_id?: string | null
           idempotency_key: string
+          proposal_email_sent_at?: string | null
           response: Json
           user_id: string
         }
@@ -921,6 +987,7 @@ export type Database = {
           created_at?: string
           event_id?: string | null
           idempotency_key?: string
+          proposal_email_sent_at?: string | null
           response?: Json
           user_id?: string
         }
@@ -1274,6 +1341,41 @@ export type Database = {
         }
         Relationships: []
       }
+      internal_notes: {
+        Row: {
+          body: string
+          created_at: string
+          created_by: string | null
+          entity_id: string
+          entity_type: "event" | "planning_item"
+          id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          created_by?: string | null
+          entity_id: string
+          entity_type: "event" | "planning_item"
+          id?: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          created_by?: string | null
+          entity_id?: string
+          entity_type?: "event" | "planning_item"
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "internal_notes_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       login_attempts: {
         Row: {
           attempted_at: string
@@ -1473,12 +1575,14 @@ export type Database = {
           created_at: string
           created_by: string | null
           description: string | null
+          end_at: string | null
           event_id: string | null
           id: string
           is_exception: boolean
           occurrence_on: string | null
           owner_id: string | null
           series_id: string | null
+          start_at: string | null
           status: string
           target_date: string
           title: string
@@ -1490,12 +1594,14 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           description?: string | null
+          end_at?: string | null
           event_id?: string | null
           id?: string
           is_exception?: boolean
           occurrence_on?: string | null
           owner_id?: string | null
           series_id?: string | null
+          start_at?: string | null
           status: string
           target_date: string
           title: string
@@ -1507,12 +1613,14 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           description?: string | null
+          end_at?: string | null
           event_id?: string | null
           id?: string
           is_exception?: boolean
           occurrence_on?: string | null
           owner_id?: string | null
           series_id?: string | null
+          start_at?: string | null
           status?: string
           target_date?: string
           title?: string
@@ -2151,9 +2259,12 @@ export type Database = {
           default_assignee_ids: string[]
           expansion_strategy: string
           id: string
+          phase: string
           section_id: string
           sort_order: number
           t_minus_days: number
+          t_plus_days: number | null
+          template_key: string | null
           title: string
           updated_at: string
           venue_filter: string | null
@@ -2163,9 +2274,12 @@ export type Database = {
           default_assignee_ids?: string[]
           expansion_strategy?: string
           id?: string
+          phase?: string
           section_id: string
           sort_order?: number
           t_minus_days?: number
+          t_plus_days?: number | null
+          template_key?: string | null
           title: string
           updated_at?: string
           venue_filter?: string | null
@@ -2175,9 +2289,12 @@ export type Database = {
           default_assignee_ids?: string[]
           expansion_strategy?: string
           id?: string
+          phase?: string
           section_id?: string
           sort_order?: number
           t_minus_days?: number
+          t_plus_days?: number | null
+          template_key?: string | null
           title?: string
           updated_at?: string
           venue_filter?: string | null
@@ -2197,43 +2314,58 @@ export type Database = {
           created_at: string
           deactivated_at: string | null
           deactivated_by: string | null
+          debrief_pinned: boolean
           email: string
           full_name: string | null
           id: string
+          is_central_events_lead: boolean
+          planning_queue_pinned: boolean
           previous_role: string | null
           role: string
+          sop_drawer_pinned: boolean
           todo_digest_frequency: string
           todo_digest_last_sent_on: string | null
           updated_at: string
           venue_id: string | null
+          weekly_digest_last_sent_on: string | null
         }
         Insert: {
           created_at?: string
           deactivated_at?: string | null
           deactivated_by?: string | null
+          debrief_pinned?: boolean
           email: string
           full_name?: string | null
           id: string
+          is_central_events_lead?: boolean
+          planning_queue_pinned?: boolean
           previous_role?: string | null
           role: string
+          sop_drawer_pinned?: boolean
           todo_digest_frequency?: string
           todo_digest_last_sent_on?: string | null
           updated_at?: string
           venue_id?: string | null
+          weekly_digest_last_sent_on?: string | null
         }
         Update: {
           created_at?: string
           deactivated_at?: string | null
           deactivated_by?: string | null
+          debrief_pinned?: boolean
           email?: string
           full_name?: string | null
           id?: string
+          is_central_events_lead?: boolean
+          planning_queue_pinned?: boolean
           previous_role?: string | null
           role?: string
+          sop_drawer_pinned?: boolean
           todo_digest_frequency?: string
           todo_digest_last_sent_on?: string | null
           updated_at?: string
           venue_id?: string | null
+          weekly_digest_last_sent_on?: string | null
         }
         Relationships: [
           {
@@ -2750,12 +2882,14 @@ export type Database = {
     }
     Enums: {
       event_status:
+        | "pending_approval"
+        | "approved_pending_details"
         | "draft"
         | "submitted"
         | "needs_revisions"
         | "approved"
         | "rejected"
-        | "published"
+        | "cancelled"
         | "completed"
       user_role: "venue_manager" | "reviewer" | "central_planner" | "executive"
     }
@@ -2886,12 +3020,14 @@ export const Constants = {
   public: {
     Enums: {
       event_status: [
+        "pending_approval",
+        "approved_pending_details",
         "draft",
         "submitted",
         "needs_revisions",
         "approved",
         "rejected",
-        "published",
+        "cancelled",
         "completed",
       ],
       user_role: ["venue_manager", "reviewer", "central_planner", "executive"],

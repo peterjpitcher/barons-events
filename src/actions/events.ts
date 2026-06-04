@@ -33,10 +33,13 @@ import {
   normaliseOptionalNumber as normaliseOptionalNumberField,
   normaliseOptionalInteger as normaliseOptionalIntegerField,
 } from "@/lib/normalise";
-import { canOfficeWorkerUseVenueSelection } from "@/lib/visibility";
 import { logEventAction } from "@/lib/observability/event-action-log";
 
 const reviewerFallback = z.string().uuid().optional();
+const eventStatusUpdateSchema = z.object({
+  eventId: z.string().uuid(),
+  status: z.enum(["completed", "cancelled"])
+});
 
 /**
  * Reads the form-mounted correlation id from FormData. The client-side
@@ -818,14 +821,6 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
   );
 
   const venueIds = requestedVenueIds;
-  if (!canOfficeWorkerUseVenueSelection(user, venueIds)) {
-    return {
-      success: false,
-      message: "You can only create or edit events for your assigned venue.",
-      fieldErrors: { venueId: "Choose your assigned venue" },
-      operationId
-    };
-  }
   const venueId = venueIds[0] ?? "";
   const titleValue = formData.get("title");
   const title = typeof titleValue === "string" ? titleValue : "";
@@ -1430,14 +1425,6 @@ export async function submitEventForReviewAction(
         formData.getAll("sopNotRequiredTemplateIds")
       );
       const venueIds = requestedVenueIds;
-      if (!canOfficeWorkerUseVenueSelection(user, venueIds)) {
-        return {
-          success: false,
-          message: "You can only submit events for your assigned venue.",
-          fieldErrors: { venueId: "Choose your assigned venue" },
-          operationId
-        };
-      }
       const venueId = venueIds[0] ?? "";
       const requestedVenueId = venueId;
 
@@ -1971,6 +1958,84 @@ export async function reviewerDecisionAction(
     console.error("reviewerDecisionAction failed:", detail, error);
     return { success: false, message: "Could not save the decision. Please try again." };
   }
+}
+
+export async function updateEventStatusAction(input: {
+  eventId: string;
+  status: "completed" | "cancelled";
+}): Promise<ActionResult> {
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect("/login");
+  }
+  if (!canReviewEvents(user.role)) {
+    return { success: false, message: "Only administrators can update event status." };
+  }
+
+  const parsed = eventStatusUpdateSchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, message: "Choose a valid event status." };
+  }
+
+  const supabase = createSupabaseAdminClient();
+  const { data: event, error: fetchError } = await supabase
+    .from("events")
+    .select("id,status,deleted_at")
+    .eq("id", parsed.data.eventId)
+    .maybeSingle();
+
+  if (fetchError) {
+    return { success: false, message: `Could not load event: ${fetchError.message}` };
+  }
+  if (!event || event.deleted_at) {
+    return { success: false, message: "Event not found." };
+  }
+
+  const previousStatus = event.status as EventStatus;
+  const nextStatus = parsed.data.status as EventStatus;
+  if (previousStatus === nextStatus) {
+    return { success: true, message: "Event status is already up to date." };
+  }
+  if (previousStatus !== "approved") {
+    return {
+      success: false,
+      message: "Only approved events can be completed or cancelled from planning."
+    };
+  }
+
+  const { error: updateError } = await supabase
+    .from("events")
+    .update({ status: nextStatus })
+    .eq("id", parsed.data.eventId)
+    .eq("status", previousStatus);
+
+  if (updateError) {
+    return { success: false, message: `Could not update event status: ${updateError.message}` };
+  }
+
+  await recordAuditLogEntry({
+    entity: "event",
+    entityId: parsed.data.eventId,
+    action: nextStatus === "completed" ? "event.completed" : "event.cancelled",
+    actorId: user.id,
+    meta: {
+      status: nextStatus,
+      previousStatus,
+      changes: ["Status"]
+    }
+  });
+
+  await appendEventVersion(parsed.data.eventId, user.id, {
+    status: nextStatus,
+    previousStatus
+  });
+
+  revalidatePath(`/events/${parsed.data.eventId}`);
+  revalidatePath("/events");
+  revalidatePath("/planning");
+  revalidatePath("/");
+
+  return { success: true, message: `Event marked ${nextStatus}.` };
 }
 
 export async function generateWebsiteCopyAction(
@@ -2522,7 +2587,7 @@ export type UpdateBookingSettingsResult = ActionResult & {
 /**
  * Save booking settings (booking_enabled, total_capacity, max_tickets_per_booking).
  * Auto-generates seo_slug when booking is first enabled and no slug exists yet.
- * Only administrator and office_worker (for their own venue's events) may call this.
+ * Only administrators may call this.
  */
 export async function updateBookingSettingsAction(
   input: UpdateBookingSettingsInput,
@@ -2561,7 +2626,7 @@ export async function updateBookingSettingsAction(
   // verified above via loadEventEditContext.
   const { data: event, error: fetchError } = await supabase
     .from("events")
-    .select("id, title, public_title, start_at, venue_id, seo_slug, booking_type")
+    .select("id, title, public_title, start_at, venue_id, seo_slug, booking_type, booking_enabled, booking_notes_enabled")
     .eq("id", eventId)
     .maybeSingle();
 
@@ -2600,12 +2665,16 @@ export async function updateBookingSettingsAction(
     }
   }
 
+  const nextBookingNotesEnabled = !event.booking_enabled && bookingEnabled
+    ? true
+    : (bookingNotesEnabled ?? false);
+
   // Build update payload — only administrators can toggle sms_promo_enabled
   const updatePayload: Record<string, unknown> = {
     booking_enabled: bookingEnabled,
     total_capacity: totalCapacity,
     max_tickets_per_booking: maxTicketsPerBooking,
-    booking_notes_enabled: bookingNotesEnabled ?? false,
+    booking_notes_enabled: nextBookingNotesEnabled,
     seo_slug: seoSlug,
     booking_url: nextBookingUrl,
   };
@@ -2633,7 +2702,7 @@ export async function updateBookingSettingsAction(
         bookingEnabled,
         totalCapacity,
         maxTicketsPerBooking,
-        bookingNotesEnabled: bookingNotesEnabled ?? false,
+        bookingNotesEnabled: nextBookingNotesEnabled,
         bookingUrl: nextBookingUrl,
         bookingUrlTrackingStatus: trackedBookingUrl.status
       }

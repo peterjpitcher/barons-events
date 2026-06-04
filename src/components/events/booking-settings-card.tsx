@@ -148,7 +148,13 @@ export function BookingSettingsCard({
               role="switch"
               aria-checked={bookingEnabled}
               onClick={() => {
-                setBookingEnabled((v) => !v);
+                setBookingEnabled((current) => {
+                  const next = !current;
+                  if (next && !current) {
+                    setBookingNotesEnabled(true);
+                  }
+                  return next;
+                });
                 setHasUnsavedChanges(true);
               }}
               className={`relative inline-flex h-6 w-11 flex-none cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--slate)] ${

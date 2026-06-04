@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { getCurrentUser, requireAuth } from "@/lib/auth";
 import { getEventDetail } from "@/lib/events";
@@ -59,10 +59,6 @@ export default async function BookingsPage({
     notFound();
   }
 
-  // Only administrator and office_worker can manage bookings
-  if (user.role !== "administrator" && user.role !== "office_worker") {
-    redirect("/events");
-  }
   const canCancelBookings = canManageBookings(user.role, user.venueId);
 
   const [bookings, totalTickets, campaignStats] = await Promise.all([
@@ -89,7 +85,7 @@ export default async function BookingsPage({
       <PageHeader
         eyebrow="Bookings"
         title={event.title}
-        description={`${event.venue?.name ?? "Venue"} · Manage customer bookings for this event.`}
+        description={`${event.venue?.name ?? "Venue"} · ${canCancelBookings ? "Manage" : "View"} customer bookings for this event.`}
         meta={
           <>
             <span>{totalTickets} confirmed ticket{totalTickets === 1 ? "" : "s"}</span>
