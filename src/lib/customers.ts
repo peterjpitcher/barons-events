@@ -113,7 +113,7 @@ export async function getCustomerById(
     };
   });
 
-  // All office workers see all customer bookings (global read access);
+  // All managers see all customer bookings (global read access);
   // write operations remain gated by canManageCustomers in server actions.
 
   return { ...rowToCustomer(customerRow as Record<string, unknown>), bookings };

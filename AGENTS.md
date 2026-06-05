@@ -99,22 +99,20 @@ npm run supabase:reset   # Reset database (linked, requires confirmation)
 
 ### Permissions
 - Administrators can manage all non-deleted events and planning items.
-- Executives can read events, planning, and reporting but cannot mutate.
-- Office workers with `venue_id` can see and write event/planning records linked to their venue through `event_venues` / `planning_item_venues`, with fallback to the legacy `venue_id`.
-- Office workers without `venue_id` have global event/planning read and can propose events for any venue, but do not get planning write rights.
-- Booking/customer PII remains globally readable to office workers by product decision.
+- Managers with `venue_id` can see and write event/planning records linked to their venue through `event_venues` / `planning_item_venues`, with fallback to the legacy `venue_id`.
+- Managers without `venue_id` have global event/planning read and can propose events for any venue, but do not get planning write rights.
+- Booking/customer PII remains globally readable to managers by product decision.
 - Check permissions in both UI and server actions (defense in depth)
 - RLS enforces at database level
 
 ### Auth Standard Deviation: Custom Role Model
 
-**Deviation from workspace standard (auth-standard.md §7):** The workspace standard mandates three generic roles (`admin`, `editor`, `viewer`). This project uses three domain-specific roles approved for this application:
+**Deviation from workspace standard (auth-standard.md §7):** The workspace standard mandates three generic roles (`admin`, `editor`, `viewer`). This project uses two domain-specific roles approved for this application:
 
 | Application Role | Maps to Standard Tier | Capabilities |
 |---|---|---|
 | `administrator` | `admin` | Full platform access, user management, all event operations |
-| `office_worker` | `editor` | Venue-scoped event/planning visibility and writes if `venue_id` set; global read and any-venue event proposal if no `venue_id`; global booking/customer read |
-| `executive` | `viewer` | Read-only access to all events, planning, and reporting |
+| `manager` | `editor` | Venue-scoped event/planning visibility and writes if `venue_id` set; global read and any-venue event proposal if no `venue_id`; global booking/customer read |
 
 **Why:** Event management requires venue-scoped write access for some staff and global read-only for others, expressed through a single role with venue_id as the capability switch.
 
@@ -122,7 +120,7 @@ npm run supabase:reset   # Reset database (linked, requires confirmation)
 - Roles stored in `public.users.role` column (not Supabase `app_metadata`)
 - Role helpers in `src/lib/roles.ts` and venue-linked visibility helpers in `src/lib/visibility.ts` use explicit capability checks with optional `venueId` context.
 - Permission checks use `role === "administrator"` for admin operations
-- `venue_id` on the user record acts as a capability switch for `office_worker`.
+- `venue_id` on the user record acts as a capability switch for `manager`.
 - Event and planning reads should follow join-table venue links first and legacy `venue_id` fallback second.
 
 ### Email & Notifications

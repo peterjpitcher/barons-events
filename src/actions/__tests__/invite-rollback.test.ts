@@ -92,7 +92,7 @@ const validInviteFormData = () =>
   makeFormData({
     email: "newuser@example.com",
     fullName: "New User",
-    role: "office_worker",
+    role: "manager",
     venueId: "550e8400-e29b-41d4-a716-446655440000"
   });
 
@@ -280,8 +280,8 @@ describe("inviteUserAction — authorization checks", () => {
     mockGetCurrentUser.mockResolvedValue({
       id: "worker-1",
       email: "worker@example.com",
-      fullName: "An Office Worker",
-      role: "office_worker",
+      fullName: "An Manager",
+      role: "manager",
       venueId: null,
       deactivatedAt: null
     });
@@ -296,7 +296,7 @@ describe("inviteUserAction — authorization checks", () => {
   it("should return validation error for invalid email", async () => {
     const badFormData = makeFormData({
       email: "not-an-email",
-      role: "office_worker"
+      role: "manager"
     });
 
     const result = await inviteUserAction(undefined, badFormData);

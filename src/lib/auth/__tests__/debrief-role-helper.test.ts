@@ -17,43 +17,39 @@ describe("canSubmitDebriefForEvent", () => {
     expect(canSubmitDebriefForEvent("administrator", "admin-1", null, { ...event, status: "completed" })).toBe(true);
   });
 
-  it("assigned office_worker manager can submit", () => {
-    expect(canSubmitDebriefForEvent("office_worker", "manager-1", "venue-A", event)).toBe(true);
+  it("assigned manager manager can submit", () => {
+    expect(canSubmitDebriefForEvent("manager", "manager-1", "venue-A", event)).toBe(true);
   });
 
-  it("assigned office_worker creator can submit when no manager is set", () => {
-    expect(canSubmitDebriefForEvent("office_worker", "creator-1", "venue-A", {
+  it("assigned manager creator can submit when no manager is set", () => {
+    expect(canSubmitDebriefForEvent("manager", "creator-1", "venue-A", {
       ...event,
       managerResponsibleId: null,
     })).toBe(true);
   });
 
-  it("office_worker without venue cannot submit even if manager", () => {
-    expect(canSubmitDebriefForEvent("office_worker", "manager-1", null, event)).toBe(false);
+  it("manager without venue cannot submit even if manager", () => {
+    expect(canSubmitDebriefForEvent("manager", "manager-1", null, event)).toBe(false);
   });
 
-  it("wrong-venue office_worker cannot submit even if manager", () => {
-    expect(canSubmitDebriefForEvent("office_worker", "manager-1", "venue-B", event)).toBe(false);
+  it("wrong-venue manager cannot submit even if manager", () => {
+    expect(canSubmitDebriefForEvent("manager", "manager-1", "venue-B", event)).toBe(false);
   });
 
-  it("office_worker at linked venue can submit when manager", () => {
-    expect(canSubmitDebriefForEvent("office_worker", "manager-1", "venue-B", {
+  it("manager at linked venue can submit when manager", () => {
+    expect(canSubmitDebriefForEvent("manager", "manager-1", "venue-B", {
       ...event,
       venueIds: ["venue-A", "venue-B"],
     })).toBe(true);
   });
 
-  it("executive cannot submit", () => {
-    expect(canSubmitDebriefForEvent("executive", "manager-1", null, event)).toBe(false);
-  });
-
   it("non-manager and non-fallback creator cannot submit", () => {
-    expect(canSubmitDebriefForEvent("office_worker", "other-1", "venue-A", event)).toBe(false);
+    expect(canSubmitDebriefForEvent("manager", "other-1", "venue-A", event)).toBe(false);
   });
 
   it("draft or submitted events cannot be submitted", () => {
     expect(canSubmitDebriefForEvent("administrator", "admin-1", null, { ...event, status: "draft" })).toBe(false);
-    expect(canSubmitDebriefForEvent("office_worker", "manager-1", "venue-A", {
+    expect(canSubmitDebriefForEvent("manager", "manager-1", "venue-A", {
       ...event,
       status: "submitted",
     })).toBe(false);

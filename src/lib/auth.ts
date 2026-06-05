@@ -20,9 +20,10 @@ function timingSafeEqual(a: string, b: string): boolean {
 function normalizeRole(role: string | null | undefined): UserRole | null {
   switch (role) {
     case "administrator":
+      return "administrator";
+    case "manager":
     case "office_worker":
-    case "executive":
-      return role;
+      return "manager";
     default:
       return null;
   }

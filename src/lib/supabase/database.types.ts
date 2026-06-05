@@ -2891,7 +2891,6 @@ export type Database = {
         | "rejected"
         | "cancelled"
         | "completed"
-      user_role: "venue_manager" | "reviewer" | "central_planner" | "executive"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -3030,7 +3029,6 @@ export const Constants = {
         "cancelled",
         "completed",
       ],
-      user_role: ["venue_manager", "reviewer", "central_planner", "executive"],
     },
   },
 } as const

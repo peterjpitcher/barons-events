@@ -79,7 +79,7 @@ describe("saveEventDraftAction operation_id propagation", () => {
     const opId = "01934c5e-7e9d-7a01-9c12-1234567890ab";
     getUserMock.mockResolvedValue({
       id: USER_A,
-      role: "executive",
+      role: "manager",
       venueId: null
     });
 
@@ -99,7 +99,7 @@ describe("saveEventDraftAction operation_id propagation", () => {
   it("generates an operation_id when the client did not send one", async () => {
     getUserMock.mockResolvedValue({
       id: USER_A,
-      role: "executive",
+      role: "manager",
       venueId: null
     });
 
@@ -119,7 +119,7 @@ describe("saveEventDraftAction operation_id propagation", () => {
   it("ignores a malformed operation_id and generates a fresh one", async () => {
     getUserMock.mockResolvedValue({
       id: USER_A,
-      role: "executive",
+      role: "manager",
       venueId: null
     });
 
@@ -143,7 +143,7 @@ describe("submitEventForReviewAction operation_id propagation", () => {
     const opId = "01934c5e-7e9d-7a02-9c12-1234567890ab";
     getUserMock.mockResolvedValue({
       id: USER_A,
-      role: "executive",
+      role: "manager",
       venueId: null
     });
 
@@ -163,7 +163,7 @@ describe("submitEventForReviewAction operation_id propagation", () => {
   it("generates an operation_id when the client did not send one", async () => {
     getUserMock.mockResolvedValue({
       id: USER_A,
-      role: "executive",
+      role: "manager",
       venueId: null
     });
 

@@ -215,7 +215,7 @@ export async function restoreArtistAction(
   if (!user) {
     redirect("/login");
   }
-  // Intentionally admin-only: office workers can archive but must
+  // Intentionally admin-only: managers can archive but must
   // escalate to an administrator to restore. The restore UI is on /settings (admin-only).
   if (user.role !== "administrator") {
     return { success: false, message: "Only administrators can restore archived artists." };

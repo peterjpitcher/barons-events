@@ -1604,7 +1604,7 @@ export async function submitEventForReviewAction(
       throw existingEventError;
     }
 
-    if (user.role === "office_worker" && existingEvent?.created_by !== user.id) {
+    if (user.role === "manager" && existingEvent?.created_by !== user.id) {
       return { success: false, message: "You can only submit events you created.", operationId };
     }
 
@@ -2502,7 +2502,7 @@ export async function revertToDraftAction(
     redirect("/login");
   }
 
-  // Only administrator can revert approved events — office_workers are blocked by
+  // Only administrator can revert approved events — managers are blocked by
   // RLS on approved-status events, and reverting approval is a privileged action.
   if (user.role !== "administrator") {
     return { success: false, message: "Only administrators can revert approved events to draft." };

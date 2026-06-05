@@ -1,11 +1,10 @@
 import type { UserRole } from "./types";
 
 /**
- * Role capability model — FINAL (3-role)
+ * Role capability model — two-role model
  *
  * administrator — full platform write access
- * office_worker — read-only access unless a non-admin workspace workflow explicitly allows writing
- * executive     — read-only observer
+ * manager       — read-only access unless a non-admin workspace workflow explicitly allows writing
  */
 
 /** Convenience: check if user is an administrator */
@@ -105,17 +104,17 @@ export function canManageArtists(role: UserRole, venueId?: string | null): boole
   return role === "administrator";
 }
 
-/** Can create debriefs (admin always; office_worker only with venueId) */
+/** Can create debriefs (admin always; manager only with venueId) */
 export function canCreateDebriefs(role: UserRole, venueId?: string | null): boolean {
   if (role === "administrator") return true;
-  if (role === "office_worker" && venueId) return true;
+  if (role === "manager" && venueId) return true;
   return false;
 }
 
-/** Can edit a debrief. Admin always; office_worker only if they are the submitted_by user. */
+/** Can edit a debrief. Admin always; manager only if they are the submitted_by user. */
 export function canEditDebrief(role: UserRole, isCreator: boolean): boolean {
   if (role === "administrator") return true;
-  if (role === "office_worker" && isCreator) return true;
+  if (role === "manager" && isCreator) return true;
   return false;
 }
 
@@ -151,12 +150,12 @@ export function canViewReviews(role: UserRole): boolean {
 
 /** Can create new planning items */
 export function canCreatePlanningItems(role: UserRole, venueId?: string | null): boolean {
-  return role === "administrator" || (role === "office_worker" && Boolean(venueId));
+  return role === "administrator" || (role === "manager" && Boolean(venueId));
 }
 
 /** Can edit/delete own planning items (admin can manage any) */
 export function canManageOwnPlanningItems(role: UserRole): boolean {
-  return role === "administrator" || role === "office_worker";
+  return role === "administrator" || role === "manager";
 }
 
 /** Can manage all planning items regardless of owner */

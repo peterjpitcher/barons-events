@@ -21,7 +21,7 @@ function makePublicUser(overrides: Record<string, unknown>) {
     id: "user-1",
     email: "user@example.com",
     full_name: "User One",
-    role: "office_worker",
+    role: "manager",
     venue_id: null,
     is_central_events_lead: false,
     todo_digest_frequency: "weekly",

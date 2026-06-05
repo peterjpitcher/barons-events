@@ -14,8 +14,8 @@
 | id | uuid (PK) | Matches Supabase auth user ID. |
 | email | text | Indexed for lookups; mirrors auth email. |
 | full_name | text | Mirrors auth metadata; nullable. |
-| role | text | Active values: `administrator`, `office_worker`, `executive`. |
-| venue_id | uuid | Nullable; capability switch for `office_worker` venue scoping. |
+| role | text | Active values: `administrator`, `manager`. |
+| venue_id | uuid | Nullable; capability switch for `manager` venue scoping. |
 | region | text | Optional legacy column; not surfaced in the current UI. |
 | created_at | timestamptz | Default `now()`. |
 | updated_at | timestamptz | Trigger-based. |
@@ -220,10 +220,10 @@
 - Venue deletes are soft deletes where supported by the table.
 
 ### events
-- Administrators and executives can read all non-deleted events.
-- Office workers without `venue_id` can read all non-deleted events and propose events for any venue.
-- Office workers with `venue_id` can read non-deleted events linked to their venue through `event_venues`, falling back to `events.venue_id`.
-- Office-worker event writes are server-action gated and RLS scoped to editable drafts/revisions they created or approved/cancelled events where they are responsible at their venue.
+- Administrators and managers can read all non-deleted events.
+- Managers without `venue_id` can read all non-deleted events and propose events for any venue.
+- Managers with `venue_id` can read non-deleted events linked to their venue through `event_venues`, falling back to `events.venue_id`.
+- Manager event writes are server-action gated and RLS scoped to editable drafts/revisions they created or approved/cancelled events where they are responsible at their venue.
 
 ### event_versions
 - Tied to `events` policy using `EXISTS` check on parent event with same access constraints.
@@ -237,14 +237,13 @@
 - Administrators have full access, including `INSERT/UPDATE`.
 
 ### debriefs
-- Venue-assigned office workers can create/edit their own debriefs for events they can manage.
+- Venue-assigned managers can create/edit their own debriefs for events they can manage.
 - Administrators manage debriefs.
-- Executives read debrief/reporting data.
 
 ### planning_items / planning_item_venues / planning_tasks
-- Administrators and executives can read all planning.
-- Office workers without `venue_id` can read all planning but cannot create/update planning items or tasks.
-- Office workers with `venue_id` can read/write planning linked to their venue through `planning_item_venues`, falling back to `planning_items.venue_id`.
+- Administrators and managers can read all planning.
+- Managers without `venue_id` can read all planning but cannot create/update planning items or tasks.
+- Managers with `venue_id` can read/write planning linked to their venue through `planning_item_venues`, falling back to `planning_items.venue_id`.
 
 ### attachments
 - Attachment reads follow the parent event/planning visibility.
@@ -268,7 +267,7 @@
 - Seed script for default goals, example venues, and template users.
 - Migration seeds stored in `/supabase/seed.sql` with environment-specific overrides.
 - Local development command: `npm run supabase:reset` to drop/recreate schema and seed defaults.
-- Seeds should use current roles (`administrator`, `office_worker`, `executive`) and staging-safe data only.
+- Seeds should use current roles (`administrator`, `manager`) and staging-safe data only.
 
 ## Monitoring & Maintenance
 - Supabase logs monitored for RLS violations.

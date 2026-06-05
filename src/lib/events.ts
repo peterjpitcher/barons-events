@@ -155,9 +155,9 @@ export async function listReviewQueue(user: AppUser): Promise<EventSummary[]> {
     .order("start_at", { ascending: true });
 
   // Known read roles load the queue, then venue-linked visibility is applied
-  // below for venue-assigned office workers.
+  // below for venue-assigned managers.
   const reviewRole = user.role as string;
-  if (reviewRole !== "administrator" && reviewRole !== "office_worker" && reviewRole !== "executive") {
+  if (reviewRole !== "administrator" && reviewRole !== "manager") {
     query = query.eq("assignee_id", user.id);
   }
 
@@ -199,7 +199,7 @@ export async function listEventsForUser(user: AppUser): Promise<EventSummary[]> 
     .order("start_at", { ascending: true });
 
   const role = user.role as string;
-  if (role !== "administrator" && role !== "office_worker" && role !== "executive") {
+  if (role !== "administrator" && role !== "manager") {
     query = query.limit(10);
   }
 

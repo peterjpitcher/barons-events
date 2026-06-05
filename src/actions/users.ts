@@ -18,7 +18,7 @@ import { sendInviteEmail } from "@/lib/notifications";
 const userUpdateSchema = z.object({
   userId: z.string().uuid(),
   fullName: z.string().max(120).optional(),
-  role: z.enum(["administrator", "office_worker", "executive"]),
+  role: z.enum(["administrator", "manager"]),
   venueId: z.union([z.string().uuid(), z.literal(""), z.null(), z.undefined()]),
   isCentralEventsLead: z.boolean()
 });
@@ -165,7 +165,7 @@ export async function updateUserAction(
 const inviteSchema = z.object({
   email: z.string().email({ message: "Enter a valid email" }),
   fullName: z.string().max(120).optional(),
-  role: z.enum(["administrator", "office_worker", "executive"]),
+  role: z.enum(["administrator", "manager"]),
   venueId: z.union([z.string().uuid(), z.literal(""), z.null(), z.undefined()])
 });
 
@@ -406,7 +406,7 @@ export async function resendInviteAction(
 
 // ─── User deactivation / deletion actions ──────────────────────────────────
 
-/** Active users eligible as reassignment targets (excludes executives, deactivated, and the target user). */
+/** Active users eligible as reassignment targets (excludes deactivated users and the target user). */
 export async function listReassignmentTargets(
   excludeUserId: string
 ): Promise<Array<{ id: string; full_name: string | null; email: string; role: string }>> {
@@ -421,7 +421,6 @@ export async function listReassignmentTargets(
     .select("id, full_name, email, role")
     .is("deactivated_at", null)
     .neq("id", excludeUserId)
-    .neq("role", "executive")
     .order("full_name");
 
   if (error) throw new Error(`Failed to list reassignment targets: ${error.message}`);
@@ -533,7 +532,7 @@ export async function deactivateUserAction(
     .eq("id", reassignToUserId)
     .single();
 
-  if (!reassignTarget || reassignTarget.deactivated_at || reassignTarget.role === "executive") {
+  if (!reassignTarget || reassignTarget.deactivated_at) {
     return { success: false, error: "The selected user is no longer active. Please choose another." };
   }
 
@@ -629,7 +628,7 @@ export async function deleteUserAction(
     .eq("id", reassignToUserId)
     .single();
 
-  if (!reassignTarget || reassignTarget.deactivated_at || reassignTarget.role === "executive") {
+  if (!reassignTarget || reassignTarget.deactivated_at) {
     return { success: false, error: "The selected user is no longer active. Please choose another." };
   }
 

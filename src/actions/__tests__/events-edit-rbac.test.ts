@@ -217,8 +217,8 @@ function setupSuccessfulCreateSubmitMocks() {
 describe("submitEventForReviewAction — create path venue rules", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("office_worker with no venueId is rejected before venue checks", async () => {
-    getUserMock.mockResolvedValue({ id: USER_A, role: "office_worker", venueId: null });
+  it("manager with no venueId is rejected before venue checks", async () => {
+    getUserMock.mockResolvedValue({ id: USER_A, role: "manager", venueId: null });
     const result = await submitEventForReviewAction(undefined, formData({
       venueIds: VENUE_A,
       title: "T",
@@ -229,16 +229,16 @@ describe("submitEventForReviewAction — create path venue rules", () => {
     expect(createEventDraft).not.toHaveBeenCalled();
   });
 
-  it("venue-assigned office_worker cannot create for any venue", async () => {
-    getUserMock.mockResolvedValue({ id: USER_A, role: "office_worker", venueId: VENUE_A });
+  it("venue-assigned manager cannot create for any venue", async () => {
+    getUserMock.mockResolvedValue({ id: USER_A, role: "manager", venueId: VENUE_A });
     const result = await submitEventForReviewAction(undefined, validFullEventForm({ venueIds: VENUE_B }));
     expect(result.success).toBe(false);
     expect(result.message).toMatch(/don't have permission/i);
     expect(createEventDraft).not.toHaveBeenCalled();
   });
 
-  it("executive is rejected for create", async () => {
-    getUserMock.mockResolvedValue({ id: USER_A, role: "executive", venueId: null });
+  it("manager is rejected for create", async () => {
+    getUserMock.mockResolvedValue({ id: USER_A, role: "manager", venueId: null });
     const result = await submitEventForReviewAction(undefined, formData({
       venueIds: VENUE_A,
       title: "T",
@@ -284,9 +284,9 @@ describe("submitEventForReviewAction — create path venue rules", () => {
     );
   });
 
-  it("office_worker full-form submit is rejected", async () => {
+  it("manager full-form submit is rejected", async () => {
     setupSuccessfulCreateSubmitMocks();
-    getUserMock.mockResolvedValue({ id: USER_A, role: "office_worker", venueId: null });
+    getUserMock.mockResolvedValue({ id: USER_A, role: "manager", venueId: null });
 
     const result = await submitEventForReviewAction(undefined, validFullEventForm());
 
@@ -295,9 +295,9 @@ describe("submitEventForReviewAction — create path venue rules", () => {
     expect(createEventPlanningItem).not.toHaveBeenCalled();
   });
 
-  it("venue-assigned office_worker cannot submit for their assigned venue", async () => {
+  it("venue-assigned manager cannot submit for their assigned venue", async () => {
     setupSuccessfulCreateSubmitMocks();
-    getUserMock.mockResolvedValue({ id: USER_A, role: "office_worker", venueId: VENUE_A });
+    getUserMock.mockResolvedValue({ id: USER_A, role: "manager", venueId: VENUE_A });
 
     const result = await submitEventForReviewAction(undefined, validFullEventForm());
 
@@ -320,8 +320,8 @@ describe("submitEventForReviewAction — create path venue rules", () => {
 describe("saveEventDraftAction — create path venue rules", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("office_worker with no venueId is rejected before venue checks", async () => {
-    getUserMock.mockResolvedValue({ id: USER_A, role: "office_worker", venueId: null });
+  it("manager with no venueId is rejected before venue checks", async () => {
+    getUserMock.mockResolvedValue({ id: USER_A, role: "manager", venueId: null });
     const result = await saveEventDraftAction(undefined, formData({
       venueIds: VENUE_A,
       title: "T",
@@ -332,16 +332,16 @@ describe("saveEventDraftAction — create path venue rules", () => {
     expect(createEventDraft).not.toHaveBeenCalled();
   });
 
-  it("venue-assigned office_worker cannot save drafts", async () => {
-    getUserMock.mockResolvedValue({ id: USER_A, role: "office_worker", venueId: VENUE_A });
+  it("venue-assigned manager cannot save drafts", async () => {
+    getUserMock.mockResolvedValue({ id: USER_A, role: "manager", venueId: VENUE_A });
     const result = await saveEventDraftAction(undefined, validFullEventForm({ venueIds: VENUE_B }));
     expect(result.success).toBe(false);
     expect(result.message).toMatch(/don't have permission/i);
     expect(createEventDraft).not.toHaveBeenCalled();
   });
 
-  it("executive is rejected for create", async () => {
-    getUserMock.mockResolvedValue({ id: USER_A, role: "executive", venueId: null });
+  it("manager is rejected for create", async () => {
+    getUserMock.mockResolvedValue({ id: USER_A, role: "manager", venueId: null });
     const result = await saveEventDraftAction(undefined, formData({
       venueIds: VENUE_A,
       title: "T",
@@ -357,8 +357,8 @@ describe("saveEventDraftAction — create path venue rules", () => {
 describe("saveEventDraftAction — update path (canEditEvent)", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("manager_responsible office_worker at own venue on approved event is rejected", async () => {
-    getUserMock.mockResolvedValue({ id: USER_A, role: "office_worker", venueId: VENUE_A });
+  it("manager_responsible manager at own venue on approved event is rejected", async () => {
+    getUserMock.mockResolvedValue({ id: USER_A, role: "manager", venueId: VENUE_A });
     loadCtxMock.mockResolvedValue({
       venueId: VENUE_A,
       managerResponsibleId: USER_A,
@@ -377,8 +377,8 @@ describe("saveEventDraftAction — update path (canEditEvent)", () => {
     expect(result.message).toMatch(/don't have permission to edit/i);
   });
 
-  it("office_worker at right venue but not manager_responsible is rejected", async () => {
-    getUserMock.mockResolvedValue({ id: USER_A, role: "office_worker", venueId: VENUE_A });
+  it("manager at right venue but not manager_responsible is rejected", async () => {
+    getUserMock.mockResolvedValue({ id: USER_A, role: "manager", venueId: VENUE_A });
     loadCtxMock.mockResolvedValue({
       venueId: VENUE_A,
       managerResponsibleId: USER_B,
@@ -413,7 +413,7 @@ describe("saveEventDraftAction — update path (canEditEvent)", () => {
   });
 
   it("missing event (loadCtx returns null) yields Event not found", async () => {
-    getUserMock.mockResolvedValue({ id: USER_A, role: "office_worker", venueId: VENUE_A });
+    getUserMock.mockResolvedValue({ id: USER_A, role: "manager", venueId: VENUE_A });
     loadCtxMock.mockResolvedValue(null);
 
     const result = await saveEventDraftAction(undefined, formData({
@@ -427,8 +427,8 @@ describe("saveEventDraftAction — update path (canEditEvent)", () => {
 describe("submitEventForReviewAction — update path (canEditEvent)", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("office_worker at right venue but not manager_responsible is rejected", async () => {
-    getUserMock.mockResolvedValue({ id: USER_A, role: "office_worker", venueId: VENUE_A });
+  it("manager at right venue but not manager_responsible is rejected", async () => {
+    getUserMock.mockResolvedValue({ id: USER_A, role: "manager", venueId: VENUE_A });
     loadCtxMock.mockResolvedValue({
       venueId: VENUE_A,
       managerResponsibleId: USER_B,
@@ -444,8 +444,8 @@ describe("submitEventForReviewAction — update path (canEditEvent)", () => {
     expect(result.message).toMatch(/don't have permission to edit/i);
   });
 
-  it("manager_responsible office_worker at own venue is rejected", async () => {
-    getUserMock.mockResolvedValue({ id: USER_A, role: "office_worker", venueId: VENUE_A });
+  it("manager_responsible manager at own venue is rejected", async () => {
+    getUserMock.mockResolvedValue({ id: USER_A, role: "manager", venueId: VENUE_A });
     loadCtxMock.mockResolvedValue({
       venueId: VENUE_A,
       managerResponsibleId: USER_A,
@@ -467,7 +467,7 @@ describe("submitEventForReviewAction — update path (canEditEvent)", () => {
 describe("deleteEventAction", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("rejects non-manager OW at same venue", async () => {
+  it("rejects non-manager manager at same venue", async () => {
     loadCtxMock.mockResolvedValue({
       venueId: VENUE_A,
       managerResponsibleId: USER_B,
@@ -475,15 +475,15 @@ describe("deleteEventAction", () => {
       status: "approved",
       deletedAt: null,
     });
-    getUserMock.mockResolvedValue({ id: USER_A, role: "office_worker", venueId: VENUE_A });
+    getUserMock.mockResolvedValue({ id: USER_A, role: "manager", venueId: VENUE_A });
 
     const result = await deleteEventAction(undefined, formData({ eventId: EVENT_ID }));
     expect(result.success).toBe(false);
     expect(result.message).toMatch(/don't have permission/i);
   });
 
-  it("rejects executive", async () => {
-    getUserMock.mockResolvedValue({ id: USER_A, role: "executive", venueId: null });
+  it("rejects managers", async () => {
+    getUserMock.mockResolvedValue({ id: USER_A, role: "manager", venueId: null });
     loadCtxMock.mockResolvedValue({
       venueId: VENUE_A,
       managerResponsibleId: USER_A,
@@ -554,8 +554,8 @@ describe("deleteEventAction", () => {
 describe("generateWebsiteCopyFromFormAction", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("rejects office_worker with no venueId", async () => {
-    getUserMock.mockResolvedValue({ id: USER_A, role: "office_worker", venueId: null });
+  it("rejects manager with no venueId", async () => {
+    getUserMock.mockResolvedValue({ id: USER_A, role: "manager", venueId: null });
     const result = await generateWebsiteCopyFromFormAction(undefined, formData({
       title: "T",
     }));
@@ -563,8 +563,8 @@ describe("generateWebsiteCopyFromFormAction", () => {
     expect(result.message).toMatch(/permission/i);
   });
 
-  it("rejects executive", async () => {
-    getUserMock.mockResolvedValue({ id: USER_A, role: "executive", venueId: null });
+  it("rejects managers", async () => {
+    getUserMock.mockResolvedValue({ id: USER_A, role: "manager", venueId: null });
     const result = await generateWebsiteCopyFromFormAction(undefined, formData({
       title: "T",
     }));
@@ -578,8 +578,8 @@ describe("generateWebsiteCopyFromFormAction", () => {
 describe("updateBookingSettingsAction", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("rejects non-manager OW at same venue", async () => {
-    getUserMock.mockResolvedValue({ id: USER_A, role: "office_worker", venueId: VENUE_A });
+  it("rejects non-manager manager at same venue", async () => {
+    getUserMock.mockResolvedValue({ id: USER_A, role: "manager", venueId: VENUE_A });
     loadCtxMock.mockResolvedValue({
       venueId: VENUE_A,
       managerResponsibleId: USER_B,
@@ -598,8 +598,8 @@ describe("updateBookingSettingsAction", () => {
     expect(result.message).toMatch(/don't have permission/i);
   });
 
-  it("rejects executive", async () => {
-    getUserMock.mockResolvedValue({ id: USER_A, role: "executive", venueId: null });
+  it("rejects managers", async () => {
+    getUserMock.mockResolvedValue({ id: USER_A, role: "manager", venueId: null });
     loadCtxMock.mockResolvedValue({
       venueId: VENUE_A,
       managerResponsibleId: USER_A,

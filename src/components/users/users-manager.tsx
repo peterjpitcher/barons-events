@@ -29,10 +29,9 @@ type UsersManagerProps = {
   canEdit: boolean;
 };
 
-const roleLabels: Record<AppUserRow["role"], string> = {
+const roleLabels: Record<string, string> = {
   administrator: "Administrator",
-  office_worker: "Office Worker",
-  executive: "Executive"
+  manager: "Manager"
 };
 
 const errorInputClass = "!border-[var(--burgundy)] focus-visible:!border-[var(--burgundy)]";
@@ -159,7 +158,7 @@ function InviteUserForm({ venues, mobileSheet = false }: { venues: VenueRow[]; m
             <Select
               id="invite-role"
               name="role"
-              defaultValue="office_worker"
+              defaultValue="manager"
               required
               aria-invalid={Boolean(roleError)}
               aria-describedby={roleError ? "invite-role-error" : undefined}

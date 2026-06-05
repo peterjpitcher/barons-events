@@ -113,7 +113,7 @@ values
     '44444444-4444-4444-4444-444444444444',
     'authenticated',
     'authenticated',
-    'executive@barons.example',
+    'manager.observer@barons.example',
     crypt('password', gen_salt('bf', 10)),
     timezone('utc', now()),
     '',
@@ -178,7 +178,7 @@ values
   (
     '44444444-4444-4444-4444-444444444444',
     '44444444-4444-4444-4444-444444444444',
-    '{"sub":"44444444-4444-4444-4444-444444444444","email":"executive@barons.example"}'::jsonb,
+    '{"sub":"44444444-4444-4444-4444-444444444444","email":"manager.observer@barons.example"}'::jsonb,
     'email',
     timezone('utc', now()),
     timezone('utc', now()),
@@ -201,21 +201,21 @@ values
     '22222222-2222-2222-2222-222222222222',
     'office.hq@barons.example',
     'Riley Office',
-    'office_worker',
+    'manager',
     null
   ),
   (
     '33333333-3333-3333-3333-333333333333',
     'office.venue@barons.example',
     'Morgan Venue',
-    'office_worker',
+    'manager',
     '9f9c5da2-8a6e-4db0-84b7-8ae0b25177e7'
   ),
   (
     '44444444-4444-4444-4444-444444444444',
-    'executive@barons.example',
-    'Eden Exec',
-    'office_worker',
+    'manager.observer@barons.example',
+    'Eden Manager',
+    'manager',
     null
   )
 on conflict (id) do update set

@@ -68,7 +68,7 @@ export default async function PlanningItemDetailPage({
   }));
 
   const visibleVenueRows =
-    user.role === "office_worker" && user.venueId
+    user.role === "manager" && user.venueId
       ? venueRows.filter((venue) => venue.id === user.venueId)
       : venueRows;
 

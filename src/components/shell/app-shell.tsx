@@ -36,44 +36,43 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: "Workspace",
     items: [
-      { label: "Dashboard", href: "/", roles: ["administrator", "office_worker", "executive"] },
+      { label: "Dashboard", href: "/", roles: ["administrator", "manager"] },
       {
         label: "Events",
         href: "/events",
-        roles: ["administrator", "office_worker", "executive"],
+        roles: ["administrator", "manager"],
         children: [
-          { label: "Pending proposals", href: "/events/pending", roles: ["administrator", "office_worker", "executive"] }
+          { label: "Pending proposals", href: "/events/pending", roles: ["administrator", "manager"] }
         ]
       },
-      { label: "30/60/90 Planning", href: "/planning", roles: ["administrator", "office_worker", "executive"] },
-      { label: "Reviews", href: "/reviews", roles: ["administrator", "office_worker", "executive"] },
-      { label: "Debriefs", href: "/debriefs", roles: ["administrator", "office_worker", "executive"] }
+      { label: "30/60/90 Planning", href: "/planning", roles: ["administrator", "manager"] },
+      { label: "Reviews", href: "/reviews", roles: ["administrator", "manager"] },
+      { label: "Debriefs", href: "/debriefs", roles: ["administrator", "manager"] }
     ]
   },
   {
     label: "Operations",
     items: [
-      { label: "Bookings", href: "/bookings", roles: ["administrator", "office_worker", "executive"] },
-      { label: "Customers", href: "/customers", roles: ["administrator", "office_worker", "executive"] },
-      { label: "Artists", href: "/artists", roles: ["administrator", "office_worker", "executive"] },
-      { label: "Links & QR Codes", href: "/links", roles: ["administrator", "office_worker", "executive"] }
+      { label: "Bookings", href: "/bookings", roles: ["administrator", "manager"] },
+      { label: "Customers", href: "/customers", roles: ["administrator", "manager"] },
+      { label: "Artists", href: "/artists", roles: ["administrator", "manager"] },
+      { label: "Links & QR Codes", href: "/links", roles: ["administrator", "manager"] }
     ]
   },
   {
     label: "Manage",
     items: [
-      { label: "Venues", href: "/venues", roles: ["administrator", "office_worker", "executive"] },
-      { label: "Opening Hours", href: "/opening-hours", roles: ["administrator", "office_worker", "executive"] },
-      { label: "Users", href: "/users", roles: ["administrator", "office_worker", "executive"] },
-      { label: "Settings", href: "/settings", roles: ["administrator", "office_worker", "executive"] }
+      { label: "Venues", href: "/venues", roles: ["administrator", "manager"] },
+      { label: "Opening Hours", href: "/opening-hours", roles: ["administrator", "manager"] },
+      { label: "Users", href: "/users", roles: ["administrator", "manager"] },
+      { label: "Settings", href: "/settings", roles: ["administrator", "manager"] }
     ]
   }
 ];
 
 const roleDisplayNames: Record<string, string> = {
   administrator: "Administrator",
-  office_worker: "Office Worker",
-  executive: "Executive",
+  manager: "Manager",
 };
 
 type AppShellProps = {

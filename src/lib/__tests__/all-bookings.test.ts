@@ -23,11 +23,11 @@ const administrator: AppUser = {
   deactivatedAt: null,
 };
 
-const officeWorker: AppUser = {
+const manager: AppUser = {
   id: "user-2",
   email: "worker@test.com",
-  fullName: "Office Worker",
-  role: "office_worker",
+  fullName: "Manager",
+  role: "manager",
   venueId: "venue-42",
   deactivatedAt: null,
 };
@@ -131,15 +131,15 @@ describe("listAllBookingsForUser", () => {
   });
 
   // -------------------------------------------------------------------------
-  // 2. office_worker global read — no venue filter applied
+  // 2. manager global read — no venue filter applied
   // -------------------------------------------------------------------------
-  it("does not apply venue_id scoping for office_worker (global read)", async () => {
+  it("does not apply venue_id scoping for manager (global read)", async () => {
     const { proxy, calls } = buildQueryMock({ data: [], error: null });
     (createSupabaseAdminClient as ReturnType<typeof vi.fn>).mockReturnValue({
       from: () => ({ select: () => ({ order: () => proxy }) }),
     });
 
-    await listAllBookingsForUser(officeWorker);
+    await listAllBookingsForUser(manager);
 
     const eqCall = calls.find(
       (c) => c.method === "eq" && c.args[0] === "events.venue_id",

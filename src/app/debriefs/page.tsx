@@ -15,7 +15,7 @@ export default async function DebriefsPage() {
   const supabase = await createSupabaseReadonlyClient();
   const outstandingDebriefs = await getDebriefsDue(user);
 
-  // ID-004: Filter at query level for office_worker with venueId
+  // ID-004: Filter at query level for manager with venueId
   let query = supabase
     .from("debriefs")
     .select(`

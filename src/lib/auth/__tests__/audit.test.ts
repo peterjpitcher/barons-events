@@ -143,7 +143,7 @@ describe("logAuthEvent", () => {
       event: "auth.invite.sent",
       userId: "admin-1",
       emailHash,
-      meta: { role: "office_worker" }
+      meta: { role: "manager" }
     });
 
     const row = lastInserted();
@@ -151,7 +151,7 @@ describe("logAuthEvent", () => {
 
     const meta = (row as { meta: Record<string, unknown> }).meta;
     expect(meta.email_hash).toBe(emailHash);
-    expect(meta.role).toBe("office_worker");
+    expect(meta.role).toBe("manager");
   });
 
   // 8. auth.invite.accepted

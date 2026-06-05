@@ -856,12 +856,12 @@ describe("cancelBookingAction", () => {
     expect(mockCancelBooking).toHaveBeenCalledWith("booking-id");
   });
 
-  it("rejects office workers before booking lookup even when venue-linked", async () => {
+  it("rejects managers before booking lookup even when venue-linked", async () => {
     mockGetCurrentUser.mockResolvedValue({
       id: "user-123",
       email: "staff@example.com",
       fullName: "Staff User",
-      role: "office_worker",
+      role: "manager",
       venueId: "venue-a",
       deactivatedAt: null,
     });
@@ -876,12 +876,12 @@ describe("cancelBookingAction", () => {
     expect(mockCancelBooking).not.toHaveBeenCalled();
   });
 
-  it("rejects executives before booking lookup", async () => {
+  it("rejects unassigned managers before booking lookup", async () => {
     mockGetCurrentUser.mockResolvedValue({
       id: "user-123",
-      email: "exec@example.com",
-      fullName: "Exec User",
-      role: "executive",
+      email: "manager@example.com",
+      fullName: "Manager User",
+      role: "manager",
       venueId: null,
       deactivatedAt: null,
     });

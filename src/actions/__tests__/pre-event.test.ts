@@ -62,8 +62,8 @@ describe("proposeEventAction", () => {
     }
   });
 
-  it("rejects executive", async () => {
-    getUserMock.mockResolvedValue({ id: "exec-1", role: "executive", venueId: null });
+  it("rejects manager without event creation permission", async () => {
+    getUserMock.mockResolvedValue({ id: "manager-1", role: "manager", venueId: null });
     const result = await proposeEventAction(undefined, fd({
       title: "x",
       startAt: "2026-05-01T10:00:00Z",
@@ -153,8 +153,8 @@ describe("proposeEventAction", () => {
     );
   });
 
-  it("rejects a venue-assigned office_worker before venue validation", async () => {
-    getUserMock.mockResolvedValue({ id: "ow-1", role: "office_worker", venueId: VENUE_A });
+  it("rejects a venue-assigned manager before venue validation", async () => {
+    getUserMock.mockResolvedValue({ id: "ow-1", role: "manager", venueId: VENUE_A });
 
     const result = await proposeEventAction(undefined, fd({
       title: "Test",
@@ -169,8 +169,8 @@ describe("proposeEventAction", () => {
     expect(rpcMock).not.toHaveBeenCalled();
   });
 
-  it("rejects a venue-assigned office_worker for their assigned venue", async () => {
-    getUserMock.mockResolvedValue({ id: "ow-1", role: "office_worker", venueId: VENUE_A });
+  it("rejects a venue-assigned manager for their assigned venue", async () => {
+    getUserMock.mockResolvedValue({ id: "ow-1", role: "manager", venueId: VENUE_A });
 
     const result = await proposeEventAction(undefined, fd({
       title: "Test",

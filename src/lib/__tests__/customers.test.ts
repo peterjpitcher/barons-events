@@ -21,11 +21,11 @@ const administrator: AppUser = {
   deactivatedAt: null,
 };
 
-const officeWorker: AppUser = {
+const manager: AppUser = {
   id: "user-2",
   email: "worker@example.com",
-  fullName: "Office Worker",
-  role: "office_worker",
+  fullName: "Manager",
+  role: "manager",
   venueId: "venue-abc",
   deactivatedAt: null,
 };
@@ -57,11 +57,11 @@ describe("listCustomersForUser", () => {
     });
   });
 
-  it("passes null venue_id for office_worker (global read)", async () => {
+  it("passes null venue_id for manager (global read)", async () => {
     const rpcMock = vi.fn().mockResolvedValue({ data: [], error: null });
     mockAdminClient.mockReturnValue({ rpc: rpcMock });
 
-    await listCustomersForUser(officeWorker);
+    await listCustomersForUser(manager);
 
     expect(rpcMock).toHaveBeenCalledWith("list_customers_with_stats", {
       p_venue_id: null,
@@ -203,7 +203,7 @@ describe("getCustomerById", () => {
     expect(callCount).toBe(1);
   });
 
-  it("office_worker: returns customer with all bookings regardless of venue (global read)", async () => {
+  it("manager: returns customer with all bookings regardless of venue (global read)", async () => {
     mockAdminClient.mockReturnValue({
       from: (table: string) => {
         if (table === "customers") {
@@ -238,12 +238,12 @@ describe("getCustomerById", () => {
       },
     });
 
-    const result = await getCustomerById("cust-1", officeWorker);
+    const result = await getCustomerById("cust-1", manager);
     expect(result).not.toBeNull();
     expect(result!.bookings).toHaveLength(1);
   });
 
-  it("office_worker: returns all bookings across all venues (global read)", async () => {
+  it("manager: returns all bookings across all venues (global read)", async () => {
     mockAdminClient.mockReturnValue({
       from: (table: string) => {
         if (table === "customers") {
@@ -267,7 +267,7 @@ describe("getCustomerById", () => {
                   id: "event-1",
                   title: "Manager Venue Event",
                   start_at: "2025-03-01T19:00:00Z",
-                  venue_id: "venue-abc",          // matches officeWorker.venueId
+                  venue_id: "venue-abc",          // matches manager.venueId
                   venues: { id: "venue-abc", name: "Manager's Venue" },
                 },
               },
@@ -291,7 +291,7 @@ describe("getCustomerById", () => {
       },
     });
 
-    const result = await getCustomerById("cust-1", officeWorker);
+    const result = await getCustomerById("cust-1", manager);
 
     expect(result).not.toBeNull();
     expect(result!.bookings).toHaveLength(2);

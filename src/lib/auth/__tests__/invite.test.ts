@@ -175,11 +175,11 @@ describe("inviteUserAction", () => {
 
   // 1. Non-administrator is rejected before any Supabase call
   it("should return an error when the current user is not an administrator", async () => {
-    mockGetCurrentUser.mockResolvedValue({ ...ADMIN_USER, role: "office_worker" });
+    mockGetCurrentUser.mockResolvedValue({ ...ADMIN_USER, role: "manager" });
 
     const result = await inviteUserAction(
       undefined,
-      createFormData({ email: "newuser@example.com", role: "office_worker" })
+      createFormData({ email: "newuser@example.com", role: "manager" })
     );
 
     expect(result.success).toBe(false);
@@ -191,7 +191,7 @@ describe("inviteUserAction", () => {
   it("should return a field error when the email is invalid", async () => {
     const result = await inviteUserAction(
       undefined,
-      createFormData({ email: "not-an-email", role: "office_worker" })
+      createFormData({ email: "not-an-email", role: "manager" })
     );
 
     expect(result.success).toBe(false);
@@ -204,7 +204,7 @@ describe("inviteUserAction", () => {
   it("should call generateLink, send the invite email, upsert the user record, and return success", async () => {
     const result = await inviteUserAction(
       undefined,
-      createFormData({ email: "invite@example.com", role: "office_worker", fullName: "Bob Worker" })
+      createFormData({ email: "invite@example.com", role: "manager", fullName: "Bob Worker" })
     );
 
     expect(result.success).toBe(true);
@@ -236,7 +236,7 @@ describe("inviteUserAction", () => {
 
     const result = await inviteUserAction(
       undefined,
-      createFormData({ email: "fail-upsert@example.com", role: "office_worker" })
+      createFormData({ email: "fail-upsert@example.com", role: "manager" })
     );
 
     expect(result.success).toBe(false);
@@ -256,7 +256,7 @@ describe("inviteUserAction", () => {
 
     const result = await inviteUserAction(
       undefined,
-      createFormData({ email: "fail@example.com", role: "office_worker" })
+      createFormData({ email: "fail@example.com", role: "manager" })
     );
 
     expect(result.success).toBe(false);
@@ -272,7 +272,7 @@ describe("inviteUserAction", () => {
 
     const result = await inviteUserAction(
       undefined,
-      createFormData({ email: "no-email@example.com", role: "office_worker" })
+      createFormData({ email: "no-email@example.com", role: "manager" })
     );
 
     expect(result.success).toBe(false);
@@ -297,12 +297,12 @@ describe("inviteUserAction", () => {
   it("should include the role field in the upsert payload written to the users table", async () => {
     await inviteUserAction(
       undefined,
-      createFormData({ email: "role-check@example.com", role: "executive" })
+      createFormData({ email: "role-check@example.com", role: "manager" })
     );
 
     expect(mockUpsert).toHaveBeenCalledOnce();
     const upsertPayload = mockUpsert.mock.calls[0]?.[0] as Record<string, unknown>;
-    expect(upsertPayload).toHaveProperty("role", "executive");
+    expect(upsertPayload).toHaveProperty("role", "manager");
   });
 });
 
@@ -338,7 +338,7 @@ describe("resendInviteAction", () => {
 
   // 1. Non-administrator rejected
   it("should return an error when the current user is not an administrator", async () => {
-    mockGetCurrentUser.mockResolvedValue({ ...ADMIN_USER, role: "office_worker" });
+    mockGetCurrentUser.mockResolvedValue({ ...ADMIN_USER, role: "manager" });
 
     const result = await resendInviteAction(
       undefined,

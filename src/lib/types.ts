@@ -2,8 +2,7 @@ import type { FieldErrors } from "@/lib/form-errors";
 
 export type UserRole =
   | "administrator"
-  | "office_worker"
-  | "executive";
+  | "manager";
 
 export interface AppUser {
   id: string;

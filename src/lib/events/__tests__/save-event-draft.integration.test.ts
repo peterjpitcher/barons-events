@@ -37,7 +37,7 @@ describe.skipIf(!enabled)("save_event_draft RPC", () => {
     if (!enabled) return;
     admin = getLocalAdminClient();
 
-    // TODO(integration setup): seed an office_worker user, a venue they
+    // TODO(integration setup): seed an manager user, a venue they
     // can access, and an artist; mint a session JWT for that user. The
     // exact helpers depend on the seeded role/venue mapping in the
     // local stack — see docs/testing/integration.md for the recommended

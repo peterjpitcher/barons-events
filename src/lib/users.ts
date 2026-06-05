@@ -178,7 +178,7 @@ export type AssignableUser = BasicUser & {
   role: string;
 };
 
-const ASSIGNABLE_ROLES = ["administrator", "office_worker", "executive"];
+const ASSIGNABLE_ROLES = ["administrator", "manager"];
 
 export async function listAssignableUsers(): Promise<AssignableUser[]> {
   const supabase = await createSupabaseReadonlyClient();
@@ -203,7 +203,7 @@ export async function listAssignableUsers(): Promise<AssignableUser[]> {
   }));
 }
 
-/** Active users eligible as reassignment targets (excludes executives, deactivated, and the target user). */
+/** Active users eligible as reassignment targets (excludes deactivated users and the target user). */
 export async function listReassignmentTargets(
   excludeUserId: string
 ): Promise<Array<{ id: string; full_name: string | null; email: string; role: string }>> {
@@ -213,7 +213,6 @@ export async function listReassignmentTargets(
     .select("id, full_name, email, role")
     .is("deactivated_at", null)
     .neq("id", excludeUserId)
-    .neq("role", "executive")
     .order("full_name");
 
   if (error) throw new Error(`Failed to list reassignment targets: ${error.message}`);

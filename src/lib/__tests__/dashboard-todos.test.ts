@@ -92,7 +92,7 @@ describe("getDashboardTodoItems", () => {
         id: "user-1",
         email: "user@example.com",
         fullName: "User",
-        role: "office_worker",
+        role: "manager",
         venueId: null,
         deactivatedAt: null
       },

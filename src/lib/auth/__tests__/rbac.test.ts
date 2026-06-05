@@ -258,11 +258,10 @@ describe("getCurrentUser", () => {
 
 // ─── normalizeRole (exercised via getCurrentUser) ─────────────────────────────
 
-describe("normalizeRole — final 3-role model", () => {
+describe("normalizeRole — two-role model", () => {
   const validRoles = [
     "administrator",
-    "office_worker",
-    "executive"
+    "manager"
   ] as const;
 
   for (const role of validRoles) {
@@ -287,6 +286,27 @@ describe("normalizeRole — final 3-role model", () => {
       expect(result?.role).toBe(role);
     });
   }
+
+  it("normalizes legacy 'office_worker' rows to manager during deployment", async () => {
+    mockCreateClient.mockResolvedValue(
+      makeSupabaseClient(
+        { id: "user-legacy" },
+        {
+          id: "user-legacy",
+          email: "legacy@example.com",
+          full_name: null,
+          role: "office_worker",
+          venue_id: "v1",
+          deactivated_at: null
+        }
+      )
+    );
+
+    const result = await getCurrentUser();
+
+    expect(result).not.toBeNull();
+    expect(result?.role).toBe("manager");
+  });
 
   it("returns null for an unknown role", async () => {
     mockCreateClient.mockResolvedValue(
@@ -338,6 +358,26 @@ describe("normalizeRole — final 3-role model", () => {
           full_name: null,
           role: "venue_manager",
           venue_id: "v1",
+          deactivated_at: null
+        }
+      )
+    );
+
+    const result = await getCurrentUser();
+
+    expect(result).toBeNull();
+  });
+
+  it("rejects retired 'executive' rows", async () => {
+    mockCreateClient.mockResolvedValue(
+      makeSupabaseClient(
+        { id: "user-exec" },
+        {
+          id: "user-exec",
+          email: "exec@example.com",
+          full_name: null,
+          role: "executive",
+          venue_id: null,
           deactivated_at: null
         }
       )
@@ -401,35 +441,16 @@ describe("requireAdmin", () => {
     expect(mockRedirect).toHaveBeenCalledWith("/login");
   });
 
-  it("calls redirect('/unauthorized') when authenticated but role is office_worker", async () => {
+  it("calls redirect('/unauthorized') when authenticated but role is manager", async () => {
     mockCreateClient.mockResolvedValue(
       makeSupabaseClient(
         { id: "user-2" },
         {
           id: "user-2",
           email: "worker@example.com",
-          full_name: "Office Worker",
-          role: "office_worker",
+          full_name: "Manager",
+          role: "manager",
           venue_id: "venue-1",
-          deactivated_at: null
-        }
-      )
-    );
-
-    await expect(requireAdmin()).rejects.toThrow("NEXT_REDIRECT:/unauthorized");
-    expect(mockRedirect).toHaveBeenCalledWith("/unauthorized");
-  });
-
-  it("calls redirect('/unauthorized') when role is executive", async () => {
-    mockCreateClient.mockResolvedValue(
-      makeSupabaseClient(
-        { id: "user-3" },
-        {
-          id: "user-3",
-          email: "exec@example.com",
-          full_name: "Executive",
-          role: "executive",
-          venue_id: null,
           deactivated_at: null
         }
       )
@@ -510,7 +531,7 @@ describe("withAdminAuth", () => {
           id: "user-2",
           email: "worker@example.com",
           full_name: "A Worker",
-          role: "office_worker",
+          role: "manager",
           venue_id: null,
           deactivated_at: null
         }
@@ -686,10 +707,10 @@ describe("withAdminAuthAndCSRF", () => {
         { id: "user-2" },
         {
           id: "user-2",
-          email: "executive@example.com",
-          full_name: "An Executive",
-          role: "executive",
-          venue_id: null,
+          email: "manager@example.com",
+          full_name: "A Manager",
+          role: "manager",
+          venue_id: "venue-1",
           deactivated_at: null
         }
       )
@@ -751,14 +772,12 @@ describe("withAdminAuthAndCSRF", () => {
 describe("roles.ts — final capability functions", () => {
   describe("isAdministrator", () => {
     it("returns true for administrator", () => expect(isAdministrator("administrator")).toBe(true));
-    it("returns false for office_worker", () => expect(isAdministrator("office_worker")).toBe(false));
-    it("returns false for executive", () => expect(isAdministrator("executive")).toBe(false));
+    it("returns false for manager", () => expect(isAdministrator("manager")).toBe(false));
   });
 
   describe("canProposeEvents", () => {
     it("administrator can propose", () => expect(canProposeEvents("administrator")).toBe(true));
-    it("office_worker cannot propose", () => expect(canProposeEvents("office_worker")).toBe(false));
-    it("executive cannot propose", () => expect(canProposeEvents("executive")).toBe(false));
+    it("manager cannot propose", () => expect(canProposeEvents("manager")).toBe(false));
   });
 
   describe("canEditEvent", () => {
@@ -778,136 +797,116 @@ describe("roles.ts — final capability functions", () => {
       expect(canEditEvent("administrator", "user-x", null, { ...base, deletedAt: "2026-01-01T00:00:00Z" })).toBe(true);
     });
 
-    it("office_worker cannot edit even as manager on their venue", () => {
-      expect(canEditEvent("office_worker", "user-manager", "venue-A", base)).toBe(false);
+    it("manager cannot edit even as manager on their venue", () => {
+      expect(canEditEvent("manager", "user-manager", "venue-A", base)).toBe(false);
     });
 
-    it("office_worker cannot edit even as creator on draft", () => {
-      expect(canEditEvent("office_worker", "user-creator", "venue-X", { ...base, status: "draft" })).toBe(false);
+    it("manager cannot edit even as creator on draft", () => {
+      expect(canEditEvent("manager", "user-creator", "venue-X", { ...base, status: "draft" })).toBe(false);
     });
 
-    it("office_worker cannot edit soft-deleted event", () => {
-      expect(canEditEvent("office_worker", "user-manager", "venue-A", { ...base, deletedAt: "2026-01-01T00:00:00Z" })).toBe(false);
+    it("manager cannot edit soft-deleted event", () => {
+      expect(canEditEvent("manager", "user-manager", "venue-A", { ...base, deletedAt: "2026-01-01T00:00:00Z" })).toBe(false);
     });
 
-    it("executive cannot edit even as creator on draft", () => {
-      expect(canEditEvent("executive", "user-creator", null, { ...base, status: "draft" })).toBe(false);
-    });
   });
 
   describe("canViewEvents", () => {
     it("all roles can view events", () => {
       expect(canViewEvents("administrator")).toBe(true);
-      expect(canViewEvents("office_worker")).toBe(true);
-      expect(canViewEvents("executive")).toBe(true);
+      expect(canViewEvents("manager")).toBe(true);
     });
   });
 
   describe("canReviewEvents", () => {
     it("administrator can review", () => expect(canReviewEvents("administrator")).toBe(true));
-    it("office_worker cannot review", () => expect(canReviewEvents("office_worker")).toBe(false));
-    it("executive cannot review", () => expect(canReviewEvents("executive")).toBe(false));
+    it("manager cannot review", () => expect(canReviewEvents("manager")).toBe(false));
   });
 
   describe("canManageBookings", () => {
     it("administrator can manage bookings", () => expect(canManageBookings("administrator")).toBe(true));
-    it("office_worker cannot manage bookings", () => expect(canManageBookings("office_worker", "v1")).toBe(false));
-    it("executive cannot manage bookings", () => expect(canManageBookings("executive")).toBe(false));
+    it("manager cannot manage bookings", () => expect(canManageBookings("manager", "v1")).toBe(false));
   });
 
   describe("canManageCustomers", () => {
     it("administrator can manage customers", () => expect(canManageCustomers("administrator")).toBe(true));
-    it("office_worker cannot manage customers", () => expect(canManageCustomers("office_worker", "v1")).toBe(false));
-    it("executive cannot manage customers", () => expect(canManageCustomers("executive")).toBe(false));
+    it("manager cannot manage customers", () => expect(canManageCustomers("manager", "v1")).toBe(false));
   });
 
   describe("canManageArtists", () => {
     it("administrator can manage artists", () => expect(canManageArtists("administrator")).toBe(true));
-    it("office_worker cannot manage artists", () => expect(canManageArtists("office_worker", "v1")).toBe(false));
-    it("executive cannot manage artists", () => expect(canManageArtists("executive")).toBe(false));
+    it("manager cannot manage artists", () => expect(canManageArtists("manager", "v1")).toBe(false));
   });
 
   describe("canCreateDebriefs (venue_id-dependent)", () => {
     it("administrator can create debriefs", () => expect(canCreateDebriefs("administrator")).toBe(true));
-    it("office_worker WITH venueId can create debriefs", () => expect(canCreateDebriefs("office_worker", "v1")).toBe(true));
-    it("office_worker WITHOUT venueId cannot create debriefs", () => expect(canCreateDebriefs("office_worker")).toBe(false));
-    it("office_worker with null venueId cannot create debriefs", () => expect(canCreateDebriefs("office_worker", null)).toBe(false));
-    it("executive cannot create debriefs", () => expect(canCreateDebriefs("executive")).toBe(false));
+    it("manager WITH venueId can create debriefs", () => expect(canCreateDebriefs("manager", "v1")).toBe(true));
+    it("manager WITHOUT venueId cannot create debriefs", () => expect(canCreateDebriefs("manager")).toBe(false));
+    it("manager with null venueId cannot create debriefs", () => expect(canCreateDebriefs("manager", null)).toBe(false));
   });
 
   describe("canEditDebrief (creator-dependent)", () => {
     it("administrator can edit any debrief", () => expect(canEditDebrief("administrator", false)).toBe(true));
     it("administrator can edit own debrief", () => expect(canEditDebrief("administrator", true)).toBe(true));
-    it("office_worker can edit own debrief", () => expect(canEditDebrief("office_worker", true)).toBe(true));
-    it("office_worker cannot edit others debrief", () => expect(canEditDebrief("office_worker", false)).toBe(false));
-    it("executive cannot edit any debrief", () => expect(canEditDebrief("executive", true)).toBe(false));
-    it("executive cannot edit even as creator", () => expect(canEditDebrief("executive", false)).toBe(false));
+    it("manager can edit own debrief", () => expect(canEditDebrief("manager", true)).toBe(true));
+    it("manager cannot edit others debrief", () => expect(canEditDebrief("manager", false)).toBe(false));
   });
 
   describe("canViewDebriefs", () => {
     it("all roles can view debriefs", () => {
       expect(canViewDebriefs("administrator")).toBe(true);
-      expect(canViewDebriefs("office_worker")).toBe(true);
-      expect(canViewDebriefs("executive")).toBe(true);
+      expect(canViewDebriefs("manager")).toBe(true);
     });
   });
 
   describe("canViewBookings", () => {
     it("all roles can view bookings", () => {
       expect(canViewBookings("administrator")).toBe(true);
-      expect(canViewBookings("office_worker")).toBe(true);
-      expect(canViewBookings("executive")).toBe(true);
+      expect(canViewBookings("manager")).toBe(true);
     });
   });
 
   describe("canViewCustomers", () => {
     it("all roles can view customers", () => {
       expect(canViewCustomers("administrator")).toBe(true);
-      expect(canViewCustomers("office_worker")).toBe(true);
-      expect(canViewCustomers("executive")).toBe(true);
+      expect(canViewCustomers("manager")).toBe(true);
     });
   });
 
   describe("canViewArtists", () => {
     it("all roles can view artists", () => {
       expect(canViewArtists("administrator")).toBe(true);
-      expect(canViewArtists("office_worker")).toBe(true);
-      expect(canViewArtists("executive")).toBe(true);
+      expect(canViewArtists("manager")).toBe(true);
     });
   });
 
   describe("canViewReviews", () => {
     it("all roles can view reviews", () => {
       expect(canViewReviews("administrator")).toBe(true);
-      expect(canViewReviews("office_worker")).toBe(true);
-      expect(canViewReviews("executive")).toBe(true);
+      expect(canViewReviews("manager")).toBe(true);
     });
   });
 
   describe("canCreatePlanningItems", () => {
     it("administrator can create", () => expect(canCreatePlanningItems("administrator")).toBe(true));
-    it("office_worker with venue can create", () => expect(canCreatePlanningItems("office_worker", "venue-1")).toBe(true));
-    it("office_worker without venue cannot create", () => expect(canCreatePlanningItems("office_worker")).toBe(false));
-    it("executive cannot create", () => expect(canCreatePlanningItems("executive")).toBe(false));
+    it("manager with venue can create", () => expect(canCreatePlanningItems("manager", "venue-1")).toBe(true));
+    it("manager without venue cannot create", () => expect(canCreatePlanningItems("manager")).toBe(false));
   });
 
   describe("canManageOwnPlanningItems", () => {
     it("administrator can manage own", () => expect(canManageOwnPlanningItems("administrator")).toBe(true));
-    it("office_worker can manage own", () => expect(canManageOwnPlanningItems("office_worker")).toBe(true));
-    it("executive cannot manage", () => expect(canManageOwnPlanningItems("executive")).toBe(false));
+    it("manager can manage own", () => expect(canManageOwnPlanningItems("manager")).toBe(true));
   });
 
   describe("canManageAllPlanning", () => {
     it("administrator can manage all", () => expect(canManageAllPlanning("administrator")).toBe(true));
-    it("office_worker cannot manage all", () => expect(canManageAllPlanning("office_worker")).toBe(false));
-    it("executive cannot manage all", () => expect(canManageAllPlanning("executive")).toBe(false));
+    it("manager cannot manage all", () => expect(canManageAllPlanning("manager")).toBe(false));
   });
 
   describe("canViewPlanning", () => {
     it("all roles can view planning", () => {
       expect(canViewPlanning("administrator")).toBe(true);
-      expect(canViewPlanning("office_worker")).toBe(true);
-      expect(canViewPlanning("executive")).toBe(true);
+      expect(canViewPlanning("manager")).toBe(true);
     });
   });
 
@@ -915,14 +914,12 @@ describe("roles.ts — final capability functions", () => {
     const adminOnly = [canManageVenues, canManageUsers, canManageSettings, canManageLinks, canEditSopTemplate];
     for (const fn of adminOnly) {
       it(`${fn.name} returns true for administrator`, () => expect(fn("administrator")).toBe(true));
-      it(`${fn.name} returns false for office_worker`, () => expect(fn("office_worker")).toBe(false));
-      it(`${fn.name} returns false for executive`, () => expect(fn("executive")).toBe(false));
+      it(`${fn.name} returns false for manager`, () => expect(fn("manager")).toBe(false));
     }
   });
 
   describe("canViewSopTemplate", () => {
     it("administrator can view", () => expect(canViewSopTemplate("administrator")).toBe(true));
-    it("executive can view", () => expect(canViewSopTemplate("executive")).toBe(true));
-    it("office_worker can view", () => expect(canViewSopTemplate("office_worker")).toBe(true));
+    it("manager can view", () => expect(canViewSopTemplate("manager")).toBe(true));
   });
 });

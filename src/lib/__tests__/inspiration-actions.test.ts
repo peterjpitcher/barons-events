@@ -8,7 +8,7 @@ vi.mock('@/lib/supabase/admin', () => ({ createSupabaseAdminClient: vi.fn() }));
 vi.mock('@/lib/planning/inspiration', () => ({ generateInspirationItems: vi.fn() }));
 vi.mock('@/lib/auth', () => ({ getCurrentUser: vi.fn() }));
 vi.mock('@/lib/roles', () => ({
-  canCreatePlanningItems: vi.fn((role: string) => role === 'administrator' || role === 'office_worker'),
+  canCreatePlanningItems: vi.fn((role: string, venueId?: string | null) => role === 'administrator' || (role === 'manager' && Boolean(venueId))),
   canViewPlanning: vi.fn(() => true),
 }));
 vi.mock('@/lib/planning/sop', () => ({
@@ -88,7 +88,7 @@ describe('convertInspirationItemAction', () => {
   });
 
   it('returns error if user role cannot create planning items', async () => {
-    (getCurrentUser as Mock).mockResolvedValue(makeUser('executive'));
+    (getCurrentUser as Mock).mockResolvedValue({ ...makeUser('manager'), venueId: null });
     const result = await convertInspirationItemAction('item-1');
     expect(result.success).toBe(false);
   });
@@ -118,7 +118,7 @@ describe('dismissInspirationItemAction', () => {
   });
 
   it('returns error if user role cannot create planning items', async () => {
-    (getCurrentUser as Mock).mockResolvedValue(makeUser('executive'));
+    (getCurrentUser as Mock).mockResolvedValue({ ...makeUser('manager'), venueId: null });
     const result = await dismissInspirationItemAction('item-1');
     expect(result.success).toBe(false);
   });
@@ -141,7 +141,7 @@ describe('refreshInspirationItemsAction', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('returns unauthorised error for non-administrator', async () => {
-    (getCurrentUser as Mock).mockResolvedValue(makeUser('executive'));
+    (getCurrentUser as Mock).mockResolvedValue(makeUser('manager'));
     const result = await refreshInspirationItemsAction();
     expect(result.success).toBe(false);
     expect(result.message).toMatch(/unauthorised/i);

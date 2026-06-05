@@ -42,11 +42,10 @@ BaronsHub is the internal event, planning, booking, and venue-operations workspa
 ## Role Model
 
 - `administrator`: full platform access, user/settings management, all event/planning operations.
-- `office_worker` with `venue_id`: event and planning visibility/write access scoped to linked venue rows; booking/customer PII remains globally readable.
-- `office_worker` without `venue_id`: global event/planning read access and can propose events for any venue, but does not gain planning write rights.
-- `executive`: read-only access to events, planning, and reporting.
+- `manager` with `venue_id`: event and planning visibility/write access scoped to linked venue rows; booking/customer PII remains globally readable.
+- `manager` without `venue_id`: global event/planning read access and can propose events for any venue, but does not gain planning write rights.
 
-Roles are stored in `public.users.role`; `public.users.venue_id` is the office-worker capability switch. Enforcement is layered through UI visibility, server actions, shared helpers in `src/lib/roles.ts` and `src/lib/visibility.ts`, and Supabase RLS.
+Roles are stored in `public.users.role`; `public.users.venue_id` is the manager capability switch. Enforcement is layered through UI visibility, server actions, shared helpers in `src/lib/roles.ts` and `src/lib/visibility.ts`, and Supabase RLS.
 
 ## Website Publishing API
 
@@ -91,7 +90,7 @@ RUN_SUPABASE_MIGRATION_TESTS=1 \
 SUPABASE_OW_JWT=<office-worker-with-venue-jwt> \
 SUPABASE_OTHER_OW_JWT=<different-venue-office-worker-jwt> \
 SUPABASE_OW_NO_VENUE_JWT=<office-worker-without-venue-jwt> \
-npm run test -- supabase/migrations/__tests__/office_worker_event_scope.test.ts
+npm run test -- supabase/migrations/__tests__/manager_event_scope.test.ts
 ```
 
 ## Project Structure

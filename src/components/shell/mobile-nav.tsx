@@ -51,8 +51,7 @@ type MobileBottomTabsProps = {
 
 const roleDisplayNames: Record<string, string> = {
   administrator: "Administrator",
-  office_worker: "Office Worker",
-  executive: "Executive",
+  manager: "Manager",
 };
 
 const bottomTabs = [

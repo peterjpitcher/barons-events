@@ -62,15 +62,15 @@ describe('revertToDraftAction', () => {
     expect(redirect).toHaveBeenCalledWith('/login');
   });
 
-  it('returns error when office_worker tries to revert', async () => {
-    (getCurrentUser as Mock).mockResolvedValue(makeUser('office_worker'));
+  it('returns error when manager tries to revert', async () => {
+    (getCurrentUser as Mock).mockResolvedValue(makeUser('manager'));
     const result = await revertToDraftAction(undefined, makeFormData('00000000-0000-0000-0000-000000000001'));
     expect(result.success).toBe(false);
     expect(result.message).toMatch(/administrator/i);
   });
 
-  it('returns error when executive tries to revert', async () => {
-    (getCurrentUser as Mock).mockResolvedValue(makeUser('executive'));
+  it('returns error when an unassigned manager tries to revert', async () => {
+    (getCurrentUser as Mock).mockResolvedValue(makeUser('manager'));
     const result = await revertToDraftAction(undefined, makeFormData('00000000-0000-0000-0000-000000000001'));
     expect(result.success).toBe(false);
     expect(result.message).toMatch(/administrator/i);

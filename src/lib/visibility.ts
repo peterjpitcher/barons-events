@@ -37,26 +37,26 @@ export function isLinkedToVenue(resource: VenueLinkedResource, venueId: string |
 
 export function canViewVenueLinkedResource(user: AppUser, resource: VenueLinkedResource): boolean {
   void resource;
-  return user.role === "administrator" || user.role === "office_worker" || user.role === "executive";
+  return user.role === "administrator" || user.role === "manager";
 }
 
-export function canOfficeWorkerUseVenueSelection(user: AppUser, venueIds: string[]): boolean {
+export function canManagerUseVenueSelection(user: AppUser, venueIds: string[]): boolean {
   if (user.role === "administrator") return true;
-  if (user.role !== "office_worker") return false;
+  if (user.role !== "manager") return false;
   if (!user.venueId) return true;
   return venueIds.length > 0 && venueIds.every((venueId) => venueId === user.venueId);
 }
 
 export function canCreatePlanningForVenueSelection(user: AppUser, venueIds: string[]): boolean {
   if (user.role === "administrator") return true;
-  if (user.role !== "office_worker") return false;
+  if (user.role !== "manager") return false;
   if (!user.venueId) return false;
   return venueIds.length > 0 && venueIds.every((venueId) => venueId === user.venueId);
 }
 
 export function canEditVenueLinkedPlanning(user: AppUser, resource: VenueLinkedResource): boolean {
   if (user.role === "administrator") return true;
-  if (user.role !== "office_worker") return false;
+  if (user.role !== "manager") return false;
   if (!user.venueId) return false;
   return isLinkedToVenue(resource, user.venueId);
 }

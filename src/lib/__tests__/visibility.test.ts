@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   canCreatePlanningForVenueSelection,
   canEditVenueLinkedPlanning,
-  canOfficeWorkerUseVenueSelection,
+  canManagerUseVenueSelection,
   canViewVenueLinkedResource
 } from "@/lib/visibility";
 import type { AppUser } from "@/lib/types";
@@ -16,59 +16,49 @@ const admin: AppUser = {
   deactivatedAt: null
 };
 
-const assignedOfficeWorker: AppUser = {
+const assignedManager: AppUser = {
   id: "worker",
   email: "worker@example.com",
   fullName: "Worker",
-  role: "office_worker",
+  role: "manager",
   venueId: "venue-a",
   deactivatedAt: null
 };
 
-const unassignedOfficeWorker: AppUser = {
-  ...assignedOfficeWorker,
+const unassignedManager: AppUser = {
+  ...assignedManager,
   id: "global-worker",
   venueId: null
 };
 
-const executive: AppUser = {
-  id: "exec",
-  email: "exec@example.com",
-  fullName: "Exec",
-  role: "executive",
-  venueId: null,
-  deactivatedAt: null
-};
-
 describe("venue-linked visibility", () => {
-  it("lets assigned office workers see all linked resources", () => {
-    expect(canViewVenueLinkedResource(assignedOfficeWorker, { venue_id: "venue-a" })).toBe(true);
-    expect(canViewVenueLinkedResource(assignedOfficeWorker, { venue_id: "venue-b" })).toBe(true);
+  it("lets assigned managers see all linked resources", () => {
+    expect(canViewVenueLinkedResource(assignedManager, { venue_id: "venue-a" })).toBe(true);
+    expect(canViewVenueLinkedResource(assignedManager, { venue_id: "venue-b" })).toBe(true);
     expect(
-      canViewVenueLinkedResource(assignedOfficeWorker, {
+      canViewVenueLinkedResource(assignedManager, {
         venue_id: "venue-b",
         event_venues: [{ venue_id: "venue-a" }]
       })
     ).toBe(true);
   });
 
-  it("keeps global read for unassigned office workers and executives", () => {
-    expect(canViewVenueLinkedResource(unassignedOfficeWorker, { venue_id: "venue-b" })).toBe(true);
-    expect(canViewVenueLinkedResource(executive, { venue_id: "venue-b" })).toBe(true);
+  it("keeps global read for unassigned managers", () => {
+    expect(canViewVenueLinkedResource(unassignedManager, { venue_id: "venue-b" })).toBe(true);
   });
 });
 
 describe("venue-linked writes", () => {
-  it("allows venue-assigned office workers to propose only their venue", () => {
-    expect(canOfficeWorkerUseVenueSelection(assignedOfficeWorker, ["venue-a"])).toBe(true);
-    expect(canOfficeWorkerUseVenueSelection(assignedOfficeWorker, ["venue-a", "venue-b"])).toBe(false);
-    expect(canOfficeWorkerUseVenueSelection(unassignedOfficeWorker, ["venue-b"])).toBe(true);
+  it("allows venue-assigned managers to propose only their venue", () => {
+    expect(canManagerUseVenueSelection(assignedManager, ["venue-a"])).toBe(true);
+    expect(canManagerUseVenueSelection(assignedManager, ["venue-a", "venue-b"])).toBe(false);
+    expect(canManagerUseVenueSelection(unassignedManager, ["venue-b"])).toBe(true);
   });
 
-  it("blocks unassigned office workers from planning writes", () => {
+  it("blocks unassigned managers from planning writes", () => {
     expect(canCreatePlanningForVenueSelection(admin, [])).toBe(true);
-    expect(canCreatePlanningForVenueSelection(assignedOfficeWorker, ["venue-a"])).toBe(true);
-    expect(canCreatePlanningForVenueSelection(unassignedOfficeWorker, ["venue-a"])).toBe(false);
-    expect(canEditVenueLinkedPlanning(unassignedOfficeWorker, { venue_id: "venue-a" })).toBe(false);
+    expect(canCreatePlanningForVenueSelection(assignedManager, ["venue-a"])).toBe(true);
+    expect(canCreatePlanningForVenueSelection(unassignedManager, ["venue-a"])).toBe(false);
+    expect(canEditVenueLinkedPlanning(unassignedManager, { venue_id: "venue-a" })).toBe(false);
   });
 });

@@ -14,32 +14,25 @@ import type { AppUser } from "@/lib/types";
 
 const mockReadonlyClient = createSupabaseReadonlyClient as ReturnType<typeof vi.fn>;
 
-const officeWorker: AppUser = {
+const manager: AppUser = {
   id: "user-2",
   email: "worker@example.com",
-  fullName: "Office Worker",
-  role: "office_worker",
+  fullName: "Manager",
+  role: "manager",
   venueId: "venue-abc",
   deactivatedAt: null
 };
 
-const unassignedOfficeWorker: AppUser = {
-  ...officeWorker,
+const unassignedManager: AppUser = {
+  ...manager,
   id: "user-3",
   venueId: null
 };
 
 const administrator: AppUser = {
-  ...officeWorker,
+  ...manager,
   id: "user-admin",
   role: "administrator",
-  venueId: null
-};
-
-const executive: AppUser = {
-  ...officeWorker,
-  id: "user-exec",
-  role: "executive",
   venueId: null
 };
 
@@ -70,7 +63,7 @@ describe("listEventsForUser", () => {
     vi.clearAllMocks();
   });
 
-  it("leaves assigned office_worker event reads global after loading rows", async () => {
+  it("leaves assigned manager event reads global after loading rows", async () => {
     const { proxy, calls } = buildQueryMock({
       data: [
         {
@@ -96,7 +89,7 @@ describe("listEventsForUser", () => {
       from: () => proxy
     });
 
-    const events = await listEventsForUser(officeWorker);
+    const events = await listEventsForUser(manager);
 
     expect(events.map((event) => event.id)).toEqual(["event-1", "event-2"]);
     expect(calls).toEqual(
@@ -109,7 +102,7 @@ describe("listEventsForUser", () => {
     expect(calls.find((call) => call.method === "eq" && call.args[0] === "venue_id")).toBeUndefined();
   });
 
-  it("leaves unassigned office_worker event reads global", async () => {
+  it("leaves unassigned manager event reads global", async () => {
     const { proxy } = buildQueryMock({
       data: [
         {
@@ -135,7 +128,7 @@ describe("listEventsForUser", () => {
       from: () => proxy
     });
 
-    const events = await listEventsForUser(unassignedOfficeWorker);
+    const events = await listEventsForUser(unassignedManager);
 
     expect(events.map((event) => event.id)).toEqual(["event-1", "event-2"]);
   });
@@ -165,27 +158,4 @@ describe("listEventsForUser", () => {
     expect(calls.find((call) => call.method === "lte" && call.args[0] === "start_at")).toBeUndefined();
   });
 
-  it("does not limit executive reads", async () => {
-    const { proxy, calls } = buildQueryMock({
-      data: [
-        {
-          id: "event-1",
-          title: "Event",
-          venue_id: "venue-abc",
-          venue: { id: "venue-abc", name: "Venue A" },
-          event_venues: [],
-          artists: []
-        }
-      ],
-      error: null
-    });
-    mockReadonlyClient.mockResolvedValue({
-      from: () => proxy
-    });
-
-    const events = await listEventsForUser(executive);
-
-    expect(events.map((event) => event.id)).toEqual(["event-1"]);
-    expect(calls.find((call) => call.method === "limit")).toBeUndefined();
-  });
 });

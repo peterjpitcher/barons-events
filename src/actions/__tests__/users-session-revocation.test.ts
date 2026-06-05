@@ -84,12 +84,12 @@ describe("updateUserAction session revocation", () => {
   });
 
   it("does not revoke sessions for a full-name-only edit", async () => {
-    mockSingle.mockResolvedValue({ data: { role: "office_worker", venue_id: venueA }, error: null });
+    mockSingle.mockResolvedValue({ data: { role: "manager", venue_id: venueA }, error: null });
 
     const result = await updateUserAction(undefined, makeFormData({
       userId: targetUserId,
       fullName: "New Name",
-      role: "office_worker",
+      role: "manager",
       venueId: venueA
     }));
 
@@ -103,12 +103,12 @@ describe("updateUserAction session revocation", () => {
   });
 
   it("revokes sessions when the user's role changes", async () => {
-    mockSingle.mockResolvedValue({ data: { role: "office_worker", venue_id: venueA }, error: null });
+    mockSingle.mockResolvedValue({ data: { role: "manager", venue_id: venueA }, error: null });
 
     const result = await updateUserAction(undefined, makeFormData({
       userId: targetUserId,
       fullName: "New Name",
-      role: "executive",
+      role: "administrator",
       venueId: venueA
     }));
 
@@ -122,12 +122,12 @@ describe("updateUserAction session revocation", () => {
   });
 
   it("revokes sessions when the user's venue access changes", async () => {
-    mockSingle.mockResolvedValue({ data: { role: "office_worker", venue_id: venueA }, error: null });
+    mockSingle.mockResolvedValue({ data: { role: "manager", venue_id: venueA }, error: null });
 
     const result = await updateUserAction(undefined, makeFormData({
       userId: targetUserId,
       fullName: "New Name",
-      role: "office_worker",
+      role: "manager",
       venueId: venueB
     }));
 

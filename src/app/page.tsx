@@ -8,7 +8,6 @@ import {
 import {
   getDashboardTodoItems,
   getDebriefsDue,
-  getExecutiveSummaryStats,
   getDashboardOperationsSnapshot,
   getRecentActivity,
 } from "@/lib/dashboard";
@@ -17,7 +16,6 @@ import { UpcomingEventsCard } from "@/components/dashboard/context-cards/upcomin
 import { PipelineCard } from "@/components/dashboard/context-cards/pipeline-card";
 import { ConflictsCard } from "@/components/dashboard/context-cards/conflicts-card";
 import { DebriefsOutstandingCard } from "@/components/dashboard/context-cards/debriefs-outstanding-card";
-import { SummaryStatsCard } from "@/components/dashboard/context-cards/summary-stats-card";
 import { RecentActivityCard } from "@/components/dashboard/context-cards/recent-activity-card";
 import { EventReadinessCard } from "@/components/dashboard/context-cards/event-readiness-card";
 import { BookingPulseCard } from "@/components/dashboard/context-cards/booking-pulse-card";
@@ -37,13 +35,9 @@ const roleCopy: Record<string, { heading: string; body: string }> = {
     heading: "Command Centre",
     body: "Your personal overview of tasks, pipeline status, and upcoming events.",
   },
-  office_worker: {
+  manager: {
     heading: "Your Dashboard",
     body: "Stay on top of your tasks, submissions, and upcoming plans.",
-  },
-  executive: {
-    heading: "Executive Snapshot",
-    body: "Track event totals, activity, and key updates at a glance.",
   },
 };
 
@@ -219,8 +213,6 @@ export default async function OverviewPage(): Promise<React.ReactNode> {
   let statusCounts: Record<string, number> | null = null;
   let conflicts: Awaited<ReturnType<typeof findConflicts>> | null = null;
   let debriefsDue: Awaited<ReturnType<typeof getDebriefsDue>> | null = null;
-  let summaryStats: Awaited<ReturnType<typeof getExecutiveSummaryStats>> | null =
-    null;
   let recentActivity: Awaited<ReturnType<typeof getRecentActivity>> | null =
     null;
 
@@ -234,13 +226,6 @@ export default async function OverviewPage(): Promise<React.ReactNode> {
     statusCounts = sc;
     conflicts = cf;
     debriefsDue = dd;
-    recentActivity = ra;
-  } else if (user.role === "executive") {
-    const [ss, ra] = await Promise.all([
-      safeFetch(getExecutiveSummaryStats()),
-      safeFetch(getRecentActivity()),
-    ]);
-    summaryStats = ss;
     recentActivity = ra;
   }
 
@@ -289,7 +274,6 @@ export default async function OverviewPage(): Promise<React.ReactNode> {
           failedSources={todoResult?.errors}
         />
         {user.role === "administrator" ? <PipelineCard counts={statusCounts} /> : null}
-        {user.role === "executive" ? <SummaryStatsCard stats={summaryStats} /> : null}
         <BookingPulseCard pulse={operationsSnapshot?.bookingPulse ?? null} />
         <EventReadinessCard events={operationsSnapshot?.readiness ?? null} />
         {user.role === "administrator" ? (
@@ -299,13 +283,12 @@ export default async function OverviewPage(): Promise<React.ReactNode> {
             <RecentActivityCard activity={recentActivity} />
           </>
         ) : null}
-        {user.role === "office_worker" || user.role === "executive" ? (
+        {user.role === "manager" ? (
           <UpcomingEventsCard
             events={upcomingEvents}
             userRole={user.role}
           />
         ) : null}
-        {user.role === "executive" ? <RecentActivityCard activity={recentActivity} /> : null}
       </div>
 
       <div className="hidden gap-6 md:grid xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.85fr)]">
@@ -331,7 +314,7 @@ export default async function OverviewPage(): Promise<React.ReactNode> {
             </>
           )}
 
-          {user.role === "office_worker" && (
+          {user.role === "manager" && (
             <>
               <BookingPulseCard pulse={operationsSnapshot?.bookingPulse ?? null} />
               <UpcomingEventsCard
@@ -341,17 +324,6 @@ export default async function OverviewPage(): Promise<React.ReactNode> {
             </>
           )}
 
-          {user.role === "executive" && (
-            <>
-              <SummaryStatsCard stats={summaryStats} />
-              <BookingPulseCard pulse={operationsSnapshot?.bookingPulse ?? null} />
-              <RecentActivityCard activity={recentActivity} />
-              <UpcomingEventsCard
-                events={upcomingEvents}
-                userRole={user.role}
-              />
-            </>
-          )}
         </div>
       </div>
     </div>

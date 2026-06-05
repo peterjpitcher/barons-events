@@ -40,7 +40,7 @@ const VENUE_B = "22222222-2222-4222-8222-222222222222";
 const EVENT_1 = "33333333-3333-4333-8333-333333333333";
 const ATTACHMENT_1 = "44444444-4444-4444-8444-444444444444";
 const MANAGER_ID = "55555555-5555-4555-8555-555555555555";
-const OTHER_OW_ID = "66666666-6666-4666-8666-666666666666";
+const OTHER_MANAGER_ID = "66666666-6666-4666-8666-666666666666";
 const ADMIN_ID = "77777777-7777-4777-8777-777777777777";
 const EXEC_ID = "88888888-8888-4888-8888-888888888888";
 
@@ -78,24 +78,24 @@ describe("requestAttachmentUploadAction — event parent authz", () => {
     adminClient.from.mockImplementation(() => ({ insert: vi.fn().mockResolvedValue({ error: null }) }));
   });
 
-  it("manager_responsible OW on approved event cannot upload", async () => {
-    getCurrentUserMock.mockResolvedValue({ id: MANAGER_ID, role: "office_worker", venueId: VENUE_A });
+  it("manager_responsible manager on approved event cannot upload", async () => {
+    getCurrentUserMock.mockResolvedValue({ id: MANAGER_ID, role: "manager", venueId: VENUE_A });
     loadEventEditContextMock.mockResolvedValue(approvedAtA);
     const result = await requestAttachmentUploadAction(validUploadInput());
     expect(result.success).toBe(false);
     if (!result.success) expect(result.message).toMatch(/permission/i);
   });
 
-  it("non-manager OW at same venue is rejected", async () => {
-    getCurrentUserMock.mockResolvedValue({ id: OTHER_OW_ID, role: "office_worker", venueId: VENUE_A });
+  it("non-manager manager at same venue is rejected", async () => {
+    getCurrentUserMock.mockResolvedValue({ id: OTHER_MANAGER_ID, role: "manager", venueId: VENUE_A });
     loadEventEditContextMock.mockResolvedValue(approvedAtA);
     const result = await requestAttachmentUploadAction(validUploadInput());
     expect(result.success).toBe(false);
     if (!result.success) expect(result.message).toMatch(/permission/i);
   });
 
-  it("OW at different venue is rejected", async () => {
-    getCurrentUserMock.mockResolvedValue({ id: OTHER_OW_ID, role: "office_worker", venueId: VENUE_B });
+  it("manager at different venue is rejected", async () => {
+    getCurrentUserMock.mockResolvedValue({ id: OTHER_MANAGER_ID, role: "manager", venueId: VENUE_B });
     loadEventEditContextMock.mockResolvedValue(approvedAtA);
     const result = await requestAttachmentUploadAction(validUploadInput());
     expect(result.success).toBe(false);
@@ -135,15 +135,15 @@ describe("requestAttachmentUploadAction — event parent authz", () => {
     expect(insertedRows[1]).not.toHaveProperty("display_name");
   });
 
-  it("executive cannot upload", async () => {
-    getCurrentUserMock.mockResolvedValue({ id: EXEC_ID, role: "executive", venueId: null });
+  it("unassigned manager cannot upload", async () => {
+    getCurrentUserMock.mockResolvedValue({ id: EXEC_ID, role: "manager", venueId: null });
     loadEventEditContextMock.mockResolvedValue(approvedAtA);
     const result = await requestAttachmentUploadAction(validUploadInput());
     expect(result.success).toBe(false);
   });
 
   it("missing event is rejected", async () => {
-    getCurrentUserMock.mockResolvedValue({ id: MANAGER_ID, role: "office_worker", venueId: VENUE_A });
+    getCurrentUserMock.mockResolvedValue({ id: MANAGER_ID, role: "manager", venueId: VENUE_A });
     loadEventEditContextMock.mockResolvedValue(null);
     const result = await requestAttachmentUploadAction(validUploadInput());
     expect(result.success).toBe(false);
@@ -151,7 +151,7 @@ describe("requestAttachmentUploadAction — event parent authz", () => {
   });
 
   it("planning_item parent follows venue-scoped planning authz", async () => {
-    getCurrentUserMock.mockResolvedValue({ id: OTHER_OW_ID, role: "office_worker", venueId: VENUE_A });
+    getCurrentUserMock.mockResolvedValue({ id: OTHER_MANAGER_ID, role: "manager", venueId: VENUE_A });
     adminClient.from.mockImplementation((table: string) => {
       if (table === "planning_items") {
         return {
@@ -175,8 +175,8 @@ describe("requestAttachmentUploadAction — event parent authz", () => {
     expect(loadEventEditContextMock).not.toHaveBeenCalled();
   });
 
-  it("planning_item parent rejects office workers from another venue", async () => {
-    getCurrentUserMock.mockResolvedValue({ id: OTHER_OW_ID, role: "office_worker", venueId: VENUE_B });
+  it("planning_item parent rejects managers from another venue", async () => {
+    getCurrentUserMock.mockResolvedValue({ id: OTHER_MANAGER_ID, role: "manager", venueId: VENUE_B });
     adminClient.from.mockImplementation((table: string) => {
       if (table === "planning_items") {
         return {
@@ -230,7 +230,7 @@ describe("getAttachmentUrlAction — parent visibility authz", () => {
                   size_bytes: 1234,
                   upload_status: "uploaded",
                   deleted_at: null,
-                  uploaded_by: OTHER_OW_ID,
+                  uploaded_by: OTHER_MANAGER_ID,
                   event_id: row.event_id,
                   planning_item_id: row.planning_item_id ?? null,
                   planning_task_id: row.planning_task_id ?? null
@@ -271,8 +271,8 @@ describe("getAttachmentUrlAction — parent visibility authz", () => {
     });
   }
 
-  it("allows a same-venue office worker to download an event attachment", async () => {
-    getCurrentUserMock.mockResolvedValue({ id: OTHER_OW_ID, role: "office_worker", venueId: VENUE_A });
+  it("allows a same-venue manager to download an event attachment", async () => {
+    getCurrentUserMock.mockResolvedValue({ id: OTHER_MANAGER_ID, role: "manager", venueId: VENUE_A });
     setupDownload({ event_id: EVENT_1, venueId: VENUE_A });
 
     const result = await getAttachmentUrlAction({ attachmentId: ATTACHMENT_1 });
@@ -280,8 +280,8 @@ describe("getAttachmentUrlAction — parent visibility authz", () => {
     expect(result.success).toBe(true);
   });
 
-  it("allows an office worker from another venue to download an event attachment", async () => {
-    getCurrentUserMock.mockResolvedValue({ id: OTHER_OW_ID, role: "office_worker", venueId: VENUE_B });
+  it("allows an manager from another venue to download an event attachment", async () => {
+    getCurrentUserMock.mockResolvedValue({ id: OTHER_MANAGER_ID, role: "manager", venueId: VENUE_B });
     setupDownload({ event_id: EVENT_1, venueId: VENUE_A });
 
     const result = await getAttachmentUrlAction({ attachmentId: ATTACHMENT_1 });
@@ -337,17 +337,17 @@ describe("deleteAttachmentAction — event parent authz", () => {
     return f;
   }
 
-  it("manager_responsible OW cannot delete event-parented attachment", async () => {
-    getCurrentUserMock.mockResolvedValue({ id: MANAGER_ID, role: "office_worker", venueId: VENUE_A });
-    setupAttachmentRow({ event_id: EVENT_1, uploaded_by: OTHER_OW_ID });
+  it("manager_responsible manager cannot delete event-parented attachment", async () => {
+    getCurrentUserMock.mockResolvedValue({ id: MANAGER_ID, role: "manager", venueId: VENUE_A });
+    setupAttachmentRow({ event_id: EVENT_1, uploaded_by: OTHER_MANAGER_ID });
     loadEventEditContextMock.mockResolvedValue(approvedAtA);
     const result = await deleteAttachmentAction(undefined, fd(ATTACHMENT_1));
     expect(result.success).toBe(false);
   });
 
   it("uploader who is not manager cannot delete event-parented attachment", async () => {
-    getCurrentUserMock.mockResolvedValue({ id: OTHER_OW_ID, role: "office_worker", venueId: VENUE_A });
-    setupAttachmentRow({ event_id: EVENT_1, uploaded_by: OTHER_OW_ID });
+    getCurrentUserMock.mockResolvedValue({ id: OTHER_MANAGER_ID, role: "manager", venueId: VENUE_A });
+    setupAttachmentRow({ event_id: EVENT_1, uploaded_by: OTHER_MANAGER_ID });
     loadEventEditContextMock.mockResolvedValue(approvedAtA);
     const result = await deleteAttachmentAction(undefined, fd(ATTACHMENT_1));
     expect(result.success).toBe(false);
@@ -355,23 +355,23 @@ describe("deleteAttachmentAction — event parent authz", () => {
 
   it("admin can always delete", async () => {
     getCurrentUserMock.mockResolvedValue({ id: ADMIN_ID, role: "administrator", venueId: null });
-    setupAttachmentRow({ event_id: EVENT_1, uploaded_by: OTHER_OW_ID });
+    setupAttachmentRow({ event_id: EVENT_1, uploaded_by: OTHER_MANAGER_ID });
     loadEventEditContextMock.mockResolvedValue(approvedAtA);
     const result = await deleteAttachmentAction(undefined, fd(ATTACHMENT_1));
     expect(result.success).toBe(true);
   });
 
   it("planning-item-parented attachment follows venue-scoped planning authz", async () => {
-    getCurrentUserMock.mockResolvedValue({ id: OTHER_OW_ID, role: "office_worker", venueId: VENUE_A });
-    setupAttachmentRow({ event_id: null, planning_item_id: "pi-1", uploaded_by: OTHER_OW_ID });
+    getCurrentUserMock.mockResolvedValue({ id: OTHER_MANAGER_ID, role: "manager", venueId: VENUE_A });
+    setupAttachmentRow({ event_id: null, planning_item_id: "pi-1", uploaded_by: OTHER_MANAGER_ID });
     const result = await deleteAttachmentAction(undefined, fd(ATTACHMENT_1));
     expect(result.success).toBe(true);
     expect(loadEventEditContextMock).not.toHaveBeenCalled();
   });
 
-  it("planning-item-parented attachment rejects office workers from another venue", async () => {
-    getCurrentUserMock.mockResolvedValue({ id: OTHER_OW_ID, role: "office_worker", venueId: VENUE_B });
-    setupAttachmentRow({ event_id: null, planning_item_id: "pi-1", uploaded_by: OTHER_OW_ID, planningVenueId: VENUE_A });
+  it("planning-item-parented attachment rejects managers from another venue", async () => {
+    getCurrentUserMock.mockResolvedValue({ id: OTHER_MANAGER_ID, role: "manager", venueId: VENUE_B });
+    setupAttachmentRow({ event_id: null, planning_item_id: "pi-1", uploaded_by: OTHER_MANAGER_ID, planningVenueId: VENUE_A });
     const result = await deleteAttachmentAction(undefined, fd(ATTACHMENT_1));
     expect(result.success).toBe(false);
   });
@@ -400,7 +400,7 @@ describe("renameAttachmentAction — attachment filename persistence", () => {
             eq: vi.fn().mockReturnValue({
               maybeSingle: vi.fn().mockResolvedValue({
                 data: {
-                  uploaded_by: OTHER_OW_ID,
+                  uploaded_by: OTHER_MANAGER_ID,
                   event_id: EVENT_1,
                   planning_item_id: null,
                   planning_task_id: null,
@@ -444,7 +444,7 @@ describe("renameAttachmentAction — attachment filename persistence", () => {
                     }
                   : {
                       data: {
-                        uploaded_by: OTHER_OW_ID,
+                        uploaded_by: OTHER_MANAGER_ID,
                         event_id: EVENT_1,
                         planning_item_id: null,
                         planning_task_id: null,
@@ -523,7 +523,7 @@ describe("attachment version upload — schema compatibility", () => {
                 maybeSingle: vi.fn().mockResolvedValue({
                   data: {
                     id: ATTACHMENT_1,
-                    uploaded_by: OTHER_OW_ID,
+                    uploaded_by: OTHER_MANAGER_ID,
                     event_id: EVENT_1,
                     planning_item_id: null,
                     planning_task_id: null,
@@ -605,7 +605,7 @@ describe("attachment version upload — schema compatibility", () => {
                 maybeSingle: vi.fn().mockResolvedValue({
                   data: {
                     id: ATTACHMENT_1,
-                    uploaded_by: OTHER_OW_ID,
+                    uploaded_by: OTHER_MANAGER_ID,
                     event_id: EVENT_1,
                     planning_item_id: null,
                     planning_task_id: null
@@ -669,7 +669,7 @@ describe("attachment version upload — schema compatibility", () => {
                 maybeSingle: vi.fn().mockResolvedValue({
                   data: {
                     id: ATTACHMENT_1,
-                    uploaded_by: OTHER_OW_ID,
+                    uploaded_by: OTHER_MANAGER_ID,
                     event_id: EVENT_1,
                     planning_item_id: null,
                     planning_task_id: null

@@ -41,7 +41,7 @@ function renderCreateForm(props: Partial<Parameters<typeof EventForm>[0]> = {}) 
       venues={venues}
       artists={[]}
       eventTypes={["Live Music", "Quiz Night"]}
-      role="office_worker"
+      role="manager"
       userVenueId={venues[0].id}
       users={[]}
       {...props}

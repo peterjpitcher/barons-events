@@ -15,7 +15,7 @@ type ProposeEventFormProps = {
   /**
    * Optional pre-selected venue id. When provided and matching a venue in
    * `venues`, the form opens with that venue already ticked. Used to give
-   * office workers a sensible default without restricting the picker.
+   * managers a sensible default without restricting the picker.
    */
   defaultVenueId?: string | null;
 };

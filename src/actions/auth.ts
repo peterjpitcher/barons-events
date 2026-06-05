@@ -27,7 +27,7 @@ const credentialsSchema = z.object({
   password: z.string().min(8, { message: "Password must be at least 8 characters" })
 });
 
-const APP_ROLES = new Set(["administrator", "office_worker", "executive"]);
+const APP_ROLES = new Set(["administrator", "manager", "office_worker"]);
 
 const emailOnlySchema = z.object({
   email: z.string().email({ message: "Enter a valid email" })

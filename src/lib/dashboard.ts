@@ -143,15 +143,13 @@ export async function getDashboardTodoItems(
     errors.push("revision");
   }
 
-  // Source 5: Debriefs needed (not for executives)
-  if (user.role !== "executive") {
-    try {
-      const debriefItems = await fetchDebriefTodos(user, today);
-      items.push(...debriefItems);
-    } catch (error) {
-      console.error("Dashboard todos: failed to load debrief tasks", error);
-      errors.push("debrief");
-    }
+  // Source 5: Debriefs needed.
+  try {
+    const debriefItems = await fetchDebriefTodos(user, today);
+    items.push(...debriefItems);
+  } catch (error) {
+    console.error("Dashboard todos: failed to load debrief tasks", error);
+    errors.push("debrief");
   }
 
   // Sort: overdue first, then due_soon, then later. Within each group, dueDate asc.
@@ -781,9 +779,9 @@ export async function getDebriefsDue(user: AppUser): Promise<Array<{
 }
 
 /**
- * Executive summary stats for the dashboard.
+ * Summary stats for dashboard reporting.
  */
-export async function getExecutiveSummaryStats(): Promise<{
+export async function getDashboardSummaryStats(): Promise<{
   eventsThisMonth: number;
   bookingsThisMonth: number;
   debriefCompletionPercent: number;
@@ -819,7 +817,7 @@ export async function getExecutiveSummaryStats(): Promise<{
 }
 
 /**
- * Recent activity feed for executives/admins. Uses service-role client.
+ * Recent activity feed for administrators. Uses service-role client.
  * ONLY returns safe, human-authored audit actions. Strips ALL meta fields.
  */
 export async function getRecentActivity(limit = 10): Promise<Array<{

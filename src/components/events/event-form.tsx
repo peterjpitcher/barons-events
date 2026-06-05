@@ -463,7 +463,7 @@ export function EventForm({
     toast.error(artistCreateState.message ?? "Could not add artist.");
   }, [artistCreateState]);
 
-  const canChooseVenue = role === "administrator" || (mode === "create" && role === "office_worker");
+  const canChooseVenue = role === "administrator" || (mode === "create" && role === "manager");
   const initialVenueDefaults = deriveEventFormVenueDefaults({
     mode,
     initialVenueId,
@@ -728,7 +728,7 @@ export function EventForm({
       // No secondary for approved or completed — primary handles it
       return eventStatus !== "approved" && eventStatus !== "completed";
     }
-    if (role === "office_worker") {
+    if (role === "manager") {
       // Can only submit drafts or revisions
       return eventStatus === "draft" || eventStatus === "needs_revisions";
     }

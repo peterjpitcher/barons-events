@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/ui/design-primitives";
 
 export const metadata = {
   title: "Users · BaronsHub 1.1",
-  description: "Manage workspace access for administrators and office workers."
+  description: "Manage workspace access for administrators and managers."
 };
 
 export default async function UsersPage() {
@@ -54,7 +54,7 @@ export default async function UsersPage() {
               </p>
             </div>
             <div className="p-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-subtle">Office Worker</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-subtle">Manager</p>
               <p className="mt-2 text-sm">
                 Read access across the workspace. Event creation, event edits, and Operations/Manage edits require an
                 administrator.

@@ -115,7 +115,7 @@ export function DeleteDialog({ open, onClose, user }: DeleteDialogProps): React.
                 <option value="">Select a user...</option>
                 {targets.map((t) => (
                   <option key={t.id} value={t.id}>
-                    {t.full_name ?? t.email} ({t.role === "administrator" ? "Administrator" : "Office Worker"})
+                    {t.full_name ?? t.email} ({t.role === "administrator" ? "Administrator" : "Manager"})
                   </option>
                 ))}
               </Select>
