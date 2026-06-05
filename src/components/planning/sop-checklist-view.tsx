@@ -189,7 +189,7 @@ export function SopChecklistView({ tasks, users, itemId, currentUserId, onChange
               {section.completedCount}/{section.totalCount} complete
             </span>
           </div>
-          <div className="space-y-1">
+          <div className="divide-y divide-[var(--hair)]">
             {section.tasks.map((task) => (
               <SopTaskRow
                 key={task.id}

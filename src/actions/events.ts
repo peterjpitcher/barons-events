@@ -415,6 +415,47 @@ function buildWebsiteCopyUpdatePayload(generated: GeneratedWebsiteCopy): Record<
   };
 }
 
+async function ensureUniqueWebsiteCopySlug(seoSlug: string | null | undefined, eventId: string): Promise<string | null> {
+  const base = typeof seoSlug === "string" ? seoSlug.trim() : "";
+  if (!base) return null;
+
+  const db = createSupabaseAdminClient();
+  async function isAvailable(candidate: string): Promise<boolean> {
+    const { count, error } = await db
+      .from("events")
+      .select("id", { count: "exact", head: true })
+      .eq("seo_slug", candidate)
+      .neq("id", eventId);
+
+    if (error) {
+      throw error;
+    }
+    return !count;
+  }
+
+  if (await isAvailable(base)) {
+    return base;
+  }
+
+  for (let suffix = 2; suffix <= 99; suffix += 1) {
+    const candidate = `${base}-${suffix}`;
+    if (await isAvailable(candidate)) {
+      return candidate;
+    }
+  }
+
+  return `${base}-${Date.now()}`;
+}
+
+async function buildUniqueWebsiteCopyUpdatePayload(
+  generated: GeneratedWebsiteCopy,
+  eventId: string
+): Promise<Record<string, unknown>> {
+  const payload = buildWebsiteCopyUpdatePayload(generated);
+  payload.seo_slug = await ensureUniqueWebsiteCopySlug(generated.seoSlug, eventId);
+  return payload;
+}
+
 function buildWebsiteCopyInput(record: WebsiteCopyEventRecord, formData?: FormData) {
   const venueSpaces =
     typeof record.venue_space === "string"
@@ -702,7 +743,9 @@ async function autoApproveEvent(params: {
     throw new Error("Event not found.");
   }
   const generatedWebsiteCopy = await generateWebsiteCopyFromEventRecord(eventBeforeApproval);
-  const websiteCopyPayload = generatedWebsiteCopy ? buildWebsiteCopyUpdatePayload(generatedWebsiteCopy) : null;
+  const websiteCopyPayload = generatedWebsiteCopy
+    ? await buildUniqueWebsiteCopyUpdatePayload(generatedWebsiteCopy, params.eventId)
+    : null;
   if (!generatedWebsiteCopy) {
     console.warn("Auto-approval continuing without AI website copy.");
     warnings.push("Website copy could not be generated automatically");
@@ -1875,7 +1918,7 @@ export async function reviewerDecisionAction(
             message: "Could not generate website copy. Approval was not saved. Check the AI service credentials and try again."
           };
         }
-        websiteCopyPayload = buildWebsiteCopyUpdatePayload(generatedWebsiteCopy);
+        websiteCopyPayload = await buildUniqueWebsiteCopyUpdatePayload(generatedWebsiteCopy, parsedId.data);
       }
     }
 
@@ -2078,7 +2121,7 @@ export async function generateWebsiteCopyAction(
     await updateEventWithFallback({
       supabase,
       eventId: parsedEventId.data,
-      payload: buildWebsiteCopyUpdatePayload(generated),
+      payload: await buildUniqueWebsiteCopyUpdatePayload(generated, parsedEventId.data),
       contextLabel: "website copy"
     });
     await recordWebsiteCopyGeneratedAudit({ eventId: parsedEventId.data, actorId: user.id });

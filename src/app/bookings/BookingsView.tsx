@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { BookingGroup, BookingRow } from "@/lib/all-bookings";
 import type { BookingStatus } from "@/lib/types";
+import { formatCurrencyPence } from "@/lib/utils/format";
 
 interface Props {
   groups: BookingGroup[];
@@ -48,6 +49,30 @@ function formatLondonDate(value: Date | string): string {
 
 function formatLondonDateTime(value: Date | string): string {
   return londonDateTimeFormatter.format(toDate(value));
+}
+
+function summarisePaymentValues(bookings: BookingRow[]): Pick<BookingGroup, "totalPaymentPence" | "paymentCurrency"> {
+  return bookings.reduce(
+    (summary, booking) => {
+      if (booking.paymentAmountPence == null) return summary;
+      return {
+        totalPaymentPence: summary.totalPaymentPence + booking.paymentAmountPence,
+        paymentCurrency: summary.paymentCurrency ?? booking.paymentCurrency ?? "gbp",
+      };
+    },
+    { totalPaymentPence: 0, paymentCurrency: null as string | null },
+  );
+}
+
+function formatBookingTotals({
+  totalBookings,
+  totalTickets,
+  totalPaymentPence,
+  paymentCurrency,
+}: Pick<BookingGroup, "totalBookings" | "totalTickets" | "totalPaymentPence" | "paymentCurrency">): string {
+  const totals = `${totalBookings} booking${totalBookings !== 1 ? "s" : ""} · ${totalTickets} ticket${totalTickets !== 1 ? "s" : ""}`;
+  if (totalPaymentPence <= 0) return totals;
+  return `${totals} · ${formatCurrencyPence(totalPaymentPence, paymentCurrency ?? "gbp")} payments`;
 }
 
 export function isBookingGroupPast(group: Pick<BookingGroup, "eventStartAt" | "eventEndAt">, now = new Date()): boolean {
@@ -96,6 +121,11 @@ function PaymentBadge({ booking }: { booking: BookingRow }) {
         : "bg-[var(--burgundy-tint)] text-[var(--burgundy)]";
   return (
     <div className="space-y-1">
+      {booking.paymentAmountPence != null ? (
+        <p className="text-sm font-semibold text-[var(--ink)]">
+          {formatCurrencyPence(booking.paymentAmountPence, booking.paymentCurrency ?? "gbp")}
+        </p>
+      ) : null}
       <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${classes}`}>
         {booking.paymentStatus.replace(/_/g, " ")}
       </span>
@@ -150,12 +180,15 @@ export function BookingsView({ groups }: Props) {
         }
 
         if (bookings.length === 0) return null;
+        const paymentSummary = summarisePaymentValues(bookings);
 
         return {
           ...group,
           bookings,
           totalBookings: bookings.length,
           totalTickets: bookings.reduce((s, b) => s + b.ticketCount, 0),
+          totalPaymentPence: paymentSummary.totalPaymentPence,
+          paymentCurrency: paymentSummary.paymentCurrency,
         };
       })
       .filter((g): g is BookingGroup => g !== null);
@@ -172,6 +205,8 @@ export function BookingsView({ groups }: Props) {
 
   const summaryBookings = filteredGroups.reduce((s, g) => s + g.totalBookings, 0);
   const summaryTickets  = filteredGroups.reduce((s, g) => s + g.totalTickets, 0);
+  const summaryPaymentPence = filteredGroups.reduce((s, g) => s + g.totalPaymentPence, 0);
+  const summaryPaymentCurrency = filteredGroups.find((group) => group.totalPaymentPence > 0)?.paymentCurrency ?? "gbp";
 
   return (
     <div className="space-y-4">
@@ -258,7 +293,12 @@ export function BookingsView({ groups }: Props) {
         </div>
 
         <span className="ml-auto whitespace-nowrap font-brand-mono text-[0.625rem] uppercase tracking-[0.05em] text-[var(--ink-soft)]">
-          {summaryBookings} booking{summaryBookings !== 1 ? "s" : ""} · {summaryTickets} ticket{summaryTickets !== 1 ? "s" : ""}
+          {formatBookingTotals({
+            totalBookings: summaryBookings,
+            totalTickets: summaryTickets,
+            totalPaymentPence: summaryPaymentPence,
+            paymentCurrency: summaryPaymentCurrency,
+          })}
         </span>
       </div>
 
@@ -279,7 +319,7 @@ export function BookingsView({ groups }: Props) {
                   {group.venueName ? ` · ${group.venueName}` : ""}
                 </span>
                 <span className="font-brand-mono text-[0.625rem] uppercase tracking-[0.04em] text-[var(--ink-soft)] sm:ml-auto">
-                  {group.totalBookings} booking{group.totalBookings !== 1 ? "s" : ""} · {group.totalTickets} ticket{group.totalTickets !== 1 ? "s" : ""}
+                  {formatBookingTotals(group)}
                 </span>
               </div>
 
@@ -327,12 +367,12 @@ export function BookingsView({ groups }: Props) {
                 <table className="data-table w-full table-fixed">
                   <colgroup>
                     <col className="w-[16%]" />
-                    <col className="w-[16%]" />
-                    <col className="w-[30%]" />
+                    <col className="w-[15%]" />
+                    <col className="w-[28%]" />
                     <col className="w-[8%]" />
                     <col className="w-[12%]" />
                     <col className="w-[9%]" />
-                    <col className="w-[9%]" />
+                    <col className="w-[12%]" />
                   </colgroup>
                   <thead>
                     <tr>

@@ -1,10 +1,17 @@
 import "server-only";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import {
+  buildAuditTrailAccordionEntries,
+  formatAuditAction,
+  toAuditMetaRecord,
+  type AuditTrailFormattingEntry
+} from "@/components/audit/audit-formatting";
 import { addDays, daysBetween } from "@/lib/planning/utils";
 import { isBookingFormat, isPaidBookingFormat } from "@/lib/booking-format";
 import { canReviewEvents } from "@/lib/roles";
 import type { AppUser } from "@/lib/types";
 import type { EventSummary } from "@/lib/events";
+import type { AuditTrailAccordionEntry } from "@/components/audit/audit-trail-accordion";
 import type { TodoItem, TodoSource, TodoUrgency } from "@/components/todos/todo-item-types";
 
 type Tone = "neutral" | "info" | "success" | "warning" | "danger";
@@ -816,75 +823,358 @@ export async function getDashboardSummaryStats(): Promise<{
   };
 }
 
-/**
- * Recent activity feed for administrators. Uses service-role client.
- * ONLY returns safe, human-authored audit actions. Strips ALL meta fields.
- */
-export async function getRecentActivity(limit = 10): Promise<Array<{
+type ActivityAuditRow = {
   id: string;
   action: string;
-  actorName: string;
-  timestamp: string;
-}>> {
+  actor_id: string | null;
+  created_at: string;
+  entity: string;
+  entity_id: string;
+  meta: unknown;
+};
+
+type ActivityContext = {
+  label: string;
+  typeLabel: "Event" | "Planning";
+};
+
+type ActivityResolvedRow = ActivityAuditRow & {
+  meta: Record<string, unknown>;
+  context: ActivityContext;
+};
+
+export type ActivityFeedFilters = {
+  type?: "all" | "event" | "planning";
+  actorId?: string;
+  action?: string;
+  q?: string;
+  from?: string;
+  to?: string;
+  limit?: number;
+};
+
+export type ActivityFilterOption = {
+  value: string;
+  label: string;
+};
+
+export type ActivityFeedResult = {
+  entries: AuditTrailAccordionEntry[];
+  filterOptions: {
+    actors: ActivityFilterOption[];
+    actions: ActivityFilterOption[];
+  };
+  matchingCount: number;
+};
+
+const activityAuditEntities = ["event", "planning", "planning_task", "attachment", "booking"] as const;
+const excludedActivityAuditActions = new Set([
+  "planning.inspiration_dismissed",
+  "planning.inspiration_refreshed"
+]);
+
+function readMetaString(meta: Record<string, unknown>, key: string): string | null {
+  const value = meta[key];
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function isUuidLike(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function parseActivityDate(value: string | undefined, edge: "start" | "end"): string | null {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const suffix = edge === "start" ? "T00:00:00.000Z" : "T23:59:59.999Z";
+  const parsed = new Date(`${value}${suffix}`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+/**
+ * Operational audit feed for administrators. Uses service-role client and
+ * keeps only rows that can be tied back to an event or planning item.
+ */
+export async function getActivityFeed(filters: ActivityFeedFilters = {}): Promise<ActivityFeedResult> {
   const db = createSupabaseAdminClient();
+  const limit = Math.max(1, Math.min(filters.limit ?? 100, 250));
+  const sourceLimit = Math.max(limit * 5, 250);
+  const fromIso = parseActivityDate(filters.from, "start");
+  const toIso = parseActivityDate(filters.to, "end");
 
-  const safeActions = [
-    "event.approved",
-    "event.rejected",
-    "event.cancelled",
-    "event.completed",
-    "event.submitted",
-    "event.debrief_updated",
-  ];
-
-  const { data, error } = await db
+  let query = db
     .from("audit_log")
-    .select("id, action, actor_id, created_at")
-    .in("action", safeActions)
-    .not("actor_id", "is", null)
+    .select("id, action, actor_id, created_at, entity, entity_id, meta")
+    .in("entity", [...activityAuditEntities]);
+
+  if (fromIso) query = query.gte("created_at", fromIso);
+  if (toIso) query = query.lte("created_at", toIso);
+
+  const { data, error } = await query
     .order("created_at", { ascending: false })
-    .limit(limit);
+    .limit(sourceLimit);
 
   if (error) throw error;
 
-  type ActivityAuditRow = {
-    id: string;
-    action: string;
-    actor_id: string | null;
-    created_at: string;
-  };
-  type HumanActivityAuditRow = ActivityAuditRow & { actor_id: string };
-  const rows = ((data ?? []) as ActivityAuditRow[]).filter(
-    (row): row is HumanActivityAuditRow => Boolean(row.actor_id)
-  );
+  const rows = ((data ?? []) as ActivityAuditRow[])
+    .filter((row) => !excludedActivityAuditActions.has(row.action))
+    .map((row) => ({
+      ...row,
+      meta: toAuditMetaRecord(row.meta)
+    }));
 
-  // Batch-fetch actor names (strip sensitive data -- only return display name)
-  const actorIds = [...new Set(rows.map((r) => r.actor_id))];
-  const actorMap = new Map<string, string>();
+  const eventIds = new Set<string>();
+  const planningItemIds = new Set<string>();
+  const planningTaskIds = new Set<string>();
+  const attachmentIds = new Set<string>();
+  const bookingIds = new Set<string>();
+  const actorIds = new Set<string>();
 
-  if (actorIds.length > 0) {
-    const { data: users } = await db
-      .from("users")
-      .select("id, full_name")
-      .in("id", actorIds);
-    for (const u of users ?? []) {
-      actorMap.set(u.id, u.full_name ?? "Unknown");
+  for (const row of rows) {
+    if (row.actor_id) actorIds.add(row.actor_id);
+    const meta = row.meta;
+    for (const key of ["assigneeId", "previousAssigneeId", "assignee_id", "previous_assignee_id"]) {
+      const id = readMetaString(meta, key);
+      if (id) actorIds.add(id);
+    }
+
+    const metaEventId = readMetaString(meta, "event_id");
+    const metaPlanningItemId = readMetaString(meta, "planning_item_id");
+    const metaPlanningTaskId = readMetaString(meta, "planning_task_id");
+    if (metaEventId) eventIds.add(metaEventId);
+    if (metaPlanningItemId) planningItemIds.add(metaPlanningItemId);
+    if (metaPlanningTaskId) planningTaskIds.add(metaPlanningTaskId);
+
+    if (row.entity === "event") {
+      eventIds.add(row.entity_id);
+    } else if (row.entity === "planning") {
+      planningItemIds.add(row.entity_id);
+      planningTaskIds.add(row.entity_id);
+    } else if (row.entity === "planning_task") {
+      planningTaskIds.add(row.entity_id);
+    } else if (row.entity === "attachment") {
+      attachmentIds.add(row.entity_id);
+    } else if (row.entity === "booking") {
+      bookingIds.add(row.entity_id);
     }
   }
 
-  const actionLabels: Record<string, string> = {
-    "event.approved": "approved an event",
-    "event.rejected": "rejected an event",
-    "event.cancelled": "cancelled an event",
-    "event.completed": "completed an event",
-    "event.submitted": "submitted an event",
-    "event.debrief_updated": "submitted a debrief",
-  };
+  async function fetchRowsByIds<T extends { id: string }>(
+    table: string,
+    select: string,
+    ids: Set<string>
+  ): Promise<T[]> {
+    const values = [...ids].filter((id) => id && isUuidLike(id));
+    if (values.length === 0) return [];
 
-  return rows.map((row) => ({
-    id: row.id,
-    action: actionLabels[row.action] ?? row.action,
-    actorName: actorMap.get(row.actor_id) ?? "Unknown",
-    timestamp: row.created_at,
-  }));
+    const { data: result, error: fetchError } = await (db as any)
+      .from(table)
+      .select(select)
+      .in("id", values);
+    if (fetchError) throw fetchError;
+    return (result ?? []) as T[];
+  }
+
+  const attachments = await fetchRowsByIds<{
+    id: string;
+    event_id: string | null;
+    planning_item_id: string | null;
+    planning_task_id: string | null;
+  }>("attachments", "id, event_id, planning_item_id, planning_task_id", attachmentIds);
+  const attachmentMap = new Map(attachments.map((attachment) => [attachment.id, attachment]));
+  for (const attachment of attachments) {
+    if (attachment.event_id) eventIds.add(attachment.event_id);
+    if (attachment.planning_item_id) planningItemIds.add(attachment.planning_item_id);
+    if (attachment.planning_task_id) planningTaskIds.add(attachment.planning_task_id);
+  }
+
+  const bookings = await fetchRowsByIds<{ id: string; event_id: string | null }>(
+    "event_bookings",
+    "id, event_id",
+    bookingIds
+  );
+  const bookingMap = new Map(bookings.map((booking) => [booking.id, booking]));
+  for (const booking of bookings) {
+    if (booking.event_id) eventIds.add(booking.event_id);
+  }
+
+  const planningTasks = await fetchRowsByIds<{ id: string; title: string; planning_item_id: string }>(
+    "planning_tasks",
+    "id, title, planning_item_id",
+    planningTaskIds
+  );
+  const planningTaskMap = new Map(planningTasks.map((task) => [task.id, task]));
+  for (const task of planningTasks) {
+    planningItemIds.add(task.planning_item_id);
+  }
+
+  const planningItems = await fetchRowsByIds<{ id: string; title: string; event_id: string | null }>(
+    "planning_items",
+    "id, title, event_id",
+    planningItemIds
+  );
+  const planningItemMap = new Map(planningItems.map((item) => [item.id, item]));
+  for (const item of planningItems) {
+    if (item.event_id) eventIds.add(item.event_id);
+  }
+
+  const events = await fetchRowsByIds<{ id: string; title: string; public_title: string | null }>(
+    "events",
+    "id, title, public_title",
+    eventIds
+  );
+  const eventMap = new Map(events.map((event) => [event.id, event]));
+
+  const actorMap = new Map<string, string>();
+
+  const actorIdValues = [...actorIds].filter(isUuidLike);
+  if (actorIdValues.length > 0) {
+    const { data: users } = await (db as any)
+      .from("users")
+      .select("id, full_name, email")
+      .in("id", actorIdValues);
+    for (const user of (users ?? []) as Array<{ id: string; full_name: string | null; email: string | null }>) {
+      actorMap.set(user.id, user.full_name ?? user.email ?? "Unknown");
+    }
+  }
+
+  function eventContext(eventId: string | null): ActivityContext | null {
+    if (!eventId) return null;
+    const event = eventMap.get(eventId);
+    if (!event) return null;
+    return { label: event.public_title ?? event.title, typeLabel: "Event" };
+  }
+
+  function planningContext(planningItemId: string | null): ActivityContext | null {
+    if (!planningItemId) return null;
+    const planningItem = planningItemMap.get(planningItemId);
+    if (!planningItem) return null;
+    return { label: planningItem.title, typeLabel: "Planning" };
+  }
+
+  function planningTaskContext(taskId: string | null): ActivityContext | null {
+    if (!taskId) return null;
+    const task = planningTaskMap.get(taskId);
+    return task ? planningContext(task.planning_item_id) : null;
+  }
+
+  function resolveActivityContext(row: ActivityAuditRow & { meta: Record<string, unknown> }): ActivityContext | null {
+    const meta = row.meta;
+    const metaTitle = readMetaString(meta, "title");
+    const fallbackContext = metaTitle ? { label: metaTitle, typeLabel: "Planning" as const } : null;
+
+    if (row.entity === "event") {
+      return eventContext(row.entity_id);
+    }
+
+    if (row.entity === "planning") {
+      return planningContext(row.entity_id) ?? planningTaskContext(row.entity_id) ?? fallbackContext;
+    }
+
+    if (row.entity === "planning_task") {
+      return planningTaskContext(row.entity_id) ?? fallbackContext;
+    }
+
+    if (row.entity === "attachment") {
+      const directContext =
+        eventContext(readMetaString(meta, "event_id")) ??
+        planningContext(readMetaString(meta, "planning_item_id")) ??
+        planningTaskContext(readMetaString(meta, "planning_task_id"));
+      if (directContext) return directContext;
+
+      const attachment = attachmentMap.get(row.entity_id);
+      return attachment
+        ? eventContext(attachment.event_id) ??
+            planningContext(attachment.planning_item_id) ??
+            planningTaskContext(attachment.planning_task_id)
+        : fallbackContext;
+    }
+
+    if (row.entity === "booking") {
+      return eventContext(readMetaString(meta, "event_id")) ?? eventContext(bookingMap.get(row.entity_id)?.event_id ?? null);
+    }
+
+    return fallbackContext;
+  }
+
+  const resolvedRows: ActivityResolvedRow[] = [];
+  for (const row of rows) {
+    const context = resolveActivityContext(row);
+    if (!context) continue;
+    resolvedRows.push({ ...row, context });
+  }
+
+  const actionOptions = Array.from(
+    new Map(
+      resolvedRows.map((row) => [
+        row.action,
+        { value: row.action, label: formatAuditAction(row.action, row.meta) }
+      ])
+    ).values()
+  ).sort((left, right) => left.label.localeCompare(right.label));
+
+  const actorOptions = Array.from(
+    new Map(
+      resolvedRows.map((row) => {
+        const value = row.actor_id ?? "system";
+        const label = row.actor_id ? actorMap.get(row.actor_id) ?? "Unknown user" : "System";
+        return [value, { value, label }];
+      })
+    ).values()
+  ).sort((left, right) => left.label.localeCompare(right.label));
+
+  const requestedType = filters.type === "event" || filters.type === "planning" ? filters.type : "all";
+  const queryText = filters.q?.trim().toLowerCase() ?? "";
+  const filteredRows = resolvedRows.filter((row) => {
+    if (requestedType !== "all" && row.context.typeLabel.toLowerCase() !== requestedType) return false;
+    if (filters.action && row.action !== filters.action) return false;
+    if (filters.actorId) {
+      if (filters.actorId === "system") {
+        if (row.actor_id !== null) return false;
+      } else if (row.actor_id !== filters.actorId) {
+        return false;
+      }
+    }
+    if (queryText) {
+      const actorName = row.actor_id ? actorMap.get(row.actor_id) ?? "Unknown user" : "System";
+      const haystack = [
+        row.context.typeLabel,
+        row.context.label,
+        formatAuditAction(row.action, row.meta),
+        row.action,
+        actorName,
+        JSON.stringify(row.meta)
+      ].join(" ").toLowerCase();
+      if (!haystack.includes(queryText)) return false;
+    }
+    return true;
+  });
+
+  const entries: AuditTrailFormattingEntry[] = filteredRows
+    .sort((left, right) => (right.created_at ?? "").localeCompare(left.created_at ?? ""))
+    .slice(0, limit)
+    .map((row) => ({
+      id: row.id,
+      action: row.action,
+      actor_id: row.actor_id,
+      created_at: row.created_at,
+      meta: row.meta,
+      contextLabel: row.context.label,
+      contextTypeLabel: row.context.typeLabel
+    }));
+
+  return {
+    entries: buildAuditTrailAccordionEntries(entries, actorMap),
+    filterOptions: {
+      actors: actorOptions,
+      actions: actionOptions
+    },
+    matchingCount: filteredRows.length
+  };
+}
+
+/**
+ * Recent activity feed for administrators. Uses service-role client.
+ */
+export async function getRecentActivity(limit = 25): Promise<AuditTrailAccordionEntry[]> {
+  const feed = await getActivityFeed({ limit });
+  return feed.entries;
 }

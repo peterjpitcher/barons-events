@@ -18,7 +18,7 @@ import { FieldError } from "@/components/ui/field-error";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
-import { Plus, Save } from "lucide-react";
+import { Lock, Plus, Save } from "lucide-react";
 
 type VenueRow = Database["public"]["Tables"]["venues"]["Row"];
 
@@ -47,6 +47,22 @@ function formatUserActivity(user: EnrichedUser): string {
 function venueLabelForUser(user: EnrichedUser, venues: VenueRow[]): string {
   if (!user.venue_id) return user.is_central_events_lead ? "Central events" : "All venues";
   return venues.find((venue) => venue.id === user.venue_id)?.name ?? "Linked venue";
+}
+
+function isProtectedUser(user: EnrichedUser): boolean {
+  return user.role === "administrator";
+}
+
+function ProtectedUserNote({ className = "" }: { className?: string }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1 text-xs text-[var(--ink-muted)] ${className}`}
+      title="Administrators cannot be deactivated or deleted"
+    >
+      <Lock className="h-3 w-3" aria-hidden="true" />
+      Protected
+    </span>
+  );
 }
 
 export function UsersManager({ users, venues, currentUserId, canEdit }: UsersManagerProps) {
@@ -228,6 +244,7 @@ function UserCardMobile({
   const activityLabel = formatUserActivity(user);
   const displayName = user.full_name ?? user.email;
   const venueLabel = venueLabelForUser(user, venues);
+  const protectedUser = isProtectedUser(user);
 
   return (
     <article className={`mobile-card space-y-4 ${isDeactivated ? "opacity-60" : ""}`}>
@@ -316,6 +333,7 @@ function UserCardMobile({
               icon={<Save className="h-4 w-4" aria-hidden="true" />}
               className="h-11 w-full"
             />
+            {protectedUser ? <ProtectedUserNote className="justify-self-start" /> : null}
           </form>
         </details>
       ) : null}
@@ -392,6 +410,7 @@ function UserDesktopRow({
 
   const isDeactivated = Boolean(user.deactivated_at);
   const activityLabel = formatUserActivity(user);
+  const protectedUser = isProtectedUser(user);
 
   return (
     <li
@@ -464,18 +483,25 @@ function UserDesktopRow({
           <span className="sr-only">Central events lead</span>
           <span aria-hidden="true">{user.is_central_events_lead ? "Lead" : "No"}</span>
         </label>
-        <div className="flex min-w-0 items-start justify-end gap-2 pt-0.5">
+        <div className="flex min-w-0 justify-end pt-0.5">
           {canEdit ? (
-            <>
-              <SubmitButton
-                label="Save changes"
-                pendingLabel="Saving..."
-                icon={<Save className="h-4 w-4" aria-hidden="true" />}
-                hideLabel
-                size="icon"
-              />
-              <UserActionsMenu user={user} currentUserId={currentUserId} />
-            </>
+            <div className="flex flex-col items-start gap-1">
+              <div className="flex items-center gap-2">
+                <SubmitButton
+                  label="Save changes"
+                  pendingLabel="Saving..."
+                  icon={<Save className="h-4 w-4" aria-hidden="true" />}
+                  hideLabel
+                  size="icon"
+                />
+                {protectedUser ? (
+                  <span className="h-8 w-8" aria-hidden="true" />
+                ) : (
+                  <UserActionsMenu user={user} currentUserId={currentUserId} />
+                )}
+              </div>
+              {protectedUser ? <ProtectedUserNote /> : null}
+            </div>
           ) : null}
         </div>
       </form>

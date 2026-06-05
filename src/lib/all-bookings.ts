@@ -26,6 +26,8 @@ export interface BookingGroup {
   bookings: BookingRow[];
   totalBookings: number;
   totalTickets: number;
+  totalPaymentPence: number;
+  paymentCurrency: string | null;
 }
 
 export interface ListAllBookingsOptions {
@@ -50,6 +52,7 @@ export async function listAllBookingsForUser(
     .from("event_bookings")
     .select(`
       id, first_name, last_name, mobile, customer_notes, ticket_count, status, payment_status, created_at,
+      payment_completed_at,
       payment_transaction:payment_transactions!event_bookings_payment_transaction_id_fkey(amount_pence, currency),
       events!inner (
         id, title, start_at, end_at, venue_id,
@@ -110,6 +113,8 @@ export async function listAllBookingsForUser(
         bookings:     [],
         totalBookings: 0,
         totalTickets:  0,
+        totalPaymentPence: 0,
+        paymentCurrency: null,
       });
     }
 
@@ -121,6 +126,8 @@ export async function listAllBookingsForUser(
     const paymentTransaction = Array.isArray(paymentRelation)
       ? (paymentRelation[0] as Record<string, unknown> | undefined) ?? null
       : (paymentRelation as Record<string, unknown> | null | undefined) ?? null;
+    const paymentAmountPence = typeof paymentTransaction?.amount_pence === "number" ? paymentTransaction.amount_pence : null;
+    const paymentCurrency = typeof paymentTransaction?.currency === "string" ? paymentTransaction.currency : null;
 
     group.bookings.push({
       id:          row.id as string,
@@ -131,8 +138,8 @@ export async function listAllBookingsForUser(
       ticketCount: tickets,
       status,
       paymentStatus: ((row.payment_status as BookingPaymentStatus | null) ?? "not_required"),
-      paymentAmountPence: typeof paymentTransaction?.amount_pence === "number" ? paymentTransaction.amount_pence : null,
-      paymentCurrency: typeof paymentTransaction?.currency === "string" ? paymentTransaction.currency : null,
+      paymentAmountPence,
+      paymentCurrency,
       paymentCompletedAt: row.payment_completed_at ? new Date(row.payment_completed_at as string) : null,
       createdAt:   new Date(row.created_at as string),
     });
@@ -141,6 +148,8 @@ export async function listAllBookingsForUser(
     if (status === "confirmed") {
       group.totalBookings++;
       group.totalTickets += tickets;
+      group.totalPaymentPence += paymentAmountPence ?? 0;
+      group.paymentCurrency ??= paymentCurrency;
     }
   }
 

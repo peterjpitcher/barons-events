@@ -170,7 +170,7 @@ export function SopTaskRow({ task, allTasks, users, onStatusChange, onChanged, p
   return (
     <div
       className={cn(
-        "rounded-[var(--radius-sm)] border border-[var(--hair)] bg-[var(--canvas-2)] px-2.5 py-1.5",
+        "py-2",
         rowOpacity
       )}
     >

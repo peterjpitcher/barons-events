@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   rpcMock: vi.fn(),
   selectInMock: vi.fn(),
   getUserMock: vi.fn(),
+  sendProposalSubmittedEmailOnceMock: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock("@/lib/supabase/admin", () => ({
@@ -27,10 +28,13 @@ vi.mock("@/lib/auth", () => ({
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
 }));
+vi.mock("@/lib/notifications", () => ({
+  sendProposalSubmittedEmailOnce: mocks.sendProposalSubmittedEmailOnceMock,
+}));
 
 import { proposeEventAction } from "../pre-event";
 
-const { rpcMock, selectInMock, getUserMock } = mocks;
+const { rpcMock, selectInMock, getUserMock, sendProposalSubmittedEmailOnceMock } = mocks;
 
 // Use valid UUID v4 strings — Zod's `.uuid()` enforces strict RFC 4122.
 const VENUE_A = "550e8400-e29b-41d4-a716-446655440000";
@@ -125,6 +129,35 @@ describe("proposeEventAction", () => {
         }),
       }),
     );
+    expect(sendProposalSubmittedEmailOnceMock).toHaveBeenCalledWith({
+      eventId: "e1",
+      idempotencyKey: expect.any(String),
+      userId: "admin-1",
+    });
+  });
+
+  it("uses the provided idempotency key when notifying the central events lead", async () => {
+    getUserMock.mockResolvedValue({ id: "admin-1", role: "administrator", venueId: null });
+    selectInMock.mockResolvedValue({
+      data: [{ id: VENUE_A }],
+      error: null,
+    });
+    rpcMock.mockResolvedValue({ data: { event_id: "550e8400-e29b-41d4-a716-446655440099" }, error: null });
+
+    const result = await proposeEventAction(undefined, fd({
+      idempotency_key: IDEMP_KEY,
+      title: "Test",
+      startAt: "2026-05-01T10:00:00Z",
+      notes: "Test",
+      venueIds: VENUE_A,
+    }));
+
+    expect(result.success).toBe(true);
+    expect(sendProposalSubmittedEmailOnceMock).toHaveBeenCalledWith({
+      eventId: "550e8400-e29b-41d4-a716-446655440099",
+      idempotencyKey: IDEMP_KEY,
+      userId: "admin-1",
+    });
   });
 
   it("normalises naive proposal times as London local time before calling the legacy RPC", async () => {
@@ -257,6 +290,11 @@ describe("proposeEventAction", () => {
       },
       p_idempotency_key: IDEMP_KEY,
       p_operation_id: OP_ID
+    });
+    expect(sendProposalSubmittedEmailOnceMock).toHaveBeenCalledWith({
+      eventId: "550e8400-e29b-41d4-a716-446655440099",
+      idempotencyKey: IDEMP_KEY,
+      userId: "admin-1",
     });
   });
 

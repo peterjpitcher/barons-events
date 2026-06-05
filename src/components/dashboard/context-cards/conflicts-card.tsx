@@ -1,5 +1,9 @@
 import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import {
+  dashboardCardHeaderClassName,
+  dashboardCardTitleClassName,
+} from "./dashboard-card-style";
 
 export type ConflictPair = {
   event: { id: string; title: string; venue_space: string; venue?: { name: string } | null };
@@ -23,8 +27,8 @@ export function ConflictsCard({ conflicts }: ConflictsCardProps): React.ReactNod
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-sm">Conflicts</CardTitle>
+      <CardHeader className={dashboardCardHeaderClassName}>
+        <CardTitle className={dashboardCardTitleClassName}>Conflicts</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
         {conflicts.length === 0 ? (

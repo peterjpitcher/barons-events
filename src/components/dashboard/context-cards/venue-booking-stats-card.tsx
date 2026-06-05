@@ -1,4 +1,8 @@
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import {
+  dashboardCardHeaderClassName,
+  dashboardCardTitleClassName,
+} from "./dashboard-card-style";
 
 type VenueBookingStatsCardProps = {
   stats: {
@@ -21,8 +25,8 @@ export function VenueBookingStatsCard({ stats }: VenueBookingStatsCardProps): Re
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-sm">Venue Bookings</CardTitle>
+      <CardHeader className={dashboardCardHeaderClassName}>
+        <CardTitle className={dashboardCardTitleClassName}>Venue Bookings</CardTitle>
       </CardHeader>
       <CardContent className="grid grid-cols-3 gap-2">
         <div className="text-center">

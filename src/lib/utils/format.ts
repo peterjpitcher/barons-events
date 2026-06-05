@@ -14,6 +14,22 @@ export function formatCurrency(value: number | null | undefined): string {
 }
 
 /**
+ * Format a pence value as currency (e.g. 1250 -> "£12.50").
+ * Returns "—" for null / undefined / non-finite values.
+ */
+export function formatCurrencyPence(
+  amountPence: number | null | undefined,
+  currency = "gbp",
+): string {
+  if (typeof amountPence !== "number" || !Number.isFinite(amountPence)) return "\u2014";
+  return new Intl.NumberFormat("en-GB", {
+    style: "currency",
+    currency: currency.toUpperCase(),
+    minimumFractionDigits: 2,
+  }).format(amountPence / 100);
+}
+
+/**
  * Format a number as a percentage string (e.g. "12.50%").
  * Returns "—" for null / undefined / NaN.
  *

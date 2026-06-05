@@ -3,6 +3,11 @@ import { CreditCard, Ticket } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { DashboardBookingPulse } from "@/lib/dashboard";
+import {
+  dashboardCardHeaderClassName,
+  dashboardCardHeaderIconClassName,
+  dashboardCardTitleClassName,
+} from "./dashboard-card-style";
 
 type BookingPulseCardProps = {
   pulse: DashboardBookingPulse | null;
@@ -29,12 +34,12 @@ export function BookingPulseCard({ pulse }: BookingPulseCardProps): React.ReactN
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+      <CardHeader className={`${dashboardCardHeaderClassName} flex flex-row items-center justify-between gap-3 space-y-0`}>
         <div className="flex items-center gap-2">
-          <Ticket className="h-4 w-4 text-[var(--navy)]" aria-hidden="true" />
-          <CardTitle className="text-sm">Bookings &amp; Sales</CardTitle>
+          <Ticket className={dashboardCardHeaderIconClassName} aria-hidden="true" />
+          <CardTitle className={dashboardCardTitleClassName}>Bookings &amp; Sales</CardTitle>
         </div>
-        <CreditCard className="h-4 w-4 text-subtle" aria-hidden="true" />
+        <CreditCard className={dashboardCardHeaderIconClassName} aria-hidden="true" />
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="grid grid-cols-3 gap-2">

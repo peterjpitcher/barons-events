@@ -65,6 +65,7 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Venues", href: "/venues", roles: ["administrator", "manager"] },
       { label: "Opening Hours", href: "/opening-hours", roles: ["administrator", "manager"] },
       { label: "Users", href: "/users", roles: ["administrator", "manager"] },
+      { label: "Activity", href: "/activity", roles: ["administrator"] },
       { label: "Settings", href: "/settings", roles: ["administrator", "manager"] }
     ]
   }

@@ -282,9 +282,13 @@ function TodoQueueRail({
         <button
           type="button"
           onClick={() => setOpen(true)}
+          tabIndex={expanded ? -1 : 0}
+          aria-hidden={expanded}
           className={cn(
-            "flex w-12 flex-none flex-col items-center justify-between gap-3 px-2 py-5 text-white transition-colors",
-            expanded ? "bg-[var(--navy)] hover:bg-[var(--navy-700)]" : "bg-[var(--mustard)] hover:bg-[var(--mustard-dark)]"
+            "flex flex-none flex-col items-center justify-between gap-3 overflow-hidden text-white transition-[width,opacity,background-color] duration-200",
+            expanded
+              ? "pointer-events-none w-0 px-0 py-5 opacity-0"
+              : "w-12 bg-[var(--mustard)] px-2 py-5 opacity-100 hover:bg-[var(--mustard-dark)]"
           )}
           aria-label={`Open MY TODO ITEMS - ${visibleItems.length} open`}
         >
@@ -307,11 +311,11 @@ function TodoQueueRail({
           aria-hidden={!expanded}
         >
           <div className="flex h-full flex-col">
-            <div className="flex items-center justify-between gap-3 border-b border-[var(--hair)] bg-[var(--navy)] px-5 py-3 text-white">
+            <div className="flex items-center justify-between gap-3 border-b border-[var(--hair)] bg-[var(--paper)] px-5 py-3 text-[var(--ink)]">
               <div className="flex min-w-0 items-center gap-2">
-                <ClipboardList className="h-4 w-4 text-white" aria-hidden="true" />
+                <ClipboardList className="h-4 w-4 text-subtle" aria-hidden="true" />
                 <h2 className="truncate text-sm font-semibold tracking-wider">MY TODO ITEMS</h2>
-                <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs font-semibold text-white">
+                <span className="rounded-full bg-[var(--canvas-2)] px-2 py-0.5 text-xs font-semibold text-[var(--ink-muted)]">
                   {visibleItems.length} open
                 </span>
               </div>
@@ -319,7 +323,7 @@ function TodoQueueRail({
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="text-white hover:bg-white/10 hover:text-white focus-visible:outline-white"
+                className="text-[var(--ink-muted)] hover:bg-[var(--canvas-2)] hover:text-[var(--ink)] focus-visible:outline-[var(--navy)]"
                 onClick={() => void setPinnedPreference(!pinned)}
                 aria-label={pinned ? "Unpin todo drawer" : "Pin todo drawer"}
                 aria-pressed={pinned}

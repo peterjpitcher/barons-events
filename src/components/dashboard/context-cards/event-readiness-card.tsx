@@ -4,6 +4,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ProgressRing } from "@/components/ui/design-primitives";
 import type { DashboardEventReadiness } from "@/lib/dashboard";
+import {
+  dashboardCardHeaderClassName,
+  dashboardCardHeaderIconClassName,
+  dashboardCardTitleClassName,
+} from "./dashboard-card-style";
 
 type EventReadinessCardProps = {
   events: DashboardEventReadiness[] | null;
@@ -29,10 +34,10 @@ export function EventReadinessCard({ events }: EventReadinessCardProps): React.R
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+      <CardHeader className={`${dashboardCardHeaderClassName} flex flex-row items-center justify-between gap-3 space-y-0`}>
         <div className="flex items-center gap-2">
-          <CalendarCheck2 className="h-4 w-4 text-[var(--navy)]" aria-hidden="true" />
-          <CardTitle className="text-sm">Next 14 Days Readiness</CardTitle>
+          <CalendarCheck2 className={dashboardCardHeaderIconClassName} aria-hidden="true" />
+          <CardTitle className={dashboardCardTitleClassName}>Next 14 Days Readiness</CardTitle>
         </div>
         <Badge variant="info">{events.length}</Badge>
       </CardHeader>

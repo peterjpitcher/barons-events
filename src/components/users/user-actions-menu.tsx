@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { MoreVertical, Ban, Trash2, CheckCircle, Lock } from "lucide-react";
+import { MoreVertical, Ban, Trash2, CheckCircle } from "lucide-react";
 import { DropdownMenu, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { DeactivateDialog } from "./deactivate-dialog";
 import { DeleteDialog } from "./delete-dialog";
@@ -18,18 +18,8 @@ export function UserActionsMenu({ user, currentUserId }: UserActionsMenuProps): 
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [reactivateOpen, setReactivateOpen] = useState(false);
 
-  // Administrators are protected
-  if (user.role === "administrator") {
-    return (
-      <span
-        className="inline-flex items-center gap-1 text-xs text-[var(--ink-muted)]"
-        title="Administrators cannot be deactivated or deleted"
-      >
-        <Lock className="h-3 w-3" aria-hidden="true" />
-        Protected
-      </span>
-    );
-  }
+  // Administrators are protected.
+  if (user.role === "administrator") return null;
 
   // Cannot action yourself
   if (user.id === currentUserId) return null;

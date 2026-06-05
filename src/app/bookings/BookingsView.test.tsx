@@ -30,6 +30,8 @@ function makeGroup(overrides: Partial<BookingGroup>): BookingGroup {
     bookings: [baseBooking],
     totalBookings: 1,
     totalTickets: 2,
+    totalPaymentPence: 0,
+    paymentCurrency: null,
     ...overrides,
   };
 }
@@ -119,6 +121,34 @@ describe("BookingsView", () => {
     expect(screen.getByText("Confirmed Guest")).toBeTruthy();
     expect(screen.getByText("Cancelled Guest")).toBeTruthy();
     expect(screen.getAllByText("2 bookings · 4 tickets")).toHaveLength(2);
+  });
+
+  it("shows payment values and sums visible payments in summaries", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-04T12:00:00.000Z"));
+
+    render(
+      <BookingsView
+        groups={[
+          makeGroup({
+            bookings: [
+              {
+                ...baseBooking,
+                paymentStatus: "completed",
+                paymentAmountPence: 1250,
+                paymentCurrency: "gbp",
+                paymentCompletedAt: new Date("2026-06-01T10:05:00.000Z"),
+              },
+            ],
+            totalPaymentPence: 1250,
+            paymentCurrency: "gbp",
+          }),
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("£12.50")).toBeTruthy();
+    expect(screen.getAllByText("1 booking · 2 tickets · £12.50 payments")).toHaveLength(2);
   });
 });
 

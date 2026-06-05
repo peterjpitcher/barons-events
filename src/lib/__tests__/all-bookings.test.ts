@@ -49,6 +49,7 @@ function makeRow(overrides: Partial<Record<string, unknown>> = {}): Record<strin
       venue_id: "venue-42",
       venues: { id: "venue-42", name: "The Star" },
     },
+    payment_transaction: null,
     ...overrides,
   };
 }
@@ -261,6 +262,36 @@ describe("listAllBookingsForUser", () => {
     expect(groups).toHaveLength(1);
     expect(groups[0].totalBookings).toBe(2);
     expect(groups[0].totalTickets).toBe(8);
+  });
+
+  it("aggregates confirmed payment totals per event group", async () => {
+    const rows = [
+      makeRow({
+        id: "b1",
+        payment_status: "completed",
+        payment_transaction: { amount_pence: 1500, currency: "gbp" },
+      }),
+      makeRow({
+        id: "b2",
+        status: "cancelled",
+        payment_status: "completed",
+        payment_transaction: { amount_pence: 900, currency: "gbp" },
+      }),
+      makeRow({
+        id: "b3",
+        payment_status: "not_required",
+      }),
+    ];
+
+    const { proxy } = buildQueryMock({ data: rows, error: null });
+    (createSupabaseAdminClient as ReturnType<typeof vi.fn>).mockReturnValue({
+      from: () => ({ select: () => ({ order: () => proxy }) }),
+    });
+
+    const groups = await listAllBookingsForUser(administrator);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].totalPaymentPence).toBe(1500);
+    expect(groups[0].paymentCurrency).toBe("gbp");
   });
 
   // -------------------------------------------------------------------------

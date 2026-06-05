@@ -1,11 +1,13 @@
+import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { AuditTrailAccordion, type AuditTrailAccordionEntry } from "@/components/audit/audit-trail-accordion";
+import {
+  dashboardCardHeaderClassName,
+  dashboardCardHeaderLinkClassName,
+  dashboardCardTitleClassName,
+} from "./dashboard-card-style";
 
-export type ActivityItem = {
-  id: string;
-  action: string;
-  actorName: string;
-  timestamp: string;
-};
+export type ActivityItem = AuditTrailAccordionEntry;
 
 type RecentActivityCardProps = {
   activity: ActivityItem[] | null;
@@ -24,24 +26,17 @@ export function RecentActivityCard({ activity }: RecentActivityCardProps): React
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-sm">Recent Activity</CardTitle>
+      <CardHeader className={`${dashboardCardHeaderClassName} flex flex-row items-center justify-between gap-3 space-y-0`}>
+        <CardTitle className={dashboardCardTitleClassName}>Recent Activity</CardTitle>
+        <Link href="/activity" className={dashboardCardHeaderLinkClassName}>
+          View all
+        </Link>
       </CardHeader>
       <CardContent className="space-y-2">
         {activity.length === 0 ? (
           <p className="text-sm text-subtle">No recent activity.</p>
         ) : (
-          activity.map((item) => (
-            <div key={item.id} className="flex items-start justify-between text-xs">
-              <div>
-                <span className="font-medium text-[var(--ink)]">{item.actorName}</span>{" "}
-                <span className="text-subtle">{item.action}</span>
-              </div>
-              <span className="shrink-0 text-subtle">
-                {new Date(item.timestamp).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
-              </span>
-            </div>
-          ))
+          <AuditTrailAccordion entries={activity} />
         )}
       </CardContent>
     </Card>

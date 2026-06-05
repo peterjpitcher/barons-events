@@ -11,6 +11,10 @@ import { UrgencySection } from "./urgency-section";
 import { FilterTabs, type FilterTab } from "./filter-tabs";
 import { TodoRow } from "./todo-row";
 import { SopTaskRow } from "@/components/planning/sop-task-row";
+import {
+  dashboardCardHeaderClassName,
+  dashboardCardTitleClassName,
+} from "@/components/dashboard/context-cards/dashboard-card-style";
 
 // ---------------------------------------------------------------------------
 // Props (discriminated union)
@@ -189,61 +193,64 @@ function DashboardMode({
     grouped.overdue.length + grouped.dueSoon.length + grouped.later.length;
 
   return (
-    <section className="space-y-3 rounded-[10px] border border-[var(--hair)] bg-[var(--paper)] p-4 shadow-card">
-      <header className="space-y-3 border-b border-[var(--hair)] pb-3">
-        <h2 className="font-brand-serif text-lg font-medium text-[var(--navy)]">My Todos</h2>
-        <FilterTabs tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
+    <section className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--hair)] bg-[var(--paper)] shadow-card">
+      <header className={dashboardCardHeaderClassName}>
+        <h2 className={dashboardCardTitleClassName}>My Todos</h2>
       </header>
 
-      {totalVisible === 0 ? (
-        <div className="py-8 text-center">
-          {activeTab !== "all" ? (
-            <p className="text-sm text-subtle">
-              No {SOURCE_LABELS[activeTab].toLowerCase()} tasks right now.{" "}
-              <button
-                type="button"
-                onClick={() => setActiveTab("all")}
-                className="font-semibold text-[var(--navy)] hover:underline"
-              >
-                Show all
-              </button>
-            </p>
-          ) : (
-            <p className="text-sm text-subtle">No assigned todos right now.</p>
-          )}
-        </div>
-      ) : (
-        <div className="space-y-1">
-          <UrgencySection
-            urgency="overdue"
-            items={grouped.overdue}
-            onToggle={handleToggle}
-            optimisticallyDone={optimisticallyDone}
-            isPending={isPending}
-          />
-          <UrgencySection
-            urgency="due_soon"
-            items={grouped.dueSoon}
-            onToggle={handleToggle}
-            optimisticallyDone={optimisticallyDone}
-            isPending={isPending}
-          />
-          <UrgencySection
-            urgency="later"
-            items={grouped.later}
-            defaultCollapsed
-            onToggle={handleToggle}
-            optimisticallyDone={optimisticallyDone}
-            isPending={isPending}
-          />
-        </div>
-      )}
+      <div className="space-y-3 p-4">
+        <FilterTabs tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
 
-      {failedSources && failedSources.length > 0 && (
-        <p className="text-xs text-subtle">
-          Some data could not be loaded: {failedSources.map((s) => SOURCE_LABELS[s]).join(", ")}.
-        </p>
-      )}
+        {totalVisible === 0 ? (
+          <div className="py-8 text-center">
+            {activeTab !== "all" ? (
+              <p className="text-sm text-subtle">
+                No {SOURCE_LABELS[activeTab].toLowerCase()} tasks right now.{" "}
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("all")}
+                  className="font-semibold text-[var(--navy)] hover:underline"
+                >
+                  Show all
+                </button>
+              </p>
+            ) : (
+              <p className="text-sm text-subtle">No assigned todos right now.</p>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-1">
+            <UrgencySection
+              urgency="overdue"
+              items={grouped.overdue}
+              onToggle={handleToggle}
+              optimisticallyDone={optimisticallyDone}
+              isPending={isPending}
+            />
+            <UrgencySection
+              urgency="due_soon"
+              items={grouped.dueSoon}
+              onToggle={handleToggle}
+              optimisticallyDone={optimisticallyDone}
+              isPending={isPending}
+            />
+            <UrgencySection
+              urgency="later"
+              items={grouped.later}
+              defaultCollapsed
+              onToggle={handleToggle}
+              optimisticallyDone={optimisticallyDone}
+              isPending={isPending}
+            />
+          </div>
+        )}
+
+        {failedSources && failedSources.length > 0 && (
+          <p className="text-xs text-subtle">
+            Some data could not be loaded: {failedSources.map((s) => SOURCE_LABELS[s]).join(", ")}.
+          </p>
+        )}
+      </div>
     </section>
   );
 }

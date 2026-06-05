@@ -229,7 +229,7 @@ export default async function PlanningItemDetailPage({
         readOnly={!canUploadAttachments}
         initiallyPinned={Boolean(userPrefs?.sop_drawer_pinned)}
         externalTriggerId={`sop-drawer-trigger-${item.id}`}
-        title="ALL TODO ITEMS FOR THIS PLANNING ITEM (SOP)"
+        title="ALL TODO ITEMS"
       />
     </div>
   );

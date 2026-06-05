@@ -1,4 +1,8 @@
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import {
+  dashboardCardHeaderClassName,
+  dashboardCardTitleClassName,
+} from "./dashboard-card-style";
 
 type PipelineCardProps = {
   counts: Record<string, number> | null;
@@ -27,8 +31,8 @@ export function PipelineCard({ counts }: PipelineCardProps): React.ReactNode {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-sm">Pipeline</CardTitle>
+      <CardHeader className={dashboardCardHeaderClassName}>
+        <CardTitle className={dashboardCardTitleClassName}>Pipeline</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">

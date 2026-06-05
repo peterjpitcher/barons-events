@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { LoadingSpinner } from "@/components/ui/page-loading";
 import { Loader2, ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -68,7 +69,13 @@ export function SopTemplateEditor(): React.ReactElement {
   }, [reload]);
 
   if (loading) {
-    return <LoadingSkeleton />;
+    return (
+      <Card>
+        <CardContent className="flex min-h-32 items-center justify-center py-8">
+          <LoadingSpinner label="Loading SOP template..." iconClassName="h-6 w-6" />
+        </CardContent>
+      </Card>
+    );
   }
 
   if (error) {
@@ -106,25 +113,6 @@ export function SopTemplateEditor(): React.ReactElement {
           canEdit={canEdit}
           onChanged={reload}
         />
-      ))}
-    </div>
-  );
-}
-
-// ─── Loading skeleton ────────────────────────────────────────────────────────
-
-function LoadingSkeleton(): React.ReactElement {
-  return (
-    <div className="space-y-4">
-      {[1, 2, 3].map((i) => (
-        <Card key={i}>
-          <CardContent className="py-6">
-            <div className="animate-pulse space-y-3">
-              <div className="h-5 w-48 rounded bg-[var(--canvas-2)]" />
-              <div className="h-4 w-32 rounded bg-[var(--canvas-2)]" />
-            </div>
-          </CardContent>
-        </Card>
       ))}
     </div>
   );

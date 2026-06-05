@@ -1,5 +1,10 @@
 import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import {
+  dashboardCardHeaderClassName,
+  dashboardCardHeaderLinkClassName,
+  dashboardCardTitleClassName,
+} from "./dashboard-card-style";
 
 type SopProgressCardProps = {
   progress: {
@@ -17,9 +22,9 @@ export function SopProgressCard({ progress }: SopProgressCardProps): React.React
 
   return (
     <Card>
-      <CardHeader className="flex items-center justify-between">
-        <CardTitle className="text-sm">SOP Progress</CardTitle>
-        <Link href="/planning" className="text-xs text-[var(--navy)] hover:text-[var(--navy)]">
+      <CardHeader className={`${dashboardCardHeaderClassName} flex items-center justify-between`}>
+        <CardTitle className={dashboardCardTitleClassName}>SOP Progress</CardTitle>
+        <Link href="/planning" className={dashboardCardHeaderLinkClassName}>
           View &rarr;
         </Link>
       </CardHeader>

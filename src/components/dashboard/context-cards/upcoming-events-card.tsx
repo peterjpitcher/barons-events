@@ -3,6 +3,11 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import type { UserRole } from "@/lib/types";
 import { canProposeEvents } from "@/lib/roles";
+import {
+  dashboardCardHeaderClassName,
+  dashboardCardHeaderLinkClassName,
+  dashboardCardTitleClassName,
+} from "./dashboard-card-style";
 
 export type UpcomingEvent = {
   id: string;
@@ -30,9 +35,9 @@ export function UpcomingEventsCard({ events, userRole }: UpcomingEventsCardProps
 
   return (
     <Card>
-      <CardHeader className="flex items-center justify-between">
-        <CardTitle className="text-sm">Upcoming Events</CardTitle>
-        <Link href="/events" className="text-xs text-[var(--navy)] hover:text-[var(--navy)]">
+      <CardHeader className={`${dashboardCardHeaderClassName} flex items-center justify-between`}>
+        <CardTitle className={dashboardCardTitleClassName}>Upcoming Events</CardTitle>
+        <Link href="/events" className={dashboardCardHeaderLinkClassName}>
           View all &rarr;
         </Link>
       </CardHeader>

@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  dashboardCardHeaderClassName,
+  dashboardCardTitleClassName,
+} from "./dashboard-card-style";
 
 export type DebriefDueItem = {
   id: string;
@@ -18,8 +22,8 @@ export function DebriefsOutstandingCard({ debriefs }: DebriefsOutstandingCardPro
 
   return (
     <Card>
-      <CardHeader className="flex items-center justify-between">
-        <CardTitle className="text-sm">Debriefs Outstanding</CardTitle>
+      <CardHeader className={`${dashboardCardHeaderClassName} flex items-center justify-between`}>
+        <CardTitle className={dashboardCardTitleClassName}>Debriefs Outstanding</CardTitle>
         <Badge variant="danger">{debriefs.length}</Badge>
       </CardHeader>
       <CardContent className="space-y-1">

@@ -88,7 +88,7 @@ export async function signInAction(_: SignInState | undefined, formData: FormDat
 
   // Verify Turnstile CAPTCHA token before any auth work
   const turnstileToken = formData.get("cf-turnstile-response") as string | null;
-  const turnstileValid = await verifyTurnstile(turnstileToken, "login", "strict");
+  const turnstileValid = await verifyTurnstile(turnstileToken, "login", "lenient");
   if (!turnstileValid) {
     return { success: false, message: "Security check failed. Please try again." };
   }

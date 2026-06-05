@@ -5,11 +5,14 @@ node_modules
 .next
 out
 dist
+outputs/
+temp/
 tsconfig.tsbuildinfo
 
 # Environment
 .env.local
 .env*.local
+.env.local.docker
 
 # Logs
 npm-debug.log*

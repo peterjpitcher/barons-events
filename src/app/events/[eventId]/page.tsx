@@ -6,12 +6,12 @@ import { BookingSettingsCard } from "@/components/events/booking-settings-card";
 import { EventPageHeader } from "@/components/events/event-page-header";
 import { SopDrawer } from "@/components/events/sop-drawer";
 import { DecisionForm } from "@/components/reviews/decision-form";
+import { AuditTrailPanel } from "@/components/audit/audit-trail-panel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth";
 import { getEventDetail } from "@/lib/events";
 import { EVENT_GOALS_BY_VALUE, humanizeGoalValue, parseGoalFocus } from "@/lib/event-goals";
-import { listAuditLogForEvent } from "@/lib/audit-log";
 import { listVenues } from "@/lib/venues";
 import { listEventTypes } from "@/lib/event-types";
 import { listArtists } from "@/lib/artists";
@@ -41,22 +41,10 @@ const statusCopy: Record<string, { label: string; tone: "neutral" | "info" | "su
   completed: { label: "Completed", tone: "success" }
 };
 
-const auditTimestampFormatter = new Intl.DateTimeFormat("en-GB", {
-  dateStyle: "medium",
-  timeStyle: "short",
-  timeZone: "Europe/London"
-});
-
 const eventDateFormatter = new Intl.DateTimeFormat("en-GB", {
   dateStyle: "medium",
   timeZone: "Europe/London"
 });
-
-const toMetaRecord = (value: unknown): Record<string, unknown> =>
-  value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
-
-const toStringArray = (value: unknown): string[] =>
-  Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 
 function buildEventImageUrl(path: string | null | undefined): string | null {
   if (!path || !path.trim().length) return null;
@@ -119,11 +107,10 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
     deletedAt: event.deleted_at
   });
 
-  const [venues, assignableUsers, eventTypes, auditLog, artists, attachments, internalNotes, userPrefsResult] = await Promise.all([
+  const [venues, assignableUsers, eventTypes, artists, attachments, internalNotes, userPrefsResult] = await Promise.all([
     listVenues(),
     listAssignableUsers(),
     listEventTypes(),
-    listAuditLogForEvent(event.id),
     listArtists(),
     listEventAttachmentsRollup(event.id),
     listInternalNotes("event", event.id),
@@ -235,21 +222,6 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
       actorIds.add(approval.reviewer_id);
     }
   });
-  auditLog.forEach((entry) => {
-    if (entry.actor_id) {
-      actorIds.add(entry.actor_id);
-    }
-    const meta = toMetaRecord(entry.meta);
-    const assigneeFromLog = typeof meta.assigneeId === "string" ? meta.assigneeId : null;
-    const previousAssigneeFromLog =
-      typeof meta.previousAssigneeId === "string" ? meta.previousAssigneeId : null;
-    if (assigneeFromLog) {
-      actorIds.add(assigneeFromLog);
-    }
-    if (previousAssigneeFromLog) {
-      actorIds.add(previousAssigneeFromLog);
-    }
-  });
 
   let userDirectory: Record<string, { id: string; name: string; email: string }> = {};
   try {
@@ -267,15 +239,6 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
     return userDirectory[id]?.name ?? assignableDirectory.get(id)?.name ?? "Unknown user";
   };
 
-  const formatStatusLabel = (value: string | null): string | null => {
-    if (!value) return null;
-    const match = statusCopy[value];
-    if (match) return match.label;
-    return value.replace(/_/g, " ");
-  };
-  const attachmentLabels = new Map(
-    attachments.map((attachment) => [attachment.id, attachment.displayName ?? attachment.originalFilename])
-  );
   const mobileEventImageUrl = buildEventImageUrl(event.event_image_path);
   const mobileStatus = statusCopy[event.status] ?? statusCopy.draft;
   const mobileVenueNames = event.venues.length > 0
@@ -293,128 +256,6 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
   const mobileDateLabel = eventDateFormatter.format(mobileStart);
   const mobileTimeLabel = `${mobileStart.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/London" })}${mobileEnd ? ` - ${mobileEnd.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/London" })}` : ""}`;
 
-  const auditEntries = auditLog.map((entry) => {
-    const meta = toMetaRecord(entry.meta);
-    const changeLabels = toStringArray(meta.changes);
-    const statusValue = typeof meta.status === "string" ? meta.status : null;
-    const previousStatus = typeof meta.previousStatus === "string" ? meta.previousStatus : null;
-    const assigneeIdFromMeta = typeof meta.assigneeId === "string" ? meta.assigneeId : null;
-    const previousAssigneeIdFromMeta =
-      typeof meta.previousAssigneeId === "string" ? meta.previousAssigneeId : null;
-    const feedbackText =
-      typeof meta.feedback === "string" && meta.feedback.trim().length ? meta.feedback.trim() : null;
-
-    const createdAt = new Date(entry.created_at);
-    const hasValidTimestamp = !Number.isNaN(createdAt.getTime());
-    const timestampLabel = hasValidTimestamp ? auditTimestampFormatter.format(createdAt) : entry.created_at;
-
-    let summary = "Activity recorded";
-    const details: string[] = [];
-
-    if (statusValue) {
-      const currentLabel = formatStatusLabel(statusValue) ?? statusValue;
-      const previousLabel =
-        previousStatus && previousStatus !== statusValue ? formatStatusLabel(previousStatus) ?? previousStatus : null;
-      let line = `Status: ${currentLabel}`;
-      if (previousLabel) {
-        line += ` (was ${previousLabel})`;
-      }
-      details.push(line);
-    }
-
-    if (assigneeIdFromMeta || previousAssigneeIdFromMeta) {
-      const currentAssigneeName = resolveUserName(assigneeIdFromMeta);
-      const previousAssigneeName =
-        previousAssigneeIdFromMeta && previousAssigneeIdFromMeta !== assigneeIdFromMeta
-          ? resolveUserName(previousAssigneeIdFromMeta)
-          : null;
-      let line = `Assignee: ${currentAssigneeName}`;
-      if (previousAssigneeName) {
-        line += ` (was ${previousAssigneeName})`;
-      }
-      details.push(line);
-    }
-
-    if (changeLabels.length) {
-      details.push(`Changed: ${changeLabels.join(", ")}`);
-    }
-
-    const attachmentLabel =
-      typeof meta.filename === "string"
-        ? meta.filename
-        : typeof meta.display_name === "string"
-          ? meta.display_name
-          : attachmentLabels.get(entry.entity_id) ?? null;
-    const attachmentUploadedFilename =
-      typeof meta.uploaded_filename === "string"
-        ? meta.uploaded_filename
-        : typeof meta.original_filename === "string"
-          ? meta.original_filename
-          : null;
-
-    switch (entry.action) {
-      case "event.created":
-        summary = "Draft created";
-        break;
-      case "event.updated":
-        summary = "Draft updated";
-        break;
-      case "event.status_submitted":
-        summary = "Submitted for review";
-        break;
-      case "event.status_changed":
-        summary = statusValue ? `Status changed to ${formatStatusLabel(statusValue) ?? statusValue}` : "Status updated";
-        break;
-      case "event.assignee_updated":
-        summary = assigneeIdFromMeta ? "Assignee updated" : "Assignee cleared";
-        break;
-      case "attachment.uploaded":
-        summary = "Attachment uploaded";
-        if (attachmentLabel) details.push(`File: ${attachmentLabel}`);
-        break;
-      case "attachment.upload_failed":
-        summary = "Attachment upload failed";
-        if (attachmentLabel) details.push(`File: ${attachmentLabel}`);
-        if (typeof meta.reason === "string") details.push(`Reason: ${meta.reason}`);
-        break;
-      case "attachment.version_added":
-        summary = "New attachment version uploaded";
-        if (attachmentLabel) details.push(`File: ${attachmentLabel}`);
-        if (typeof meta.version_no === "number") details.push(`Version: v${meta.version_no}`);
-        if (attachmentUploadedFilename && attachmentUploadedFilename !== attachmentLabel) {
-          details.push(`Uploaded filename: ${attachmentUploadedFilename}`);
-        }
-        break;
-      case "attachment.renamed":
-        summary = "Attachment filename changed";
-        if (typeof meta.previous_display_name === "string" && typeof meta.display_name === "string") {
-          details.push(`Renamed: ${meta.previous_display_name} to ${meta.display_name}`);
-        } else if (attachmentLabel) {
-          details.push(`File: ${attachmentLabel}`);
-        }
-        break;
-      case "attachment.deleted":
-        summary = "Attachment deleted";
-        if (attachmentLabel) details.push(`File: ${attachmentLabel}`);
-        break;
-      default: {
-        const cleaned = entry.action.replace(/^event\\./, "").replace(/_/g, " ");
-        summary = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
-        break;
-      }
-    }
-
-    return {
-      id: entry.id,
-      actorName: resolveUserName(entry.actor_id),
-      timestampLabel,
-      createdAtIso: hasValidTimestamp ? createdAt.toISOString() : null,
-      summary,
-      details,
-      feedback: feedbackText
-    };
-  });
-
   // ─── Shared right-column cards ────────────────────────────────────────────
 
   const reviewDecisionCard = canReview ? (
@@ -430,50 +271,11 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
   ) : null;
 
   const auditTrailCard = (
-    <Card>
-      <CardHeader className="border-b border-[var(--hair)] bg-[var(--paper-tint)] px-4 py-3">
-        <CardTitle className="font-brand-mono text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-[var(--ink-muted)]">Audit trail</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <p className="text-sm text-muted">Track status changes, assignments, and reviewer feedback.</p>
-        {auditEntries.length === 0 ? (
-          <p className="text-sm text-subtle">No activity recorded yet.</p>
-        ) : (
-          auditEntries.map((entry) => (
-            <div
-              key={entry.id}
-              className="rounded-[8px] border border-[var(--hair)] bg-[var(--paper)] px-4 py-3 text-sm text-[var(--ink)] shadow-card"
-            >
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <p className="font-semibold text-[var(--ink)]">{entry.summary}</p>
-                <time dateTime={entry.createdAtIso ?? undefined} className="text-xs text-subtle">
-                  {entry.timestampLabel}
-                </time>
-              </div>
-              <p className="mt-1 text-xs text-subtle">By {entry.actorName}</p>
-              {entry.details.length ? (
-                <ul className="mt-2 space-y-1 text-xs">
-                  {entry.details.map((detail, index) => (
-                    <li key={`${entry.id}-detail-${index}`} className="flex items-start gap-2">
-                      <span
-                        className="mt-[0.35rem] h-1.5 w-1.5 flex-none rounded-full bg-[var(--slate)]"
-                        aria-hidden="true"
-                      />
-                      <span>{detail}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-              {entry.feedback ? (
-                <p className="mt-3 rounded-[var(--radius)] bg-[var(--paper-tint)] p-3 text-sm leading-relaxed text-[var(--ink)]">
-                  {entry.feedback}
-                </p>
-              ) : null}
-            </div>
-          ))
-        )}
-      </CardContent>
-    </Card>
+    <AuditTrailPanel
+      entityType="event"
+      entityId={event.id}
+      description="Track status changes, assignments, and reviewer feedback."
+    />
   );
 
   const debriefSnapshotCard = event.debrief ? (
@@ -724,7 +526,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
           readOnly={!canEdit}
           initiallyPinned={Boolean(userPrefs?.sop_drawer_pinned)}
           externalTriggerId={`sop-drawer-trigger-${event.id}`}
-          title="ALL TODO ITEMS FOR THIS EVENT (SOP)"
+          title="ALL TODO ITEMS"
         />
       ) : null}
     </div>
