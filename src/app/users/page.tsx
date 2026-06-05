@@ -22,13 +22,21 @@ export default async function UsersPage() {
 
   return (
     <div className="app-page">
-      <PageHeader
-        eyebrow="Access"
-        title="Workspace users"
-        description="Invite team members, adjust roles, and link venues in one place."
-        meta={<span>{users.length} user{users.length === 1 ? "" : "s"}</span>}
-      />
-      <Card className="overflow-hidden">
+      <div className="hidden md:block">
+        <PageHeader
+          eyebrow="Access"
+          title="Workspace users"
+          description="Invite team members, adjust roles, and link venues in one place."
+          meta={<span>{users.length} user{users.length === 1 ? "" : "s"}</span>}
+        />
+      </div>
+      <div className="md:hidden">
+        <p className="mobile-eyebrow">Manage</p>
+        <h1 className="mt-1 font-brand-serif text-[1.85rem] font-medium leading-tight text-[var(--navy)]">
+          Users
+        </h1>
+      </div>
+      <Card className="hidden overflow-hidden md:block">
         <CardHeader>
           <CardTitle>Role model</CardTitle>
           <CardDescription>Each role maps to the operational permissions used throughout BaronsHub 1.1.</CardDescription>

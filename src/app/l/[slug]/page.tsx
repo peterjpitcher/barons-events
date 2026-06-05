@@ -218,10 +218,10 @@ export default async function EventLandingPage({ params }: PageProps) {
               <img
                 src={imageUrl}
                 alt={displayTitle}
-                className="w-full aspect-square object-cover"
+                className="h-[200px] w-full object-cover"
               />
             ) : (
-              <div className="w-full aspect-square bg-[var(--slate)] flex items-center justify-center">
+              <div className="flex h-[200px] w-full items-center justify-center bg-[var(--slate)]">
                 <span className="text-white/60 text-sm">No image</span>
               </div>
             )}

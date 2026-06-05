@@ -85,7 +85,7 @@ export function SheetTrigger({ children, className }: SheetTriggerProps): React.
 /* ------------------------------------------------------------------ */
 
 type SheetContentProps = {
-  side?: "left" | "right";
+  side?: "left" | "right" | "bottom";
   children: ReactNode;
   className?: string;
 };
@@ -100,6 +100,11 @@ const sideClasses = {
     panel: "left-0 top-0 h-full",
     enterFrom: "-translate-x-full",
     enterTo: "translate-x-0",
+  },
+  bottom: {
+    panel: "left-0 right-0 bottom-0 max-h-[86vh]",
+    enterFrom: "translate-y-full",
+    enterTo: "translate-y-0",
   },
 } as const;
 
@@ -214,7 +219,7 @@ export function SheetContent({ side = "right", children, className }: SheetConte
         className={cn(
           "fixed flex w-full max-w-md flex-col border-[var(--hair)] bg-[var(--paper)] shadow-lg transition-transform duration-300 ease-in-out",
           sc.panel,
-          side === "right" ? "border-l" : "border-r",
+          side === "right" ? "border-l" : side === "left" ? "border-r" : "max-w-none rounded-t-[22px] border-t",
           visible ? sc.enterTo : sc.enterFrom,
           className,
         )}

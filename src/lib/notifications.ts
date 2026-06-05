@@ -20,6 +20,7 @@ const APP_BASE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ??
   process.env.NEXT_PUBLIC_APP_URL ??
   "https://baronshub.orangejelly.co.uk";
+const WEEKLY_UPDATE_TODO_EMAIL_LIMIT = 10;
 
 type EventRow = Database["public"]["Tables"]["events"]["Row"];
 type UserRow = Database["public"]["Tables"]["users"]["Row"];
@@ -56,6 +57,20 @@ type EmailContent = {
   button?: { label: string; url: string };
   meta?: string[];
   footerNote?: string;
+};
+
+type WeeklyUpdateEmailItem = {
+  title: string;
+  detail: string;
+};
+
+type WeeklyUpdateEmailContent = {
+  recipientName: string | null;
+  approvedEvents: WeeklyUpdateEmailItem[];
+  todoItems: WeeklyUpdateEmailItem[];
+  todoOverflowCount: number;
+  debriefs: WeeklyUpdateEmailItem[];
+  appUrl: string;
 };
 
 type CustomerBookingEmailContent = {
@@ -237,6 +252,330 @@ function renderEmailTemplate({ headline, intro, body = [], button, meta, footerN
   const text = textParts.join("\n");
 
   return { html, text };
+}
+
+function renderWeeklyUpdateEmail({
+  recipientName,
+  approvedEvents,
+  todoItems,
+  todoOverflowCount,
+  debriefs,
+  appUrl
+}: WeeklyUpdateEmailContent): { html: string; text: string } {
+  const greeting = recipientName ? `Hi ${recipientName},` : "Hi there,";
+  const todoCount = todoItems.length + todoOverflowCount;
+  const todoStatHint = todoCount === 0
+    ? "All clear"
+    : todoOverflowCount > 0
+      ? `${todoItems.length} shown in email`
+      : `${todoItems.length} listed`;
+
+  function renderRows(items: WeeklyUpdateEmailItem[], emptyText: string): string {
+    if (items.length === 0) {
+      return `<div class="empty">${escapeHtml(emptyText)}</div>`;
+    }
+
+    return items
+      .map(
+        (item) => `
+          <div class="item">
+            <div class="item-title">${escapeHtml(item.title)}</div>
+            <div class="item-detail">${escapeHtml(item.detail)}</div>
+          </div>`
+      )
+      .join("\n");
+  }
+
+  const overflowHtml = todoOverflowCount > 0
+    ? `<div class="item muted-item">...and ${todoOverflowCount} more to-dos in BaronsHub.</div>`
+    : "";
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Weekly BaronsHub Update</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      :root {
+        color-scheme: light;
+      }
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
+        background: #ede7dc;
+        color: #24343d;
+      }
+      .wrapper {
+        padding: 32px 14px;
+      }
+      .card {
+        max-width: 680px;
+        margin: 0 auto;
+        background: #ffffff;
+        border: 1px solid #d8d0c4;
+        border-radius: 18px;
+        overflow: hidden;
+      }
+      .header {
+        background: #23343e;
+        color: #ffffff;
+        padding: 28px 32px;
+      }
+      .eyebrow {
+        margin: 0 0 10px;
+        color: #d5aa00;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+      h1 {
+        margin: 0;
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: 30px;
+        line-height: 1.2;
+        font-weight: 700;
+      }
+      .intro {
+        margin: 12px 0 0;
+        color: #dfe6e6;
+        font-size: 15px;
+        line-height: 1.5;
+      }
+      .content {
+        padding: 28px 32px 32px;
+      }
+      .summary {
+        display: table;
+        width: 100%;
+        border-spacing: 0;
+        margin: 0 0 24px;
+      }
+      .summary-cell {
+        display: table-cell;
+        width: 33.333%;
+        padding: 0 8px 0 0;
+      }
+      .summary-box {
+        border: 1px solid #e3ddd2;
+        border-radius: 12px;
+        padding: 14px;
+        background: #f7f3ec;
+      }
+      .summary-number {
+        display: block;
+        font-size: 24px;
+        line-height: 1;
+        font-weight: 800;
+        color: #23343e;
+      }
+      .summary-label {
+        display: block;
+        margin-top: 6px;
+        color: #6c756f;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+      .summary-hint {
+        display: block;
+        margin-top: 5px;
+        color: #8a8174;
+        font-size: 11px;
+        line-height: 1.2;
+      }
+      .section {
+        margin-top: 22px;
+        border-top: 1px solid #e5ded4;
+        padding-top: 20px;
+      }
+      .section:first-of-type {
+        margin-top: 0;
+      }
+      .section-heading {
+        margin: 0 0 12px;
+        font-size: 15px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #23343e;
+      }
+      .count-pill {
+        display: inline-block;
+        margin-left: 8px;
+        padding: 3px 8px;
+        border-radius: 999px;
+        background: #efe9de;
+        color: #49545a;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0;
+        text-transform: none;
+      }
+      .item,
+      .empty {
+        border: 1px solid #e5ded4;
+        border-radius: 10px;
+        padding: 12px 14px;
+        margin: 8px 0;
+        background: #fffdf9;
+      }
+      .item-title {
+        font-size: 14px;
+        line-height: 1.35;
+        font-weight: 800;
+        color: #24343d;
+      }
+      .item-detail,
+      .empty,
+      .muted-item {
+        color: #69736f;
+        font-size: 13px;
+        line-height: 1.45;
+      }
+      .item-detail {
+        margin-top: 4px;
+      }
+      .empty {
+        background: #f7f3ec;
+      }
+      .button-wrap {
+        text-align: center;
+        margin: 28px 0 4px;
+      }
+      .button {
+        display: inline-block;
+        padding: 13px 22px;
+        border-radius: 9px;
+        background: #23343e;
+        color: #ffffff;
+        font-size: 13px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-decoration: none;
+        text-transform: uppercase;
+      }
+      .footer {
+        max-width: 680px;
+        margin: 14px auto 0;
+        color: #766f64;
+        font-size: 12px;
+        line-height: 1.5;
+        text-align: center;
+      }
+      @media (max-width: 640px) {
+        .wrapper {
+          padding: 20px 10px;
+        }
+        .header,
+        .content {
+          padding-left: 20px;
+          padding-right: 20px;
+        }
+        .summary,
+        .summary-cell {
+          display: block;
+          width: 100%;
+        }
+        .summary-cell {
+          padding: 0 0 8px;
+        }
+        h1 {
+          font-size: 26px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrapper">
+      <div class="card">
+        <div class="header">
+          <p class="eyebrow">BaronsHub weekly update</p>
+          <h1>Weekly BaronsHub update</h1>
+          <p class="intro">${escapeHtml(greeting)} here is your weekly BaronsHub update.</p>
+        </div>
+        <div class="content">
+          <div class="summary">
+            <div class="summary-cell">
+              <div class="summary-box">
+                <span class="summary-number">${approvedEvents.length}</span>
+                <span class="summary-label">Recently approved</span>
+              </div>
+            </div>
+            <div class="summary-cell">
+              <div class="summary-box">
+                <span class="summary-number">${todoCount}</span>
+                <span class="summary-label">Total SOP items</span>
+                <span class="summary-hint">${escapeHtml(todoStatHint)}</span>
+              </div>
+            </div>
+            <div class="summary-cell">
+              <div class="summary-box">
+                <span class="summary-number">${debriefs.length}</span>
+                <span class="summary-label">Debriefs</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="section">
+            <h2 class="section-heading">Recently approved events <span class="count-pill">last 7 days</span></h2>
+            ${renderRows(approvedEvents, "No newly approved events for your scope.")}
+          </div>
+
+          <div class="section">
+            <h2 class="section-heading">Your SOP to-dos <span class="count-pill">due now or next 14 days</span></h2>
+            ${renderRows(todoItems, "No open to-dos. Nice work, you are all caught up.")}
+            ${overflowHtml}
+          </div>
+
+          <div class="section">
+            <h2 class="section-heading">Debriefed events <span class="count-pill">last 7 days</span></h2>
+            ${renderRows(debriefs, "No debriefs submitted for your scope.")}
+          </div>
+
+          <div class="button-wrap">
+            <a class="button" href="${escapeHtml(appUrl)}">Open BaronsHub</a>
+          </div>
+        </div>
+      </div>
+      <div class="footer">
+        Your helpful weekly update from BaronsHub sent every Tuesday<br />
+        ${escapeHtml(APP_BASE_URL)} · Sent from the BaronsHub 1.1 planning team.
+      </div>
+    </div>
+  </body>
+</html>`;
+
+  const textLines = [
+    "Weekly BaronsHub update",
+    "",
+    `${greeting} here is your weekly BaronsHub update.`,
+    "",
+    `Recently approved events in the last 7 days (${approvedEvents.length}):`,
+    ...(approvedEvents.length
+      ? approvedEvents.map((item) => `  - ${item.title} — ${item.detail}`)
+      : ["  No newly approved events for your scope."]),
+    "",
+    `Your SOP to-dos due now or in the next 14 days (${todoCount}):`,
+    ...(todoItems.length
+      ? todoItems.map((item) => `  - ${item.title} — ${item.detail}`)
+      : ["  No open to-dos. Nice work, you are all caught up."]),
+    ...(todoOverflowCount > 0 ? [`  ...and ${todoOverflowCount} more to-dos in BaronsHub.`] : []),
+    "",
+    `Debriefed events in the last 7 days (${debriefs.length}):`,
+    ...(debriefs.length
+      ? debriefs.map((item) => `  - ${item.title} — ${item.detail}`)
+      : ["  No debriefs submitted for your scope."]),
+    "",
+    `Open BaronsHub: ${appUrl}`,
+    "",
+    "Your helpful weekly update from BaronsHub sent every Tuesday"
+  ];
+
+  return { html, text: textLines.join("\n") };
 }
 
 function renderCustomerBookingEmailTemplate({
@@ -1742,49 +2081,39 @@ export async function sendMandatoryWeeklyUpdateEmail(): Promise<{ sent: number; 
           return Boolean(event) && inUserScope(user, event as WeeklyEvent);
         });
 
-      const body: string[] = [];
-      body.push("Approved events in the last 7 days:");
-      if (userApproved.length === 0) {
-        body.push("  No newly approved events for your scope.");
-      } else {
-        for (const event of userApproved.slice(0, 20)) {
-          const venue = firstRelation(event.venue);
-          body.push(`  • ${event.title} — ${formatEventDate(event.start_at)}, ${venue?.name ?? "Unknown venue"}`);
-        }
-      }
+      const approvedItems = userApproved.slice(0, 20).map((event) => {
+        const venue = firstRelation(event.venue);
+        return {
+          title: event.title,
+          detail: `${formatEventDate(event.start_at)} · ${venue?.name ?? "Unknown venue"}`
+        };
+      });
 
-      body.push("", "Your to-dos due now or in the next 14 days:");
-      if (todoTasks.length === 0) {
-        body.push("  No open to-dos. Nice work, you are all caught up.");
-      } else {
-        for (const task of todoTasks.slice(0, 50)) {
-          const due = task.dueDate ? formatInLondon(`${task.dueDate}T00:00:00Z`).date : "TBD";
-          const context = task.eventTitle ? `${task.planningTitle} / ${task.eventTitle}` : task.planningTitle;
-          body.push(`  • ${task.title} — ${due} (${context})`);
-        }
-        if (todoTasks.length > 50) {
-          body.push(`  …and ${todoTasks.length - 50} more to-dos in BaronsHub.`);
-        }
-      }
+      const visibleTodoTasks = todoTasks.slice(0, WEEKLY_UPDATE_TODO_EMAIL_LIMIT);
+      const todoItems = visibleTodoTasks.map((task) => {
+        const due = task.dueDate ? formatInLondon(`${task.dueDate}T00:00:00Z`).date : "TBD";
+        const context = task.eventTitle ? `${task.planningTitle} / ${task.eventTitle}` : task.planningTitle;
+        return {
+          title: task.title,
+          detail: `${due} · ${context}`
+        };
+      });
 
-      body.push("", "Events debriefed in the last 7 days:");
-      if (userDebriefs.length === 0) {
-        body.push("  No debriefs submitted for your scope.");
-      } else {
-        for (const debrief of userDebriefs.slice(0, 20)) {
-          const venue = firstRelation(debrief.event.venue);
-          body.push(
-            `  • ${debrief.event.title} — ${formatEventDate(debrief.event.start_at)}, ${venue?.name ?? "Unknown venue"}, uplift ${formatUplift(debrief.sales_uplift_percent)}`
-          );
-        }
-      }
+      const debriefItems = userDebriefs.slice(0, 20).map((debrief) => {
+        const venue = firstRelation(debrief.event.venue);
+        return {
+          title: debrief.event.title,
+          detail: `${formatEventDate(debrief.event.start_at)} · ${venue?.name ?? "Unknown venue"} · uplift ${formatUplift(debrief.sales_uplift_percent)}`
+        };
+      });
 
-      const { html, text } = renderEmailTemplate({
-        headline: "Weekly BaronsHub update",
-        intro: `${buildGreeting({ full_name: user.full_name }, "Hello")} here is your weekly BaronsHub update.`,
-        body,
-        button: { label: "Open BaronsHub", url: plannerDashboardLink() },
-        footerNote: "This mandatory weekly update is sent every Tuesday."
+      const { html, text } = renderWeeklyUpdateEmail({
+        recipientName: user.full_name,
+        approvedEvents: approvedItems,
+        todoItems,
+        todoOverflowCount: Math.max(0, todoTasks.length - visibleTodoTasks.length),
+        debriefs: debriefItems,
+        appUrl: plannerDashboardLink()
       });
 
       await resend.emails.send({

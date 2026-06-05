@@ -110,7 +110,11 @@ function checkoutUrls(sessionPlaceholder = "{CHECKOUT_SESSION_ID}") {
   };
 }
 
-async function cancelPendingBookingAfterFailure(bookingId: string): Promise<void> {
+async function cancelPendingBookingAfterFailure(params: {
+  bookingId: string;
+  eventId: string;
+  reason: string;
+}): Promise<void> {
   const db = createSupabaseAdminClient();
   await db
     .from("event_bookings")
@@ -119,8 +123,20 @@ async function cancelPendingBookingAfterFailure(bookingId: string): Promise<void
       payment_status: "failed",
       payment_failed_at: new Date().toISOString(),
     })
-    .eq("id", bookingId)
+    .eq("id", params.bookingId)
     .eq("payment_status", "pending");
+
+  await recordSystemAuditLogEntry({
+    entity: "event",
+    entityId: params.eventId,
+    action: "booking.cancelled",
+    meta: {
+      booking_id: params.bookingId,
+      source: "paid_checkout",
+      reason: params.reason
+    },
+    actorId: null,
+  });
 }
 
 async function fetchPaidEvent(eventId: string): Promise<{
@@ -267,6 +283,19 @@ export async function createPaidCheckoutSession(
   }
 
   const bookingId = rpcResult.bookingId;
+  await recordSystemAuditLogEntry({
+    entity: "event",
+    entityId: input.eventId,
+    action: "booking.created",
+    meta: {
+      booking_id: bookingId,
+      ticket_count: input.ticketCount,
+      source: "paid_checkout",
+      payment_status: "pending"
+    },
+    actorId: null,
+  });
+
   const idempotencyKey = buildCheckoutIdempotencyKey({
     bookingId,
     eventId: input.eventId,
@@ -322,7 +351,11 @@ export async function createPaidCheckoutSession(
 
     if (insertError || !transaction) {
       await stripePaymentProvider.expireSession(order.sessionId).catch(() => undefined);
-      await cancelPendingBookingAfterFailure(bookingId);
+      await cancelPendingBookingAfterFailure({
+        bookingId,
+        eventId: input.eventId,
+        reason: "local_transaction_insert_failed"
+      });
       await recordSystemAuditLogEntry({
         entity: "payment",
         entityId: bookingId,
@@ -351,7 +384,11 @@ export async function createPaidCheckoutSession(
           updated_at: new Date().toISOString(),
         })
         .eq("id", (transaction as { id: string }).id);
-      await cancelPendingBookingAfterFailure(bookingId);
+      await cancelPendingBookingAfterFailure({
+        bookingId,
+        eventId: input.eventId,
+        reason: "booking_transaction_link_failed"
+      });
       await recordSystemAuditLogEntry({
         entity: "payment",
         entityId: bookingId,
@@ -400,7 +437,11 @@ export async function createPaidCheckoutSession(
     };
   } catch (error) {
     console.error("createPaidCheckoutSession failed:", error);
-    await cancelPendingBookingAfterFailure(bookingId);
+    await cancelPendingBookingAfterFailure({
+      bookingId,
+      eventId: input.eventId,
+      reason: "provider_error"
+    });
     await recordSystemAuditLogEntry({
       entity: "payment",
       entityId: bookingId,
@@ -765,7 +806,7 @@ async function reconcileRefundedCharge(charge: Stripe.Charge): Promise<void> {
   const status = isFull ? "refunded" : "partially_refunded";
   const now = new Date().toISOString();
 
-  await db
+  const { error: txUpdateError } = await db
     .from("payment_transactions")
     .update({
       status,
@@ -774,7 +815,7 @@ async function reconcileRefundedCharge(charge: Stripe.Charge): Promise<void> {
       updated_at: now,
     })
     .eq("id", transaction.id);
-  await db
+  const { error: bookingUpdateError } = await db
     .from("event_bookings")
     .update({
       payment_status: status,
@@ -782,6 +823,40 @@ async function reconcileRefundedCharge(charge: Stripe.Charge): Promise<void> {
       ...(isFull ? { status: "cancelled" } : {}),
     })
     .eq("id", transaction.booking_id);
+
+  if (txUpdateError || bookingUpdateError) {
+    await recordSystemAuditLogEntry({
+      entity: "payment",
+      entityId: transaction.id,
+      action: "payment.capture_local_update_failed",
+      meta: {
+        transaction_id: transaction.id,
+        booking_id: transaction.booking_id,
+        payment_intent_id: paymentIntentId,
+        action_needed: true,
+        stage: "webhook_refund_reconcile",
+        transaction_error: txUpdateError?.message ?? null,
+        booking_error: bookingUpdateError?.message ?? null
+      },
+      actorId: null,
+    });
+    return;
+  }
+
+  await recordSystemAuditLogEntry({
+    entity: "payment",
+    entityId: transaction.id,
+    action: "payment.refund_completed",
+    meta: {
+      transaction_id: transaction.id,
+      booking_id: transaction.booking_id,
+      payment_intent_id: paymentIntentId,
+      amount_pence: refundedAmount,
+      is_full_refund: isFull,
+      source: "stripe_webhook"
+    },
+    actorId: null,
+  });
 }
 
 export async function getCheckoutSessionView(

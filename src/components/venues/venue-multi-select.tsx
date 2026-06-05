@@ -112,11 +112,13 @@ export function VenueMultiSelect({
     if (next.has(id)) next.delete(id);
     else next.add(id);
     emit(Array.from(next));
+    setIsOpen(false);
   }
 
   function chooseGlobal() {
     if (disabled || !globalMode) return;
     emit(globalMode === "all" ? allVenueIds : []);
+    setIsOpen(false);
   }
 
   const summary = useMemo(() => {

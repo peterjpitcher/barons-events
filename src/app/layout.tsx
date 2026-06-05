@@ -163,7 +163,7 @@ export default async function RootLayout({
 
   // Skip AppShell and session validation on auth/public pages — no need to call getCurrentUser()
   // when the page does not require authentication.
-  const AUTH_PATHS = ["/login", "/forgot-password", "/reset-password", "/unauthorized"];
+  const AUTH_PATHS = ["/login", "/forgot-password", "/reset-password", "/unauthorized", "/deactivated"];
   const isAuthPage = AUTH_PATHS.some(p => pathname.startsWith(p));
   const isPublicLandingPage = pathname === "/l" || pathname.startsWith("/l/");
 

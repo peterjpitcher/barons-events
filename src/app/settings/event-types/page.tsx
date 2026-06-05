@@ -6,5 +6,5 @@ export const metadata = {
 };
 
 export default function EventTypesPage() {
-  redirect("/settings");
+  redirect("/settings?tab=event-types");
 }

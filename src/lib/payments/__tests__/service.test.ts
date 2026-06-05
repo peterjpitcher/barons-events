@@ -51,6 +51,7 @@ import {
   handleStripeWebhook,
   normaliseTicketPriceToPence,
 } from "@/lib/payments/service";
+import { stripePaymentProvider } from "@/lib/payments/providers/stripe";
 
 function stripeEvent(overrides: Record<string, unknown> = {}) {
   return {
@@ -159,6 +160,108 @@ describe("createPaidCheckoutSession", () => {
 
     expect(result).toEqual({ success: false, error: "not_found" });
     expect(mocks.createPaidBookingAtomic).not.toHaveBeenCalled();
+  });
+
+  it("records event booking and payment audit rows when checkout setup succeeds", async () => {
+    mocks.createPaidBookingAtomic.mockResolvedValue({ ok: true, bookingId: "booking-1" });
+    vi.mocked(stripePaymentProvider.createOrder).mockResolvedValue({
+      sessionId: "cs_123",
+      approvalUrl: "https://checkout.example/cs_123",
+      amountPence: 3000,
+      currency: "gbp",
+    });
+
+    mocks.from.mockImplementation((table: string) => {
+      if (table === "events") {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              maybeSingle: vi.fn().mockResolvedValue({
+                data: {
+                  id: "event-1",
+                  title: "Dinner",
+                  public_title: "Dinner Night",
+                  booking_type: "paid_seated",
+                  booking_url: null,
+                  booking_enabled: true,
+                  ticket_price: 15,
+                  status: "approved",
+                  deleted_at: null,
+                  start_at: "2026-05-26T18:00:00Z",
+                  venue: { name: "The Pub", is_internal: false },
+                },
+                error: null,
+              })
+            })
+          })
+        };
+      }
+      if (table === "customers") {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null })
+            })
+          })
+        };
+      }
+      if (table === "payment_transactions") {
+        return {
+          insert: vi.fn().mockReturnValue({
+            select: vi.fn().mockReturnValue({
+              single: vi.fn().mockResolvedValue({ data: { id: "tx-1" }, error: null })
+            })
+          })
+        };
+      }
+      if (table === "event_bookings") {
+        return {
+          update: vi.fn().mockReturnValue({
+            eq: vi.fn().mockResolvedValue({ error: null })
+          })
+        };
+      }
+      return {};
+    });
+
+    const result = await createPaidCheckoutSession({
+      eventId: "event-1",
+      firstName: "Jane",
+      lastName: null,
+      mobile: "+447911123456",
+      email: "jane@example.com",
+      ticketCount: 2,
+      marketingOptIn: false,
+    });
+
+    expect(result).toEqual({
+      success: true,
+      bookingId: "booking-1",
+      sessionId: "cs_123",
+      approvalUrl: "https://checkout.example/cs_123",
+      amountPence: 3000,
+      currency: "gbp",
+    });
+    expect(mocks.recordSystemAuditLogEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entity: "event",
+        entityId: "event-1",
+        action: "booking.created",
+        meta: expect.objectContaining({
+          booking_id: "booking-1",
+          ticket_count: 2,
+          source: "paid_checkout",
+          payment_status: "pending"
+        })
+      })
+    );
+    expect(mocks.recordSystemAuditLogEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entity: "payment",
+        entityId: "booking-1",
+        action: "payment.order_created"
+      })
+    );
   });
 });
 

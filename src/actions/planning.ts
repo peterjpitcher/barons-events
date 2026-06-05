@@ -189,6 +189,9 @@ export async function createPlanningItemAction(input: unknown): Promise<Planning
       };
     }
     const primaryVenueId = venueIds[0] ?? null;
+    const inputObject = input && typeof input === "object" ? input as Record<string, unknown> : {};
+    const hasStartAt = Object.prototype.hasOwnProperty.call(inputObject, "startAt");
+    const hasEndAt = Object.prototype.hasOwnProperty.call(inputObject, "endAt");
 
     const item = await createPlanningItem({
       title: parsed.data.title,
@@ -197,8 +200,8 @@ export async function createPlanningItemAction(input: unknown): Promise<Planning
       venueId: primaryVenueId,
       ownerId: parsed.data.ownerId ? parsed.data.ownerId : null,
       targetDate: parsed.data.targetDate,
-      startAt: parsed.data.startAt || null,
-      endAt: parsed.data.endAt || null,
+      ...(hasStartAt ? { startAt: parsed.data.startAt || null } : {}),
+      ...(hasEndAt ? { endAt: parsed.data.endAt || null } : {}),
       status: (parsed.data.status ?? "planned") as PlanningItemStatus,
       createdBy: user.id
     });

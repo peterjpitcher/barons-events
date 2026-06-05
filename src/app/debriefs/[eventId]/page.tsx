@@ -59,13 +59,21 @@ export default async function DebriefPage({ params }: { params: Promise<{ eventI
         description="Keep it clear and simple. Numbers help the planning team understand how the night performed."
         meta={<span>{event.title}</span>}
       />
-      <Card>
-        <CardHeader>
+      <section className="mobile-card md:hidden">
+        <p className="mobile-eyebrow text-[var(--ink-soft)]">Post-event report</p>
+        <h1 className="mt-1 text-xl font-semibold text-[var(--navy)]">{event.title}</h1>
+        <p className="mt-2 text-sm text-[var(--ink-muted)]">{new Date(event.start_at).toLocaleDateString("en-GB")}</p>
+        <Link href={`/events/${event.id}`} className="mt-3 inline-flex h-11 items-center rounded-[8px] border border-[var(--hair)] px-4 text-sm font-semibold text-[var(--ink)]">
+          View event
+        </Link>
+      </section>
+      <Card className="mobile-card md:rounded-[var(--radius-lg)]">
+        <CardHeader className="hidden md:block">
           <CardTitle>{event.title}</CardTitle>
           <CardDescription>{new Date(event.start_at).toLocaleDateString("en-GB")}</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="mb-6 rounded-[8px] border border-[var(--hair)] bg-[var(--paper-tint)] px-4 py-3 text-sm text-subtle">
+          <div className="mb-6 hidden rounded-[8px] border border-[var(--hair)] bg-[var(--paper-tint)] px-4 py-3 text-sm text-subtle md:block">
             <p>
               Event:{" "}
               <Link

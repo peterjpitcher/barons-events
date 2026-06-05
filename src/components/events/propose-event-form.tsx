@@ -95,13 +95,20 @@ export function ProposeEventForm({ venues, defaultVenueId }: ProposeEventFormPro
   }, [state, router]);
 
   return (
-    <form action={formAction} className="space-y-5">
+    <form action={formAction} className="space-y-5 pb-20 md:pb-0">
       <input type="hidden" name="operation_id" value={operationIdRef.current} readOnly />
       <input type="hidden" name="idempotency_key" value={idempotencyKeyRef.current} readOnly />
       <input type="hidden" name="idempotencyKey" value={idempotencyKeyRef.current} readOnly />
       <div className="space-y-2">
         <Label htmlFor="propose-title">Event title</Label>
-        <Input id="propose-title" name="title" required maxLength={200} placeholder="e.g. Easter Weekend Quiz" />
+        <Input
+          id="propose-title"
+          name="title"
+          required
+          maxLength={200}
+          placeholder="e.g. Easter Weekend Quiz"
+          className="h-12 text-[16px] md:h-10 md:text-sm"
+        />
       </div>
       <div className="space-y-2">
         <Label htmlFor="propose-start">When is it?</Label>
@@ -111,6 +118,7 @@ export function ProposeEventForm({ venues, defaultVenueId }: ProposeEventFormPro
           type="datetime-local"
           value={startAt}
           required
+          className="h-12 text-[16px] md:h-10 md:text-sm"
           onChange={(event) => setStartAt(event.target.value)}
         />
         {shortNoticeEnteredByDate ? (
@@ -144,6 +152,7 @@ export function ProposeEventForm({ venues, defaultVenueId }: ProposeEventFormPro
           required
           maxLength={2000}
           placeholder="A sentence or two about the idea — the admin will use this to decide whether to green-light it."
+          className="text-[16px] md:text-sm"
         />
       </div>
 
@@ -152,7 +161,17 @@ export function ProposeEventForm({ venues, defaultVenueId }: ProposeEventFormPro
         pendingLabel="Submitting..."
         variant="primary"
         disabled={isPending}
+        className="hidden md:inline-flex"
       />
+      <div className="mobile-actionbar md:hidden">
+        <SubmitButton
+          label="Submit proposal"
+          pendingLabel="Submitting..."
+          variant="primary"
+          disabled={isPending || selectedVenueIds.length === 0}
+          className="h-12 flex-1"
+        />
+      </div>
     </form>
   );
 }

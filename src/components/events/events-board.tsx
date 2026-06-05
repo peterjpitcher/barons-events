@@ -18,9 +18,12 @@ import {
   ChevronRight,
   Clock,
   List,
+  MapPin,
+  Plus,
   Rows3,
   Search,
   SlidersHorizontal,
+  Star,
   X
 } from "lucide-react";
 import type { EventSummary } from "@/lib/events";
@@ -32,12 +35,15 @@ import { EventCalendar, type CalendarEvent } from "@/components/events/event-cal
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { PageHeader } from "@/components/ui/design-primitives";
+import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { cn } from "@/lib/utils";
 
 dayjs.extend(advancedFormat);
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
 type ViewMode = "month" | "matrix" | "list";
+type MobileViewMode = "agenda" | "month" | "matrix";
 type ListSortKey = "date" | "time" | "event" | "venue" | "artist" | "space" | "status";
 type ListSortDirection = "asc" | "desc";
 type EventWithDates = CalendarEvent;
@@ -174,6 +180,25 @@ function compareText(left: string, right: string): number {
   return left.localeCompare(right, undefined, { sensitivity: "base" });
 }
 
+function initialsForName(name: string): string {
+  return name
+    .split(/[\s&]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
+}
+
+function colorForVenue(name: string): string {
+  const palette = ["var(--navy)", "var(--burgundy)", "var(--sage-dark)", "var(--mustard-dark)", "var(--slate-dark)", "var(--slate)"];
+  let hash = 0;
+  for (let index = 0; index < name.length; index += 1) {
+    hash = (hash * 31 + name.charCodeAt(index)) >>> 0;
+  }
+  return palette[hash % palette.length];
+}
+
 export function EventsBoard({ user, events, venues }: EventsBoardProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -203,6 +228,8 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
   const [monthCursor, setMonthCursor] = useState<dayjs.Dayjs>(dayjs().startOf("month"));
   const [venueSearch, setVenueSearch] = useState("");
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
+  const [mobileView, setMobileView] = useState<MobileViewMode>("agenda");
   const [eventSearch, setEventSearch] = useState("");
   const [artistSearch, setArtistSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -447,6 +474,18 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
     setEndDateFilter("");
   }, []);
 
+  const mobileVisibleEvents = useMemo(() => {
+    if (mobileView === "agenda") return listEvents;
+    if (mobileView === "month") {
+      const start = monthCursor.startOf("month");
+      const end = monthCursor.endOf("month");
+      return filteredEvents.filter((event) => event.end.isAfter(start) && event.start.isBefore(end));
+    }
+    const start = matrixStart.isValid() ? matrixStart.startOf("day") : dayjs().startOf("day");
+    const end = start.add(7, "day").endOf("day");
+    return filteredEvents.filter((event) => event.end.isAfter(start) && event.start.isBefore(end));
+  }, [filteredEvents, listEvents, matrixStart, mobileView, monthCursor]);
+
   const venueOptions = useMemo(() => {
     const baseOptions: { value: string; label: string }[] = [{ value: "all", label: "All venues" }];
     if (myVenueId) {
@@ -498,7 +537,7 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
         description="Track programming across venues, pivot between month, week, and list views, and jump straight into new drafts."
         meta={<span>{filteredEvents.length} event{filteredEvents.length === 1 ? "" : "s"} in view</span>}
         actions={
-          <>
+          <div className="hidden flex-wrap items-center gap-2 md:flex">
           {canCreate ? (
             <Button asChild variant="primary">
               <Link href="/events/new">New event</Link>
@@ -527,11 +566,51 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
               </Button>
             ))}
           </div>
-          </>
+          </div>
         }
       />
 
-      <section className="space-y-3">
+      <MobileEventsControls
+        view={mobileView}
+        onChangeView={setMobileView}
+        search={eventSearch}
+        onChangeSearch={setEventSearch}
+        filterOpen={mobileFilterOpen}
+        onFilterOpenChange={setMobileFilterOpen}
+        hasFilters={hasAdvancedFilters}
+        clearFilters={clearAdvancedFilters}
+        venueId={selectedVenueId}
+        onVenueChange={handleVenueChange}
+        venueOptions={venueOptions}
+        statusFilter={statusFilter}
+        onStatusChange={setStatusFilter}
+        eventTypeFilter={eventTypeFilter}
+        onEventTypeChange={setEventTypeFilter}
+        eventTypeOptions={eventTypeOptions}
+        startDateFilter={startDateFilter}
+        onStartDateChange={setStartDateFilter}
+        endDateFilter={endDateFilter}
+        onEndDateChange={setEndDateFilter}
+        resultCount={mobileVisibleEvents.length}
+      />
+
+      <div className="md:hidden">
+        <MobileEventAgenda
+          events={mobileVisibleEvents}
+          allFilteredCount={filteredEvents.length}
+          hidePastEvents={hidePastEvents}
+        />
+        {canCreate ? (
+          <Button asChild variant="primary" className="mobile-fab">
+            <Link href="/events/new">
+              <Plus className="h-5 w-5" aria-hidden="true" />
+              New event
+            </Link>
+          </Button>
+        ) : null}
+      </div>
+
+      <section className="hidden space-y-3 md:block">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2 rounded-full border border-[var(--hair)] bg-[var(--paper)] px-3 py-1.5">
@@ -730,37 +809,196 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
         ) : null}
       </section>
 
-      <StatusLegend legendItems={legendItems} />
+      <div className="hidden md:block">
+        <StatusLegend legendItems={legendItems} />
+      </div>
 
-      {view === "month" ? (
-        <EventCalendar
-          events={filteredEvents}
-          monthCursor={monthCursor}
-          onChangeMonth={setMonthCursor}
-          canCreate={
-            canCreate &&
-            (createScopeVenueId === undefined ||
-              createScopeVenueId === null ||
-              !filteredVenueId ||
-              filteredVenueId === createScopeVenueId)
-          }
-          createVenueId={filteredVenueId ?? (typeof createScopeVenueId === "string" ? createScopeVenueId : undefined)}
-          getStatusLabel={(status) => (statusConfig[status] ?? statusConfig.draft).label}
-          getStatusAccent={(status) => statusAccentStyles[status] ?? statusAccentStyles.draft}
-          canApproveEvent={canApproveEvent}
-        />
-      ) : view === "matrix" ? (
-        <SevenDayMatrix
-          events={filteredEvents}
-          venues={filteredVenuesForMatrix}
-          rangeStart={matrixStart}
-          onChangeStart={setMatrixStart}
-          canCreate={canCreate}
-          createScopeVenueId={createScopeVenueId}
-        />
-      ) : (
-        <EventsListTable events={listEvents} allFilteredCount={filteredEvents.length} hidePastEvents={hidePastEvents} />
-      )}
+      <div className="hidden md:block">
+        {view === "month" ? (
+          <EventCalendar
+            events={filteredEvents}
+            monthCursor={monthCursor}
+            onChangeMonth={setMonthCursor}
+            canCreate={
+              canCreate &&
+              (createScopeVenueId === undefined ||
+                createScopeVenueId === null ||
+                !filteredVenueId ||
+                filteredVenueId === createScopeVenueId)
+            }
+            createVenueId={filteredVenueId ?? (typeof createScopeVenueId === "string" ? createScopeVenueId : undefined)}
+            getStatusLabel={(status) => (statusConfig[status] ?? statusConfig.draft).label}
+            getStatusAccent={(status) => statusAccentStyles[status] ?? statusAccentStyles.draft}
+            canApproveEvent={canApproveEvent}
+          />
+        ) : view === "matrix" ? (
+          <SevenDayMatrix
+            events={filteredEvents}
+            venues={filteredVenuesForMatrix}
+            rangeStart={matrixStart}
+            onChangeStart={setMatrixStart}
+            canCreate={canCreate}
+            createScopeVenueId={createScopeVenueId}
+          />
+        ) : (
+          <EventsListTable events={listEvents} allFilteredCount={filteredEvents.length} hidePastEvents={hidePastEvents} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MobileEventsControls({
+  view,
+  onChangeView,
+  search,
+  onChangeSearch,
+  filterOpen,
+  onFilterOpenChange,
+  hasFilters,
+  clearFilters,
+  venueId,
+  onVenueChange,
+  venueOptions,
+  statusFilter,
+  onStatusChange,
+  eventTypeFilter,
+  onEventTypeChange,
+  eventTypeOptions,
+  startDateFilter,
+  onStartDateChange,
+  endDateFilter,
+  onEndDateChange,
+  resultCount,
+}: {
+  view: MobileViewMode;
+  onChangeView: (view: MobileViewMode) => void;
+  search: string;
+  onChangeSearch: (value: string) => void;
+  filterOpen: boolean;
+  onFilterOpenChange: (open: boolean) => void;
+  hasFilters: boolean;
+  clearFilters: () => void;
+  venueId: string;
+  onVenueChange: (value: string) => void;
+  venueOptions: { value: string; label: string }[];
+  statusFilter: string;
+  onStatusChange: (value: string) => void;
+  eventTypeFilter: string;
+  onEventTypeChange: (value: string) => void;
+  eventTypeOptions: string[];
+  startDateFilter: string;
+  onStartDateChange: (value: string) => void;
+  endDateFilter: string;
+  onEndDateChange: (value: string) => void;
+  resultCount: number;
+}) {
+  return (
+    <div className="space-y-3 md:hidden">
+      <div className="grid grid-cols-3 gap-1 rounded-[11px] bg-[var(--canvas-2)] p-1">
+        {[
+          { value: "agenda", label: "Agenda", icon: List },
+          { value: "month", label: "Month", icon: CalendarDays },
+          { value: "matrix", label: "7-day", icon: Rows3 },
+        ].map((option) => {
+          const Icon = option.icon;
+          const active = view === option.value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              className={cn(
+                "inline-flex h-9 items-center justify-center gap-1 rounded-[9px] text-xs font-semibold text-[var(--ink-muted)]",
+                active && "bg-[var(--paper)] text-[var(--navy)] shadow-card"
+              )}
+              onClick={() => onChangeView(option.value as MobileViewMode)}
+            >
+              <Icon className="h-4 w-4" aria-hidden="true" />
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+      <div className="flex gap-2">
+        <label className="mobile-search flex-1">
+          <Search className="h-4 w-4" aria-hidden="true" />
+          <span className="sr-only">Search events</span>
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => onChangeSearch(event.target.value)}
+            placeholder="Search events"
+            className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[16px] text-[var(--ink)] outline-none placeholder:text-[var(--ink-soft)]"
+          />
+        </label>
+        <Sheet open={filterOpen} onOpenChange={onFilterOpenChange}>
+          <button
+            type="button"
+            className="relative inline-flex h-11 w-11 items-center justify-center rounded-[11px] border border-[var(--hair)] bg-[var(--paper)] text-[var(--ink-muted)]"
+            onClick={() => onFilterOpenChange(true)}
+            aria-label="Open event filters"
+          >
+            <SlidersHorizontal className="h-5 w-5" aria-hidden="true" />
+            {hasFilters ? <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-[var(--mustard)]" /> : null}
+          </button>
+          <SheetContent side="bottom" className="max-h-[82vh]">
+            <SheetHeader>
+              <SheetTitle className="font-brand-serif text-[19px] font-medium text-[var(--navy)]">Filters</SheetTitle>
+              {hasFilters ? (
+                <button
+                  type="button"
+                  className="mt-2 text-left text-sm font-semibold text-[var(--slate-dark)]"
+                  onClick={clearFilters}
+                >
+                  Clear all
+                </button>
+              ) : null}
+            </SheetHeader>
+            <div className="space-y-4 overflow-y-auto px-5 py-4">
+              <div className="space-y-2">
+                <label htmlFor="mobile-events-venue" className="mobile-eyebrow">Venue</label>
+                <Select id="mobile-events-venue" value={venueId} onChange={(event) => onVenueChange(event.target.value)} className="mobile-input">
+                  {venueOptions.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="mobile-events-status" className="mobile-eyebrow">Status</label>
+                <Select id="mobile-events-status" value={statusFilter} onChange={(event) => onStatusChange(event.target.value)} className="mobile-input">
+                  <option value="all">All statuses</option>
+                  {(Object.keys(statusConfig) as EventSummary["status"][]).map((status) => (
+                    <option key={status} value={status}>{statusConfig[status].label}</option>
+                  ))}
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="mobile-events-type" className="mobile-eyebrow">Event type</label>
+                <Select id="mobile-events-type" value={eventTypeFilter} onChange={(event) => onEventTypeChange(event.target.value)} className="mobile-input">
+                  <option value="all">All types</option>
+                  {eventTypeOptions.map((value) => <option key={value} value={value}>{value}</option>)}
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <label htmlFor="mobile-events-from" className="mobile-eyebrow">From</label>
+                  <Input id="mobile-events-from" type="date" value={startDateFilter} onChange={(event) => onStartDateChange(event.target.value)} className="mobile-input" />
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="mobile-events-to" className="mobile-eyebrow">To</label>
+                  <Input id="mobile-events-to" type="date" value={endDateFilter} onChange={(event) => onEndDateChange(event.target.value)} className="mobile-input" />
+                </div>
+              </div>
+              <SheetClose className="inline-flex min-h-11 w-full items-center justify-center rounded-[11px] bg-[var(--navy)] px-4 text-sm font-semibold text-white">
+                Show {resultCount} event{resultCount === 1 ? "" : "s"}
+              </SheetClose>
+            </div>
+          </SheetContent>
+        </Sheet>
+      </div>
+      <p className="font-brand-mono text-[0.625rem] uppercase tracking-[0.05em] text-[var(--ink-soft)]">
+        {resultCount} event{resultCount === 1 ? "" : "s"} in view
+      </p>
     </div>
   );
 }
@@ -779,6 +1017,116 @@ function StatusLegend({
         </Badge>
       ))}
     </div>
+  );
+}
+
+function MobileEventAgenda({
+  events,
+  allFilteredCount,
+  hidePastEvents,
+}: {
+  events: EventWithDates[];
+  allFilteredCount: number;
+  hidePastEvents: boolean;
+}) {
+  const sorted = useMemo(() => {
+    return [...events].sort((left, right) => left.start.valueOf() - right.start.valueOf());
+  }, [events]);
+
+  const groups = useMemo(() => {
+    const map = new Map<string, EventWithDates[]>();
+    for (const event of sorted) {
+      const key = event.start.format("YYYY-MM-DD");
+      const list = map.get(key) ?? [];
+      list.push(event);
+      map.set(key, list);
+    }
+    return Array.from(map.entries()).map(([key, rows]) => ({
+      key,
+      day: dayjs(key),
+      rows,
+    }));
+  }, [sorted]);
+
+  if (sorted.length === 0) {
+    return (
+      <div className="mobile-card py-10 text-center text-sm text-[var(--ink-muted)]">
+        {hidePastEvents && allFilteredCount > 0
+          ? "All events are in the past. Change filters to show them."
+          : "No events match your current filters."}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1">
+      {groups.map((group) => (
+        <section key={group.key}>
+          <div className="mobile-day-group">
+            <span className="mobile-day-number">{group.day.format("DD")}</span>
+            <span className="flex flex-col">
+              <span className="font-brand-mono text-[0.6rem] font-semibold uppercase tracking-[0.12em] text-[var(--ink-soft)]">
+                {group.day.format("ddd")}
+              </span>
+              <span className="text-xs font-medium text-[var(--ink-muted)]">{group.day.format("MMMM")}</span>
+            </span>
+          </div>
+          <div className="space-y-2">
+            {group.rows.map((event) => (
+              <MobileEventCard key={event.id} event={event} />
+            ))}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function MobileEventCard({ event }: { event: EventWithDates }) {
+  const status = statusConfig[event.status] ?? statusConfig.draft;
+  const allVenues = Array.isArray(event.venues) && event.venues.length > 0
+    ? event.venues.map((v) => v.name)
+    : event.venue?.name
+      ? [event.venue.name]
+      : ["Unknown venue"];
+  const venueName = allVenues.length > 1
+    ? `${allVenues[0]} +${allVenues.length - 1}`
+    : allVenues[0];
+  const artistLabel = getEventArtistLabel(event);
+  const spaceName = event.venue_space?.trim().length ? event.venue_space : "Space TBC";
+
+  return (
+    <Link href={`/events/${event.id}`} className="mobile-card block">
+      <div className="flex items-start gap-3">
+        <span
+          className="inline-flex h-10 w-10 flex-none items-center justify-center rounded-[9px] font-brand-serif text-sm font-semibold text-white"
+          style={{ background: colorForVenue(venueName) }}
+          aria-hidden="true"
+        >
+          {initialsForName(venueName)}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[15px] font-semibold leading-snug text-[var(--ink)]">{event.title}</span>
+          <span className="mt-1 inline-flex items-center gap-1.5 text-xs text-[var(--ink-muted)]">
+            <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+            <span className="font-brand-mono text-[0.68rem]">{event.start.format("HH:mm")} - {event.end.format("HH:mm")}</span>
+            <span aria-hidden="true">·</span>
+            <span>{spaceName}</span>
+          </span>
+        </span>
+        <Badge variant={status.tone}>{status.label}</Badge>
+      </div>
+      <div className="mt-3 flex flex-col gap-1.5 text-xs text-[var(--ink-muted)]">
+        <span className="inline-flex items-center gap-2">
+          <MapPin className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
+          {venueName}
+        </span>
+        <span className={cn("inline-flex items-center gap-2", artistLabel === "No artist" && "text-[var(--ink-soft)]")}>
+          <Star className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
+          {artistLabel}
+        </span>
+      </div>
+    </Link>
   );
 }
 

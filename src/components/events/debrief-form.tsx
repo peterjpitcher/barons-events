@@ -101,13 +101,15 @@ export function DebriefForm({ eventId, defaults, labourRateGbp = 12.71, readOnly
   }, [eventWetTakings, eventFoodTakings, baselineWetTakings, baselineFoodTakings]);
 
   return (
-    <form action={formAction} className="space-y-5">
+    <form action={formAction} className="space-y-5 pb-20 md:pb-0">
       <input type="hidden" name="eventId" value={eventId} />
 
+      <section className="mobile-card space-y-4 md:contents">
+      <h2 className="mobile-section-label md:hidden">Attendance</h2>
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="attendance">How many people attended?</Label>
-          <Input id="attendance" name="attendance" type="number" min={0} defaultValue={defaults?.attendance ?? ""} placeholder="e.g. 108" disabled={readOnly} />
+          <Input id="attendance" name="attendance" type="number" min={0} inputMode="numeric" className="h-12 text-[16px] md:h-10 md:text-sm" defaultValue={defaults?.attendance ?? ""} placeholder="e.g. 108" disabled={readOnly} />
         </div>
         <div className="space-y-2">
           <Label htmlFor="baselineAttendance">What would attendance normally be for this day?</Label>
@@ -116,13 +118,18 @@ export function DebriefForm({ eventId, defaults, labourRateGbp = 12.71, readOnly
             name="baselineAttendance"
             type="number"
             min={0}
+            inputMode="numeric"
+            className="h-12 text-[16px] md:h-10 md:text-sm"
             defaultValue={defaults?.baseline_attendance ?? ""}
             placeholder="e.g. 72"
             disabled={readOnly}
           />
         </div>
       </div>
+      </section>
 
+      <section className="mobile-card space-y-4 md:contents">
+      <h2 className="mobile-section-label md:hidden">Takings</h2>
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="wetTakings">Wet takings for this event (£)</Label>
@@ -132,6 +139,8 @@ export function DebriefForm({ eventId, defaults, labourRateGbp = 12.71, readOnly
             type="number"
             step="0.01"
             min={0}
+            inputMode="decimal"
+            className="h-12 text-[16px] md:h-10 md:text-sm"
             value={eventWetTakings}
             onChange={(event) => setEventWetTakings(event.target.value)}
             placeholder="e.g. 2450"
@@ -146,6 +155,8 @@ export function DebriefForm({ eventId, defaults, labourRateGbp = 12.71, readOnly
             type="number"
             step="0.01"
             min={0}
+            inputMode="decimal"
+            className="h-12 text-[16px] md:h-10 md:text-sm"
             value={eventFoodTakings}
             onChange={(event) => setEventFoodTakings(event.target.value)}
             placeholder="e.g. 780"
@@ -163,6 +174,8 @@ export function DebriefForm({ eventId, defaults, labourRateGbp = 12.71, readOnly
             type="number"
             step="0.01"
             min={0}
+            inputMode="decimal"
+            className="h-12 text-[16px] md:h-10 md:text-sm"
             value={baselineWetTakings}
             onChange={(event) => setBaselineWetTakings(event.target.value)}
             placeholder="e.g. 1900"
@@ -178,6 +191,8 @@ export function DebriefForm({ eventId, defaults, labourRateGbp = 12.71, readOnly
             type="number"
             step="0.01"
             min={0}
+            inputMode="decimal"
+            className="h-12 text-[16px] md:h-10 md:text-sm"
             value={baselineFoodTakings}
             onChange={(event) => setBaselineFoodTakings(event.target.value)}
             placeholder="e.g. 620"
@@ -215,6 +230,8 @@ export function DebriefForm({ eventId, defaults, labourRateGbp = 12.71, readOnly
             step="0.25"
             min={0}
             max={2000}
+            inputMode="decimal"
+            className="h-12 text-[16px] md:h-10 md:text-sm"
             value={labourHours}
             onChange={(event) => setLabourHours(event.target.value)}
             placeholder="e.g. 42"
@@ -231,7 +248,10 @@ export function DebriefForm({ eventId, defaults, labourRateGbp = 12.71, readOnly
           </p>
         </div>
       </div>
+      </section>
 
+      <section className="mobile-card space-y-4 md:contents">
+      <h2 className="mobile-section-label md:hidden">Reflections</h2>
       <div className="grid gap-4 md:grid-cols-3">
         <div className="space-y-2">
           <Label htmlFor="promoEffectiveness">How effective was the promotion? (1-5)</Label>
@@ -241,6 +261,8 @@ export function DebriefForm({ eventId, defaults, labourRateGbp = 12.71, readOnly
             type="number"
             min={1}
             max={5}
+            inputMode="numeric"
+            className="h-12 text-[16px] md:h-10 md:text-sm"
             defaultValue={defaults?.promo_effectiveness ?? ""}
             placeholder="e.g. 4"
             disabled={readOnly}
@@ -251,6 +273,7 @@ export function DebriefForm({ eventId, defaults, labourRateGbp = 12.71, readOnly
           <Select
             id="wouldBookAgain"
             name="wouldBookAgain"
+            className="h-12 text-[16px] md:h-10 md:text-sm"
             defaultValue={
               defaults?.would_book_again == null ? "" : defaults.would_book_again ? "yes" : "no"
             }
@@ -272,6 +295,7 @@ export function DebriefForm({ eventId, defaults, labourRateGbp = 12.71, readOnly
           defaultValue={defaults?.highlights ?? ""}
           placeholder="What drove strong guest response, sales, or operational wins?"
           disabled={readOnly}
+          className="text-[16px] md:text-sm"
         />
       </div>
 
@@ -284,6 +308,7 @@ export function DebriefForm({ eventId, defaults, labourRateGbp = 12.71, readOnly
           defaultValue={defaults?.issues ?? ""}
           placeholder="Operational gaps, timing issues, audience mismatch, etc."
           disabled={readOnly}
+          className="text-[16px] md:text-sm"
         />
       </div>
 
@@ -296,6 +321,7 @@ export function DebriefForm({ eventId, defaults, labourRateGbp = 12.71, readOnly
           defaultValue={defaults?.guest_sentiment_notes ?? ""}
           placeholder="What did guests say in person, online, or through team feedback?"
           disabled={readOnly}
+          className="text-[16px] md:text-sm"
         />
       </div>
 
@@ -308,6 +334,7 @@ export function DebriefForm({ eventId, defaults, labourRateGbp = 12.71, readOnly
           defaultValue={defaults?.operational_notes ?? ""}
           placeholder="Staffing, stock, service pace, door/check-in flow, or setup notes."
           disabled={readOnly}
+          className="text-[16px] md:text-sm"
         />
       </div>
 
@@ -320,11 +347,18 @@ export function DebriefForm({ eventId, defaults, labourRateGbp = 12.71, readOnly
           defaultValue={defaults?.next_time_actions ?? ""}
           placeholder="Specific actions to repeat, stop, or test next time."
           disabled={readOnly}
+          className="text-[16px] md:text-sm"
         />
       </div>
+      </section>
 
       {!readOnly && (
-        <SubmitButton label="Save debrief" pendingLabel="Saving..." variant="primary" />
+        <>
+          <SubmitButton label="Save debrief" pendingLabel="Saving..." variant="primary" className="hidden md:inline-flex" />
+          <div className="mobile-actionbar md:hidden">
+            <SubmitButton label="Submit debrief" pendingLabel="Saving..." variant="primary" className="h-12 flex-1" />
+          </div>
+        </>
       )}
     </form>
   );

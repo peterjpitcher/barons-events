@@ -280,7 +280,35 @@ export default async function OverviewPage(): Promise<React.ReactNode> {
         }
       />
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.85fr)]">
+      <div className="space-y-4 md:hidden">
+        <NeedsAttentionCard items={attentionItems} />
+        <UnifiedTodoList
+          mode="dashboard"
+          items={todoResult?.items ?? []}
+          currentUserId={user.id}
+          failedSources={todoResult?.errors}
+        />
+        {user.role === "administrator" ? <PipelineCard counts={statusCounts} /> : null}
+        {user.role === "executive" ? <SummaryStatsCard stats={summaryStats} /> : null}
+        <BookingPulseCard pulse={operationsSnapshot?.bookingPulse ?? null} />
+        <EventReadinessCard events={operationsSnapshot?.readiness ?? null} />
+        {user.role === "administrator" ? (
+          <>
+            <ConflictsCard conflicts={conflicts} />
+            <DebriefsOutstandingCard debriefs={debriefsDue} />
+            <RecentActivityCard activity={recentActivity} />
+          </>
+        ) : null}
+        {user.role === "office_worker" || user.role === "executive" ? (
+          <UpcomingEventsCard
+            events={upcomingEvents}
+            userRole={user.role}
+          />
+        ) : null}
+        {user.role === "executive" ? <RecentActivityCard activity={recentActivity} /> : null}
+      </div>
+
+      <div className="hidden gap-6 md:grid xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.85fr)]">
         <div className="space-y-4">
           <NeedsAttentionCard items={attentionItems} />
           <UnifiedTodoList

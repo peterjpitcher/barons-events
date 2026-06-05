@@ -99,11 +99,11 @@ export function ResetPasswordCard() {
                 onChange={(event) => setPassword(event.target.value)}
                 aria-invalid={Boolean(passwordError)}
                 aria-describedby={passwordError ? "password-error" : undefined}
-                className={passwordError ? errorInputClass : undefined}
+                className={`${passwordError ? errorInputClass : ""} h-12 pr-12 text-[16px] md:h-10 md:text-sm`}
               />
               <button
                 type="button"
-                className="absolute inset-y-0 right-3 flex items-center text-[var(--ink-soft)]"
+                className="absolute inset-y-0 right-3 flex min-w-11 items-center justify-center text-[var(--ink-soft)]"
                 onClick={() => setShowPassword((prev) => !prev)}
                 aria-label={showPassword ? "Hide password" : "Show password"}
               >
@@ -130,11 +130,11 @@ export function ResetPasswordCard() {
                 onChange={(event) => setConfirmPassword(event.target.value)}
                 aria-invalid={Boolean(confirmPasswordError)}
                 aria-describedby={confirmPasswordError ? "confirm-password-error" : undefined}
-                className={confirmPasswordError ? errorInputClass : undefined}
+                className={`${confirmPasswordError ? errorInputClass : ""} h-12 pr-12 text-[16px] md:h-10 md:text-sm`}
               />
               <button
                 type="button"
-                className="absolute inset-y-0 right-3 flex items-center text-[var(--ink-soft)]"
+                className="absolute inset-y-0 right-3 flex min-w-11 items-center justify-center text-[var(--ink-soft)]"
                 onClick={() => setShowConfirmPassword((prev) => !prev)}
                 aria-label={showConfirmPassword ? "Hide password" : "Show password"}
               >
@@ -144,7 +144,7 @@ export function ResetPasswordCard() {
             <FieldError id="confirm-password-error" message={confirmPasswordError} />
           </div>
 
-          <SubmitButton label="Update password" pendingLabel="Updating..." className="w-full" />
+          <SubmitButton label="Update password" pendingLabel="Updating..." className="h-12 w-full" />
 
           <p className="text-sm text-muted">
             Need a fresh link?{" "}

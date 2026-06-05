@@ -25,13 +25,21 @@ export default async function ArtistsPage() {
 
   return (
     <div className="app-page">
-      <PageHeader
-        eyebrow="Programming"
-        title="Artists directory"
-        description="Track artists over time using debrief uplift and sentiment data."
-        meta={<span>{artists.length} artist{artists.length === 1 ? "" : "s"}</span>}
-      />
-      <Card>
+      <div className="hidden md:block">
+        <PageHeader
+          eyebrow="Programming"
+          title="Artists directory"
+          description="Track artists over time using debrief uplift and sentiment data."
+          meta={<span>{artists.length} artist{artists.length === 1 ? "" : "s"}</span>}
+        />
+      </div>
+      <div className="md:hidden">
+        <p className="mobile-eyebrow">Programming</p>
+        <h1 className="mt-1 font-brand-serif text-[1.85rem] font-medium leading-tight text-[var(--navy)]">
+          Artists
+        </h1>
+      </div>
+      <Card className="hidden md:block">
         <CardHeader>
           <CardTitle>Performance context</CardTitle>
           <CardDescription>Use linked event history to support rebooking decisions.</CardDescription>

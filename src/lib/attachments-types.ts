@@ -9,6 +9,8 @@ export type AttachmentVersionSummary = {
   sizeBytes: number;
   uploadedAt: string;
   uploadedBy: string | null;
+  uploadedByName: string | null;
+  uploadedByEmail: string | null;
 };
 
 export type AttachmentSummary = {

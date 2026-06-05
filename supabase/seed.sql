@@ -1,32 +1,30 @@
+select set_config('request.jwt.claim.role', 'service_role', false);
+
 -- Demo venues
-insert into public.venues (id, name, capacity, address, default_approver_id)
+insert into public.venues (id, name, capacity, address)
 values
   (
     '9f9c5da2-8a6e-4db0-84b7-8ae0b25177e7',
     'Barons Riverside',
     180,
-    '12 River Walk, Guildford',
-    '11111111-1111-1111-1111-111111111111'
+    '12 River Walk, Guildford'
   ),
   (
     'c04ef2b5-2741-430b-9148-6a51fdd5dcd2',
     'Barons City Tap',
     220,
-    '85 Market Street, London',
-    '11111111-1111-1111-1111-111111111111'
+    '85 Market Street, London'
   ),
   (
     '0a077fe4-513b-438a-a60d-608c516d6b32',
     'Barons Lakeside',
     150,
-    '44 Willow Lane, Reading',
-    '11111111-1111-1111-1111-111111111111'
+    '44 Willow Lane, Reading'
   )
 on conflict (id) do update set
   name = excluded.name,
   capacity = excluded.capacity,
-  address = excluded.address,
-  default_approver_id = excluded.default_approver_id;
+  address = excluded.address;
 
 insert into public.event_types (label)
 values
@@ -41,49 +39,154 @@ values
 on conflict (label) do nothing;
 
 -- Demo accounts
-select auth.admin.create_user(
-  jsonb_build_object(
-    'id', '11111111-1111-1111-1111-111111111111',
-    'email', 'admin@barons.example',
-    'password', 'password',
-    'email_confirm', true
+insert into auth.users (
+  instance_id,
+  id,
+  aud,
+  role,
+  email,
+  encrypted_password,
+  email_confirmed_at,
+  confirmation_token,
+  recovery_token,
+  email_change_token_new,
+  email_change,
+  raw_app_meta_data,
+  raw_user_meta_data,
+  created_at,
+  updated_at
+)
+values
+  (
+    '00000000-0000-0000-0000-000000000000',
+    '11111111-1111-1111-1111-111111111111',
+    'authenticated',
+    'authenticated',
+    'admin@barons.example',
+    crypt('password', gen_salt('bf', 10)),
+    timezone('utc', now()),
+    '',
+    '',
+    '',
+    '',
+    '{"provider":"email","providers":["email"]}'::jsonb,
+    '{}'::jsonb,
+    timezone('utc', now()),
+    timezone('utc', now())
+  ),
+  (
+    '00000000-0000-0000-0000-000000000000',
+    '22222222-2222-2222-2222-222222222222',
+    'authenticated',
+    'authenticated',
+    'office.hq@barons.example',
+    crypt('password', gen_salt('bf', 10)),
+    timezone('utc', now()),
+    '',
+    '',
+    '',
+    '',
+    '{"provider":"email","providers":["email"]}'::jsonb,
+    '{}'::jsonb,
+    timezone('utc', now()),
+    timezone('utc', now())
+  ),
+  (
+    '00000000-0000-0000-0000-000000000000',
+    '33333333-3333-3333-3333-333333333333',
+    'authenticated',
+    'authenticated',
+    'office.venue@barons.example',
+    crypt('password', gen_salt('bf', 10)),
+    timezone('utc', now()),
+    '',
+    '',
+    '',
+    '',
+    '{"provider":"email","providers":["email"]}'::jsonb,
+    '{}'::jsonb,
+    timezone('utc', now()),
+    timezone('utc', now())
+  ),
+  (
+    '00000000-0000-0000-0000-000000000000',
+    '44444444-4444-4444-4444-444444444444',
+    'authenticated',
+    'authenticated',
+    'executive@barons.example',
+    crypt('password', gen_salt('bf', 10)),
+    timezone('utc', now()),
+    '',
+    '',
+    '',
+    '',
+    '{"provider":"email","providers":["email"]}'::jsonb,
+    '{}'::jsonb,
+    timezone('utc', now()),
+    timezone('utc', now())
   )
-) where not exists (
-  select 1 from auth.users where id = '11111111-1111-1111-1111-111111111111'
-);
+on conflict (id) do update set
+  instance_id = excluded.instance_id,
+  email = excluded.email,
+  encrypted_password = excluded.encrypted_password,
+  email_confirmed_at = excluded.email_confirmed_at,
+  confirmation_token = excluded.confirmation_token,
+  recovery_token = excluded.recovery_token,
+  email_change_token_new = excluded.email_change_token_new,
+  email_change = excluded.email_change,
+  raw_app_meta_data = excluded.raw_app_meta_data,
+  raw_user_meta_data = excluded.raw_user_meta_data,
+  updated_at = excluded.updated_at;
 
-select auth.admin.create_user(
-  jsonb_build_object(
-    'id', '22222222-2222-2222-2222-222222222222',
-    'email', 'office.hq@barons.example',
-    'password', 'password',
-    'email_confirm', true
+insert into auth.identities (
+  provider_id,
+  user_id,
+  identity_data,
+  provider,
+  last_sign_in_at,
+  created_at,
+  updated_at
+)
+values
+  (
+    '11111111-1111-1111-1111-111111111111',
+    '11111111-1111-1111-1111-111111111111',
+    '{"sub":"11111111-1111-1111-1111-111111111111","email":"admin@barons.example"}'::jsonb,
+    'email',
+    timezone('utc', now()),
+    timezone('utc', now()),
+    timezone('utc', now())
+  ),
+  (
+    '22222222-2222-2222-2222-222222222222',
+    '22222222-2222-2222-2222-222222222222',
+    '{"sub":"22222222-2222-2222-2222-222222222222","email":"office.hq@barons.example"}'::jsonb,
+    'email',
+    timezone('utc', now()),
+    timezone('utc', now()),
+    timezone('utc', now())
+  ),
+  (
+    '33333333-3333-3333-3333-333333333333',
+    '33333333-3333-3333-3333-333333333333',
+    '{"sub":"33333333-3333-3333-3333-333333333333","email":"office.venue@barons.example"}'::jsonb,
+    'email',
+    timezone('utc', now()),
+    timezone('utc', now()),
+    timezone('utc', now())
+  ),
+  (
+    '44444444-4444-4444-4444-444444444444',
+    '44444444-4444-4444-4444-444444444444',
+    '{"sub":"44444444-4444-4444-4444-444444444444","email":"executive@barons.example"}'::jsonb,
+    'email',
+    timezone('utc', now()),
+    timezone('utc', now()),
+    timezone('utc', now())
   )
-) where not exists (
-  select 1 from auth.users where id = '22222222-2222-2222-2222-222222222222'
-);
-
-select auth.admin.create_user(
-  jsonb_build_object(
-    'id', '33333333-3333-3333-3333-333333333333',
-    'email', 'office.venue@barons.example',
-    'password', 'password',
-    'email_confirm', true
-  )
-) where not exists (
-  select 1 from auth.users where id = '33333333-3333-3333-3333-333333333333'
-);
-
-select auth.admin.create_user(
-  jsonb_build_object(
-    'id', '44444444-4444-4444-4444-444444444444',
-    'email', 'executive@barons.example',
-    'password', 'password',
-    'email_confirm', true
-  )
-) where not exists (
-  select 1 from auth.users where id = '44444444-4444-4444-4444-444444444444'
-);
+on conflict (provider, provider_id) do update set
+  identity_data = excluded.identity_data,
+  updated_at = excluded.updated_at;
 
 insert into public.users (id, email, full_name, role, venue_id)
 values
@@ -112,7 +215,7 @@ values
     '44444444-4444-4444-4444-444444444444',
     'executive@barons.example',
     'Eden Exec',
-    'executive',
+    'office_worker',
     null
   )
 on conflict (id) do update set
@@ -120,6 +223,14 @@ on conflict (id) do update set
   full_name = excluded.full_name,
   role = excluded.role,
   venue_id = excluded.venue_id;
+
+update public.venues
+set default_approver_id = '11111111-1111-1111-1111-111111111111'
+where id in (
+  '9f9c5da2-8a6e-4db0-84b7-8ae0b25177e7',
+  'c04ef2b5-2741-430b-9148-6a51fdd5dcd2',
+  '0a077fe4-513b-438a-a60d-608c516d6b32'
+);
 
 -- Sample events
 insert into public.events (

@@ -37,13 +37,13 @@ export function ForgotPasswordForm({ nonce }: { nonce?: string }) {
           required
           aria-invalid={Boolean(emailError)}
           aria-describedby={emailError ? "email-error" : undefined}
-          className={emailError ? errorInputClass : undefined}
+          className={`${emailError ? errorInputClass : ""} h-12 text-[16px] md:h-10 md:text-sm`}
         />
         <FieldError id="email-error" message={emailError} />
       </div>
       {formError ? <p className="text-sm text-[var(--color-danger)]">{formError}</p> : null}
       <TurnstileWidget key={turnstileKey} action="password_reset" nonce={nonce} />
-      <SubmitButton label="Send reset link" pendingLabel="Sending link..." />
+      <SubmitButton label="Send reset link" pendingLabel="Sending link..." className="h-12 w-full" />
       <p className="text-sm text-muted">
         Remembered it?{" "}
         <Link href="/login" className="underline">

@@ -136,10 +136,13 @@ function ServiceTypeRow({ type, canEdit }: { type: ServiceTypeRow; canEdit: bool
           </div>
           {canEdit ? <SubmitButton label="Save" pendingLabel="Saving…" size="sm" variant="secondary" /> : <span />}
           {canEdit ? (
-            <form action={deleteAction}>
-              <input type="hidden" name="typeId" value={type.id} />
-              <SubmitButton label="Remove" pendingLabel="Removing…" variant="destructive" size="sm" />
-            </form>
+            <SubmitButton
+              label="Remove"
+              pendingLabel="Removing…"
+              variant="destructive"
+              size="sm"
+              formAction={deleteAction}
+            />
           ) : <span />}
         </div>
       </form>

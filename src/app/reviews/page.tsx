@@ -51,7 +51,7 @@ export default async function ReviewsPage() {
           const spaceLabel = spaces.length > 1 ? "Spaces" : "Space";
           const spaceDisplay = spaces.length ? spaces.join(", ") : "Not specified";
           return (
-            <Card key={event.id}>
+            <Card key={event.id} className="mobile-card md:rounded-[var(--radius-lg)]">
               <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                 <div>
                   <CardTitle className="text-xl text-[var(--navy)]">

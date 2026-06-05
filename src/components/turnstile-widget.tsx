@@ -1,7 +1,7 @@
 "use client";
 
 import { Turnstile, type TurnstileInstance } from "@marsidev/react-turnstile";
-import { useRef, useCallback } from "react";
+import { useRef, useCallback, useState } from "react";
 
 type TurnstileWidgetProps = {
   action: string;
@@ -23,10 +23,16 @@ type TurnstileWidgetProps = {
  */
 export function TurnstileWidget({ action, nonce }: TurnstileWidgetProps) {
   const ref = useRef<TurnstileInstance | null>(null);
+  const [token, setToken] = useState("");
   const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 
   const handleExpire = useCallback(() => {
+    setToken("");
     ref.current?.reset();
+  }, []);
+
+  const handleError = useCallback(() => {
+    setToken("");
   }, []);
 
   if (!siteKey) {
@@ -35,19 +41,26 @@ export function TurnstileWidget({ action, nonce }: TurnstileWidgetProps) {
   }
 
   return (
-    <Turnstile
-      ref={ref}
-      siteKey={siteKey}
-      options={{
-        action,
-        refreshExpired: "auto",
-      }}
-      injectScript
-      scriptOptions={{
-        appendTo: "body",
-        nonce: nonce || "",
-      }}
-      onExpire={handleExpire}
-    />
+    <>
+      <input type="hidden" name="cf-turnstile-response" value={token} readOnly />
+      <div className="max-w-full overflow-hidden">
+        <Turnstile
+          ref={ref}
+          siteKey={siteKey}
+          options={{
+            action,
+            refreshExpired: "auto",
+          }}
+          injectScript
+          scriptOptions={{
+            appendTo: "body",
+            nonce: nonce || "",
+          }}
+          onSuccess={setToken}
+          onExpire={handleExpire}
+          onError={handleError}
+        />
+      </div>
+    </>
   );
 }

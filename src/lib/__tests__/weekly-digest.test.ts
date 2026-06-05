@@ -33,8 +33,9 @@ vi.mock("@/lib/datetime", async (importOriginal) => {
   };
 });
 
-import { sendWeeklyDigestEmail } from "../notifications";
+import { sendMandatoryWeeklyUpdateEmail, sendWeeklyDigestEmail } from "../notifications";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getTodayLondonIsoDate } from "@/lib/datetime";
 
 const mockAdmin = createSupabaseAdminClient as ReturnType<typeof vi.fn>;
 
@@ -666,5 +667,113 @@ describe("sendWeeklyDigestEmail", () => {
     expect(result.sent).toBe(1);
     const call = mockEmailSend.mock.calls[0][0];
     expect(call.subject).toBe("Your BaronsHub 1.1 todo digest \u2014 3 tasks need attention");
+  });
+});
+
+describe("sendMandatoryWeeklyUpdateEmail", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    delete process.env.NOTIFICATIONS_DISABLED;
+    process.env.BARONSHUB_OPERATIONAL_EMAILS_ENABLED = "true";
+    process.env.RESEND_API_KEY = "re_test_key";
+  });
+
+  it("sends the mandatory weekly update with structured section styling", async () => {
+    vi.mocked(getTodayLondonIsoDate).mockReturnValueOnce("2026-04-21");
+
+    setupMockDb({
+      users: {
+        data: [
+          {
+            ...makeUser({ id: "user-1", email: "alice@example.com", full_name: "Alice Smith" }),
+            weekly_digest_last_sent_on: null
+          }
+        ],
+        error: null
+      },
+      planning_task_assignees: { data: [], error: null },
+      planning_tasks: {
+        data: Array.from({ length: 12 }, (_, index) =>
+          makeTask({
+            id: `task-${index + 1}`,
+            title: `Weekly update task ${String(index + 1).padStart(2, "0")}`,
+            due_date: "2026-04-21",
+            assignee_id: "user-1",
+            planning_item: {
+              id: "pi-1",
+              title: "Spring Quiz",
+              event: { id: "evt-1", title: "Spring Quiz Night", venue_id: "venue-1" }
+            }
+          })
+        ),
+        error: null
+      },
+      audit_log: {
+        data: [{ entity_id: "evt-approved", created_at: "2026-04-20T10:00:00Z" }],
+        error: null
+      },
+      events: {
+        data: [
+          {
+            id: "evt-approved",
+            title: "Newly Approved Quiz",
+            start_at: "2026-04-30T19:00:00Z",
+            venue_id: "venue-1",
+            venue: { name: "The Star" },
+            event_venues: [{ venue_id: "venue-1" }]
+          }
+        ],
+        error: null
+      },
+      debriefs: {
+        data: [
+          {
+            event_id: "evt-debrief",
+            submitted_at: "2026-04-20T12:00:00Z",
+            sales_uplift_percent: 12.34,
+            event: {
+              id: "evt-debrief",
+              title: "Debriefed Soul Night",
+              start_at: "2026-04-19T19:00:00Z",
+              venue_id: "venue-1",
+              venue: { name: "The Star" },
+              event_venues: [{ venue_id: "venue-1" }]
+            }
+          }
+        ],
+        error: null
+      }
+    });
+
+    const result = await sendMandatoryWeeklyUpdateEmail();
+
+    expect(result).toEqual({ sent: 1, failed: 0, skippedAssignees: 0 });
+    expect(mockEmailSend).toHaveBeenCalledTimes(1);
+
+    const call = mockEmailSend.mock.calls[0][0];
+    expect(call.to).toEqual(["alice@example.com"]);
+    expect(call.subject).toBe("Your weekly BaronsHub update");
+    expect(call.html).toContain("summary-box");
+    expect(call.html).toContain("background: #23343e;");
+    expect(call.html).toContain("color: #ffffff;");
+    expect(call.html).toContain("Total SOP items");
+    expect(call.html).toContain("10 shown in email");
+    expect(call.html).toContain("Recently approved");
+    expect(call.html).toContain("Recently approved events");
+    expect(call.html).toContain("Your SOP to-dos");
+    expect(call.html).toContain("Debriefed events");
+    expect(call.html).toContain("Newly Approved Quiz");
+    expect(call.html).toContain("Weekly update task 10");
+    expect(call.html).not.toContain("Weekly update task 11");
+    expect(call.html).toContain("...and 2 more to-dos in BaronsHub.");
+    expect(call.html).toContain("Debriefed Soul Night");
+    expect(call.html).toContain("uplift 12.3%");
+    expect(call.html).toContain("Your helpful weekly update from BaronsHub sent every Tuesday");
+    expect(call.html).not.toContain("Approved events in the last 7 days:");
+    expect(call.html).not.toContain("This mandatory weekly update is sent every Tuesday.");
+    expect(call.text).toContain("Recently approved events in the last 7 days");
+    expect(call.text).toContain("Your SOP to-dos due now or in the next 14 days");
+    expect(call.text).toContain("...and 2 more to-dos in BaronsHub.");
+    expect(call.text).toContain("Your helpful weekly update from BaronsHub sent every Tuesday");
   });
 });

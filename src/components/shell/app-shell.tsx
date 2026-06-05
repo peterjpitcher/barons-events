@@ -6,8 +6,9 @@ import { canProposeEvents } from "@/lib/roles";
 import { londonDateString } from "@/lib/planning/utils";
 import type { TodoItem, TodoSource } from "@/components/todos/todo-item-types";
 import { Avatar } from "@/components/ui/design-primitives";
+import { AppShellRouteGuard } from "./app-shell-route-guard";
 import { AppTopBar, type ShellNavSection } from "./app-topbar";
-import { MobileNav } from "./mobile-nav";
+import { MobileBottomTabs, MobileNav } from "./mobile-nav";
 import { NavCalloutLink, NavLink } from "./nav-link";
 import { SessionMonitor } from "./session-monitor";
 
@@ -157,7 +158,7 @@ export async function AppShell({ user, children }: AppShellProps) {
       .filter(<T,>(item: T | null): item is T => item !== null)
   })).filter((section) => section.items.length > 0) satisfies ShellNavSection[];
 
-  return (
+  const shell = (
     <div className="min-h-screen bg-[var(--canvas)] text-[var(--ink)] md:pl-[var(--rail-w)]">
       <SessionMonitor />
       <a
@@ -241,10 +242,20 @@ export async function AppShell({ user, children }: AppShellProps) {
           todos={todoResult.items}
           failedSources={todoResult.errors}
           pendingProposalCount={pendingCount}
-          mobileNav={<MobileNav sections={sections} todayIso={todayIso} showProposeEvent={canCreateEvents} />}
+          mobileNav={
+            <MobileNav
+              sections={sections}
+              todayIso={todayIso}
+              showProposeEvent={canCreateEvents}
+              user={{ email: user.email, fullName: user.fullName, role: user.role }}
+            />
+          }
         />
-        <main id="main-content" className="flex-1 bg-[var(--canvas)] px-4 py-5 md:px-5 md:py-5">{children}</main>
+        <main id="main-content" className="flex-1 bg-[var(--canvas)] px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-4 md:px-5 md:py-5">{children}</main>
       </div>
+      <MobileBottomTabs planningCount={openTodoCount} />
     </div>
   );
+
+  return <AppShellRouteGuard shell={shell}>{children}</AppShellRouteGuard>;
 }

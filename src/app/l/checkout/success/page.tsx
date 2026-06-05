@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CheckCircle2, CalendarDays } from "lucide-react";
 import { formatInLondon } from "@/lib/datetime";
 import { getCheckoutSessionView } from "@/lib/payments/service";
 
@@ -28,9 +29,9 @@ export default async function CheckoutSuccessPage({ searchParams }: PageProps) {
   const eventDateTime = view ? formatEventDateTime(view.eventStartAt) : null;
 
   return (
-    <main className="min-h-screen bg-[var(--navy)] px-4 py-8 text-[var(--navy)]">
-      <section className="mx-auto max-w-lg overflow-hidden rounded-[8px] bg-[var(--paper)] shadow-card">
-        <div className="flex items-center gap-3 border-b border-[var(--hair)] bg-[var(--navy)] px-6 py-4 text-white">
+    <main className="flex min-h-screen items-center bg-[var(--paper)] px-4 py-8 text-[var(--navy)] sm:bg-[var(--navy)]">
+      <section className="mx-auto w-full max-w-lg overflow-hidden rounded-[18px] bg-[var(--paper)] shadow-card sm:rounded-[8px]">
+        <div className="hidden items-center gap-3 border-b border-[var(--hair)] bg-[var(--navy)] px-6 py-4 text-white sm:flex">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.png" alt="Barons Pub Company" className="h-9 w-auto flex-shrink-0" />
           <div>
@@ -38,9 +39,12 @@ export default async function CheckoutSuccessPage({ searchParams }: PageProps) {
             <p className="text-sm text-white/80">Secure event booking</p>
           </div>
         </div>
-        <div className="p-6">
+        <div className="p-6 text-center sm:text-left">
         {!view ? (
           <>
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-[18px] bg-[var(--burgundy-tint)] text-[var(--burgundy)] sm:hidden">
+              !
+            </div>
             <h1 className="font-serif text-2xl font-bold">We could not find that payment</h1>
             <p className="mt-3 text-sm text-[var(--slate)]">
               If money has left your account, please contact the venue team and quote your Stripe payment reference.
@@ -48,11 +52,14 @@ export default async function CheckoutSuccessPage({ searchParams }: PageProps) {
           </>
         ) : view.completed || view.paymentStatus === "completed" ? (
           <>
-            <h1 className="font-serif text-2xl font-bold">You&apos;re booked in</h1>
-            <p className="mt-3 text-sm text-[var(--slate)]">
+            <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-[var(--sage-tint)] text-[var(--sage-dark)] sm:hidden">
+              <CheckCircle2 className="h-11 w-11" aria-hidden="true" />
+            </div>
+            <h1 className="font-serif text-[26px] font-bold sm:text-2xl">You&apos;re booked in!</h1>
+            <p className="mx-auto mt-3 max-w-[18rem] text-sm leading-relaxed text-[var(--slate)] sm:mx-0 sm:max-w-none">
               Thanks {view.firstName}. Your payment has been received and your tickets are confirmed.
             </p>
-            <dl className="mt-5 space-y-3 rounded-[8px] border border-[var(--hair)] bg-[var(--paper-tint)] p-4 text-sm">
+            <dl className="mt-5 space-y-3 rounded-[14px] border border-[var(--hair)] bg-[var(--paper-tint)] p-4 text-left text-sm sm:rounded-[8px]">
               <div className="flex justify-between gap-4">
                 <dt className="text-[var(--slate)]">Event</dt>
                 <dd className="text-right font-semibold">{view.eventTitle}</dd>
@@ -85,6 +92,13 @@ export default async function CheckoutSuccessPage({ searchParams }: PageProps) {
             <p className="mt-4 rounded-[8px] border border-[var(--mustard-bright)] bg-[var(--mustard-tint)] px-4 py-3 text-sm font-semibold text-[var(--navy)]">
               On mobile? Take a screenshot of this page now so you have your booking details handy at the venue.
             </p>
+            <Link
+              href={`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(view.eventTitle)}${view.eventStartAt ? `&dates=${encodeURIComponent(view.eventStartAt.replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z"))}/${encodeURIComponent(view.eventStartAt.replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z"))}` : ""}`}
+              className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[11px] border border-[var(--hair)] px-4 text-sm font-semibold text-[var(--navy)] sm:hidden"
+            >
+              <CalendarDays className="h-4 w-4" aria-hidden="true" />
+              Add to calendar
+            </Link>
           </>
         ) : (
           <>
@@ -96,7 +110,7 @@ export default async function CheckoutSuccessPage({ searchParams }: PageProps) {
         )}
         <Link
           href="https://baronspubs.com"
-          className="mt-6 inline-flex rounded-md bg-[var(--navy)] px-4 py-2 text-sm font-bold uppercase tracking-wider text-white"
+          className="mt-6 inline-flex min-h-11 w-full items-center justify-center rounded-[11px] bg-[var(--navy)] px-4 py-2 text-sm font-bold uppercase tracking-wider text-white sm:w-auto sm:rounded-md"
         >
           Back to Barons
         </Link>

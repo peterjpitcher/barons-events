@@ -239,11 +239,11 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
             Add one-off operational actions or recurring planning schedules.
           </CardDescription>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" variant={mode === "single" ? "primary" : "ghost"} size="sm" onClick={() => setMode("single")}>
+        <div className="mobile-scroll-row md:flex md:flex-wrap md:items-center md:gap-2">
+          <Button type="button" variant={mode === "single" ? "primary" : "ghost"} size="sm" className="h-11 rounded-full px-4 md:h-8 md:rounded-[6px]" onClick={() => setMode("single")}>
             Single item
           </Button>
-          <Button type="button" variant={mode === "series" ? "primary" : "ghost"} size="sm" onClick={() => setMode("series")}>
+          <Button type="button" variant={mode === "series" ? "primary" : "ghost"} size="sm" className="h-11 rounded-full px-4 md:h-8 md:rounded-[6px]" onClick={() => setMode("series")}>
             Recurring series
           </Button>
         </div>
@@ -260,6 +260,7 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                     value={itemTitle}
                     maxLength={160}
                     disabled={isPending}
+                    className="h-12 text-[16px] md:h-10 md:text-sm"
                     aria-invalid={Boolean(singleFieldErrors.title)}
                     aria-describedby="planning-item-title-error"
                     onChange={(event) => setItemTitle(event.target.value)}
@@ -274,6 +275,7 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                     maxLength={120}
                     placeholder="Menu launch, ops change, etc."
                     disabled={isPending}
+                    className="h-12 text-[16px] md:h-10 md:text-sm"
                     aria-invalid={Boolean(singleFieldErrors.typeLabel)}
                     aria-describedby="planning-item-type-error"
                     onChange={(event) => setItemType(event.target.value)}
@@ -297,6 +299,7 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                     type="date"
                     value={itemTargetDate}
                     disabled={isPending}
+                    className="h-12 text-[16px] md:h-10 md:text-sm"
                     aria-invalid={Boolean(singleFieldErrors.targetDate)}
                     aria-describedby="planning-item-target-error"
                     onChange={(event) => setItemTargetDate(event.target.value)}
@@ -305,7 +308,13 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="planning-item-owner">Owner</Label>
-                  <Select id="planning-item-owner" value={itemOwnerId} disabled={isPending} onChange={(event) => setItemOwnerId(event.target.value)}>
+                  <Select
+                    id="planning-item-owner"
+                    value={itemOwnerId}
+                    disabled={isPending}
+                    className="h-12 text-[16px] md:h-10 md:text-sm"
+                    onChange={(event) => setItemOwnerId(event.target.value)}
+                  >
                     <option value="">Unassigned</option>
                     {sortedUsers.map((user) => (
                       <option key={user.id} value={user.id}>
@@ -338,6 +347,7 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                       id="planning-item-venue"
                       value={itemVenueId}
                       disabled={isPending}
+                      className="h-12 text-[16px] md:h-10 md:text-sm"
                       aria-invalid={Boolean(singleFieldErrors.venueId ?? singleFieldErrors.venueIds)}
                       aria-describedby="planning-item-venue-error"
                       onChange={(event) => setItemVenueId(event.target.value)}
@@ -352,7 +362,7 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                   <FieldError id="planning-item-venue-error" message={singleFieldErrors.venueId ?? singleFieldErrors.venueIds} />
                 </div>
               </div>
-              <Button type="button" disabled={isPending} onClick={submitSingleItem}>
+              <Button type="button" disabled={isPending} className="hidden md:inline-flex" onClick={submitSingleItem}>
                 <Plus className="mr-1 h-4 w-4" aria-hidden="true" /> Add planning item
               </Button>
             </div>
@@ -376,6 +386,7 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                     value={seriesTitle}
                     maxLength={160}
                     disabled={isPending}
+                    className="h-12 text-[16px] md:h-10 md:text-sm"
                     aria-invalid={Boolean(seriesFieldErrors.title)}
                     aria-describedby="planning-series-title-error"
                     onChange={(event) => setSeriesTitle(event.target.value)}
@@ -390,6 +401,7 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                     maxLength={120}
                     placeholder="Menu launch, ops change, etc."
                     disabled={isPending}
+                    className="h-12 text-[16px] md:h-10 md:text-sm"
                     aria-invalid={Boolean(seriesFieldErrors.typeLabel)}
                     aria-describedby="planning-series-type-error"
                     onChange={(event) => setSeriesType(event.target.value)}
@@ -412,6 +424,7 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                     id="planning-series-frequency"
                     value={frequency}
                     disabled={isPending}
+                    className="h-12 text-[16px] md:h-10 md:text-sm"
                     onChange={(event) => setFrequency(event.target.value as RecurrenceFrequency)}
                   >
                     <option value="daily">Daily</option>
@@ -428,6 +441,8 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                     max={365}
                     value={interval}
                     disabled={isPending}
+                    className="h-12 text-[16px] md:h-10 md:text-sm"
+                    inputMode="numeric"
                     aria-invalid={Boolean(seriesFieldErrors.recurrenceInterval)}
                     aria-describedby="planning-series-interval-error"
                     onChange={(event) => setInterval(event.target.value)}
@@ -441,6 +456,7 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                     type="date"
                     value={startsOn}
                     disabled={isPending}
+                    className="h-12 text-[16px] md:h-10 md:text-sm"
                     aria-invalid={Boolean(seriesFieldErrors.startsOn)}
                     aria-describedby="planning-series-start-error"
                     onChange={(event) => setStartsOn(event.target.value)}
@@ -454,6 +470,7 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                     type="date"
                     value={endsOn}
                     disabled={isPending}
+                    className="h-12 text-[16px] md:h-10 md:text-sm"
                     aria-invalid={Boolean(seriesFieldErrors.endsOn)}
                     aria-describedby="planning-series-end-error"
                     onChange={(event) => setEndsOn(event.target.value)}
@@ -491,6 +508,8 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                     max={31}
                     value={monthday}
                     disabled={isPending}
+                    className="h-12 text-[16px] md:h-10 md:text-sm"
+                    inputMode="numeric"
                     onChange={(event) => setMonthday(event.target.value)}
                   />
                 </div>
@@ -503,6 +522,7 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                     id="planning-series-owner"
                     value={seriesOwnerId}
                     disabled={isPending}
+                    className="h-12 text-[16px] md:h-10 md:text-sm"
                     onChange={(event) => setSeriesOwnerId(event.target.value)}
                   >
                     <option value="">Unassigned</option>
@@ -519,6 +539,7 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                     id="planning-series-venue"
                     value={seriesVenueId}
                     disabled={isPending}
+                    className="h-12 text-[16px] md:h-10 md:text-sm"
                     aria-invalid={Boolean(seriesFieldErrors.venueId)}
                     aria-describedby="planning-series-venue-error"
                     onChange={(event) => setSeriesVenueId(event.target.value)}
@@ -534,7 +555,7 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                 </div>
               </div>
 
-              <Button type="button" disabled={isPending} onClick={submitSeries}>
+              <Button type="button" disabled={isPending} className="hidden md:inline-flex" onClick={submitSeries}>
                 <Repeat className="mr-1 h-4 w-4" aria-hidden="true" /> Create recurring series
               </Button>
             </div>
@@ -550,6 +571,19 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
           </div>
         )}
       </CardContent>
+      <div className="mobile-actionbar md:hidden">
+        {mode === "single" ? (
+          <Button type="button" variant="primary" className="h-12 flex-1" disabled={isPending} onClick={submitSingleItem}>
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            Add planning item
+          </Button>
+        ) : (
+          <Button type="button" variant="primary" className="h-12 flex-1" disabled={isPending} onClick={submitSeries}>
+            <Repeat className="h-4 w-4" aria-hidden="true" />
+            Create series
+          </Button>
+        )}
+      </div>
     </Card>
   );
 }

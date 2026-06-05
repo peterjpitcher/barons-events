@@ -15,6 +15,16 @@ const dateFormatter = new Intl.DateTimeFormat("en-GB", {
   timeZone: "Europe/London",
 });
 
+function initials(name: string): string {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase() || "?";
+}
+
 export async function generateMetadata({
   params,
 }: {
@@ -62,7 +72,35 @@ export default async function CustomerDetailPage({
         meta={<span>{customer.bookings.length} booking{customer.bookings.length === 1 ? "" : "s"}</span>}
       />
 
-      <div className="rounded-[10px] border border-[var(--hair)] bg-[var(--paper)] p-5 shadow-card">
+      <section className="mobile-card text-center md:hidden">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[var(--navy)] text-xl font-semibold text-white">
+          {initials(fullName)}
+        </div>
+        <h1 className="mt-3 text-xl font-semibold text-[var(--navy)]">{fullName}</h1>
+        <p className="mt-1 text-sm text-[var(--ink-muted)]">{customer.email ?? customer.mobile}</p>
+        <div className="mt-4 grid grid-cols-2 gap-2 text-left">
+          <div className="rounded-[8px] bg-[var(--canvas-2)] p-3">
+            <p className="text-[0.68rem] uppercase tracking-[0.08em] text-[var(--ink-soft)]">Bookings</p>
+            <p className="mt-1 text-lg font-semibold text-[var(--ink)]">{customer.bookings.length}</p>
+          </div>
+          <div className="rounded-[8px] bg-[var(--canvas-2)] p-3">
+            <p className="text-[0.68rem] uppercase tracking-[0.08em] text-[var(--ink-soft)]">Opt-in</p>
+            <p className="mt-1 text-sm font-semibold text-[var(--ink)]">{customer.marketingOptIn ? "Yes" : "No"}</p>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-2">
+          <a href={`tel:${customer.mobile}`} className="inline-flex h-11 items-center justify-center rounded-[8px] bg-[var(--navy)] text-sm font-semibold text-white">
+            Call customer
+          </a>
+          {customer.email ? (
+            <a href={`mailto:${customer.email}`} className="inline-flex h-11 items-center justify-center rounded-[8px] border border-[var(--hair)] text-sm font-semibold text-[var(--ink)]">
+              Email customer
+            </a>
+          ) : null}
+        </div>
+      </section>
+
+      <div className="hidden rounded-[10px] border border-[var(--hair)] bg-[var(--paper)] p-5 shadow-card md:block">
         <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
           <div>
             <dt className="font-semibold text-[var(--ink)]">Mobile</dt>
@@ -106,7 +144,35 @@ export default async function CustomerDetailPage({
             No bookings found.
           </div>
         ) : (
-          <div className="data-table-shell">
+          <>
+          <div className="space-y-2 md:hidden">
+            {customer.bookings.map((booking) => (
+              <div key={booking.id} className="mobile-list-card">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-[var(--ink)]">{booking.eventTitle}</p>
+                    <p className="mt-1 text-sm text-[var(--ink-muted)]">{booking.venueName ?? "No venue"}</p>
+                  </div>
+                  <span className="text-right text-lg font-semibold tabular-nums text-[var(--navy)]">
+                    {booking.ticketCount}
+                    <span className="block text-xs font-medium text-[var(--ink-soft)]">tickets</span>
+                  </span>
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <Badge variant={booking.status === "confirmed" ? "success" : "neutral"}>
+                    {booking.status}
+                  </Badge>
+                  <span className="rounded-full bg-[var(--canvas-2)] px-2 py-1 text-xs font-semibold text-[var(--ink-muted)]">
+                    {dateFormatter.format(booking.eventStartAt)}
+                  </span>
+                </div>
+                {booking.customerNotes ? (
+                  <p className="mt-3 rounded-[8px] bg-[var(--canvas-2)] p-3 text-sm text-[var(--ink-muted)]">{booking.customerNotes}</p>
+                ) : null}
+              </div>
+            ))}
+          </div>
+          <div className="data-table-shell hidden md:block">
             <table className="data-table min-w-full">
               <thead>
                 <tr>
@@ -151,6 +217,7 @@ export default async function CustomerDetailPage({
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
     </div>

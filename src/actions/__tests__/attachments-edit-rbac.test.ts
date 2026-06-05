@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { getCurrentUserMock, loadEventEditContextMock, adminClient } = vi.hoisted(() => {
+const { getCurrentUserMock, loadEventEditContextMock, fileTypeFromBufferMock, adminClient } = vi.hoisted(() => {
   return {
     getCurrentUserMock: vi.fn(),
     loadEventEditContextMock: vi.fn(),
+    fileTypeFromBufferMock: vi.fn(),
     adminClient: {
       storage: {
         from: vi.fn().mockReturnValue({
@@ -21,10 +22,18 @@ const { getCurrentUserMock, loadEventEditContextMock, adminClient } = vi.hoisted
 vi.mock("@/lib/auth", () => ({ getCurrentUser: getCurrentUserMock }));
 vi.mock("@/lib/events/edit-context", () => ({ loadEventEditContext: loadEventEditContextMock }));
 vi.mock("@/lib/supabase/admin", () => ({ createSupabaseAdminClient: () => adminClient }));
+vi.mock("file-type", () => ({ fileTypeFromBuffer: fileTypeFromBufferMock }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/audit-log", () => ({ recordAuditLogEntry: vi.fn().mockResolvedValue(undefined) }));
 
-import { requestAttachmentUploadAction, deleteAttachmentAction, getAttachmentUrlAction } from "../attachments";
+import {
+  requestAttachmentUploadAction,
+  deleteAttachmentAction,
+  getAttachmentUrlAction,
+  renameAttachmentAction,
+  requestAttachmentVersionUploadAction,
+  confirmAttachmentVersionUploadAction
+} from "../attachments";
 
 const VENUE_A = "11111111-1111-4111-8111-111111111111";
 const VENUE_B = "22222222-2222-4222-8222-222222222222";
@@ -97,6 +106,33 @@ describe("requestAttachmentUploadAction — event parent authz", () => {
     loadEventEditContextMock.mockResolvedValue(approvedAtA);
     const result = await requestAttachmentUploadAction(validUploadInput());
     expect(result.success).toBe(true);
+  });
+
+  it("falls back to the legacy attachment insert when display_name is not migrated yet", async () => {
+    getCurrentUserMock.mockResolvedValue({ id: ADMIN_ID, role: "administrator", venueId: null });
+    loadEventEditContextMock.mockResolvedValue(approvedAtA);
+    const insertedRows: Array<Record<string, unknown>> = [];
+    adminClient.from.mockImplementation(() => ({
+      insert: vi.fn((row: Record<string, unknown>) => {
+        insertedRows.push(row);
+        if ("display_name" in row) {
+          return Promise.resolve({
+            error: {
+              code: "PGRST204",
+              message: "Could not find the 'display_name' column of 'attachments' in the schema cache"
+            }
+          });
+        }
+        return Promise.resolve({ error: null });
+      })
+    }));
+
+    const result = await requestAttachmentUploadAction(validUploadInput());
+
+    expect(result.success).toBe(true);
+    expect(insertedRows).toHaveLength(2);
+    expect(insertedRows[0]).toHaveProperty("display_name", "doc.pdf");
+    expect(insertedRows[1]).not.toHaveProperty("display_name");
   });
 
   it("executive cannot upload", async () => {
@@ -338,5 +374,340 @@ describe("deleteAttachmentAction — event parent authz", () => {
     setupAttachmentRow({ event_id: null, planning_item_id: "pi-1", uploaded_by: OTHER_OW_ID, planningVenueId: VENUE_A });
     const result = await deleteAttachmentAction(undefined, fd(ATTACHMENT_1));
     expect(result.success).toBe(false);
+  });
+});
+
+describe("renameAttachmentAction — attachment filename persistence", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getCurrentUserMock.mockResolvedValue({ id: ADMIN_ID, role: "administrator", venueId: null });
+    loadEventEditContextMock.mockResolvedValue(approvedAtA);
+  });
+
+  function renameForm(displayName = "New filename.pdf"): FormData {
+    const form = new FormData();
+    form.set("attachmentId", ATTACHMENT_1);
+    form.set("displayName", displayName);
+    return form;
+  }
+
+  it("stores renamed files in display_name when the migrated column exists", async () => {
+    const updates: Array<Record<string, unknown>> = [];
+    adminClient.from.mockImplementation((table: string) => {
+      if (table === "attachments") {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              maybeSingle: vi.fn().mockResolvedValue({
+                data: {
+                  uploaded_by: OTHER_OW_ID,
+                  event_id: EVENT_1,
+                  planning_item_id: null,
+                  planning_task_id: null,
+                  display_name: "Old display.pdf",
+                  original_filename: "Original.pdf"
+                },
+                error: null
+              })
+            })
+          }),
+          update: vi.fn((payload: Record<string, unknown>) => {
+            updates.push(payload);
+            return { eq: vi.fn().mockResolvedValue({ error: null }) };
+          })
+        };
+      }
+      return {};
+    });
+
+    const result = await renameAttachmentAction(undefined, renameForm());
+
+    expect(result.success).toBe(true);
+    expect(updates).toEqual([{ display_name: "New filename.pdf" }]);
+  });
+
+  it("falls back to original_filename when display_name is not migrated yet", async () => {
+    const updates: Array<Record<string, unknown>> = [];
+    adminClient.from.mockImplementation((table: string) => {
+      if (table === "attachments") {
+        return {
+          select: vi.fn((selectClause: string) => ({
+            eq: vi.fn().mockReturnValue({
+              maybeSingle: vi.fn().mockResolvedValue(
+                selectClause.includes("display_name")
+                  ? {
+                      data: null,
+                      error: {
+                        code: "PGRST204",
+                        message: "Could not find the 'display_name' column of 'attachments' in the schema cache"
+                      }
+                    }
+                  : {
+                      data: {
+                        uploaded_by: OTHER_OW_ID,
+                        event_id: EVENT_1,
+                        planning_item_id: null,
+                        planning_task_id: null,
+                        original_filename: "Original.pdf"
+                      },
+                      error: null
+                    }
+              )
+            })
+          })),
+          update: vi.fn((payload: Record<string, unknown>) => {
+            updates.push(payload);
+            return { eq: vi.fn().mockResolvedValue({ error: null }) };
+          })
+        };
+      }
+      return {};
+    });
+
+    const result = await renameAttachmentAction(undefined, renameForm());
+
+    expect(result.success).toBe(true);
+    expect(updates).toEqual([{ original_filename: "New filename.pdf" }]);
+  });
+});
+
+describe("attachment version upload — schema compatibility", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getCurrentUserMock.mockResolvedValue({ id: ADMIN_ID, role: "administrator", venueId: null });
+    loadEventEditContextMock.mockResolvedValue(approvedAtA);
+    fileTypeFromBufferMock.mockResolvedValue({ mime: "image/png", ext: "png" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 206,
+        arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(8))
+      })
+    );
+    adminClient.storage.from.mockReturnValue({
+      createSignedUploadUrl: vi.fn().mockResolvedValue({
+        data: { signedUrl: "https://signed.example/upload", token: "tok" },
+        error: null
+      }),
+      createSignedUrl: vi.fn().mockResolvedValue({
+        data: { signedUrl: "https://signed.example/download" },
+        error: null
+      })
+    });
+  });
+
+  function versionForm(): FormData {
+    const form = new FormData();
+    form.set("attachmentId", ATTACHMENT_1);
+    form.set("storagePath", `${ATTACHMENT_1}/v1-file.png`);
+    form.set("versionNo", "1");
+    form.set("originalFilename", "New version.png");
+    form.set("mimeType", "image/png");
+    form.set("sizeBytes", "2048");
+    return form;
+  }
+
+  function setupSuccessfulVersionConfirm(row: {
+    original_filename: string;
+    display_name: string | null;
+  }) {
+    const attachmentUpdates: Array<Record<string, unknown>> = [];
+    const versionInserts: Array<Record<string, unknown>> = [];
+    adminClient.from.mockImplementation((table: string) => {
+      if (table === "attachments") {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              is: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: {
+                    id: ATTACHMENT_1,
+                    uploaded_by: OTHER_OW_ID,
+                    event_id: EVENT_1,
+                    planning_item_id: null,
+                    planning_task_id: null,
+                    original_filename: row.original_filename,
+                    display_name: row.display_name
+                  },
+                  error: null
+                })
+              })
+            })
+          }),
+          update: vi.fn((payload: Record<string, unknown>) => {
+            attachmentUpdates.push(payload);
+            return { eq: vi.fn().mockResolvedValue({ error: null }) };
+          })
+        };
+      }
+      if (table === "attachment_versions") {
+        return {
+          insert: vi.fn((payload: Record<string, unknown>) => {
+            versionInserts.push(payload);
+            return {
+              select: vi.fn().mockReturnValue({
+                single: vi.fn().mockResolvedValue({
+                  data: { id: "99999999-9999-4999-8999-999999999999" },
+                  error: null
+                })
+              })
+            };
+          })
+        };
+      }
+      return {};
+    });
+    return { attachmentUpdates, versionInserts };
+  }
+
+  it("uses the new version filename when the display filename was not edited", async () => {
+    const { attachmentUpdates, versionInserts } = setupSuccessfulVersionConfirm({
+      original_filename: "Old version.png",
+      display_name: "Old version.png"
+    });
+
+    const result = await confirmAttachmentVersionUploadAction(undefined, versionForm());
+
+    expect(result.success).toBe(true);
+    expect(versionInserts[0]).toMatchObject({ original_filename: "New version.png" });
+    expect(attachmentUpdates[0]).toMatchObject({
+      original_filename: "New version.png",
+      display_name: "New version.png",
+      current_version_id: "99999999-9999-4999-8999-999999999999"
+    });
+  });
+
+  it("preserves the edited display filename when a new version is uploaded", async () => {
+    const { attachmentUpdates, versionInserts } = setupSuccessfulVersionConfirm({
+      original_filename: "Old version.png",
+      display_name: "Board pack for managers.png"
+    });
+
+    const result = await confirmAttachmentVersionUploadAction(undefined, versionForm());
+
+    expect(result.success).toBe(true);
+    expect(versionInserts[0]).toMatchObject({ original_filename: "New version.png" });
+    expect(attachmentUpdates[0]).toMatchObject({
+      original_filename: "New version.png",
+      display_name: "Board pack for managers.png",
+      current_version_id: "99999999-9999-4999-8999-999999999999"
+    });
+  });
+
+  it("blocks version upload preparation when attachment_versions is not migrated yet", async () => {
+    adminClient.from.mockImplementation((table: string) => {
+      if (table === "attachments") {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              is: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: {
+                    id: ATTACHMENT_1,
+                    uploaded_by: OTHER_OW_ID,
+                    event_id: EVENT_1,
+                    planning_item_id: null,
+                    planning_task_id: null
+                  },
+                  error: null
+                })
+              })
+            })
+          })
+        };
+      }
+      if (table === "attachment_versions") {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              order: vi.fn().mockReturnValue({
+                limit: vi.fn().mockReturnValue({
+                  maybeSingle: vi.fn().mockResolvedValue({
+                    data: null,
+                    error: {
+                      code: "PGRST205",
+                      message: "Could not find the table 'public.attachment_versions' in the schema cache"
+                    }
+                  })
+                })
+              })
+            })
+          })
+        };
+      }
+      return {};
+    });
+
+    const result = await requestAttachmentVersionUploadAction({
+      attachmentId: ATTACHMENT_1,
+      originalFilename: "New version.png",
+      mimeType: "image/png",
+      sizeBytes: 2048
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.message).toMatch(/database migration/i);
+  });
+
+  it("blocks version confirmation when attachment_versions is not migrated yet", async () => {
+    const updates: Array<Record<string, unknown>> = [];
+    const remove = vi.fn().mockResolvedValue({ data: null, error: null });
+    adminClient.storage.from.mockReturnValue({
+      createSignedUrl: vi.fn().mockResolvedValue({
+        data: { signedUrl: "https://signed.example/download" },
+        error: null
+      }),
+      remove
+    });
+    adminClient.from.mockImplementation((table: string) => {
+      if (table === "attachments") {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              is: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: {
+                    id: ATTACHMENT_1,
+                    uploaded_by: OTHER_OW_ID,
+                    event_id: EVENT_1,
+                    planning_item_id: null,
+                    planning_task_id: null
+                  },
+                  error: null
+                })
+              })
+            })
+          }),
+          update: vi.fn((payload: Record<string, unknown>) => {
+            updates.push(payload);
+            return { eq: vi.fn().mockResolvedValue({ error: null }) };
+          })
+        };
+      }
+      if (table === "attachment_versions") {
+        return {
+          insert: vi.fn().mockReturnValue({
+            select: vi.fn().mockReturnValue({
+              single: vi.fn().mockResolvedValue({
+                data: null,
+                error: {
+                  code: "PGRST205",
+                  message: "Could not find the table 'public.attachment_versions' in the schema cache"
+                }
+              })
+            })
+          })
+        };
+      }
+      return {};
+    });
+
+    const result = await confirmAttachmentVersionUploadAction(undefined, versionForm());
+
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.message).toMatch(/database migration/i);
+    expect(updates).toEqual([]);
+    expect(remove).toHaveBeenCalledWith([`${ATTACHMENT_1}/v1-file.png`]);
   });
 });

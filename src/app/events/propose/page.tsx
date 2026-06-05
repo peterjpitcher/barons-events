@@ -34,11 +34,20 @@ export default async function ProposeEventPage() {
         description="Give just a title, date and short description before the full event form is opened."
         meta={<span>{venues.length} available venue{venues.length === 1 ? "" : "s"}</span>}
       />
-      <section className="rounded-[10px] border border-[var(--hair)] bg-[var(--paper)] p-4 shadow-card">
+      <section className="space-y-3">
+        <div className="mobile-card md:hidden">
+          <p className="mobile-eyebrow text-[var(--ink-soft)]">Quick capture</p>
+          <h2 className="mt-1 text-lg font-semibold text-[var(--navy)]">Send the essentials for review</h2>
+          <p className="mt-2 text-sm text-[var(--ink-muted)]">
+            Title, date, venue, and pitch are enough to start the approval workflow.
+          </p>
+        </div>
+        <div className="rounded-[10px] border border-[var(--hair)] bg-[var(--paper)] p-4 shadow-card">
           <ProposeEventForm venues={venues} defaultVenueId={null} />
           <p className="mt-4 text-xs text-subtle">
             Need to submit a fully-detailed event straight away? <Link className="underline" href="/events/new">Use the full event form.</Link>
           </p>
+        </div>
       </section>
     </div>
   );

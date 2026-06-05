@@ -18,12 +18,20 @@ export default async function CustomersPage() {
 
   return (
     <div className="app-page">
-      <PageHeader
-        eyebrow="Audience"
-        title="Customers"
-        description="Browse booking history, contact details, and marketing opt-in status."
-        meta={<span>{customers.length} customer{customers.length !== 1 ? "s" : ""}</span>}
-      />
+      <div className="hidden md:block">
+        <PageHeader
+          eyebrow="Audience"
+          title="Customers"
+          description="Browse booking history, contact details, and marketing opt-in status."
+          meta={<span>{customers.length} customer{customers.length !== 1 ? "s" : ""}</span>}
+        />
+      </div>
+      <div className="md:hidden">
+        <p className="mobile-eyebrow">Audience</p>
+        <h1 className="mt-1 font-brand-serif text-[1.85rem] font-medium leading-tight text-[var(--navy)]">
+          Customers
+        </h1>
+      </div>
       <CustomersView customers={customers} />
     </div>
   );

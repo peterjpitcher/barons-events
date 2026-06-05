@@ -27,13 +27,21 @@ export default async function VenuesPage() {
 
   return (
     <div className="app-page">
-      <PageHeader
-        eyebrow="Estate"
-        title="Venues"
-        description="Keep venue names, reviewer routing, and operational defaults current."
-        meta={<span>{venues.length} venue{venues.length === 1 ? "" : "s"}</span>}
-      />
-      <Card>
+      <div className="hidden md:block">
+        <PageHeader
+          eyebrow="Estate"
+          title="Venues"
+          description="Keep venue names, reviewer routing, and operational defaults current."
+          meta={<span>{venues.length} venue{venues.length === 1 ? "" : "s"}</span>}
+        />
+      </div>
+      <div className="md:hidden">
+        <p className="mobile-eyebrow">Manage</p>
+        <h1 className="mt-1 font-brand-serif text-[1.85rem] font-medium leading-tight text-[var(--navy)]">
+          Venues
+        </h1>
+      </div>
+      <Card className="hidden md:block">
         <CardHeader>
           <CardTitle>Venue routing</CardTitle>
           <CardDescription>These details power event forms, reviewer assignments, and planning analytics.</CardDescription>

@@ -15,14 +15,20 @@ import { canEditVenueLinkedPlanning } from "@/lib/visibility";
 import { PlanningItemEditorShell, PlanningStatusControl } from "./planning-item-editor-shell";
 import { PageHeader } from "@/components/ui/design-primitives";
 import { PlanningOverflowMenu } from "@/components/planning/planning-overflow-menu";
+import { SopChecklistView } from "@/components/planning/sop-checklist-view";
 import { SopDrawer } from "@/components/events/sop-drawer";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/utils/format";
+import { CalendarDays, CheckCircle2, ClipboardList, UserRound } from "lucide-react";
 
 export const metadata = {
   title: "Planning item · BaronsHub 1.1",
   description: "Manage a single planning item, its SOP tasks, attachments, and audit trail."
 };
+
+function statusLabel(status: string): string {
+  return status.replace(/_/g, " ");
+}
 
 export default async function PlanningItemDetailPage({
   params
@@ -51,6 +57,8 @@ export default async function PlanningItemDetailPage({
   const userPrefs = userPrefsResult.data;
 
   const canUploadAttachments = canEditVenueLinkedPlanning(user, { venueId: item.venueId, venues: item.venues });
+  const completeTaskCount = item.tasks.filter((task) => task.status === "done" || task.status === "not_required").length;
+  const taskPercent = item.tasks.length > 0 ? Math.round((completeTaskCount / item.tasks.length) * 100) : 0;
 
   const planningUsers = users.map((u) => ({
     id: u.id,
@@ -72,41 +80,93 @@ export default async function PlanningItemDetailPage({
 
   return (
     <div className="app-page">
-      <PageHeader
-        eyebrow={
-          <span className="inline-flex items-center gap-1">
-            <Link href="/planning" className="hover:text-[var(--ink)]">
-              Planning
-            </Link>
-            <span aria-hidden="true">/</span>
-            <span>Detail</span>
-          </span>
-        }
-        title={item.title}
-        description="Manage the item details, SOP tasks, attachments, and audit trail."
-        meta={
-          <>
-            <span>{item.venueName ?? "Global"}</span>
-            <span className="h-1 w-1 rounded-full bg-[var(--hair-strong)]" />
-            <span>{item.tasks.length} task{item.tasks.length === 1 ? "" : "s"}</span>
-          </>
-        }
-        actions={
-          <>
-            <PlanningStatusControl
-              itemId={item.id}
-              status={item.status}
-              disabled={!canUploadAttachments}
-            />
-            <PlanningOverflowMenu
-              itemId={item.id}
-              canDelete={canUploadAttachments}
-            />
-          </>
-        }
-      />
+      <div className="hidden md:block">
+        <PageHeader
+          eyebrow={
+            <span className="inline-flex items-center gap-1">
+              <Link href="/planning" className="hover:text-[var(--ink)]">
+                Planning
+              </Link>
+              <span aria-hidden="true">/</span>
+              <span>Detail</span>
+            </span>
+          }
+          title={item.title}
+          description="Manage the item details, SOP tasks, attachments, and audit trail."
+          meta={
+            <>
+              <span>{item.venueName ?? "Global"}</span>
+              <span className="h-1 w-1 rounded-full bg-[var(--hair-strong)]" />
+              <span>{item.tasks.length} task{item.tasks.length === 1 ? "" : "s"}</span>
+            </>
+          }
+          actions={
+            <>
+              <PlanningStatusControl
+                itemId={item.id}
+                status={item.status}
+                disabled={!canUploadAttachments}
+              />
+              <PlanningOverflowMenu
+                itemId={item.id}
+                canDelete={canUploadAttachments}
+              />
+            </>
+          }
+        />
+      </div>
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-subtle">
+      <section className="mobile-card space-y-4 md:hidden">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <Link href="/planning" className="mobile-eyebrow text-[var(--ink-muted)]">Planning</Link>
+            <h1 className="mt-1 text-xl font-semibold text-[var(--navy)]">{item.title}</h1>
+            <p className="mt-1 text-sm text-[var(--ink-soft)]">{item.typeLabel}</p>
+          </div>
+          <span className="rounded-full bg-[var(--canvas-2)] px-3 py-1 text-xs font-semibold capitalize text-[var(--ink)]">
+            {statusLabel(item.status)}
+          </span>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="rounded-[8px] bg-[var(--canvas-2)] p-3">
+            <UserRound className="h-4 w-4 text-[var(--ink-muted)]" aria-hidden="true" />
+            <p className="mt-2 text-[0.68rem] uppercase tracking-[0.08em] text-[var(--ink-soft)]">Owner</p>
+            <p className="mt-0.5 text-sm font-semibold text-[var(--ink)]">{item.ownerName ?? "Unassigned"}</p>
+          </div>
+          <div className="rounded-[8px] bg-[var(--canvas-2)] p-3">
+            <CalendarDays className="h-4 w-4 text-[var(--ink-muted)]" aria-hidden="true" />
+            <p className="mt-2 text-[0.68rem] uppercase tracking-[0.08em] text-[var(--ink-soft)]">Target</p>
+            <p className="mt-0.5 text-sm font-semibold text-[var(--ink)]">{formatDate(item.targetDate)}</p>
+          </div>
+          <div className="rounded-[8px] bg-[var(--canvas-2)] p-3">
+            <ClipboardList className="h-4 w-4 text-[var(--ink-muted)]" aria-hidden="true" />
+            <p className="mt-2 text-[0.68rem] uppercase tracking-[0.08em] text-[var(--ink-soft)]">Tasks</p>
+            <p className="mt-0.5 text-sm font-semibold text-[var(--ink)]">{completeTaskCount}/{item.tasks.length} done</p>
+          </div>
+          <div className="rounded-[8px] bg-[var(--canvas-2)] p-3">
+            <CheckCircle2 className="h-4 w-4 text-[var(--ink-muted)]" aria-hidden="true" />
+            <p className="mt-2 text-[0.68rem] uppercase tracking-[0.08em] text-[var(--ink-soft)]">Progress</p>
+            <p className="mt-0.5 text-sm font-semibold text-[var(--ink)]">{taskPercent}%</p>
+          </div>
+        </div>
+        <p className="text-sm text-[var(--ink-muted)]">{item.venueName ?? "Global item"}</p>
+        <div className="flex items-center gap-2">
+          <PlanningStatusControl
+            itemId={item.id}
+            status={item.status}
+            disabled={!canUploadAttachments}
+          />
+          <Button asChild variant="secondary" className="h-11 flex-1 text-white hover:text-white">
+            <a href="#planning-mobile-checklist">SOP</a>
+          </Button>
+          <PlanningOverflowMenu
+            itemId={item.id}
+            canDelete={canUploadAttachments}
+          />
+        </div>
+      </section>
+
+      <div className="hidden flex-wrap items-center gap-x-4 gap-y-1 text-xs text-subtle md:flex">
         <span>
           <span className="font-semibold text-[var(--ink)]">Manager:</span>{" "}
           {item.ownerName ?? "Unassigned"}
@@ -115,7 +175,7 @@ export default async function PlanningItemDetailPage({
           <span className="font-semibold text-[var(--ink)]">Target:</span>{" "}
           {formatDate(item.targetDate)}
         </span>
-        <Button id={`sop-drawer-trigger-${item.id}`} type="button" variant="secondary" size="sm">
+        <Button id={`sop-drawer-trigger-${item.id}`} type="button" variant="secondary" size="sm" className="text-white hover:text-white">
           SOP
         </Button>
       </div>
@@ -139,6 +199,15 @@ export default async function PlanningItemDetailPage({
         />
       </div>
 
+      <section id="planning-mobile-checklist" className="mobile-card md:hidden">
+        <SopChecklistView
+          tasks={item.tasks}
+          users={planningUsers}
+          itemId={item.id}
+          currentUserId={user.id}
+        />
+      </section>
+
       <div className="grid gap-6 lg:grid-cols-2">
         <InternalNotesPanel
           parentType="planning_item"
@@ -160,7 +229,7 @@ export default async function PlanningItemDetailPage({
         readOnly={!canUploadAttachments}
         initiallyPinned={Boolean(userPrefs?.sop_drawer_pinned)}
         externalTriggerId={`sop-drawer-trigger-${item.id}`}
-        title="ALL TODO ITEMS FOR THIS PLANNING ITEM"
+        title="ALL TODO ITEMS FOR THIS PLANNING ITEM (SOP)"
       />
     </div>
   );

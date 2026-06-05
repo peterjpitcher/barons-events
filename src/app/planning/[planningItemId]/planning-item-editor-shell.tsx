@@ -213,6 +213,7 @@ export function PlanningItemEditorShell({
               value={title}
               maxLength={160}
               disabled={disabled}
+              className="h-12 text-[16px] md:h-10 md:text-sm"
               aria-invalid={Boolean(fieldErrors.title)}
               aria-describedby="planning-title-error"
               onChange={(event) => setTitle(event.target.value)}
@@ -249,6 +250,7 @@ export function PlanningItemEditorShell({
               value={typeLabel}
               maxLength={120}
               disabled={disabled}
+              className="h-12 text-[16px] md:h-10 md:text-sm"
               aria-invalid={Boolean(fieldErrors.typeLabel)}
               aria-describedby="planning-type-error"
               onChange={(event) => setTypeLabel(event.target.value)}
@@ -262,6 +264,7 @@ export function PlanningItemEditorShell({
               id="planning-owner"
               value={ownerId}
               disabled={disabled}
+              className="h-12 text-[16px] md:h-10 md:text-sm"
               onChange={(event) => setOwnerId(event.target.value)}
             >
               <option value="">Unassigned</option>
@@ -282,6 +285,7 @@ export function PlanningItemEditorShell({
               type="datetime-local"
               value={startAtInput}
               disabled={disabled}
+              className="h-12 text-[16px] md:h-10 md:text-sm"
               aria-invalid={Boolean(fieldErrors.startAt ?? fieldErrors.targetDate)}
               aria-describedby="planning-start-error"
               onChange={(event) => handleStartChange(event.target.value)}
@@ -296,6 +300,7 @@ export function PlanningItemEditorShell({
               type="datetime-local"
               value={endAtInput}
               disabled={disabled}
+              className="h-12 text-[16px] md:h-10 md:text-sm"
               aria-invalid={Boolean(fieldErrors.endAt)}
               aria-describedby="planning-end-error"
               onChange={(event) => setEndAtInput(event.target.value)}
@@ -318,7 +323,7 @@ export function PlanningItemEditorShell({
         </div>
 
         {canEdit ? (
-          <div className="flex justify-end pt-1">
+          <div className="hidden justify-end pt-1 md:flex">
             <Button type="button" variant="primary" disabled={isPending} onClick={handleSave}>
               {isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
               Save planning item
@@ -326,6 +331,14 @@ export function PlanningItemEditorShell({
           </div>
         ) : null}
       </CardContent>
+      {canEdit ? (
+        <div className="mobile-actionbar md:hidden">
+          <Button type="button" variant="primary" className="h-12 flex-1" disabled={isPending} onClick={handleSave}>
+            {isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
+            Save planning item
+          </Button>
+        </div>
+      ) : null}
     </Card>
   );
 }

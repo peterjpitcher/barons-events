@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Check, Download, History, Pencil, Trash2, Upload, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button, type ButtonProps } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   confirmAttachmentVersionUploadAction,
@@ -28,6 +28,48 @@ type AttachmentListProps = {
   heading?: string;
   emptyMessage?: string;
 };
+
+type AttachmentActionButtonProps = Omit<ButtonProps, "children" | "aria-label" | "title"> & {
+  tooltip: string;
+  ariaLabel?: string;
+  children: ReactNode;
+};
+
+function AttachmentActionButton({ tooltip, ariaLabel, children, ...props }: AttachmentActionButtonProps) {
+  return (
+    <span className="group relative inline-flex">
+      <Button {...props} aria-label={ariaLabel ?? tooltip} title={tooltip}>
+        {children}
+      </Button>
+      <span
+        role="tooltip"
+        className="pointer-events-none absolute bottom-full left-1/2 z-[80] mb-2 hidden -translate-x-1/2 whitespace-nowrap rounded-[7px] border border-[var(--hair)] bg-[var(--navy)] px-2.5 py-1.5 text-xs font-medium leading-4 text-white shadow-card group-hover:block group-focus-within:block"
+      >
+        {tooltip}
+      </span>
+    </span>
+  );
+}
+
+const versionTimestampFormatter = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Europe/London",
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false
+});
+
+function formatVersionTimestamp(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Unknown date";
+  return versionTimestampFormatter.format(date);
+}
+
+function formatVersionUploader(version: AttachmentSummary["versions"][number]): string {
+  return version.uploadedByName ?? version.uploadedByEmail ?? "Unknown uploader";
+}
 
 export function AttachmentList({
   attachments,
@@ -186,6 +228,7 @@ export function AttachmentList({
         {attachments.map((attachment) => {
           const fileLabel = attachment.displayName ?? attachment.originalFilename;
           const versionInputId = `attachment-version-${attachment.id}`;
+          const hasVersionHistory = attachment.versions.length > 0;
           return (
           <li
             key={attachment.id}
@@ -201,12 +244,26 @@ export function AttachmentList({
                   className="min-w-0 flex-1 rounded-[var(--radius-sm)] border border-[var(--hair)] bg-[var(--paper)] px-2 py-1 text-sm text-[var(--ink)] focus:outline-none focus:ring-2 focus:ring-[var(--mustard)]"
                   aria-label={`Rename ${fileLabel}`}
                 />
-                <Button type="button" variant="ghost" size="icon" disabled={isPending} onClick={() => saveRename(attachment)} aria-label="Save filename">
+                <AttachmentActionButton
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  disabled={isPending}
+                  onClick={() => saveRename(attachment)}
+                  tooltip="Save filename"
+                >
                   <Check className="h-4 w-4" aria-hidden="true" />
-                </Button>
-                <Button type="button" variant="ghost" size="icon" disabled={isPending} onClick={() => setRenamingId(null)} aria-label="Cancel rename">
+                </AttachmentActionButton>
+                <AttachmentActionButton
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  disabled={isPending}
+                  onClick={() => setRenamingId(null)}
+                  tooltip="Cancel rename"
+                >
                   <X className="h-4 w-4" aria-hidden="true" />
-                </Button>
+                </AttachmentActionButton>
               </span>
             ) : (
               <span className="flex-1 truncate font-medium text-[var(--ink)]" title={fileLabel}>
@@ -219,38 +276,41 @@ export function AttachmentList({
                 v{attachment.versions[0]?.versionNo ?? attachment.versionCount}
               </span>
             ) : null}
-            <Button
+            <AttachmentActionButton
               type="button"
               variant="ghost"
               size="sm"
               onClick={() => download(attachment)}
               disabled={isPending}
-              aria-label={`Download ${attachment.originalFilename}`}
+              tooltip="Download"
+              ariaLabel={`Download ${attachment.originalFilename}`}
             >
               <Download className="h-4 w-4" aria-hidden="true" />
-            </Button>
-            <Button
+            </AttachmentActionButton>
+            <AttachmentActionButton
               type="button"
               variant="ghost"
               size="sm"
               onClick={() => setHistoryAttachment(attachment)}
-              disabled={isPending || attachment.versions.length === 0}
-              aria-label={`View version history for ${fileLabel}`}
+              disabled={isPending || !hasVersionHistory}
+              tooltip={hasVersionHistory ? "Version history" : "No version history yet"}
+              ariaLabel={hasVersionHistory ? `View version history for ${fileLabel}` : `No version history for ${fileLabel}`}
             >
               <History className="h-4 w-4" aria-hidden="true" />
-            </Button>
+            </AttachmentActionButton>
             {canMutate(attachment) ? (
               <>
-                <Button
+                <AttachmentActionButton
                   type="button"
                   variant="ghost"
                   size="sm"
                   onClick={() => startRename(attachment)}
                   disabled={isPending}
-                  aria-label={`Rename ${fileLabel}`}
+                  tooltip="Rename"
+                  ariaLabel={`Rename ${fileLabel}`}
                 >
                   <Pencil className="h-4 w-4" aria-hidden="true" />
-                </Button>
+                </AttachmentActionButton>
                 <input
                   id={versionInputId}
                   type="file"
@@ -262,29 +322,31 @@ export function AttachmentList({
                     if (file) uploadNewVersion(attachment, file);
                   }}
                 />
-                <Button
+                <AttachmentActionButton
                   type="button"
                   variant="ghost"
                   size="sm"
                   disabled={isPending}
                   onClick={() => document.getElementById(versionInputId)?.click()}
-                  aria-label={`Upload new version of ${fileLabel}`}
+                  tooltip="Upload new version"
+                  ariaLabel={`Upload new version of ${fileLabel}`}
                 >
                   <Upload className="h-4 w-4" aria-hidden="true" />
-                </Button>
+                </AttachmentActionButton>
               </>
             ) : null}
             {canDelete?.(attachment) ? (
-              <Button
+              <AttachmentActionButton
                 type="button"
                 variant="destructive"
                 size="sm"
                 onClick={() => confirmDelete(attachment.id)}
                 disabled={isPending}
-                aria-label={`Delete ${attachment.originalFilename}`}
+                tooltip="Delete"
+                ariaLabel={`Delete ${attachment.originalFilename}`}
               >
                 <Trash2 className="h-4 w-4" aria-hidden="true" />
-              </Button>
+              </AttachmentActionButton>
             ) : null}
           </li>
           );
@@ -308,19 +370,38 @@ export function AttachmentList({
                 <h2 id="attachment-history-title" className="text-lg font-semibold text-[var(--ink)]">Version history</h2>
                 <p className="mt-1 truncate text-sm text-subtle">{historyAttachment.displayName ?? historyAttachment.originalFilename}</p>
               </div>
-              <Button type="button" variant="ghost" size="icon" onClick={() => setHistoryAttachment(null)} aria-label="Close version history">
+              <AttachmentActionButton
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => setHistoryAttachment(null)}
+                tooltip="Close version history"
+              >
                 <X className="h-4 w-4" aria-hidden="true" />
-              </Button>
+              </AttachmentActionButton>
             </div>
             <ul className="mt-4 space-y-2">
               {historyAttachment.versions.map((version) => (
-                <li key={version.id} className="flex flex-wrap items-center gap-2 rounded-[var(--radius-sm)] border border-[var(--hair)] px-3 py-2 text-sm">
-                  <span className="font-semibold text-[var(--ink)]">v{version.versionNo}</span>
-                  <span className="min-w-0 flex-1 truncate text-subtle" title={version.originalFilename}>{version.originalFilename}</span>
-                  <span className="text-xs text-subtle">{formatBytes(version.sizeBytes)}</span>
-                  <Button type="button" variant="ghost" size="sm" onClick={() => downloadVersion(version.id)} disabled={isPending}>
+                <li key={version.id} className="flex items-center gap-3 rounded-[var(--radius-sm)] border border-[var(--hair)] px-3 py-2 text-sm">
+                  <span className="shrink-0 font-semibold text-[var(--ink)]">v{version.versionNo}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[var(--ink)]" title={version.originalFilename}>{version.originalFilename}</span>
+                    <span className="mt-0.5 block text-xs text-subtle">
+                      Uploaded by {formatVersionUploader(version)} · {formatVersionTimestamp(version.uploadedAt)}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-xs text-subtle">{formatBytes(version.sizeBytes)}</span>
+                  <AttachmentActionButton
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => downloadVersion(version.id)}
+                    disabled={isPending}
+                    tooltip="Download version"
+                    ariaLabel={`Download version ${version.versionNo}`}
+                  >
                     <Download className="h-4 w-4" aria-hidden="true" />
-                  </Button>
+                  </AttachmentActionButton>
                 </li>
               ))}
             </ul>

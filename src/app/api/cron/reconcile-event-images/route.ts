@@ -2,6 +2,7 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { verifyCronSecret } from "@/lib/cron-auth";
+import { recordSystemAuditLogEntry } from "@/lib/audit-log";
 
 /**
  * Wave 3 (Phase B′ / Task B4) — reconcile event-image attachments.
@@ -58,6 +59,17 @@ export async function GET(request: Request): Promise<NextResponse> {
       .eq("id", row.id);
 
     if (!attachErr) {
+      await recordSystemAuditLogEntry({
+        entity: "event",
+        entityId: row.id,
+        action: "event.updated",
+        actorId: null,
+        meta: {
+          source: "reconcile-event-images",
+          changes: ["Event image"],
+          event_image_path: row.pending_image_attach
+        }
+      });
       reconciled++;
       continue;
     }
@@ -89,6 +101,18 @@ export async function GET(request: Request): Promise<NextResponse> {
         );
         continue;
       }
+      await recordSystemAuditLogEntry({
+        entity: "event",
+        entityId: row.id,
+        action: "event.updated",
+        actorId: null,
+        meta: {
+          source: "reconcile-event-images",
+          changes: ["Pending event image"],
+          pending_image_attach: row.pending_image_attach,
+          reason: "orphaned_pending_image_purged"
+        }
+      });
       purged++;
     } else {
       console.warn(

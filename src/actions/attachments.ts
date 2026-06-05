@@ -5,6 +5,7 @@ import { z } from "zod";
 import { fileTypeFromBuffer } from "file-type";
 import { getCurrentUser } from "@/lib/auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { isMissingColumnError, isMissingRelationError, serialiseSupabaseError } from "@/lib/supabase/errors";
 import { recordAuditLogEntry } from "@/lib/audit-log";
 import { canEditAttachment, canUploadToAttachmentParent, canViewAttachment } from "@/lib/attachment-access";
 import type { ActionResult } from "@/lib/types";
@@ -79,6 +80,24 @@ function sanitiseFilename(raw: string): string {
   return cleaned.slice(0, 180);
 }
 
+function attachmentDisplayLabel(row: { display_name?: string | null; original_filename?: string | null }): string | null {
+  return row.display_name ?? row.original_filename ?? null;
+}
+
+function attachmentParentMeta(row: {
+  event_id?: string | null;
+  planning_item_id?: string | null;
+  planning_task_id?: string | null;
+}): Record<string, string> {
+  return Object.fromEntries(
+    [
+      ["event_id", row.event_id],
+      ["planning_item_id", row.planning_item_id],
+      ["planning_task_id", row.planning_task_id]
+    ].filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].length > 0)
+  );
+}
+
 function safeExtensionFromMime(mime: string): string {
   const map: Record<string, string> = {
     "application/pdf": "pdf",
@@ -121,6 +140,11 @@ async function recordAttachmentUploadFailure(args: {
   markAttachmentFailed?: boolean;
 }): Promise<void> {
   const db = createSupabaseAdminClient();
+  const { data: attachment } = await (db as any)
+    .from("attachments")
+    .select("display_name, original_filename, event_id, planning_item_id, planning_task_id")
+    .eq("id", args.attachmentId)
+    .maybeSingle();
   if (args.markAttachmentFailed !== false) {
     await (db as any)
       .from("attachments")
@@ -133,7 +157,11 @@ async function recordAttachmentUploadFailure(args: {
     entityId: args.attachmentId,
     action: "attachment.upload_failed",
     actorId: args.userId,
-    meta: { reason: args.reason }
+    meta: {
+      ...(attachment ? attachmentParentMeta(attachment) : {}),
+      reason: args.reason,
+      filename: attachment ? attachmentDisplayLabel(attachment) : null
+    }
   });
 }
 
@@ -300,7 +328,26 @@ export async function requestAttachmentUploadAction(
    
   const { error: insertErr } = await (db as any).from("attachments").insert(insertRow);
   if (insertErr) {
-    console.error("requestAttachmentUploadAction insert failed:", insertErr);
+    if (isMissingColumnError(insertErr, "display_name")) {
+      const legacyInsertRow = { ...insertRow };
+      delete legacyInsertRow.display_name;
+      const { error: legacyInsertErr } = await (db as any).from("attachments").insert(legacyInsertRow);
+      if (!legacyInsertErr) {
+        return {
+          success: true,
+          attachmentId,
+          uploadUrl: signed.signedUrl,
+          storagePath,
+          uploadToken: signed.token ?? ""
+        };
+      }
+      console.error(
+        "requestAttachmentUploadAction legacy insert failed:",
+        serialiseSupabaseError(legacyInsertErr)
+      );
+      return { success: false, message: "Could not create attachment record." };
+    }
+    console.error("requestAttachmentUploadAction insert failed:", serialiseSupabaseError(insertErr));
     return { success: false, message: "Could not create attachment record." };
   }
 
@@ -327,13 +374,28 @@ export async function confirmAttachmentUploadAction(
 
   const db = createSupabaseAdminClient();
    
-  const { data: row, error: readErr } = await (db as any)
+  let supportsAttachmentDisplayName = true;
+  let { data: row, error: readErr } = await (db as any)
     .from("attachments")
     .select("id, uploaded_by, event_id, planning_item_id, planning_task_id, storage_path, original_filename, display_name, mime_type, size_bytes, upload_status")
     .eq("id", parsed.data.attachmentId)
     .maybeSingle();
 
+  if (readErr && isMissingColumnError(readErr, "display_name")) {
+    supportsAttachmentDisplayName = false;
+    const legacyRead = await (db as any)
+      .from("attachments")
+      .select("id, uploaded_by, event_id, planning_item_id, planning_task_id, storage_path, original_filename, mime_type, size_bytes, upload_status")
+      .eq("id", parsed.data.attachmentId)
+      .maybeSingle();
+    row = legacyRead.data;
+    readErr = legacyRead.error;
+  }
+
   if (readErr || !row) {
+    if (readErr) {
+      console.error("confirmAttachmentUploadAction read failed:", serialiseSupabaseError(readErr));
+    }
     return { success: false, message: "Attachment not found." };
   }
   if (row.uploaded_by !== user.id && user.role !== "administrator") {
@@ -356,6 +418,7 @@ export async function confirmAttachmentUploadAction(
     return verificationError;
   }
 
+  let currentVersionId: string | null = null;
   const { data: version, error: versionError } = await (db as any)
     .from("attachment_versions")
     .insert({
@@ -370,21 +433,46 @@ export async function confirmAttachmentUploadAction(
     .select("id")
     .single();
   if (versionError || !version) {
-    console.error("confirmAttachmentUploadAction version insert failed:", versionError);
-    return { success: false, message: "Could not record attachment version." };
+    if (!isMissingRelationError(versionError, "attachment_versions")) {
+      console.error("confirmAttachmentUploadAction version insert failed:", serialiseSupabaseError(versionError));
+      return { success: false, message: "Could not record attachment version." };
+    }
+  } else {
+    currentVersionId = version.id;
   }
 
   const uploadedAt = new Date().toISOString();
-  const { error: updateErr } = await (db as any)
+  const updatePayload: Record<string, unknown> = {
+    upload_status: "uploaded",
+    uploaded_at: uploadedAt
+  };
+  if (supportsAttachmentDisplayName) {
+    updatePayload.display_name = row.display_name ?? row.original_filename;
+  }
+  if (currentVersionId) {
+    updatePayload.current_version_id = currentVersionId;
+  }
+
+  let { error: updateErr } = await (db as any)
     .from("attachments")
-    .update({
-      upload_status: "uploaded",
-      uploaded_at: uploadedAt,
-      display_name: row.display_name ?? row.original_filename,
-      current_version_id: version.id
-    })
+    .update(updatePayload)
     .eq("id", parsed.data.attachmentId);
+  if (
+    updateErr &&
+    (isMissingColumnError(updateErr, "display_name") || isMissingColumnError(updateErr, "current_version_id"))
+  ) {
+    const legacyUpdate = {
+      upload_status: "uploaded",
+      uploaded_at: uploadedAt
+    };
+    const legacyResult = await (db as any)
+      .from("attachments")
+      .update(legacyUpdate)
+      .eq("id", parsed.data.attachmentId);
+    updateErr = legacyResult.error;
+  }
   if (updateErr) {
+    console.error("confirmAttachmentUploadAction update failed:", serialiseSupabaseError(updateErr));
     return { success: false, message: "Could not mark attachment uploaded." };
   }
 
@@ -393,7 +481,14 @@ export async function confirmAttachmentUploadAction(
     entityId: parsed.data.attachmentId,
     action: "attachment.uploaded",
     actorId: user.id,
-    meta: { mime_type: row.mime_type, storage_path: row.storage_path }
+    meta: {
+      ...attachmentParentMeta(row),
+      filename: attachmentDisplayLabel(row),
+      original_filename: row.original_filename,
+      mime_type: row.mime_type,
+      size_bytes: row.size_bytes,
+      storage_path: row.storage_path
+    }
   });
 
   await revalidateAttachmentParentPaths(row);
@@ -423,22 +518,51 @@ export async function renameAttachmentAction(
   }
 
   const db = createSupabaseAdminClient();
-  const { data: row } = await (db as any)
+  let supportsAttachmentDisplayName = true;
+  let { data: row, error: readError } = await (db as any)
     .from("attachments")
     .select("uploaded_by, event_id, planning_item_id, planning_task_id, display_name, original_filename")
     .eq("id", parsed.data.attachmentId)
     .maybeSingle();
+  if (readError && isMissingColumnError(readError, "display_name")) {
+    supportsAttachmentDisplayName = false;
+    const legacyRead = await (db as any)
+      .from("attachments")
+      .select("uploaded_by, event_id, planning_item_id, planning_task_id, original_filename")
+      .eq("id", parsed.data.attachmentId)
+      .maybeSingle();
+    row = legacyRead.data;
+    readError = legacyRead.error;
+  }
+  if (readError) {
+    console.error("renameAttachmentAction read failed:", serialiseSupabaseError(readError));
+    return { success: false, message: "Attachment not found." };
+  }
   if (!row) return { success: false, message: "Attachment not found." };
   if (!(await canEditAttachment(user, row))) {
     return { success: false, message: "You don't have permission to rename this attachment." };
   }
 
   const displayName = sanitiseFilename(parsed.data.displayName);
-  const { error } = await (db as any)
+  const updatePayload = supportsAttachmentDisplayName
+    ? { display_name: displayName }
+    : { original_filename: displayName };
+  let { error } = await (db as any)
     .from("attachments")
-    .update({ display_name: displayName })
+    .update(updatePayload)
     .eq("id", parsed.data.attachmentId);
-  if (error) return { success: false, message: "Could not rename attachment." };
+  if (error && supportsAttachmentDisplayName && isMissingColumnError(error, "display_name")) {
+    supportsAttachmentDisplayName = false;
+    const legacyUpdate = await (db as any)
+      .from("attachments")
+      .update({ original_filename: displayName })
+      .eq("id", parsed.data.attachmentId);
+    error = legacyUpdate.error;
+  }
+  if (error) {
+    console.error("renameAttachmentAction update failed:", serialiseSupabaseError(error));
+    return { success: false, message: "Could not rename attachment." };
+  }
 
   await recordAuditLogEntry({
     entity: "attachment",
@@ -446,8 +570,10 @@ export async function renameAttachmentAction(
     action: "attachment.renamed",
     actorId: user.id,
     meta: {
+      ...attachmentParentMeta(row),
       previous_display_name: row.display_name ?? row.original_filename,
-      display_name: displayName
+      display_name: displayName,
+      persisted_field: supportsAttachmentDisplayName ? "display_name" : "original_filename"
     }
   });
 
@@ -488,14 +614,27 @@ export async function requestAttachmentVersionUploadAction(
     return { success: false, message: "You don't have permission to upload a new version." };
   }
 
-  const { data: latest } = await (db as any)
+  let versionNo = 1;
+  const { data: latest, error: latestError } = await (db as any)
     .from("attachment_versions")
     .select("version_no")
     .eq("attachment_id", parsed.data.attachmentId)
     .order("version_no", { ascending: false })
     .limit(1)
     .maybeSingle();
-  const versionNo = Number(latest?.version_no ?? 0) + 1;
+  if (latestError && !isMissingRelationError(latestError, "attachment_versions")) {
+    console.error("requestAttachmentVersionUploadAction latest version lookup failed:", serialiseSupabaseError(latestError));
+    return { success: false, message: "Could not prepare version upload." };
+  }
+  if (latestError && isMissingRelationError(latestError, "attachment_versions")) {
+    return {
+      success: false,
+      message: "Attachment version history needs the database migration before uploading versions."
+    };
+  }
+  if (!latestError) {
+    versionNo = Number(latest?.version_no ?? 0) + 1;
+  }
   const ext = safeExtensionFromMime(parsed.data.mimeType);
   const storagePath = `${parsed.data.attachmentId}/v${versionNo}-${crypto.randomUUID()}.${ext}`;
 
@@ -549,12 +688,27 @@ export async function confirmAttachmentVersionUploadAction(
   }
 
   const db = createSupabaseAdminClient();
-  const { data: row } = await (db as any)
+  let supportsAttachmentDisplayName = true;
+  let { data: row, error: readError } = await (db as any)
     .from("attachments")
-    .select("id, uploaded_by, event_id, planning_item_id, planning_task_id")
+    .select("id, uploaded_by, event_id, planning_item_id, planning_task_id, original_filename, display_name")
     .eq("id", parsed.data.attachmentId)
     .is("deleted_at", null)
     .maybeSingle();
+  if (readError && isMissingColumnError(readError, "display_name")) {
+    supportsAttachmentDisplayName = false;
+    const legacyRead = await (db as any)
+      .from("attachments")
+      .select("id, uploaded_by, event_id, planning_item_id, planning_task_id, original_filename")
+      .eq("id", parsed.data.attachmentId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    row = legacyRead.data;
+    readError = legacyRead.error;
+  }
+  if (readError) {
+    console.error("confirmAttachmentVersionUploadAction attachment read failed:", serialiseSupabaseError(readError));
+  }
   if (!row) return { success: false, message: "Attachment not found." };
   if (!(await canEditAttachment(user, row))) {
     return { success: false, message: "You don't have permission to confirm this version." };
@@ -572,6 +726,11 @@ export async function confirmAttachmentVersionUploadAction(
   }
 
   const safeName = sanitiseFilename(parsed.data.originalFilename);
+  const currentDisplayName = typeof row.display_name === "string" && row.display_name.trim().length > 0
+    ? row.display_name
+    : null;
+  const hasUserEditedDisplayName = Boolean(currentDisplayName && currentDisplayName !== row.original_filename);
+  const nextDisplayName = hasUserEditedDisplayName ? currentDisplayName : safeName;
   const { data: version, error: versionError } = await (db as any)
     .from("attachment_versions")
     .insert({
@@ -586,31 +745,70 @@ export async function confirmAttachmentVersionUploadAction(
     .select("id")
     .single();
   if (versionError || !version) {
-    console.error("confirmAttachmentVersionUploadAction version insert failed:", versionError);
-    return { success: false, message: "Could not record the new version." };
+    if (!isMissingRelationError(versionError, "attachment_versions")) {
+      console.error("confirmAttachmentVersionUploadAction version insert failed:", serialiseSupabaseError(versionError));
+      return { success: false, message: "Could not record the new version." };
+    }
+
+    await (db as any).storage.from("task-attachments").remove([parsed.data.storagePath]).catch(() => {});
+    return {
+      success: false,
+      message: "Attachment version history needs the database migration before uploading versions."
+    };
   }
 
-  const { error: updateError } = await (db as any)
+  const uploadedAt = new Date().toISOString();
+  const updatePayload: Record<string, unknown> = {
+    current_version_id: version.id,
+    storage_path: parsed.data.storagePath,
+    original_filename: safeName,
+    mime_type: parsed.data.mimeType,
+    size_bytes: parsed.data.sizeBytes,
+    uploaded_at: uploadedAt,
+    uploaded_by: user.id,
+    upload_status: "uploaded"
+  };
+  if (supportsAttachmentDisplayName) {
+    updatePayload.display_name = nextDisplayName;
+  }
+
+  let { error: updateError } = await (db as any)
     .from("attachments")
-    .update({
-      current_version_id: version.id,
-      storage_path: parsed.data.storagePath,
-      original_filename: safeName,
-      mime_type: parsed.data.mimeType,
-      size_bytes: parsed.data.sizeBytes,
-      uploaded_at: new Date().toISOString(),
-      uploaded_by: user.id,
-      upload_status: "uploaded"
-    })
+    .update(updatePayload)
     .eq("id", parsed.data.attachmentId);
+  if (
+    updateError &&
+    (isMissingColumnError(updateError, "current_version_id") || isMissingColumnError(updateError, "display_name"))
+  ) {
+    const retryPayload = { ...updatePayload };
+    if (isMissingColumnError(updateError, "current_version_id")) {
+      delete retryPayload.current_version_id;
+    }
+    if (isMissingColumnError(updateError, "display_name")) {
+      delete retryPayload.display_name;
+    }
+    const legacyUpdate = await (db as any)
+      .from("attachments")
+      .update(retryPayload)
+      .eq("id", parsed.data.attachmentId);
+    updateError = legacyUpdate.error;
+  }
   if (updateError) return { success: false, message: "Could not activate the new version." };
 
   await recordAuditLogEntry({
     entity: "attachment",
     entityId: parsed.data.attachmentId,
-    action: "attachment.version_uploaded",
+    action: "attachment.version_added",
     actorId: user.id,
-    meta: { version_no: parsed.data.versionNo, mime_type: parsed.data.mimeType }
+    meta: {
+      ...attachmentParentMeta(row),
+      filename: nextDisplayName,
+      uploaded_filename: safeName,
+      previous_filename: row.original_filename,
+      version_no: parsed.data.versionNo,
+      mime_type: parsed.data.mimeType,
+      size_bytes: parsed.data.sizeBytes
+    }
   });
 
   await revalidateAttachmentParentPaths(row);
@@ -630,11 +828,25 @@ export async function deleteAttachmentAction(
   const db = createSupabaseAdminClient();
 
 
-  const { data: row } = await (db as any)
+  let supportsAttachmentDisplayName = true;
+  let { data: row, error: readError } = await (db as any)
     .from("attachments")
-    .select("uploaded_by, event_id, planning_item_id, planning_task_id")
+    .select("uploaded_by, event_id, planning_item_id, planning_task_id, display_name, original_filename")
     .eq("id", parsed.data.attachmentId)
     .maybeSingle();
+  if (readError && isMissingColumnError(readError, "display_name")) {
+    supportsAttachmentDisplayName = false;
+    const legacyRead = await (db as any)
+      .from("attachments")
+      .select("uploaded_by, event_id, planning_item_id, planning_task_id, original_filename")
+      .eq("id", parsed.data.attachmentId)
+      .maybeSingle();
+    row = legacyRead.data;
+    readError = legacyRead.error;
+  }
+  if (readError) {
+    console.error("deleteAttachmentAction read failed:", serialiseSupabaseError(readError));
+  }
 
   if (!row) return { success: false, message: "Attachment not found." };
 
@@ -654,7 +866,11 @@ export async function deleteAttachmentAction(
     entityId: parsed.data.attachmentId,
     action: "attachment.deleted",
     actorId: user.id,
-    meta: {}
+    meta: {
+      ...attachmentParentMeta(row),
+      filename: supportsAttachmentDisplayName ? attachmentDisplayLabel(row) : row.original_filename,
+      original_filename: row.original_filename
+    }
   });
 
   await revalidateAttachmentParentPaths(row);

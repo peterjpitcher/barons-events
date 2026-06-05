@@ -21,7 +21,8 @@ export function FieldLabel({ children, className, help, ...props }: FieldLabelPr
               "inline-flex h-4 w-4 items-center justify-center rounded-full text-[var(--ink-soft)] transition",
               "hover:bg-[var(--paper-tint)] hover:text-[var(--ink)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mustard)]"
             )}
-            aria-label={`Help for ${typeof children === "string" ? children : "this field"}`}
+            aria-label="Show field help"
+            title={`Help for ${typeof children === "string" ? children : "this field"}`}
           >
             <CircleHelp className="h-3.5 w-3.5" aria-hidden="true" />
           </button>

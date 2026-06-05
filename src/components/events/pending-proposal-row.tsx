@@ -77,10 +77,10 @@ export function PendingProposalRow({ proposal, canDecide = false }: { proposal: 
     : null;
 
   return (
-    <li className="rounded-[var(--radius)] border border-[var(--hair)] bg-[var(--paper)]">
+    <li className="mobile-card p-0 md:rounded-[var(--radius)]">
       <button
         type="button"
-        className="flex w-full items-start gap-2 p-4 text-left hover:bg-[var(--canvas-2)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mustard)]"
+        className="flex min-h-16 w-full items-start gap-2 rounded-[inherit] p-4 text-left hover:bg-[var(--canvas-2)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mustard)]"
         onClick={() => setIsExpanded((v) => !v)}
         aria-expanded={isExpanded}
         aria-controls={detailsId}
@@ -101,7 +101,7 @@ export function PendingProposalRow({ proposal, canDecide = false }: { proposal: 
             <span className="mt-1 block truncate text-xs text-subtle">“{notesPreview}”</span>
           ) : null}
         </span>
-        <span className="flex-shrink-0 text-xs text-subtle">
+        <span className="hidden flex-shrink-0 text-xs text-subtle sm:inline">
           {isExpanded ? "Hide details" : "Show details"}
         </span>
       </button>
@@ -136,11 +136,12 @@ export function PendingProposalRow({ proposal, canDecide = false }: { proposal: 
             .
           </p>
           {canDecide ? (
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="grid gap-2 sm:flex sm:flex-wrap sm:items-center">
               <Button
                 type="button"
                 variant="primary"
                 size="sm"
+                className="h-11 w-full sm:h-8 sm:w-auto"
                 disabled={isPending}
                 onClick={handleApprove}
                 aria-label={`Approve proposal ${proposal.title}`}
@@ -151,6 +152,7 @@ export function PendingProposalRow({ proposal, canDecide = false }: { proposal: 
                 type="button"
                 variant="ghost"
                 size="sm"
+                className="h-11 w-full sm:h-8 sm:w-auto"
                 disabled={isPending}
                 onClick={() => setShowRejectForm((v) => !v)}
                 aria-label={`Reject proposal ${proposal.title}`}
@@ -173,12 +175,14 @@ export function PendingProposalRow({ proposal, canDecide = false }: { proposal: 
                 onChange={(e) => setRejectReason(e.target.value)}
                 placeholder="Let the creator know why you're rejecting the proposal."
                 disabled={isPending}
+                className="text-[16px] md:text-sm"
               />
-              <div className="flex justify-end gap-1">
+              <div className="grid gap-2 sm:flex sm:justify-end sm:gap-1">
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
+                  className="h-11 sm:h-8"
                   disabled={isPending}
                   onClick={() => {
                     setShowRejectForm(false);
@@ -191,6 +195,7 @@ export function PendingProposalRow({ proposal, canDecide = false }: { proposal: 
                   type="button"
                   variant="primary"
                   size="sm"
+                  className="h-11 sm:h-8"
                   disabled={isPending || !rejectReason.trim()}
                   onClick={handleReject}
                 >

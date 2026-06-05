@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { BookingGroup, BookingRow } from "@/lib/all-bookings";
 import type { BookingStatus } from "@/lib/types";
 
@@ -10,6 +10,19 @@ interface Props {
 
 type StatusFilter = "all" | BookingStatus;
 type DateFilter = "all" | "this_month" | "next_30_days";
+type EventTimeFilter = "current" | "past" | "all";
+
+const eventTimeFilters: { value: EventTimeFilter; label: string }[] = [
+  { value: "current", label: "Current" },
+  { value: "past", label: "Past" },
+  { value: "all", label: "All" },
+];
+
+const bookingStatusFilters: { value: StatusFilter; label: string }[] = [
+  { value: "confirmed", label: "Confirmed" },
+  { value: "cancelled", label: "Cancelled" },
+  { value: "all", label: "All" },
+];
 
 const londonDateFormatter = new Intl.DateTimeFormat("en-GB", {
   day: "numeric",
@@ -35,6 +48,25 @@ function formatLondonDate(value: Date | string): string {
 
 function formatLondonDateTime(value: Date | string): string {
   return londonDateTimeFormatter.format(toDate(value));
+}
+
+export function isBookingGroupPast(group: Pick<BookingGroup, "eventStartAt" | "eventEndAt">, now = new Date()): boolean {
+  return toDate(group.eventEndAt ?? group.eventStartAt) < now;
+}
+
+function useIsMobileViewport(): boolean {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const media = window.matchMedia("(max-width: 767.98px)");
+    const sync = () => setIsMobile(media.matches);
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
+
+  return isMobile;
 }
 
 function StatusBadge({ status }: { status: BookingStatus }) {
@@ -78,10 +110,12 @@ function PaymentBadge({ booking }: { booking: BookingRow }) {
 
 export function BookingsView({ groups }: Props) {
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("confirmed");
   const [dateFilter, setDateFilter] = useState<DateFilter>("all");
+  const [eventTimeFilter, setEventTimeFilter] = useState<EventTimeFilter>("current");
+  const isMobile = useIsMobileViewport();
 
-  const filteredGroups = useMemo<BookingGroup[]>(() => {
+  const filteredGroupsIncludingPast = useMemo<BookingGroup[]>(() => {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
@@ -117,18 +151,24 @@ export function BookingsView({ groups }: Props) {
 
         if (bookings.length === 0) return null;
 
-        // Only count confirmed bookings in summary totals
-        const confirmedBookings = bookings.filter((b) => b.status === "confirmed");
-
         return {
           ...group,
           bookings,
-          totalBookings: confirmedBookings.length,
-          totalTickets: confirmedBookings.reduce((s, b) => s + b.ticketCount, 0),
+          totalBookings: bookings.length,
+          totalTickets: bookings.reduce((s, b) => s + b.ticketCount, 0),
         };
       })
       .filter((g): g is BookingGroup => g !== null);
   }, [groups, search, statusFilter, dateFilter]);
+
+  const filteredGroups = useMemo<BookingGroup[]>(() => {
+    if (eventTimeFilter === "all") return filteredGroupsIncludingPast;
+    const now = new Date();
+    return filteredGroupsIncludingPast.filter((group) => {
+      const isPast = isBookingGroupPast(group, now);
+      return eventTimeFilter === "past" ? isPast : !isPast;
+    });
+  }, [filteredGroupsIncludingPast, eventTimeFilter]);
 
   const summaryBookings = filteredGroups.reduce((s, g) => s + g.totalBookings, 0);
   const summaryTickets  = filteredGroups.reduce((s, g) => s + g.totalTickets, 0);
@@ -142,28 +182,80 @@ export function BookingsView({ groups }: Props) {
           placeholder="Search name or mobile…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="h-8 w-full rounded-[7px] border border-[var(--hair)] bg-[var(--paper)] px-3 text-sm text-[var(--ink)] placeholder:text-[var(--ink-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--mustard-tint)] sm:w-64"
+          className="h-11 w-full rounded-[11px] border border-[var(--hair)] bg-[var(--paper)] px-3 text-[16px] text-[var(--ink)] placeholder:text-[var(--ink-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--mustard-tint)] sm:h-8 sm:w-64 sm:rounded-[7px] sm:text-sm"
         />
 
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-          className="h-8 rounded-[7px] border border-[var(--hair)] bg-[var(--paper)] px-3 text-sm text-[var(--ink)] focus:outline-none focus:ring-2 focus:ring-[var(--mustard-tint)]"
-        >
-          <option value="all">All statuses</option>
-          <option value="confirmed">Confirmed</option>
-          <option value="cancelled">Cancelled</option>
-        </select>
+        <div className="flex w-full items-center gap-2 overflow-x-auto sm:w-auto sm:overflow-visible">
+          <span className="font-brand-mono text-[0.625rem] font-semibold uppercase tracking-[0.08em] text-[var(--ink-soft)]">
+            Status
+          </span>
+          <div
+            role="radiogroup"
+            aria-label="Booking status filter"
+            className="inline-flex h-8 rounded-[7px] border border-[var(--hair)] bg-[var(--paper)] p-0.5"
+          >
+            {bookingStatusFilters.map((option) => {
+              const selected = statusFilter === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => setStatusFilter(option.value)}
+                  className={`rounded-[6px] px-3 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--slate)] ${
+                    selected
+                      ? "bg-[var(--navy)] text-white"
+                      : "text-[var(--ink-muted)] hover:text-[var(--ink)]"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
         <select
           value={dateFilter}
           onChange={(e) => setDateFilter(e.target.value as DateFilter)}
-          className="h-8 rounded-[7px] border border-[var(--hair)] bg-[var(--paper)] px-3 text-sm text-[var(--ink)] focus:outline-none focus:ring-2 focus:ring-[var(--mustard-tint)]"
+          className="h-11 w-full rounded-[11px] border border-[var(--hair)] bg-[var(--paper)] px-3 text-[16px] text-[var(--ink)] focus:outline-none focus:ring-2 focus:ring-[var(--mustard-tint)] sm:h-8 sm:w-auto sm:rounded-[7px] sm:text-sm"
         >
           <option value="all">All dates</option>
           <option value="this_month">This month</option>
           <option value="next_30_days">Next 30 days</option>
         </select>
+
+        <div className="flex w-full items-center gap-2 overflow-x-auto sm:w-auto sm:overflow-visible">
+          <span className="font-brand-mono text-[0.625rem] font-semibold uppercase tracking-[0.08em] text-[var(--ink-soft)]">
+            Events
+          </span>
+          <div
+            role="radiogroup"
+            aria-label="Event time filter"
+            className="inline-flex h-8 rounded-[7px] border border-[var(--hair)] bg-[var(--paper)] p-0.5"
+          >
+            {eventTimeFilters.map((option) => {
+              const selected = eventTimeFilter === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => setEventTimeFilter(option.value)}
+                  className={`rounded-[6px] px-3 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--slate)] ${
+                    selected
+                      ? "bg-[var(--navy)] text-white"
+                      : "text-[var(--ink-muted)] hover:text-[var(--ink)]"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
         <span className="ml-auto whitespace-nowrap font-brand-mono text-[0.625rem] uppercase tracking-[0.05em] text-[var(--ink-soft)]">
           {summaryBookings} booking{summaryBookings !== 1 ? "s" : ""} · {summaryTickets} ticket{summaryTickets !== 1 ? "s" : ""}
@@ -191,9 +283,57 @@ export function BookingsView({ groups }: Props) {
                 </span>
               </div>
 
+              {isMobile ? (
+              <div className="grid gap-2">
+                {group.bookings.map((booking) => {
+                  const fullName = `${booking.firstName}${booking.lastName ? ` ${booking.lastName}` : ""}`;
+                  return (
+                    <article key={booking.id} className="mobile-card">
+                      <div className="flex items-start gap-3">
+                        <div className="min-w-0 flex-1">
+                          <h3 className="text-[15px] font-semibold leading-tight text-[var(--ink)]">{fullName}</h3>
+                          <a
+                            href={`tel:${booking.mobile.replace(/\s+/g, "")}`}
+                            className="mt-1 inline-flex font-brand-mono text-xs text-[var(--slate-dark)] underline-offset-2 hover:underline"
+                          >
+                            {booking.mobile}
+                          </a>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-2xl font-semibold leading-none text-[var(--ink)]">{booking.ticketCount}</p>
+                          <p className="mt-1 font-brand-mono text-[0.55rem] uppercase tracking-[0.08em] text-[var(--ink-soft)]">tickets</p>
+                        </div>
+                      </div>
+                      {booking.customerNotes ? (
+                        <p className="mt-3 rounded-[10px] bg-[var(--paper-tint)] px-3 py-2 text-sm leading-relaxed text-[var(--ink-muted)]">
+                          {booking.customerNotes}
+                        </p>
+                      ) : null}
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <StatusBadge status={booking.status} />
+                        <PaymentBadge booking={booking} />
+                        <time className="ml-auto text-xs text-[var(--ink-soft)]" dateTime={toDate(booking.createdAt).toISOString()}>
+                          {formatLondonDateTime(booking.createdAt)}
+                        </time>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+              ) : (
+              <>
               {/* Bookings table */}
-              <div className="data-table-shell">
-                <table className="data-table min-w-full">
+              <div className="data-table-shell w-full">
+                <table className="data-table w-full table-fixed">
+                  <colgroup>
+                    <col className="w-[16%]" />
+                    <col className="w-[16%]" />
+                    <col className="w-[30%]" />
+                    <col className="w-[8%]" />
+                    <col className="w-[12%]" />
+                    <col className="w-[9%]" />
+                    <col className="w-[9%]" />
+                  </colgroup>
                   <thead>
                     <tr>
                       <th scope="col" className="px-4 py-2 text-left font-medium text-[var(--ink)]">
@@ -227,7 +367,7 @@ export function BookingsView({ groups }: Props) {
                           {booking.lastName ? ` ${booking.lastName}` : ""}
                         </td>
                         <td className="px-4 py-2 text-[var(--ink-muted)]">{booking.mobile}</td>
-                        <td className="max-w-xs px-4 py-2 text-[var(--ink-muted)]">
+                        <td className="px-4 py-2 text-[var(--ink-muted)]">
                           {booking.customerNotes ? (
                             <span className="block break-words">{booking.customerNotes}</span>
                           ) : (
@@ -251,6 +391,8 @@ export function BookingsView({ groups }: Props) {
                   </tbody>
                 </table>
               </div>
+              </>
+              )}
             </div>
           ))}
         </div>

@@ -18,6 +18,54 @@ values
 on conflict (id) do update set
   name = excluded.name;
 
+insert into auth.users (
+  instance_id,
+  id,
+  aud,
+  role,
+  email,
+  email_confirmed_at,
+  confirmation_token,
+  recovery_token,
+  email_change_token_new,
+  email_change,
+  raw_app_meta_data,
+  raw_user_meta_data,
+  created_at,
+  updated_at
+)
+values (
+  '00000000-0000-0000-0000-000000000000',
+  '00000000-0000-4000-8000-000000000001',
+  'authenticated',
+  'authenticated',
+  'system.import@barons.example',
+  timezone('utc', now()),
+  '',
+  '',
+  '',
+  '',
+  '{"provider":"email","providers":["email"]}'::jsonb,
+  '{}'::jsonb,
+  timezone('utc', now()),
+  timezone('utc', now())
+)
+on conflict (id) do nothing;
+
+insert into public.users (id, email, full_name, role, venue_id)
+values (
+  '00000000-0000-4000-8000-000000000001',
+  'system.import@barons.example',
+  'System Import',
+  'central_planner',
+  null
+)
+on conflict (id) do update set
+  email = excluded.email,
+  full_name = excluded.full_name,
+  role = excluded.role,
+  venue_id = excluded.venue_id;
+
 with actor as (
   select coalesce(
     (select id from public.users where role = 'central_planner' order by created_at limit 1),

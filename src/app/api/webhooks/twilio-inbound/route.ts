@@ -4,6 +4,7 @@ import { parsePhoneNumberFromString } from "libphonenumber-js";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { validateTwilioRequest } from "@/lib/twilio";
 import { findCustomerByMobile } from "@/lib/customers";
+import { recordSystemAuditLogEntry } from "@/lib/audit-log";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -103,6 +104,12 @@ export async function POST(request: Request): Promise<NextResponse> {
     const customer = await findCustomerByMobile(from);
     if (customer) {
       await db.from("customers").update({ marketing_opt_in: false }).eq("id", customer.id);
+      await db.from("customer_consent_events").insert({
+        customer_id: customer.id,
+        event_type: "opt_out",
+        consent_wording: "Customer replied STOP to SMS campaign.",
+        booking_id: null,
+      });
       // Suppress all open campaigns for this customer
       await db
         .from("sms_campaign_sends")
@@ -211,6 +218,20 @@ export async function POST(request: Request): Promise<NextResponse> {
   const evt = campaignSend.events as unknown as Record<string, unknown>;
   const venue = (evt.venues as unknown as Record<string, unknown>) ?? {};
   await updateInboundResult(db, messageSid, "booked", { booking_id: rpcResult.booking_id });
+  if (rpcResult.booking_id) {
+    await recordSystemAuditLogEntry({
+      entity: "event",
+      entityId: campaignSend.event_id,
+      action: "booking.created",
+      meta: {
+        booking_id: rpcResult.booking_id,
+        ticket_count: ticketCount,
+        source: "sms_campaign",
+        campaign_send_id: campaignSend.id
+      },
+      actorId: null,
+    });
+  }
 
   return twiml(`Booked! ${ticketCount} seat(s) for ${evt.public_title} at ${venue.name}. See you there!`);
 }

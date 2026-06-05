@@ -21,6 +21,7 @@ export interface BookingGroup {
   eventId: string;
   eventTitle: string;
   eventStartAt: Date;
+  eventEndAt: Date | null;
   venueName: string | null;
   bookings: BookingRow[];
   totalBookings: number;
@@ -51,7 +52,7 @@ export async function listAllBookingsForUser(
       id, first_name, last_name, mobile, customer_notes, ticket_count, status, payment_status, created_at,
       payment_transaction:payment_transactions!event_bookings_payment_transaction_id_fkey(amount_pence, currency),
       events!inner (
-        id, title, start_at, venue_id,
+        id, title, start_at, end_at, venue_id,
         venues!events_venue_id_fkey ( id, name )
       )
     `)
@@ -104,6 +105,7 @@ export async function listAllBookingsForUser(
         eventId,
         eventTitle:   event.title as string,
         eventStartAt: new Date(event.start_at as string),
+        eventEndAt:   typeof event.end_at === "string" ? new Date(event.end_at) : null,
         venueName:    (venue.name as string) ?? null,
         bookings:     [],
         totalBookings: 0,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useRef, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState, type ReactNode, type SyntheticEvent } from "react";
 import { toast } from "sonner";
 import { createArtistAction } from "@/actions/artists";
 import {
@@ -93,6 +93,63 @@ export type EventFormProps = {
   debriefInitiallyPinned?: boolean;
   reserveFloatingActionSpace?: boolean;
 };
+
+function MobilePersistedFormSection({
+  storageKey,
+  title,
+  description,
+  className,
+  children,
+}: {
+  storageKey: string;
+  title: string;
+  description: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(true);
+  const [isDesktop, setIsDesktop] = useState(false);
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") {
+      setIsDesktop(false);
+      return;
+    }
+    const media = window.matchMedia("(min-width: 768px)");
+    const sync = () => setIsDesktop(media.matches);
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window.localStorage?.getItem !== "function") return;
+    const stored = window.localStorage.getItem(storageKey);
+    if (stored === "closed") setOpen(false);
+    if (stored === "open") setOpen(true);
+  }, [storageKey]);
+
+  function handleToggle(event: SyntheticEvent<HTMLDetailsElement>) {
+    if (isDesktop) return;
+    const nextOpen = event.currentTarget.open;
+    setOpen(nextOpen);
+    if (typeof window.localStorage?.setItem === "function") {
+      window.localStorage.setItem(storageKey, nextOpen ? "open" : "closed");
+    }
+  }
+
+  return (
+    <details className={cn("mobile-form-section", className)} open={isDesktop || open} onToggle={handleToggle}>
+      <summary>
+        <span>
+          {title}
+          <span className="mt-0.5 block text-xs font-normal text-[var(--ink-muted)]">{description}</span>
+        </span>
+      </summary>
+      {children}
+    </details>
+  );
+}
 
 function toLocalInputValue(date?: string | null) {
   return toLondonDateTimeInputValue(date);
@@ -880,13 +937,21 @@ export function EventForm({
           setManagerDirty(true);
           setManagerResponsibleId(e.target.value);
         }}
-        className="flex h-10 w-full rounded-md border border-[var(--hair)] bg-[var(--paper)] px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slate)] focus-visible:ring-offset-2"
+        aria-invalid={Boolean(fieldErrors.managerResponsibleId)}
+        aria-describedby={fieldErrors.managerResponsibleId ? "manager-responsible-error" : undefined}
+        className={cn(
+          "flex h-10 w-full rounded-md border border-[var(--hair)] bg-[var(--paper)] px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slate)] focus-visible:ring-offset-2",
+          fieldErrors.managerResponsibleId
+            ? "!border-[var(--burgundy)] focus-visible:!border-[var(--burgundy)]"
+            : undefined
+        )}
       >
         <option value="">No manager assigned</option>
         {(users ?? []).map((u) => (
           <option key={u.id} value={u.id}>{u.name}</option>
         ))}
       </select>
+      <FieldError id="manager-responsible-error" message={fieldErrors.managerResponsibleId} />
     </div>
   );
 
@@ -1819,6 +1884,11 @@ export function EventForm({
               {/* Two-column layout */}
               <div className="grid gap-4 lg:grid-cols-2">
                 {/* Left column: Event Details */}
+                <MobilePersistedFormSection
+                  storageKey="baronshub:event-form:basics"
+                  title="Basics"
+                  description="Title, venue, timing and notes"
+                >
                 <Card>
                   <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--navy)] px-4 py-2.5">
                     <CardTitle className="text-sm font-semibold uppercase tracking-wider !text-white">
@@ -1860,18 +1930,32 @@ export function EventForm({
                     ) : null}
                   </CardContent>
                 </Card>
+                </MobilePersistedFormSection>
 
                 {/* Right column: Website Listing */}
-                <WebsiteListingCard
-                  websiteFields={websiteFields}
-                  generateAction={activeWebsiteCopyAction}
-                  canGenerate={canGenerateWebsiteCopy}
-                  readOnly={readOnly}
-                />
+                <MobilePersistedFormSection
+                  storageKey="baronshub:event-form:description-promo"
+                  title="Description & promo"
+                  description="Website copy, highlights and listing details"
+                  className="md:[display:block]"
+                >
+                  <WebsiteListingCard
+                    websiteFields={websiteFields}
+                    generateAction={activeWebsiteCopyAction}
+                    canGenerate={canGenerateWebsiteCopy}
+                    readOnly={readOnly}
+                  />
+                </MobilePersistedFormSection>
               </div>
 
               {/* Lower: Booking & Ticketing */}
-              <Card className="mt-4">
+              <MobilePersistedFormSection
+                storageKey="baronshub:event-form:capacity-tickets"
+                title="Capacity & tickets"
+                description="Headcount, booking settings, terms and goals"
+                className="mt-4"
+              >
+              <Card>
                 <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--navy)] px-4 py-2.5">
                   <CardTitle className="text-sm font-semibold uppercase tracking-wider !text-white">
                     Booking &amp; Ticketing
@@ -1888,6 +1972,7 @@ export function EventForm({
                   {goalsSection}
                 </CardContent>
               </Card>
+              </MobilePersistedFormSection>
             </div>
 
             {showSopRail ? (

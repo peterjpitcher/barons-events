@@ -15,6 +15,15 @@ const dateFormatter = new Intl.DateTimeFormat("en-GB", {
   timeZone: "Europe/London",
 });
 
+function initials(firstName: string, lastName?: string | null): string {
+  return [firstName, lastName ?? ""]
+    .filter(Boolean)
+    .map((part) => part.trim()[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase() || "?";
+}
+
 export function CustomersView({ customers }: Props) {
   const [search, setSearch] = useState("");
   const [optInOnly, setOptInOnly] = useState(false);
@@ -42,9 +51,9 @@ export function CustomersView({ customers }: Props) {
           placeholder="Search name, mobile or email…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="h-8 w-full rounded-[7px] border border-[var(--hair)] bg-[var(--paper)] px-3 text-sm text-[var(--ink)] placeholder:text-[var(--ink-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--mustard-tint)] sm:max-w-xs"
+          className="mobile-search sm:max-w-xs md:h-8 md:text-sm"
         />
-        <label className="flex cursor-pointer items-center gap-2 text-sm text-[var(--ink-muted)]">
+        <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-full border border-[var(--hair)] bg-[var(--paper)] px-3 text-sm text-[var(--ink-muted)] md:min-h-0 md:border-0 md:bg-transparent md:px-0">
           <input
             type="checkbox"
             checked={optInOnly}
@@ -63,7 +72,49 @@ export function CustomersView({ customers }: Props) {
             : "No customers match your filters."}
         </div>
       ) : (
-        <div className="data-table-shell">
+        <>
+        <div className="space-y-2 md:hidden">
+          {filtered.map((customer) => {
+            const name = [customer.firstName, customer.lastName].filter(Boolean).join(" ");
+            return (
+              <Link
+                key={customer.id}
+                href={`/customers/${customer.id}`}
+                className="mobile-list-card flex items-start gap-3"
+              >
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[var(--navy)] text-sm font-semibold text-white">
+                  {initials(customer.firstName, customer.lastName)}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-start justify-between gap-3">
+                    <span className="min-w-0">
+                      <span className="block truncate font-semibold text-[var(--ink)]">{name}</span>
+                      <span className="mt-1 block truncate text-sm text-[var(--ink-muted)]">{customer.email ?? customer.mobile}</span>
+                    </span>
+                    <span className="text-right text-sm font-semibold tabular-nums text-[var(--navy)]">
+                      {customer.bookingCount}
+                      <span className="block text-xs font-medium text-[var(--ink-soft)]">bookings</span>
+                    </span>
+                  </span>
+                  <span className="mt-3 flex flex-wrap items-center gap-2">
+                    {customer.marketingOptIn ? (
+                      <span className="rounded-full bg-[var(--sage-tint)] px-2 py-1 text-xs font-semibold text-[var(--sage-dark)]">Opted in</span>
+                    ) : (
+                      <span className="rounded-full bg-[var(--canvas-2)] px-2 py-1 text-xs font-semibold text-[var(--ink-muted)]">No opt-in</span>
+                    )}
+                    <span className="rounded-full bg-[var(--canvas-2)] px-2 py-1 text-xs font-semibold text-[var(--ink-muted)]">
+                      {customer.ticketCount} tickets
+                    </span>
+                    <span className="rounded-full bg-[var(--canvas-2)] px-2 py-1 text-xs font-semibold text-[var(--ink-muted)]">
+                      {dateFormatter.format(customer.firstSeen)}
+                    </span>
+                  </span>
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+        <div className="data-table-shell hidden md:block">
           <table className="data-table min-w-full">
             <thead>
               <tr>
@@ -122,6 +173,7 @@ export function CustomersView({ customers }: Props) {
             </tbody>
           </table>
         </div>
+        </>
       )}
     </div>
   );

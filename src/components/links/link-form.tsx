@@ -54,6 +54,7 @@ export function LinkForm({ mode, initialValues, fieldErrors = {}, onSubmit, onCa
             placeholder="Summer cocktail menu"
             maxLength={120}
             disabled={isPending}
+            className="h-12 text-[16px] md:h-10 md:text-sm"
             aria-describedby={fieldErrors.name ? "link-name-error" : undefined}
           />
           <FieldError id="link-name-error" message={fieldErrors.name} />
@@ -68,6 +69,7 @@ export function LinkForm({ mode, initialValues, fieldErrors = {}, onSubmit, onCa
             value={values.link_type}
             onChange={(e) => set("link_type", e.target.value)}
             disabled={isPending}
+            className="h-12 text-[16px] md:h-10 md:text-sm"
           >
             {LINK_TYPES.map((t) => (
               <option key={t.value} value={t.value}>
@@ -90,6 +92,7 @@ export function LinkForm({ mode, initialValues, fieldErrors = {}, onSubmit, onCa
             placeholder="https://baronspubs.com/events/..."
             maxLength={2048}
             disabled={isPending}
+            className="h-12 text-[16px] md:h-10 md:text-sm"
             aria-describedby={fieldErrors.destination ? "link-destination-error" : undefined}
           />
           <FieldError id="link-destination-error" message={fieldErrors.destination} />
@@ -106,17 +109,18 @@ export function LinkForm({ mode, initialValues, fieldErrors = {}, onSubmit, onCa
             value={values.expires_at}
             onChange={(e) => set("expires_at", e.target.value)}
             disabled={isPending}
+            className="h-12 text-[16px] md:h-10 md:text-sm"
             aria-describedby={fieldErrors.expires_at ? "link-expires-error" : undefined}
           />
           <FieldError id="link-expires-error" message={fieldErrors.expires_at} />
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
-        <Button type="submit" size="sm" variant="primary" disabled={isPending}>
+      <div className="grid gap-2 md:flex md:items-center md:gap-3">
+        <Button type="submit" size="sm" variant="primary" disabled={isPending} className="h-11 md:h-8">
           {isPending ? "Saving…" : mode === "create" ? "Create link" : "Save changes"}
         </Button>
-        <Button type="button" size="sm" variant="ghost" onClick={onCancel} disabled={isPending}>
+        <Button type="button" size="sm" variant="ghost" onClick={onCancel} disabled={isPending} className="h-11 md:h-8">
           Cancel
         </Button>
       </div>

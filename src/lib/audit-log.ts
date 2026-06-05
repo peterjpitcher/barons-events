@@ -35,6 +35,14 @@ export type AuditLogEntry = Omit<AuditLogRow, "meta"> & {
   meta: Record<string, unknown> | null;
 };
 
+type AuditClient = Awaited<ReturnType<typeof createSupabaseReadonlyClient>>;
+
+type AttachmentAuditScope = {
+  attachmentIds: string[];
+  planningItemIds: string[];
+  planningTaskIds: string[];
+};
+
 function serialiseMeta(meta: Record<string, unknown> | undefined): Json | null {
   if (!meta) {
     return null;
@@ -163,7 +171,34 @@ export async function logAuthEvent(params: LogAuthEventParams): Promise<void> {
 }
 
 export async function listAuditLogForEvent(eventId: string): Promise<AuditLogEntry[]> {
-  return listAuditLogForEntity("event", eventId);
+  const supabase = await createSupabaseReadonlyClient();
+  const eventRows = await listAuditRowsForEntityIds(supabase, "event", [eventId]);
+  const scope = await listEventAttachmentAuditScope(supabase, eventId);
+  const attachmentRows = await listAuditRowsForEntityIds(supabase, "attachment", scope.attachmentIds, {
+    optional: true
+  });
+  const attachmentRowsByMeta = await listAttachmentAuditRowsByParentMeta(supabase, [
+    { event_id: eventId },
+    ...scope.planningItemIds.map((id) => ({ planning_item_id: id })),
+    ...scope.planningTaskIds.map((id) => ({ planning_task_id: id }))
+  ]);
+
+  return normaliseAuditRows([...eventRows, ...attachmentRows, ...attachmentRowsByMeta]);
+}
+
+export async function listAuditLogForPlanningItem(planningItemId: string): Promise<AuditLogEntry[]> {
+  const supabase = await createSupabaseReadonlyClient();
+  const planningRows = await listAuditRowsForEntityIds(supabase, "planning", [planningItemId]);
+  const scope = await listPlanningAttachmentAuditScope(supabase, planningItemId);
+  const attachmentRows = await listAuditRowsForEntityIds(supabase, "attachment", scope.attachmentIds, {
+    optional: true
+  });
+  const attachmentRowsByMeta = await listAttachmentAuditRowsByParentMeta(supabase, [
+    { planning_item_id: planningItemId },
+    ...scope.planningTaskIds.map((id) => ({ planning_task_id: id }))
+  ]);
+
+  return normaliseAuditRows([...planningRows, ...attachmentRows, ...attachmentRowsByMeta]);
 }
 
 /**
@@ -186,9 +221,13 @@ export async function listAuditLogForEntity(
     throw new Error(`Could not load audit log: ${error.message}`);
   }
 
-  const rows = (data ?? []) as AuditLogRow[];
+  return normaliseAuditRows((data ?? []) as AuditLogRow[]);
+}
 
-  return rows.map((row) => ({
+function normaliseAuditRows(rows: AuditLogRow[]): AuditLogEntry[] {
+  return Array.from(new Map(rows.map((row) => [row.id, row])).values())
+    .sort((left, right) => (left.created_at ?? "").localeCompare(right.created_at ?? ""))
+    .map((row) => ({
     id: row.id,
     entity: row.entity,
     entity_id: row.entity_id,
@@ -201,5 +240,159 @@ export async function listAuditLogForEntity(
         : row.meta === null
           ? null
           : { value: row.meta }
-  }));
+    }));
+}
+
+async function listAuditRowsForEntityIds(
+  supabase: AuditClient,
+  entity: string,
+  entityIds: string[],
+  options: { optional?: boolean } = {}
+): Promise<AuditLogRow[]> {
+  const ids = Array.from(new Set(entityIds.filter(Boolean)));
+  if (ids.length === 0) return [];
+
+  let query = supabase
+    .from("audit_log")
+    .select("*")
+    .eq("entity", entity);
+
+  query = ids.length === 1 ? query.eq("entity_id", ids[0]) : query.in("entity_id", ids);
+
+  const { data, error } = await query.order("created_at", { ascending: true });
+  if (error) {
+    if (options.optional) {
+      console.error(`Could not load related ${entity} audit log: ${error.message}`);
+      return [];
+    }
+    throw new Error(`Could not load audit log: ${error.message}`);
+  }
+  return (data ?? []) as AuditLogRow[];
+}
+
+async function listAttachmentAuditRowsByParentMeta(
+  supabase: AuditClient,
+  filters: Array<Record<string, string>>
+): Promise<AuditLogRow[]> {
+  const rows: AuditLogRow[] = [];
+  const seenFilters = new Set<string>();
+
+  for (const filter of filters) {
+    const key = JSON.stringify(filter);
+    if (seenFilters.has(key)) continue;
+    seenFilters.add(key);
+
+    const { data, error } = await supabase
+      .from("audit_log")
+      .select("*")
+      .eq("entity", "attachment")
+      .contains("meta", filter)
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      console.error(`Could not load attachment audit by parent metadata: ${error.message}`);
+      continue;
+    }
+    rows.push(...((data ?? []) as AuditLogRow[]));
+  }
+
+  return rows;
+}
+
+async function listEventAttachmentAuditScope(supabase: AuditClient, eventId: string): Promise<AttachmentAuditScope> {
+  const ids = new Set<string>();
+  const planningItemIds = new Set<string>();
+  const planningTaskIds = new Set<string>();
+
+  await addAttachmentIdsFromQuery(
+    ids,
+    supabase.from("attachments").select("id").eq("event_id", eventId),
+    "event attachment audit lookup"
+  );
+
+  const itemIds = await listIdsFromQuery(
+    supabase.from("planning_items").select("id").eq("event_id", eventId),
+    "event planning audit lookup"
+  );
+  itemIds.forEach((id) => planningItemIds.add(id));
+  if (itemIds.length > 0) {
+    await addAttachmentIdsFromQuery(
+      ids,
+      supabase.from("attachments").select("id").in("planning_item_id", itemIds),
+      "event planning item attachment audit lookup"
+    );
+
+    const taskIds = await listIdsFromQuery(
+      supabase.from("planning_tasks").select("id").in("planning_item_id", itemIds),
+      "event planning task audit lookup"
+    );
+    taskIds.forEach((id) => planningTaskIds.add(id));
+    if (taskIds.length > 0) {
+      await addAttachmentIdsFromQuery(
+        ids,
+        supabase.from("attachments").select("id").in("planning_task_id", taskIds),
+        "event planning task attachment audit lookup"
+      );
+    }
+  }
+
+  return {
+    attachmentIds: Array.from(ids),
+    planningItemIds: Array.from(planningItemIds),
+    planningTaskIds: Array.from(planningTaskIds)
+  };
+}
+
+async function listPlanningAttachmentAuditScope(
+  supabase: AuditClient,
+  planningItemId: string
+): Promise<AttachmentAuditScope> {
+  const ids = new Set<string>();
+  const planningTaskIds = new Set<string>();
+
+  await addAttachmentIdsFromQuery(
+    ids,
+    supabase.from("attachments").select("id").eq("planning_item_id", planningItemId),
+    "planning attachment audit lookup"
+  );
+
+  const taskIds = await listIdsFromQuery(
+    supabase.from("planning_tasks").select("id").eq("planning_item_id", planningItemId),
+    "planning task audit lookup"
+  );
+  taskIds.forEach((id) => planningTaskIds.add(id));
+  if (taskIds.length > 0) {
+    await addAttachmentIdsFromQuery(
+      ids,
+      supabase.from("attachments").select("id").in("planning_task_id", taskIds),
+      "planning task attachment audit lookup"
+    );
+  }
+
+  return {
+    attachmentIds: Array.from(ids),
+    planningItemIds: [planningItemId],
+    planningTaskIds: Array.from(planningTaskIds)
+  };
+}
+
+async function addAttachmentIdsFromQuery(
+  ids: Set<string>,
+  query: PromiseLike<{ data: Array<{ id: string }> | null; error: { message?: string } | null }>,
+  label: string
+): Promise<void> {
+  const found = await listIdsFromQuery(query, label);
+  found.forEach((id) => ids.add(id));
+}
+
+async function listIdsFromQuery(
+  query: PromiseLike<{ data: Array<{ id: string }> | null; error: { message?: string } | null }>,
+  label: string
+): Promise<string[]> {
+  const { data, error } = await query;
+  if (error) {
+    console.error(`${label} failed: ${error.message ?? "Unknown error"}`);
+    return [];
+  }
+  return (data ?? []).map((row) => row.id).filter(Boolean);
 }

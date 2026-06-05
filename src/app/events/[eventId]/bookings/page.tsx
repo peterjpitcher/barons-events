@@ -111,7 +111,83 @@ export default async function BookingsPage({
           </CardContent>
         </Card>
       ) : (
-        <div className="data-table-shell">
+        <>
+        <div className="grid gap-2 md:hidden">
+          {bookings.map((booking) => {
+            const fullName = `${booking.firstName}${booking.lastName ? ` ${booking.lastName}` : ""}`;
+            const action =
+              booking.status === "confirmed" && user.role === "administrator" && booking.paymentTransactionId && booking.paymentAmountPence != null && (booking.paymentStatus === "completed" || booking.paymentStatus === "partially_refunded") ? (
+                <RefundBookingButton
+                  transactionId={booking.paymentTransactionId}
+                  eventId={eventId}
+                  refundableAmountPence={booking.paymentAmountPence - (booking.paymentRefundedAmountPence ?? 0)}
+                  currency={booking.paymentCurrency ?? "gbp"}
+                />
+              ) : booking.status === "confirmed" && canCancelBookings && !["completed", "partially_refunded", "refunded"].includes(booking.paymentStatus) ? (
+                <CancelBookingButton
+                  bookingId={booking.id}
+                  eventId={eventId}
+                  guestName={fullName}
+                />
+              ) : null;
+
+            return (
+              <article key={booking.id} className="mobile-card">
+                <div className="flex items-start gap-3">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-[15px] font-semibold leading-tight text-[var(--ink)]">{fullName}</h3>
+                    <a
+                      href={`tel:${booking.mobile.replace(/\s+/g, "")}`}
+                      className="mt-1 inline-flex font-brand-mono text-xs text-[var(--slate-dark)] underline-offset-2 hover:underline"
+                    >
+                      {booking.mobile}
+                    </a>
+                    {booking.email ? <p className="mt-1 truncate text-xs text-[var(--ink-muted)]">{booking.email}</p> : null}
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-semibold leading-none text-[var(--ink)]">{booking.ticketCount}</p>
+                    <p className="mt-1 font-brand-mono text-[0.55rem] uppercase tracking-[0.08em] text-[var(--ink-soft)]">tickets</p>
+                  </div>
+                </div>
+                {booking.customerNotes ? (
+                  <p className="mt-3 rounded-[10px] bg-[var(--paper-tint)] px-3 py-2 text-sm leading-relaxed text-[var(--ink-muted)]">
+                    {booking.customerNotes}
+                  </p>
+                ) : null}
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <Badge variant={booking.status === "confirmed" ? "success" : "neutral"}>
+                    {booking.status}
+                  </Badge>
+                  <Badge variant={paymentBadgeVariant(booking.paymentStatus)}>
+                    {booking.paymentStatus.replace(/_/g, " ")}
+                  </Badge>
+                  <time className="ml-auto text-xs text-[var(--ink-soft)]" dateTime={booking.createdAt.toISOString()}>
+                    {dateFormatter.format(booking.createdAt)}
+                  </time>
+                </div>
+                {booking.paymentAmountPence != null || booking.paymentCompletedAt ? (
+                  <div className="mt-2 text-xs text-[var(--ink-muted)]">
+                    {booking.paymentAmountPence != null ? (
+                      <p>
+                        {formatPaymentAmount(booking.paymentAmountPence, booking.paymentCurrency)}
+                        {booking.paymentRefundedAmountPence ? (
+                          <> · refunded {formatPaymentAmount(booking.paymentRefundedAmountPence, booking.paymentCurrency)}</>
+                        ) : null}
+                      </p>
+                    ) : null}
+                    {booking.paymentCompletedAt ? (
+                      <p>
+                        Paid <time dateTime={booking.paymentCompletedAt.toISOString()}>{dateFormatter.format(booking.paymentCompletedAt)}</time>
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+                {action ? <div className="mt-3 flex justify-end">{action}</div> : null}
+              </article>
+            );
+          })}
+        </div>
+        <div className="data-table-shell hidden md:block">
           <table className="data-table min-w-full">
             <thead>
               <tr>
@@ -202,6 +278,7 @@ export default async function BookingsPage({
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {/* SMS Campaign Stats */}

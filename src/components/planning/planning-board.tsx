@@ -79,6 +79,11 @@ function sortByDateThenTitle<T extends { targetDate: string; title: string }>(ro
 
 type ViewMode = "board" | "calendar" | "list" | "todos_by_person";
 type StatusScope = "open" | "closed" | "all";
+type CombinedPlanningRow =
+  | { type: "planning"; item: PlanningItem }
+  | { type: "event"; event: PlanningEventOverlay }
+  | { type: "inspiration"; item: PlanningInspirationItem };
+type MobilePlanningRow = Extract<CombinedPlanningRow, { type: "planning" }>;
 
 function isClosedPlanningStatus(status: PlanningItem["status"]): boolean {
   return status === "done" || status === "cancelled";
@@ -99,6 +104,14 @@ const BUCKET_TONE_CLASS: Record<PlanningBucketKey, string> = {
   "31_60": "bg-[var(--slate)]",
   "61_90": "bg-[var(--sage)]",
   later: "bg-[var(--hair-strong)]",
+};
+
+const MOBILE_BUCKET_LABELS: Record<PlanningBucketKey, string> = {
+  past: "Past",
+  "0_30": "0-30",
+  "31_60": "31-60",
+  "61_90": "61-90",
+  later: "90+",
 };
 
 const QUEUE_GROUPS: Array<{
@@ -194,7 +207,13 @@ function TodoQueueRail({
 
     const media = window.matchMedia("(min-width: 1024px)");
     function syncBodyPadding(): void {
-      const reservedWidth = pinned && media.matches ? "22rem" : "3rem";
+      if (!media.matches) {
+        document.body.style.paddingRight = "";
+        document.documentElement.style.removeProperty("--planning-queue-drawer-reserved-width");
+        return;
+      }
+
+      const reservedWidth = pinned ? "22rem" : "3rem";
       document.body.style.paddingRight = reservedWidth;
       document.documentElement.style.setProperty("--planning-queue-drawer-reserved-width", reservedWidth);
     }
@@ -242,7 +261,7 @@ function TodoQueueRail({
   return (
     <aside
       className={cn(
-        "fixed bottom-0 right-0 top-0 z-40 flex flex-col border-l bg-[var(--paper)] shadow-card transition-[width] duration-200 ease-out",
+        "fixed bottom-0 right-0 top-0 z-40 hidden flex-col border-l bg-[var(--paper)] shadow-card transition-[width] duration-200 ease-out lg:flex",
         expanded ? "w-[min(22rem,calc(100vw-3rem))] border-[var(--hair)]" : "w-12 border-[var(--mustard-dark)]"
       )}
       onMouseEnter={() => setHovered(true)}
@@ -378,6 +397,9 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
   const router = useRouter();
   const [viewMode, setViewMode] = useState<ViewMode>("board");
   const [showLater, setShowLater] = useState(false);
+  const [mobileBucket, setMobileBucket] = useState<PlanningBucketKey>("0_30");
+  const [mobileMineOnly, setMobileMineOnly] = useState(false);
+  const [mobileBlockedOnly, setMobileBlockedOnly] = useState(false);
   const [statusScope, setStatusScope] = useState<StatusScope>("open");
   const [search, setSearch] = useState("");
   const [venueFilter, setVenueFilter] = useState("");
@@ -502,11 +524,7 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
 
   const combinedByBucket = useMemo(() => {
     const typeOrder: Record<string, number> = { planning: 0, event: 1, inspiration: 2 };
-    const result: Record<PlanningBucketKey, Array<
-      | { type: "planning"; item: PlanningItem }
-      | { type: "event"; event: PlanningEventOverlay }
-      | { type: "inspiration"; item: PlanningInspirationItem }
-    >> = { past: [], "0_30": [], "31_60": [], "61_90": [], later: [] };
+    const result: Record<PlanningBucketKey, CombinedPlanningRow[]> = { past: [], "0_30": [], "31_60": [], "61_90": [], later: [] };
 
     for (const key of ["past", "0_30", "31_60", "61_90", "later"] as PlanningBucketKey[]) {
       const merged = [
@@ -532,6 +550,27 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
   const hasPastItems = combinedByBucket.past.length > 0;
   const baseBuckets = hasPastItems ? CORE_BUCKETS : CORE_BUCKETS.slice(1);
   const visibleBuckets = showLater ? [...baseBuckets, BUCKETS[4]] : baseBuckets;
+
+  const mobileCombinedByBucket = useMemo(() => {
+    const result: Record<PlanningBucketKey, MobilePlanningRow[]> = {
+      past: [],
+      "0_30": [],
+      "31_60": [],
+      "61_90": [],
+      later: [],
+    };
+
+    for (const bucket of BUCKETS) {
+      result[bucket.key] = combinedByBucket[bucket.key].filter((row): row is MobilePlanningRow => {
+        if (row.type !== "planning") return false;
+        if (mobileMineOnly && row.item.ownerId !== currentUserId) return false;
+        if (mobileBlockedOnly && row.item.status !== "blocked") return false;
+        return true;
+      });
+    }
+
+    return result;
+  }, [combinedByBucket, currentUserId, mobileBlockedOnly, mobileMineOnly]);
 
   const combinedEntries = useMemo<PlanningViewEntry[]>(() => {
     const sourceOrder: Record<string, number> = { planning: 0, event: 1, inspiration: 2 };
@@ -695,89 +734,97 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
 
   return (
     <div className="app-page">
-      <PageHeader
-        eyebrow="30 / 60 / 90 planner"
-        title="Planning workspace"
-        description="Operational actions and launches on a rolling horizon, with recurring templates and task ownership."
-        meta={
-          <>
-            <span>{filteredPlanningItems.length} items</span>
-            <span className="h-1 w-1 rounded-full bg-[var(--hair-strong)]" />
-            <span>{visibleEvents.length} events</span>
-            <span className="h-1 w-1 rounded-full bg-[var(--hair-strong)]" />
-            <span>{visibleInspirationItems.length} inspiration</span>
-            <span className="h-1 w-1 rounded-full bg-[var(--hair-strong)]" />
-            <span className="text-[var(--ink-soft)]">Updated now</span>
-          </>
-        }
-        actions={
-          <>
-            {userRole && canCreatePlanningItems(userRole, currentUserVenueId) && (
-              <Button asChild>
-                <Link href="/planning/new">
-                  <Plus className="h-4 w-4" aria-hidden="true" /> New item
-                </Link>
-              </Button>
-            )}
-            <div className="inline-flex h-8 items-center rounded-[7px] border border-[var(--hair)] bg-[var(--paper)] p-1">
-              <Button
-                type="button"
-                size="sm"
-                variant={viewMode === "board" ? "primary" : "ghost"}
-                onClick={() => switchView("board")}
-              >
-                <LayoutGrid className="h-4 w-4" aria-hidden="true" /> Board
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={viewMode === "calendar" ? "primary" : "ghost"}
-                onClick={() => switchView("calendar")}
-              >
-                <CalendarRange className="h-4 w-4" aria-hidden="true" /> Calendar
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={viewMode === "list" ? "primary" : "ghost"}
-                onClick={() => switchView("list")}
-              >
-                <List className="h-4 w-4" aria-hidden="true" /> List
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={viewMode === "todos_by_person" ? "primary" : "ghost"}
-                onClick={() => switchView("todos_by_person")}
-              >
-                <Users className="h-4 w-4" aria-hidden="true" /> Todos by person
-              </Button>
+      <div className="hidden md:block">
+        <PageHeader
+          eyebrow="30 / 60 / 90 planner"
+          title="Planning workspace"
+          description="Operational actions and launches on a rolling horizon, with recurring templates and task ownership."
+          meta={
+            <>
+              <span>{filteredPlanningItems.length} items</span>
+              <span className="h-1 w-1 rounded-full bg-[var(--hair-strong)]" />
+              <span>{visibleEvents.length} events</span>
+              <span className="h-1 w-1 rounded-full bg-[var(--hair-strong)]" />
+              <span>{visibleInspirationItems.length} inspiration</span>
+              <span className="h-1 w-1 rounded-full bg-[var(--hair-strong)]" />
+              <span className="text-[var(--ink-soft)]">Updated now</span>
+            </>
+          }
+          actions={
+            <div className="hidden flex-wrap items-center gap-2 md:flex">
+              {userRole && canCreatePlanningItems(userRole, currentUserVenueId) && (
+                <Button asChild>
+                  <Link href="/planning/new">
+                    <Plus className="h-4 w-4" aria-hidden="true" /> New item
+                  </Link>
+                </Button>
+              )}
+              <div className="inline-flex h-8 items-center rounded-[7px] border border-[var(--hair)] bg-[var(--paper)] p-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={viewMode === "board" ? "primary" : "ghost"}
+                  onClick={() => switchView("board")}
+                >
+                  <LayoutGrid className="h-4 w-4" aria-hidden="true" /> Board
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={viewMode === "calendar" ? "primary" : "ghost"}
+                  onClick={() => switchView("calendar")}
+                >
+                  <CalendarRange className="h-4 w-4" aria-hidden="true" /> Calendar
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={viewMode === "list" ? "primary" : "ghost"}
+                  onClick={() => switchView("list")}
+                >
+                  <List className="h-4 w-4" aria-hidden="true" /> List
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={viewMode === "todos_by_person" ? "primary" : "ghost"}
+                  onClick={() => switchView("todos_by_person")}
+                >
+                  <Users className="h-4 w-4" aria-hidden="true" /> Todos by person
+                </Button>
+              </div>
             </div>
-          </>
-        }
-      />
-
-      {userRole === 'administrator' && <RefreshInspirationButton />}
-
-      <PlanningAlertStrip
-        alerts={data.alerts}
-        activeFilter={viewMode === "todos_by_person" ? todoAlertFilter : null}
-        onFilterClick={(filter) => {
-          const toggling = todoAlertFilter === filter;
-          setTodoAlertFilter(toggling ? null : filter);
-          if (!toggling) {
-            // Clear search/venue filters so counts match the alert strip numbers
-            setSearch("");
-            setVenueFilter("");
-            setStatusScope("open");
           }
-          if (viewMode !== "todos_by_person") {
-            setViewMode("todos_by_person");
-          }
-        }}
-      />
+        />
+      </div>
 
-      <section className="flex flex-wrap items-center gap-2">
+      {userRole === 'administrator' && (
+        <div className="hidden md:block">
+          <RefreshInspirationButton />
+        </div>
+      )}
+
+      <div className="hidden md:block">
+        <PlanningAlertStrip
+          alerts={data.alerts}
+          activeFilter={viewMode === "todos_by_person" ? todoAlertFilter : null}
+          onFilterClick={(filter) => {
+            const toggling = todoAlertFilter === filter;
+            setTodoAlertFilter(toggling ? null : filter);
+            if (!toggling) {
+              // Clear search/venue filters so counts match the alert strip numbers
+              setSearch("");
+              setVenueFilter("");
+              setStatusScope("open");
+            }
+            if (viewMode !== "todos_by_person") {
+              setViewMode("todos_by_person");
+            }
+          }}
+        />
+      </div>
+
+      <section className="hidden flex-wrap items-center gap-2 md:flex">
         <div className="flex h-8 w-full items-center md:w-44">
           <Select
             value={statusScope}
@@ -835,8 +882,67 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
         </span>
       </section>
 
+      <section className="md:hidden">
+        <div className="mobile-scroll-row">
+          {visibleBuckets.map((bucket) => (
+            <button
+              key={bucket.key}
+              type="button"
+              className={cn("mobile-chip", mobileBucket === bucket.key && "mobile-chip-active")}
+              onClick={() => setMobileBucket(bucket.key)}
+            >
+              {MOBILE_BUCKET_LABELS[bucket.key]}
+              <span className={cn("rounded-full px-1.5 py-0.5 font-brand-mono text-[0.6rem]", mobileBucket === bucket.key ? "bg-white/20 text-white" : "bg-[var(--canvas-2)] text-[var(--ink-muted)]")}>
+                {mobileCombinedByBucket[bucket.key].length}
+              </span>
+            </button>
+          ))}
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className={cn("mobile-chip", mobileMineOnly && "mobile-chip-active")}
+            onClick={() => setMobileMineOnly((current) => !current)}
+          >
+            Mine only
+          </button>
+          <button
+            type="button"
+            className={cn("mobile-chip", mobileBlockedOnly && "mobile-chip-active")}
+            onClick={() => setMobileBlockedOnly((current) => !current)}
+          >
+            Blocked
+          </button>
+        </div>
+        <div className="mt-3 space-y-2">
+          {(mobileCombinedByBucket[mobileBucket] ?? []).map((row) => (
+            <PlanningItemCard
+              key={row.item.id}
+              item={row.item}
+              users={data.users}
+              venues={venues}
+              onChanged={refreshBoard}
+              compact
+              onOpenDetails={(planningItem) => router.push(`/planning/${planningItem.id}`)}
+              currentUserId={currentUserId}
+            />
+          ))}
+          {mobileCombinedByBucket[mobileBucket]?.length === 0 ? (
+            <p className="mobile-card py-8 text-center text-sm text-[var(--ink-soft)]">No planning items match this horizon.</p>
+          ) : null}
+        </div>
+        {userRole && canCreatePlanningItems(userRole, currentUserVenueId) ? (
+          <Button asChild variant="primary" className="mobile-fab">
+            <Link href="/planning/new">
+              <Plus className="h-5 w-5" aria-hidden="true" />
+              New item
+            </Link>
+          </Button>
+        ) : null}
+      </section>
+
       {viewMode === "board" ? (
-        <section>
+        <section className="hidden md:block">
           <div className={`grid gap-3 ${
             visibleBuckets.length === 5 ? "2xl:grid-cols-5" :
             visibleBuckets.length === 4 ? "2xl:grid-cols-4" :
@@ -903,7 +1009,7 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
       ) : null}
 
       {viewMode === "calendar" ? (
-        <div className="space-y-2">
+        <div className="hidden space-y-2 md:block">
           <div className="rounded-[8px] border border-[var(--hair)] bg-[var(--paper)] p-2 shadow-card">
             <p className="text-xs text-[var(--ink-muted)]">
               Calendar follows the status, venue, source, and search filters above across the full historic dataset.
@@ -921,28 +1027,32 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
       ) : null}
 
       {viewMode === "list" ? (
-        <PlanningListView
-          today={data.today}
-          entries={combinedEntries}
-          onOpenPlanningItem={(item) => router.push(`/planning/${item.id}`)}
-        />
+        <div className="hidden md:block">
+          <PlanningListView
+            today={data.today}
+            entries={combinedEntries}
+            onOpenPlanningItem={(item) => router.push(`/planning/${item.id}`)}
+          />
+        </div>
       ) : null}
 
       {viewMode === "todos_by_person" ? (
-        <UnifiedTodoList
-          mode="planning"
-          items={planningItemsToTodoItems(
-            filteredPlanningItems,
-            data.today,
-            userRole ? canManageAllPlanning(userRole) : false,
-            currentUserId ?? "",
-            todoAlertFilter
-          )}
-          currentUserId={currentUserId ?? ""}
-          users={data.users}
-          alertFilter={todoAlertFilter}
-          onOpenPlanningItemId={(id) => router.push(`/planning/${id}`)}
-        />
+        <div className="hidden md:block">
+          <UnifiedTodoList
+            mode="planning"
+            items={planningItemsToTodoItems(
+              filteredPlanningItems,
+              data.today,
+              userRole ? canManageAllPlanning(userRole) : false,
+              currentUserId ?? "",
+              todoAlertFilter
+            )}
+            currentUserId={currentUserId ?? ""}
+            users={data.users}
+            alertFilter={todoAlertFilter}
+            onOpenPlanningItemId={(id) => router.push(`/planning/${id}`)}
+          />
+        </div>
       ) : null}
 
       <TodoQueueRail

@@ -20,12 +20,18 @@ export const metadata = {
   description: "Manage event configuration and defaults."
 };
 
-export default async function SettingsPage() {
+type SettingsPageProps = {
+  searchParams?: Promise<{ tab?: string }>;
+};
+
+export default async function SettingsPage({ searchParams }: SettingsPageProps) {
   const user = await getCurrentUser();
   if (!user) {
     redirect("/login");
   }
   const canEdit = user.role === "administrator";
+  const requestedParams: { tab?: string } = (await searchParams?.catch(() => ({}))) ?? {};
+  const requestedTab = typeof requestedParams.tab === "string" ? requestedParams.tab : undefined;
 
   const db = createSupabaseAdminClient();
 
@@ -129,14 +135,22 @@ export default async function SettingsPage() {
 
   return (
     <div className="app-page">
-      <PageHeader
-        eyebrow="Configuration"
-        title="Settings"
-        description="Manage operational defaults, event taxonomies, SOP templates, and archived artist records."
-        meta={<span>{tabs.length} sections</span>}
-      />
+      <div className="hidden md:block">
+        <PageHeader
+          eyebrow="Configuration"
+          title="Settings"
+          description="Manage operational defaults, event taxonomies, SOP templates, and archived artist records."
+          meta={<span>{tabs.length} sections</span>}
+        />
+      </div>
+      <div className="md:hidden">
+        <p className="mobile-eyebrow">Manage</p>
+        <h1 className="mt-1 font-brand-serif text-[1.85rem] font-medium leading-tight text-[var(--navy)]">
+          Settings
+        </h1>
+      </div>
 
-      <SettingsTabs tabs={tabs} />
+      <SettingsTabs tabs={tabs} initialTab={requestedTab} />
     </div>
   );
 }

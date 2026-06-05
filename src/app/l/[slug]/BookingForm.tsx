@@ -321,13 +321,13 @@ export function BookingForm({
   }
 
   return (
-    <div className="bg-[var(--paper)] border-t border-[var(--hair)] p-6">
+    <div className="border-t border-[var(--hair)] bg-[var(--paper)] p-6 pb-[calc(96px+env(safe-area-inset-bottom))] sm:pb-6">
       <h2 className="text-sm font-bold uppercase tracking-wider text-[var(--navy)] mb-4">
         {ctaLabel}
       </h2>
 
       {isPaidBooking ? (
-        <div className="mb-4 rounded-[8px] border border-[var(--hair)] bg-[var(--paper-tint)] p-4 text-sm text-[var(--navy)]">
+        <div className="mb-4 hidden rounded-[8px] border border-[var(--hair)] bg-[var(--paper-tint)] p-4 text-sm text-[var(--navy)] sm:block">
           <div className="flex items-center justify-between gap-3">
             <span>{ticketCount} {ticketCount === 1 ? bookingNoun.slice(0, -1) : bookingNoun}</span>
             <span className="font-semibold">
@@ -346,30 +346,31 @@ export function BookingForm({
 
       <form ref={formRef} onSubmit={handleSubmit} noValidate className="space-y-4">
         {/* Ticket count stepper */}
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-[var(--slate)]">How many {bookingNoun}?</span>
-          <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between rounded-[11px] border border-[var(--hair)] bg-[var(--paper-tint)] p-3">
+          <span className="text-sm font-semibold text-[var(--navy)]">
+            How many {bookingNoun}?
+            {isPaidBooking && ticketPrice != null ? (
+              <span className="mt-1 block text-xs font-normal text-[var(--ink-muted)]">{formatAmount(ticketPrice)} each</span>
+            ) : null}
+          </span>
+          <div className="flex items-center overflow-hidden rounded-[11px] border border-[var(--hair)] bg-[var(--paper)]">
             <button
               type="button"
               onClick={() => setTicketCount((n) => Math.max(1, n - 1))}
               disabled={ticketCount <= 1}
-              className="w-8 h-8 rounded-full bg-[var(--navy)] text-white font-bold
-                         disabled:opacity-40 flex items-center justify-center hover:bg-[var(--slate)]
-                         focus:outline-none focus:ring-2 focus:ring-[var(--navy)] focus:ring-offset-1"
+              className="flex h-11 w-11 items-center justify-center text-xl font-bold text-[var(--ink-muted)] disabled:opacity-40 hover:bg-[var(--paper-tint)] focus:outline-none focus:ring-2 focus:ring-[var(--navy)] focus:ring-offset-1"
               aria-label="Decrease ticket count"
             >
               −
             </button>
-            <span className="text-lg font-bold w-6 text-center" aria-live="polite">
+            <span className="w-10 text-center text-lg font-bold text-[var(--navy)]" aria-live="polite">
               {ticketCount}
             </span>
             <button
               type="button"
               onClick={() => setTicketCount((n) => Math.min(maxTickets, n + 1))}
               disabled={ticketCount >= maxTickets}
-              className="w-8 h-8 rounded-full bg-[var(--navy)] text-white font-bold
-                         disabled:opacity-40 flex items-center justify-center hover:bg-[var(--slate)]
-                         focus:outline-none focus:ring-2 focus:ring-[var(--navy)] focus:ring-offset-1"
+              className="flex h-11 w-11 items-center justify-center bg-[var(--navy)] text-xl font-bold text-white disabled:opacity-40 hover:bg-[var(--slate)] focus:outline-none focus:ring-2 focus:ring-[var(--navy)] focus:ring-offset-1"
               aria-label="Increase ticket count"
             >
               +
@@ -389,7 +390,7 @@ export function BookingForm({
               onChange={(e) => setFirstName(e.target.value)}
               required
               autoComplete="given-name"
-              className="w-full rounded-[8px] border border-[var(--hair)] bg-[var(--paper)] px-3 py-2 text-sm
+              className="h-12 w-full rounded-[11px] border border-[var(--hair)] bg-[var(--paper)] px-3 py-2 text-[16px] sm:h-auto sm:rounded-[8px] sm:text-sm
                          placeholder:text-[var(--ink-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--navy)]"
             />
           </div>
@@ -402,7 +403,7 @@ export function BookingForm({
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
               autoComplete="family-name"
-              className="w-full rounded-[8px] border border-[var(--hair)] bg-[var(--paper)] px-3 py-2 text-sm
+              className="h-12 w-full rounded-[11px] border border-[var(--hair)] bg-[var(--paper)] px-3 py-2 text-[16px] sm:h-auto sm:rounded-[8px] sm:text-sm
                          placeholder:text-[var(--ink-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--navy)]"
             />
           </div>
@@ -419,7 +420,7 @@ export function BookingForm({
             onChange={(e) => setMobile(e.target.value)}
             required
             autoComplete="tel"
-            className="w-full rounded-[8px] border border-[var(--hair)] bg-[var(--paper)] px-3 py-2 text-sm
+            className="h-12 w-full rounded-[11px] border border-[var(--hair)] bg-[var(--paper)] px-3 py-2 text-[16px] sm:h-auto sm:rounded-[8px] sm:text-sm
                        placeholder:text-[var(--ink-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--navy)]"
           />
         </div>
@@ -435,7 +436,7 @@ export function BookingForm({
             onChange={(e) => setEmail(e.target.value)}
             required={isPaidBooking}
             autoComplete="email"
-            className="w-full rounded-[8px] border border-[var(--hair)] bg-[var(--paper)] px-3 py-2 text-sm
+            className="h-12 w-full rounded-[11px] border border-[var(--hair)] bg-[var(--paper)] px-3 py-2 text-[16px] sm:h-auto sm:rounded-[8px] sm:text-sm
                        placeholder:text-[var(--ink-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--navy)]"
           />
         </div>
@@ -450,7 +451,7 @@ export function BookingForm({
               onChange={(e) => setCustomerNotes(e.target.value)}
               maxLength={1000}
               rows={3}
-              className="w-full rounded-[8px] border border-[var(--hair)] bg-[var(--paper)] px-3 py-2 text-sm
+              className="w-full rounded-[11px] border border-[var(--hair)] bg-[var(--paper)] px-3 py-2 text-[16px] sm:rounded-[8px] sm:text-sm
                          placeholder:text-[var(--ink-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--navy)]"
             />
           </div>
@@ -492,18 +493,31 @@ export function BookingForm({
           .
         </p>
 
-        <TurnstileWidget action="booking" nonce={nonce} />
+        <div className="max-w-full overflow-hidden">
+          <TurnstileWidget action="booking" nonce={nonce} />
+        </div>
 
-        {/* Submit */}
-        <button
-          type="submit"
-          disabled={loading || !firstName.trim() || !mobile.trim() || (isPaidBooking && !email.trim())}
-          className="w-full bg-[var(--mustard)] hover:bg-[var(--mustard-dark)] text-white font-bold text-sm
-                     uppercase tracking-wider py-3 rounded-md disabled:opacity-50
-                     transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--mustard)] focus:ring-offset-1"
-        >
-          {loading ? (isPaidBooking ? "Opening checkout…" : "Submitting…") : ctaLabel}
-        </button>
+        <div className="mobile-actionbar sm:block">
+          <div className="min-w-0 flex-1 sm:hidden">
+            <p className="font-brand-mono text-[0.56rem] font-semibold uppercase tracking-[0.08em] text-[var(--ink-soft)]">
+              {isPaidBooking ? `Total · ${ticketCount} ${ticketCount === 1 ? bookingNoun.slice(0, -1) : bookingNoun}` : `${ticketCount} ${ticketCount === 1 ? bookingNoun.slice(0, -1) : bookingNoun}`}
+            </p>
+            {isPaidBooking ? (
+              <p className="text-lg font-bold leading-tight text-[var(--navy)]">
+                {paidTotal != null ? formatAmount(paidTotal) : "Unavailable"}
+              </p>
+            ) : (
+              <p className="text-sm font-semibold text-[var(--navy)]">{ctaLabel}</p>
+            )}
+          </div>
+          <button
+            type="submit"
+            disabled={loading || !firstName.trim() || !mobile.trim() || (isPaidBooking && !email.trim())}
+            className="inline-flex min-h-12 items-center justify-center rounded-[11px] bg-[var(--navy)] px-5 text-sm font-bold text-white disabled:opacity-50 sm:w-full sm:bg-[var(--mustard)] sm:py-3 sm:uppercase sm:tracking-wider sm:hover:bg-[var(--mustard-dark)]"
+          >
+            {loading ? (isPaidBooking ? "Opening checkout…" : "Submitting…") : ctaLabel}
+          </button>
+        </div>
       </form>
     </div>
   );

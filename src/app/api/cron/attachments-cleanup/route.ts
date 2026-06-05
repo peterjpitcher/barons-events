@@ -2,6 +2,7 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { verifyCronSecret } from "@/lib/cron-auth";
+import { recordSystemAuditLogEntry } from "@/lib/audit-log";
 
 /**
  * Wave 5 — orphan cleanup cron.
@@ -16,6 +17,30 @@ import { verifyCronSecret } from "@/lib/cron-auth";
  *
  * Uses the admin client so it bypasses RLS.
  */
+type CleanupAttachmentRow = {
+  id: string;
+  storage_path: string;
+  display_name?: string | null;
+  original_filename?: string | null;
+  event_id?: string | null;
+  planning_item_id?: string | null;
+  planning_task_id?: string | null;
+};
+
+function attachmentFilename(row: CleanupAttachmentRow): string | null {
+  return row.display_name ?? row.original_filename ?? null;
+}
+
+function attachmentParentMeta(row: CleanupAttachmentRow): Record<string, string> {
+  return Object.fromEntries(
+    [
+      ["event_id", row.event_id],
+      ["planning_item_id", row.planning_item_id],
+      ["planning_task_id", row.planning_task_id]
+    ].filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].length > 0)
+  );
+}
+
 export async function GET(request: Request): Promise<NextResponse> {
   if (!verifyCronSecret(request.headers.get("authorization"))) {
     return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
@@ -38,11 +63,11 @@ export async function GET(request: Request): Promise<NextResponse> {
    
   const { data: pendingRows } = await (db as any)
     .from("attachments")
-    .select("id, storage_path")
+    .select("id, storage_path, display_name, original_filename, event_id, planning_item_id, planning_task_id")
     .eq("upload_status", "pending")
     .lt("created_at", oneDayAgo);
 
-  for (const row of (pendingRows ?? []) as Array<{ id: string; storage_path: string }>) {
+  for (const row of (pendingRows ?? []) as CleanupAttachmentRow[]) {
     try {
        
       await (db as any).storage.from("task-attachments").remove([row.storage_path]).catch(() => {});
@@ -51,6 +76,18 @@ export async function GET(request: Request): Promise<NextResponse> {
         .from("attachments")
         .update({ upload_status: "failed" })
         .eq("id", row.id);
+      await recordSystemAuditLogEntry({
+        entity: "attachment",
+        entityId: row.id,
+        action: "attachment.upload_failed",
+        actorId: null,
+        meta: {
+          ...attachmentParentMeta(row),
+          filename: attachmentFilename(row),
+          original_filename: row.original_filename ?? null,
+          reason: "stale_pending_upload_cleanup"
+        }
+      });
       cleanedPending++;
     } catch (err) {
       console.warn("attachments-cleanup: pending row failed", row.id, err);
@@ -61,14 +98,26 @@ export async function GET(request: Request): Promise<NextResponse> {
    
   const { data: failedRows } = await (db as any)
     .from("attachments")
-    .select("id, storage_path")
+    .select("id, storage_path, display_name, original_filename, event_id, planning_item_id, planning_task_id")
     .eq("upload_status", "failed")
     .lt("created_at", oneDayAgo);
 
-  for (const row of (failedRows ?? []) as Array<{ id: string; storage_path: string }>) {
+  for (const row of (failedRows ?? []) as CleanupAttachmentRow[]) {
     try {
        
       await (db as any).storage.from("task-attachments").remove([row.storage_path]).catch(() => {});
+      await recordSystemAuditLogEntry({
+        entity: "attachment",
+        entityId: row.id,
+        action: "attachment.deleted",
+        actorId: null,
+        meta: {
+          ...attachmentParentMeta(row),
+          filename: attachmentFilename(row),
+          original_filename: row.original_filename ?? null,
+          reason: "failed_upload_cleanup"
+        }
+      });
        
       await (db as any).from("attachments").delete().eq("id", row.id);
       cleanedFailed++;
@@ -81,14 +130,26 @@ export async function GET(request: Request): Promise<NextResponse> {
    
   const { data: deletedRows } = await (db as any)
     .from("attachments")
-    .select("id, storage_path")
+    .select("id, storage_path, display_name, original_filename, event_id, planning_item_id, planning_task_id")
     .not("deleted_at", "is", null)
     .lt("deleted_at", sevenDaysAgo);
 
-  for (const row of (deletedRows ?? []) as Array<{ id: string; storage_path: string }>) {
+  for (const row of (deletedRows ?? []) as CleanupAttachmentRow[]) {
     try {
        
       await (db as any).storage.from("task-attachments").remove([row.storage_path]).catch(() => {});
+      await recordSystemAuditLogEntry({
+        entity: "attachment",
+        entityId: row.id,
+        action: "attachment.deleted",
+        actorId: null,
+        meta: {
+          ...attachmentParentMeta(row),
+          filename: attachmentFilename(row),
+          original_filename: row.original_filename ?? null,
+          reason: "soft_deleted_cleanup"
+        }
+      });
        
       await (db as any).from("attachments").delete().eq("id", row.id);
       cleanedDeleted++;

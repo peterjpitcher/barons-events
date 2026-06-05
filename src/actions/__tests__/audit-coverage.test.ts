@@ -21,6 +21,7 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const ACTIONS_DIR = join(__dirname, "..");
+const API_DIR = join(__dirname, "..", "..", "app", "api");
 
 // Set of `<file>.ts:<functionName>` entries that are intentionally exempt.
 // Add with a one-line reason; remove when the underlying gap is closed.
@@ -37,7 +38,9 @@ const AUDIT_COVERAGE_ALLOWLIST = new Set<string>([
 ]);
 
 const MUTATION_PATTERN = /\.(insert|update|delete|upsert|rpc)\s*\(/;
+const DIRECT_WRITE_PATTERN = /\.(insert|update|delete|upsert)\s*\(/;
 const AUDIT_PATTERN = /(recordAuditLogEntry|logAuthEvent)\s*\(/;
+const SYSTEM_AUDIT_PATTERN = /(recordAuditLogEntry|recordSystemAuditLogEntry|from\(["']audit_log["']\)\.insert)\s*\(?/;
 
 type FunctionBlock = {
   name: string;
@@ -86,6 +89,14 @@ function extractExportedAsyncFunctions(source: string): FunctionBlock[] {
   return blocks;
 }
 
+function listFilesRecursive(dir: string): string[] {
+  return readdirSync(dir).flatMap((entry) => {
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) return listFilesRecursive(full);
+    return full.endsWith(".ts") ? [full] : [];
+  });
+}
+
 describe("audit coverage guard (Wave 0.4)", () => {
   const files = readdirSync(ACTIONS_DIR)
     .filter((f) => f.endsWith(".ts"))
@@ -116,6 +127,28 @@ describe("audit coverage guard (Wave 0.4)", () => {
           `${key} performs a mutation (.insert/.update/.delete/.upsert/.rpc) but does not call ` +
             `recordAuditLogEntry or logAuthEvent in the same function scope. ` +
             `Add an audit call, or add "${key}" to AUDIT_COVERAGE_ALLOWLIST with a reason.`
+        );
+      });
+    }
+  }
+});
+
+describe("API route audit coverage guard", () => {
+  const files = listFilesRecursive(API_DIR);
+  expect(files.length).toBeGreaterThan(0);
+
+  for (const path of files) {
+    const source = readFileSync(path, "utf8");
+    const blocks = extractExportedAsyncFunctions(source);
+    const label = path.replace(`${API_DIR}/`, "");
+
+    for (const { name, body } of blocks) {
+      it(`${label}:${name} — direct mutating routes audit`, () => {
+        const mutatesDirectly = DIRECT_WRITE_PATTERN.test(body);
+        if (!mutatesDirectly) return;
+
+        expect(SYSTEM_AUDIT_PATTERN.test(body)).toBe(
+          true
         );
       });
     }

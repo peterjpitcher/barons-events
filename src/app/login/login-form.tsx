@@ -44,7 +44,7 @@ export function LoginForm({ redirectTo, nonce }: LoginFormProps) {
           required
           aria-invalid={Boolean(emailError)}
           aria-describedby={emailError ? "email-error" : undefined}
-          className={emailError ? errorInputClass : undefined}
+          className={`${emailError ? errorInputClass : ""} h-12 text-[16px] md:h-10 md:text-sm`}
         />
         <FieldError id="email-error" message={emailError} />
       </div>
@@ -60,13 +60,13 @@ export function LoginForm({ redirectTo, nonce }: LoginFormProps) {
           required
           aria-invalid={Boolean(passwordError)}
           aria-describedby={passwordError ? "password-error" : undefined}
-          className={passwordError ? errorInputClass : undefined}
+          className={`${passwordError ? errorInputClass : ""} h-12 text-[16px] md:h-10 md:text-sm`}
         />
         <FieldError id="password-error" message={passwordError} />
       </div>
       {formError ? <p className="text-sm text-[var(--color-danger)]">{formError}</p> : null}
       <TurnstileWidget key={turnstileKey} action="login" nonce={nonce} />
-      <SubmitButton label="Sign in" />
+      <SubmitButton label="Sign in" className="h-12 w-full" />
     </form>
   );
 }

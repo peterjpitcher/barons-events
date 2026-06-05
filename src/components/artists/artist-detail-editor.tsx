@@ -71,17 +71,51 @@ export function ArtistDetailEditor({ artist, canEdit = false }: ArtistDetailEdit
       <Link href="/artists" className="text-sm text-subtle underline">
         ← Back to artists
       </Link>
-      <PageHeader
-        eyebrow="Artist profile"
-        title={artist.name}
-        description={`${artist.eventCount} linked event${artist.eventCount === 1 ? "" : "s"} · ${artist.debriefCount} debrief${artist.debriefCount === 1 ? "" : "s"}`}
-        actions={
-          <Badge variant={scoreTone(artist.effectivenessScore)}>
-            Effectiveness {Math.round(artist.effectivenessScore)}/100
-          </Badge>
-        }
-      />
-      <Card>
+      <div className="hidden md:block">
+        <PageHeader
+          eyebrow="Artist profile"
+          title={artist.name}
+          description={`${artist.eventCount} linked event${artist.eventCount === 1 ? "" : "s"} · ${artist.debriefCount} debrief${artist.debriefCount === 1 ? "" : "s"}`}
+          actions={
+            <Badge variant={scoreTone(artist.effectivenessScore)}>
+              Effectiveness {Math.round(artist.effectivenessScore)}/100
+            </Badge>
+          }
+        />
+      </div>
+      <section className="mobile-card text-center md:hidden">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[var(--navy)] text-xl font-semibold text-white">
+          {artist.name.slice(0, 2).toUpperCase()}
+        </div>
+        <h1 className="mt-3 text-xl font-semibold text-[var(--navy)]">{artist.name}</h1>
+        <p className="mt-1 text-sm capitalize text-[var(--ink-muted)]">{artist.artistType}</p>
+        <Badge variant={scoreTone(artist.effectivenessScore)} className="mt-3">
+          Effectiveness {Math.round(artist.effectivenessScore)}/100
+        </Badge>
+        <div className="mt-4 grid grid-cols-2 gap-2 text-left">
+          <div className="rounded-[8px] bg-[var(--canvas-2)] p-3">
+            <p className="text-[0.68rem] uppercase tracking-[0.08em] text-[var(--ink-soft)]">Events</p>
+            <p className="mt-1 text-lg font-semibold text-[var(--ink)]">{artist.eventCount}</p>
+          </div>
+          <div className="rounded-[8px] bg-[var(--canvas-2)] p-3">
+            <p className="text-[0.68rem] uppercase tracking-[0.08em] text-[var(--ink-soft)]">Debriefs</p>
+            <p className="mt-1 text-lg font-semibold text-[var(--ink)]">{artist.debriefCount}</p>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-2">
+          {artist.phone ? (
+            <a href={`tel:${artist.phone}`} className="inline-flex h-11 items-center justify-center rounded-[8px] bg-[var(--navy)] text-sm font-semibold text-white">
+              Call artist
+            </a>
+          ) : null}
+          {artist.email ? (
+            <a href={`mailto:${artist.email}`} className="inline-flex h-11 items-center justify-center rounded-[8px] border border-[var(--hair)] text-sm font-semibold text-[var(--ink)]">
+              Email artist
+            </a>
+          ) : null}
+        </div>
+      </section>
+      <Card className="mobile-card md:rounded-[var(--radius-lg)]">
         <CardHeader>
           <CardTitle>Performance snapshot</CardTitle>
           <CardDescription>Debrief metrics from linked events.</CardDescription>
@@ -106,7 +140,7 @@ export function ArtistDetailEditor({ artist, canEdit = false }: ArtistDetailEdit
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="mobile-card md:rounded-[var(--radius-lg)]">
         <CardHeader>
           <CardTitle>Artist profile</CardTitle>
           <CardDescription>Keep contacts and descriptions current so future booking is quick.</CardDescription>
@@ -124,12 +158,13 @@ export function ArtistDetailEditor({ artist, canEdit = false }: ArtistDetailEdit
                   disabled={!canEdit}
                   aria-invalid={Boolean(nameError)}
                   aria-describedby={nameError ? "artist-name-error" : undefined}
+                  className="h-12 text-[16px] md:h-10 md:text-sm"
                 />
                 <FieldError id="artist-name-error" message={nameError} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="artist-type">Type</Label>
-                <Select id="artist-type" name="artistType" defaultValue={artist.artistType} disabled={!canEdit}>
+                <Select id="artist-type" name="artistType" defaultValue={artist.artistType} disabled={!canEdit} className="h-12 text-[16px] md:h-10 md:text-sm">
                   <option value="artist">Artist</option>
                   <option value="band">Band</option>
                   <option value="host">Host</option>
@@ -142,11 +177,11 @@ export function ArtistDetailEditor({ artist, canEdit = false }: ArtistDetailEdit
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="artist-email">Email</Label>
-                <Input id="artist-email" name="email" type="email" defaultValue={artist.email ?? ""} disabled={!canEdit} />
+                <Input id="artist-email" name="email" type="email" autoComplete="email" defaultValue={artist.email ?? ""} disabled={!canEdit} className="h-12 text-[16px] md:h-10 md:text-sm" />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="artist-phone">Phone</Label>
-                <Input id="artist-phone" name="phone" defaultValue={artist.phone ?? ""} disabled={!canEdit} />
+                <Input id="artist-phone" name="phone" type="tel" autoComplete="tel" defaultValue={artist.phone ?? ""} disabled={!canEdit} className="h-12 text-[16px] md:h-10 md:text-sm" />
               </div>
             </div>
             <div className="space-y-2">
@@ -158,24 +193,26 @@ export function ArtistDetailEditor({ artist, canEdit = false }: ArtistDetailEdit
                 defaultValue={artist.description ?? ""}
                 disabled={!canEdit}
                 placeholder="Genre, crowd fit, known strengths, and operational notes."
+                className="text-[16px] md:text-sm"
               />
             </div>
             {canEdit ? (
-              <div className="flex flex-wrap justify-end gap-2">
+              <div className="grid gap-2 md:flex md:flex-wrap md:justify-end">
                 <SubmitButton
                   label="Archive artist"
                   pendingLabel="Archiving..."
                   variant="destructive"
                   formAction={archiveFormAction}
+                  className="h-11 md:h-10"
                 />
-                <SubmitButton label="Save artist" pendingLabel="Saving..." variant="secondary" />
+                <SubmitButton label="Save artist" pendingLabel="Saving..." variant="secondary" className="h-11 md:h-10" />
               </div>
             ) : null}
           </form>
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="mobile-card md:rounded-[var(--radius-lg)]">
         <CardHeader>
           <CardTitle>Linked event debriefs</CardTitle>
           <CardDescription>All debrief outcomes for this artist in one timeline.</CardDescription>
@@ -187,7 +224,7 @@ export function ArtistDetailEditor({ artist, canEdit = false }: ArtistDetailEdit
             artist.events.map((entry) => (
               <div
                 key={`${entry.eventId}-${entry.startAt}`}
-                className="rounded-[8px] border border-[var(--hair)] bg-[var(--paper)] p-4 text-sm shadow-card"
+                className="mobile-list-card text-sm md:rounded-[8px]"
               >
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { CalendarDays, Clock, Edit, MapPin, Share2 } from "lucide-react";
 import { EventForm } from "@/components/events/event-form";
 import { BookingSettingsCard } from "@/components/events/booking-settings-card";
 import { EventPageHeader } from "@/components/events/event-page-header";
@@ -46,11 +47,29 @@ const auditTimestampFormatter = new Intl.DateTimeFormat("en-GB", {
   timeZone: "Europe/London"
 });
 
+const eventDateFormatter = new Intl.DateTimeFormat("en-GB", {
+  dateStyle: "medium",
+  timeZone: "Europe/London"
+});
+
 const toMetaRecord = (value: unknown): Record<string, unknown> =>
   value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 
 const toStringArray = (value: unknown): string[] =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+
+function buildEventImageUrl(path: string | null | undefined): string | null {
+  if (!path || !path.trim().length) return null;
+  const base =
+    typeof process.env.NEXT_PUBLIC_SUPABASE_URL === "string"
+      ? process.env.NEXT_PUBLIC_SUPABASE_URL.trim().replace(/\/+$/g, "")
+      : "";
+  if (!base.length) return null;
+  return `${base}/storage/v1/object/public/event-images/${path
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/")}`;
+}
 
 export default async function EventDetailPage({ params }: { params: Promise<{ eventId: string }> }) {
   const { eventId } = await params;
@@ -254,6 +273,25 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
     if (match) return match.label;
     return value.replace(/_/g, " ");
   };
+  const attachmentLabels = new Map(
+    attachments.map((attachment) => [attachment.id, attachment.displayName ?? attachment.originalFilename])
+  );
+  const mobileEventImageUrl = buildEventImageUrl(event.event_image_path);
+  const mobileStatus = statusCopy[event.status] ?? statusCopy.draft;
+  const mobileVenueNames = event.venues.length > 0
+    ? event.venues.map((venue) => venue.name)
+    : event.venue?.name
+      ? [event.venue.name]
+      : [];
+  const mobileVenueLabel = mobileVenueNames.length > 1
+    ? `${mobileVenueNames[0]} +${mobileVenueNames.length - 1}`
+    : mobileVenueNames[0] ?? "Venue TBC";
+  const mobileSpaces = parseVenueSpaces(event.venue_space);
+  const mobileSpaceLabel = mobileSpaces.length ? mobileSpaces.join(", ") : "Space TBC";
+  const mobileStart = new Date(event.start_at);
+  const mobileEnd = event.end_at ? new Date(event.end_at) : null;
+  const mobileDateLabel = eventDateFormatter.format(mobileStart);
+  const mobileTimeLabel = `${mobileStart.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/London" })}${mobileEnd ? ` - ${mobileEnd.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/London" })}` : ""}`;
 
   const auditEntries = auditLog.map((entry) => {
     const meta = toMetaRecord(entry.meta);
@@ -301,6 +339,19 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
       details.push(`Changed: ${changeLabels.join(", ")}`);
     }
 
+    const attachmentLabel =
+      typeof meta.filename === "string"
+        ? meta.filename
+        : typeof meta.display_name === "string"
+          ? meta.display_name
+          : attachmentLabels.get(entry.entity_id) ?? null;
+    const attachmentUploadedFilename =
+      typeof meta.uploaded_filename === "string"
+        ? meta.uploaded_filename
+        : typeof meta.original_filename === "string"
+          ? meta.original_filename
+          : null;
+
     switch (entry.action) {
       case "event.created":
         summary = "Draft created";
@@ -316,6 +367,35 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
         break;
       case "event.assignee_updated":
         summary = assigneeIdFromMeta ? "Assignee updated" : "Assignee cleared";
+        break;
+      case "attachment.uploaded":
+        summary = "Attachment uploaded";
+        if (attachmentLabel) details.push(`File: ${attachmentLabel}`);
+        break;
+      case "attachment.upload_failed":
+        summary = "Attachment upload failed";
+        if (attachmentLabel) details.push(`File: ${attachmentLabel}`);
+        if (typeof meta.reason === "string") details.push(`Reason: ${meta.reason}`);
+        break;
+      case "attachment.version_added":
+        summary = "New attachment version uploaded";
+        if (attachmentLabel) details.push(`File: ${attachmentLabel}`);
+        if (typeof meta.version_no === "number") details.push(`Version: v${meta.version_no}`);
+        if (attachmentUploadedFilename && attachmentUploadedFilename !== attachmentLabel) {
+          details.push(`Uploaded filename: ${attachmentUploadedFilename}`);
+        }
+        break;
+      case "attachment.renamed":
+        summary = "Attachment filename changed";
+        if (typeof meta.previous_display_name === "string" && typeof meta.display_name === "string") {
+          details.push(`Renamed: ${meta.previous_display_name} to ${meta.display_name}`);
+        } else if (attachmentLabel) {
+          details.push(`File: ${attachmentLabel}`);
+        }
+        break;
+      case "attachment.deleted":
+        summary = "Attachment deleted";
+        if (attachmentLabel) details.push(`File: ${attachmentLabel}`);
         break;
       default: {
         const cleaned = entry.action.replace(/^event\\./, "").replace(/_/g, " ");
@@ -450,17 +530,112 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
 
   return (
     <div className={canEdit ? "app-page pb-32" : "app-page"}>
-      <EventPageHeader
-        title={event.title}
-        mode={canEdit ? "edit" : "view"}
-        status={event.status as EventStatus}
-        eventId={event.id}
-        canDelete={canDelete}
-        canRevertToDraft={canRevertToDraft}
-      />
+      <div className="md:hidden">
+        <div className="-mx-4 -mt-4">
+          {mobileEventImageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={mobileEventImageUrl} alt={`${event.title} event image`} className="h-44 w-full object-cover" />
+          ) : (
+            <div className="flex h-44 w-full items-center justify-center bg-[var(--slate)] text-sm text-white/70">Event image</div>
+          )}
+        </div>
+        <div className="-mt-8 mobile-card relative">
+          <div className="mb-2 flex flex-wrap gap-2">
+            <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
+              mobileStatus.tone === "danger"
+                ? "bg-[var(--burgundy)] text-white"
+                : mobileStatus.tone === "warning"
+                  ? "bg-[var(--mustard)] text-[var(--ink-on-mustard)]"
+                  : mobileStatus.tone === "success"
+                    ? "bg-[var(--sage-dark)] text-white"
+                    : "bg-[var(--slate)] text-white"
+            }`}>
+              {mobileStatus.label}
+            </span>
+            {event.booking_enabled ? (
+              <span className="inline-flex rounded-full bg-[var(--canvas-2)] px-2.5 py-1 text-xs font-semibold text-[var(--ink-muted)]">
+                Bookings on
+              </span>
+            ) : null}
+          </div>
+          <h1 className="font-brand-serif text-[23px] font-medium leading-tight text-[var(--navy)]">{event.title}</h1>
+          <div className="mt-3 flex flex-col gap-1.5 text-sm text-[var(--ink-muted)]">
+            <span className="inline-flex items-center gap-2">
+              <CalendarDays className="h-4 w-4" aria-hidden="true" />
+              {mobileDateLabel}
+            </span>
+            <span className="inline-flex items-center gap-2">
+              <Clock className="h-4 w-4" aria-hidden="true" />
+              {mobileTimeLabel}
+            </span>
+            <span className="inline-flex items-center gap-2">
+              <MapPin className="h-4 w-4" aria-hidden="true" />
+              {mobileVenueLabel} · {mobileSpaceLabel}
+            </span>
+          </div>
+        </div>
+        <div className="mt-3 grid grid-cols-3 gap-1 rounded-[11px] bg-[var(--canvas-2)] p-1">
+          {["Details", "Bookings", "Tasks"].map((label, index) => (
+            <Link
+              key={label}
+              href={index === 1 ? `/events/${event.id}/bookings` : index === 2 ? `#sop-drawer-trigger-${event.id}` : "#event-mobile-facts"}
+              className={`inline-flex h-9 items-center justify-center rounded-[9px] text-xs font-semibold ${index === 0 ? "bg-[var(--paper)] text-[var(--navy)] shadow-card" : "text-[var(--ink-muted)]"}`}
+            >
+              {label}
+            </Link>
+          ))}
+        </div>
+        <section id="event-mobile-facts" className="mt-3 mobile-card">
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            {[
+              ["Type", event.event_type ?? "TBC"],
+              ["Venues", mobileVenueLabel],
+              ["Space", mobileSpaceLabel],
+              ["Headcount", event.expected_headcount != null ? String(event.expected_headcount) : "TBC"],
+              ["Capacity", event.total_capacity != null ? String(event.total_capacity) : "TBC"],
+              ["Bookings", event.booking_enabled ? "Enabled" : "Disabled"],
+            ].map(([label, value]) => (
+              <div key={label}>
+                <p className="mobile-eyebrow">{label}</p>
+                <p className="mt-1 font-semibold text-[var(--ink)]">{value}</p>
+              </div>
+            ))}
+          </div>
+          {event.notes ? <p className="mt-4 whitespace-pre-wrap text-sm leading-relaxed text-[var(--ink-muted)]">{event.notes}</p> : null}
+        </section>
+        <div className="mt-3 flex gap-2">
+          <a
+            href={`mailto:?subject=${encodeURIComponent(event.title)}&body=${encodeURIComponent(event.title)}`}
+            className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-[11px] border border-[var(--hair)] bg-[var(--paper)] px-4 text-sm font-semibold text-[var(--ink)]"
+          >
+            <Share2 className="h-4 w-4" aria-hidden="true" />
+            Share
+          </a>
+          {canEdit ? (
+            <a
+              href="#event-form"
+              className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-[11px] bg-[var(--navy)] px-4 text-sm font-semibold text-white"
+            >
+              <Edit className="h-4 w-4" aria-hidden="true" />
+              Edit event
+            </a>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="hidden md:block">
+        <EventPageHeader
+          title={event.title}
+          mode={canEdit ? "edit" : "view"}
+          status={event.status as EventStatus}
+          eventId={event.id}
+          canDelete={canDelete}
+          canRevertToDraft={canRevertToDraft}
+        />
+      </div>
 
       {/* Quick info bar */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-subtle">
+      <div className="hidden flex-wrap items-center gap-x-4 gap-y-1 text-xs text-subtle md:flex">
         {event.manager_responsible_id ? (
           <span>
             <span className="font-semibold text-[var(--ink)]">Manager:</span>{" "}
@@ -473,30 +648,32 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
           </Button>
         ) : null}
         {canViewEventPlanning ? (
-          <Button id={`sop-drawer-trigger-${event.id}`} type="button" variant="secondary" size="sm">
+          <Button id={`sop-drawer-trigger-${event.id}`} type="button" variant="secondary" size="sm" className="text-white hover:text-white">
             SOP
           </Button>
         ) : null}
       </div>
 
       {/* EventForm for all users — read-only for non-editors */}
-      <EventForm
-        key={event.id}
-        mode="edit"
-        defaultValues={event}
-        venues={venues}
-        artists={artists}
-        eventTypes={eventTypes.map((type) => type.label)}
-        role={user.role}
-        userVenueId={user.venueId}
-        users={assignableUsers.map((u) => ({ id: u.id, name: u.name }))}
-        canDelete={canDelete}
-        readOnly={!canEdit}
-        debrief={event.debrief}
-        canSubmitDebrief={canSubmitDebrief}
-        debriefInitiallyPinned={Boolean(userPrefs?.debrief_pinned)}
-        reserveFloatingActionSpace={false}
-      />
+      <div id="event-form">
+        <EventForm
+          key={event.id}
+          mode="edit"
+          defaultValues={event}
+          venues={venues}
+          artists={artists}
+          eventTypes={eventTypes.map((type) => type.label)}
+          role={user.role}
+          userVenueId={user.venueId}
+          users={assignableUsers.map((u) => ({ id: u.id, name: u.name }))}
+          canDelete={canDelete}
+          readOnly={!canEdit}
+          debrief={event.debrief}
+          canSubmitDebrief={canSubmitDebrief}
+          debriefInitiallyPinned={Boolean(userPrefs?.debrief_pinned)}
+          reserveFloatingActionSpace={false}
+        />
+      </div>
 
       {/* Lower cards grid */}
       <div className="grid gap-6 lg:grid-cols-2">
@@ -547,7 +724,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
           readOnly={!canEdit}
           initiallyPinned={Boolean(userPrefs?.sop_drawer_pinned)}
           externalTriggerId={`sop-drawer-trigger-${event.id}`}
-          title="ALL TODO ITEMS FOR THIS EVENT"
+          title="ALL TODO ITEMS FOR THIS EVENT (SOP)"
         />
       ) : null}
     </div>

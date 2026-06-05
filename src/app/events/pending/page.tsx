@@ -76,7 +76,7 @@ export default async function PendingProposalsPage() {
         description="Review quick event proposals. Approving unlocks the full event form for the creator; rejecting closes the proposal with a reason."
         meta={<span>{proposals.length} proposal{proposals.length === 1 ? "" : "s"}</span>}
       />
-      <section className="rounded-[10px] border border-[var(--hair)] bg-[var(--paper)] p-4 shadow-card">
+      <section className="rounded-[10px] border border-[var(--hair)] bg-[var(--paper)] p-4 shadow-card md:rounded-[10px]">
           {proposals.length === 0 ? (
             <p className="text-sm text-subtle">No pending proposals.</p>
           ) : (

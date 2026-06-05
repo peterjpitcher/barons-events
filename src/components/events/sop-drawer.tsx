@@ -55,7 +55,13 @@ export function SopDrawer({
 
     const media = window.matchMedia("(min-width: 1024px)");
     function syncBodyPadding(): void {
-      const reservedWidth = pinned && media.matches ? "28rem" : "3rem";
+      if (!media.matches) {
+        document.body.style.paddingRight = "";
+        document.documentElement.style.removeProperty("--sop-drawer-reserved-width");
+        return;
+      }
+
+      const reservedWidth = pinned ? "28rem" : "3rem";
       document.body.style.paddingRight = reservedWidth;
       document.documentElement.style.setProperty("--sop-drawer-reserved-width", reservedWidth);
     }
@@ -133,7 +139,7 @@ export function SopDrawer({
   return (
     <aside
       className={cn(
-        "fixed bottom-0 right-0 top-0 z-40 flex flex-col border-l bg-[var(--paper)] shadow-card transition-[width] duration-200 ease-out",
+        "fixed bottom-0 right-0 top-0 z-40 hidden flex-col border-l bg-[var(--paper)] shadow-card transition-[width] duration-200 ease-out lg:flex",
         expanded ? "w-[min(28rem,calc(100vw-3rem))] border-[var(--hair)]" : "w-12 border-[var(--mustard-dark)]"
       )}
       onMouseEnter={() => setHovered(true)}

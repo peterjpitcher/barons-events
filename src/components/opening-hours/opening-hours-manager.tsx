@@ -31,7 +31,7 @@ export function OpeningHoursManager({
 
   return (
     <div className="space-y-8">
-      <Card>
+      <Card className="mobile-card md:rounded-[var(--radius-lg)]">
         <CardHeader>
           <CardTitle>Standard weekly hours</CardTitle>
           <CardDescription>
@@ -58,7 +58,7 @@ export function OpeningHoursManager({
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="mobile-card md:rounded-[var(--radius-lg)]">
         <CardHeader>
           <CardTitle>Date-specific changes</CardTitle>
           <CardDescription>

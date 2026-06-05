@@ -40,6 +40,7 @@ export function CommunicationPreferencesForm({
           id="todoDigestFrequency"
           name="todoDigestFrequency"
           defaultValue={todoDigestFrequency}
+          className="h-12 text-[16px] md:h-10 md:text-sm"
           aria-invalid={Boolean(frequencyError)}
           aria-describedby={frequencyError ? "todo-digest-frequency-error" : undefined}
         >
@@ -63,7 +64,7 @@ export function CommunicationPreferencesForm({
         </p>
       ) : null}
 
-      <SubmitButton label="Save preferences" pendingLabel="Saving..." variant="primary" />
+      <SubmitButton label="Save preferences" pendingLabel="Saving..." variant="primary" className="h-11 w-full md:w-auto" />
     </form>
   );
 }

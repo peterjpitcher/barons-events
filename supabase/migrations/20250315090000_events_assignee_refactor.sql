@@ -3,10 +3,21 @@
 alter table public.events
   add column if not exists assignee_id uuid references public.users(id) on delete set null;
 
-update public.events
-set assignee_id = assigned_reviewer_id
-where assigned_reviewer_id is not null
-  and (assignee_id is null or assignee_id <> assigned_reviewer_id);
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'events'
+      and column_name = 'assigned_reviewer_id'
+  ) then
+    update public.events
+    set assignee_id = assigned_reviewer_id
+    where assigned_reviewer_id is not null
+      and (assignee_id is null or assignee_id <> assigned_reviewer_id);
+  end if;
+end $$;
 
 drop index if exists public.events_reviewer_idx;
 create index if not exists events_assignee_idx on public.events(assignee_id);

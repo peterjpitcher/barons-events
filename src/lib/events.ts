@@ -680,12 +680,20 @@ export async function ensureEventPlanningItem(
 
   const { data: existing, error: existingError } = await (db as any)
     .from("planning_items")
-    .select("id")
+    .select("id, target_date")
     .eq("event_id", eventId)
     .maybeSingle();
 
   if (existingError) throw existingError;
-  if (existing?.id) return;
+  if (existing?.id) {
+    if (existing.target_date) {
+      await generateSopChecklist(existing.id, existing.target_date, createdBy, {
+        notRequiredTemplateIds: options.notRequiredTemplateIds,
+        applyEventTodoRules: options.applyEventTodoRules ?? true
+      });
+    }
+    return;
+  }
 
   const { data: event, error: eventError } = await (db as any)
     .from("events")

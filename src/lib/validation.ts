@@ -40,6 +40,15 @@ const optionalInteger = (min: number, max: number) =>
 const optionalNumberMin = (min: number) =>
   z.preprocess(normaliseOptionalNumber, z.number().min(min).optional());
 
+const optionalUuid = z.preprocess(
+  (value) => {
+    if (typeof value !== "string") return value;
+    const trimmed = value.trim();
+    return trimmed.length ? trimmed : undefined;
+  },
+  z.string().uuid().optional().nullable()
+);
+
 const optionalHighlights = z.preprocess((value) => {
   if (typeof value === "string") {
     const items = value
@@ -126,7 +135,7 @@ const eventDraftBaseSchema = z.object({
   seoTitle: optionalText(80),
   seoDescription: optionalText(200),
   seoSlug: seoSlugSchema,
-  managerResponsibleId: z.string().uuid().optional().nullable()
+  managerResponsibleId: optionalUuid
 });
 
 export const eventDraftSchema = eventDraftBaseSchema.refine(

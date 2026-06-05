@@ -190,7 +190,77 @@ export function WeeklyHoursGrid({
 
   return (
     <div className="space-y-4">
-      <div className="data-table-shell">
+      <div className="space-y-2 md:hidden">
+        {DAYS.map((day, dayIndex) => (
+          <details key={day} className="mobile-card" open={dayIndex === 0}>
+            <summary className="flex cursor-pointer items-center justify-between text-base font-semibold text-[var(--ink)]">
+              <span>{day}</span>
+              <span className="text-xs font-medium uppercase tracking-[0.08em] text-[var(--ink-soft)]">Edit day</span>
+            </summary>
+            <div className="mt-4 space-y-3">
+              {serviceTypes.map((st) => {
+                const service = grid[st.id];
+                const cell = service?.days[dayIndex] ?? {
+                  open_time: "",
+                  close_time: "",
+                  availability: "closed" as Availability
+                };
+                const hasService = service?.has_service ?? false;
+                return (
+                  <div key={st.id} className="rounded-[8px] border border-[var(--hair)] bg-[var(--canvas-2)] p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-[var(--ink)]">{st.name}</p>
+                        <label className="mt-2 flex min-h-8 items-center gap-2 text-sm text-[var(--ink-muted)]">
+                          <input
+                            type="checkbox"
+                            checked={includedServiceTypeIds.has(st.id)}
+                            disabled={!canEdit}
+                            onChange={(event) => updateServiceIncluded(st.id, event.target.checked)}
+                            className="h-4 w-4"
+                          />
+                          Include in save
+                        </label>
+                      </div>
+                      {canEdit ? (
+                        <button
+                          type="button"
+                          className="rounded-full bg-[var(--paper)] px-3 py-1.5 text-xs font-semibold text-[var(--ink)]"
+                          onClick={() => {
+                            updateServiceAvailability(st.id, !hasService);
+                            if (!hasService) updateCell(st.id, dayIndex, { availability: "open" });
+                          }}
+                        >
+                          {hasService ? "Remove" : "Add service"}
+                        </button>
+                      ) : null}
+                    </div>
+                    <div className="mt-3">
+                      <HoursCell
+                        cell={cell}
+                        hasService={hasService}
+                        canEdit={canEdit}
+                        onChange={(updates) => updateCell(st.id, dayIndex, updates)}
+                      />
+                    </div>
+                    {canEdit && hasService ? (
+                      <button
+                        type="button"
+                        className="mt-3 text-xs font-semibold text-[var(--burgundy)]"
+                        onClick={() => updateCell(st.id, dayIndex, { availability: "closed", open_time: "", close_time: "" })}
+                      >
+                        Mark closed
+                      </button>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          </details>
+        ))}
+      </div>
+
+      <div className="data-table-shell hidden md:block">
         <table className="data-table min-w-full">
           <thead>
             <tr>
@@ -260,7 +330,7 @@ export function WeeklyHoursGrid({
       </div>
 
       {canEdit ? (
-        <div className="flex items-center justify-end gap-3">
+        <div className="hidden items-center justify-end gap-3 md:flex">
           {venues.length > 1 && (
             <p className="text-xs text-subtle">
               Will apply to all {venues.length} selected venues
@@ -273,6 +343,20 @@ export function WeeklyHoursGrid({
             onClick={handleSaveClick}
           >
             {isPending ? "Saving…" : "Save weekly hours"}
+          </Button>
+        </div>
+      ) : null}
+
+      {canEdit ? (
+        <div className="mobile-actionbar md:hidden">
+          <Button
+            type="button"
+            variant="primary"
+            className="h-12 flex-1"
+            disabled={isPending || includedServiceTypeIds.size === 0}
+            onClick={handleSaveClick}
+          >
+            {isPending ? "Saving..." : "Save weekly hours"}
           </Button>
         </div>
       ) : null}
@@ -379,7 +463,7 @@ function HoursCell({
             onChange={(e) => onChange({ open_time: e.target.value })}
             placeholder="Open"
             aria-label="Opening time"
-            className="block w-full rounded-[var(--radius-sm)] border border-[var(--hair)] bg-[var(--paper)] px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[var(--slate)]"
+            className="block h-11 w-full rounded-[var(--radius-sm)] border border-[var(--hair)] bg-[var(--paper)] px-2 py-1 text-[16px] focus:outline-none focus:ring-1 focus:ring-[var(--slate)] md:h-auto md:text-xs"
           />
           <input
             type="time"
@@ -387,7 +471,7 @@ function HoursCell({
             onChange={(e) => onChange({ close_time: e.target.value })}
             placeholder="Close"
             aria-label="Closing time"
-            className="block w-full rounded-[var(--radius-sm)] border border-[var(--hair)] bg-[var(--paper)] px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[var(--slate)]"
+            className="block h-11 w-full rounded-[var(--radius-sm)] border border-[var(--hair)] bg-[var(--paper)] px-2 py-1 text-[16px] focus:outline-none focus:ring-1 focus:ring-[var(--slate)] md:h-auto md:text-xs"
           />
         </>
       ) : null}
