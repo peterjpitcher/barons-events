@@ -1873,6 +1873,24 @@ export async function sendDebriefSubmittedToSltEmail(eventId: string): Promise<v
 }
 
 /**
+ * Fetch ALL rows for a Supabase query, paging past PostgREST's 1000-row response cap.
+ * The builder MUST apply a stable .order() so range/offset pages don't skip or repeat rows.
+ */
+async function fetchDigestRows<T>(label: string, buildQuery: () => any): Promise<T[]> {
+  const pageSize = 1000;
+  const rows: T[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const query = buildQuery();
+    const canPage = typeof query.range === "function";
+    const result = canPage ? await query.range(from, from + pageSize - 1) : await query;
+    if (result.error) throw new Error(`Failed to fetch ${label}: ${result.error.message}`);
+    const page = (result.data ?? []) as T[];
+    rows.push(...page);
+    if (!canPage || page.length < pageSize) return rows;
+  }
+}
+
+/**
  * Mandatory Tuesday weekly update.
  *
  * Sends to every active user once per ISO week. Personal to-dos are per-user;
@@ -1927,47 +1945,6 @@ export async function sendMandatoryWeeklyUpdateEmail(): Promise<{ sent: number; 
   const todoDueLimit = addDays(todayLondon, 14);
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
-  const [usersResult, assigneeRowsResult, legacyTasksResult, approvalAuditResult, debriefsResult] = await Promise.all([
-    db
-      .from("users")
-      .select("id, email, full_name, venue_id, weekly_digest_last_sent_on")
-      .is("deactivated_at", null),
-    (db as any)
-      .from("planning_task_assignees")
-      .select(`
-        user_id,
-        planning_task:planning_tasks!inner(
-          id, title, due_date, assignee_id, status,
-          planning_item:planning_items!inner(id, title, event:events(id, title, venue_id, event_venues(venue_id)))
-        )
-      `)
-      .not("user_id", "is", null),
-    (db as any)
-      .from("planning_tasks")
-      .select(`
-        id, title, due_date, assignee_id, status,
-        planning_item:planning_items!inner(id, title, event:events(id, title, venue_id, event_venues(venue_id)))
-      `)
-      .eq("status", "open")
-      .not("assignee_id", "is", null),
-    db
-      .from("audit_log")
-      .select("entity_id, created_at")
-      .eq("entity", "event")
-      .eq("action", "event.approved")
-      .gte("created_at", sevenDaysAgo),
-    (db as any)
-      .from("debriefs")
-      .select("event_id, submitted_at, sales_uplift_percent, event:events(id, title, start_at, venue_id, venue:venues!events_venue_id_fkey(name), event_venues(venue_id))")
-      .gte("submitted_at", sevenDaysAgo)
-  ]);
-
-  if (usersResult.error) throw new Error(`Could not load digest users: ${usersResult.error.message}`);
-  if (assigneeRowsResult.error) throw new Error(`Could not load assigned planning tasks: ${assigneeRowsResult.error.message}`);
-  if (legacyTasksResult.error) throw new Error(`Could not load legacy planning tasks: ${legacyTasksResult.error.message}`);
-  if (approvalAuditResult.error) throw new Error(`Could not load approved event audit rows: ${approvalAuditResult.error.message}`);
-  if (debriefsResult.error) throw new Error(`Could not load debrief rows: ${debriefsResult.error.message}`);
-
   type WeeklyUser = {
     id: string;
     email: string;
@@ -1983,7 +1960,61 @@ export async function sendMandatoryWeeklyUpdateEmail(): Promise<{ sent: number; 
     eventTitle: string | null;
   };
 
-  const users = ((usersResult.data ?? []) as WeeklyUser[])
+  const [userRows, assigneeRows, legacyTasks, approvalAuditResult, debriefsResult] = await Promise.all([
+    fetchDigestRows<WeeklyUser>("weekly update users", () =>
+      db
+        .from("users")
+        .select("id, email, full_name, venue_id, weekly_digest_last_sent_on")
+        .is("deactivated_at", null)
+        .order("id", { ascending: true })
+    ),
+
+    fetchDigestRows<Record<string, unknown>>("weekly assignee tasks", () =>
+      (db as any)
+        .from("planning_task_assignees")
+        .select(`
+          user_id,
+          planning_task:planning_tasks!inner(
+            id, title, due_date, assignee_id, status,
+            planning_item:planning_items!inner(id, title, event:events(id, title, venue_id, event_venues(venue_id)))
+          )
+        `)
+        .not("user_id", "is", null)
+        .order("id", { ascending: true })
+    ),
+
+    fetchDigestRows<Record<string, unknown>>("weekly legacy tasks", () =>
+      (db as any)
+        .from("planning_tasks")
+        .select(`
+          id, title, due_date, assignee_id, status,
+          planning_item:planning_items!inner(id, title, event:events(id, title, venue_id, event_venues(venue_id)))
+        `)
+        .eq("status", "open")
+        .lte("due_date", todoDueLimit)
+        .not("assignee_id", "is", null)
+        .order("id", { ascending: true })
+    ),
+
+    // audit_log + debriefs are intentionally NOT paginated: both are bounded by the 7-day window
+    // (sevenDaysAgo) and stay well under PostgREST's 1000-row cap. See spec §10 (out of scope).
+    db
+      .from("audit_log")
+      .select("entity_id, created_at")
+      .eq("entity", "event")
+      .eq("action", "event.approved")
+      .gte("created_at", sevenDaysAgo),
+
+    (db as any)
+      .from("debriefs")
+      .select("event_id, submitted_at, sales_uplift_percent, event:events(id, title, start_at, venue_id, venue:venues!events_venue_id_fkey(name), event_venues(venue_id))")
+      .gte("submitted_at", sevenDaysAgo)
+  ]);
+
+  if (approvalAuditResult.error) throw new Error(`Could not load approved event audit rows: ${approvalAuditResult.error.message}`);
+  if (debriefsResult.error) throw new Error(`Could not load debrief rows: ${debriefsResult.error.message}`);
+
+  const users = userRows
     .filter((user) => Boolean(user.email))
     .filter((user) => !user.weekly_digest_last_sent_on || isoWeekStart(user.weekly_digest_last_sent_on) !== weekStart);
   const userMap = new Map(users.map((user) => [user.id, user]));
@@ -2021,13 +2052,13 @@ export async function sendMandatoryWeeklyUpdateEmail(): Promise<{ sent: number; 
     tasksByUser.set(userId, tasks);
   }
 
-  for (const row of (assigneeRowsResult.data ?? []) as Array<Record<string, unknown>>) {
+  for (const row of assigneeRows as Array<Record<string, unknown>>) {
     const task = normaliseWeeklyTask(row.planning_task ?? row.planning_tasks);
     if (task) taskIdsWithAssigneeRows.add(task.id);
     addTask(typeof row.user_id === "string" ? row.user_id : null, task);
   }
 
-  for (const rawTask of (legacyTasksResult.data ?? []) as Array<Record<string, unknown>>) {
+  for (const rawTask of legacyTasks as Array<Record<string, unknown>>) {
     const task = normaliseWeeklyTask(rawTask);
     if (task && taskIdsWithAssigneeRows.has(task.id)) continue;
     addTask(typeof rawTask.assignee_id === "string" ? rawTask.assignee_id : null, task);
@@ -2197,28 +2228,6 @@ export async function sendWeeklyDigestEmail(): Promise<{ sent: number; failed: n
   const nowIso = new Date().toISOString();
   const fourDaysFromNow = new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString();
 
-  async function fetchDigestRows<T>(label: string, buildQuery: () => any): Promise<T[]> {
-    const pageSize = 1000;
-    const rows: T[] = [];
-
-    for (let from = 0; ; from += pageSize) {
-      const query = buildQuery();
-      const canPage = typeof query.range === "function";
-      const result =
-        canPage
-          ? await query.range(from, from + pageSize - 1)
-          : await query;
-
-      if (result.error) {
-        throw new Error(`Failed to fetch ${label}: ${result.error.message}`);
-      }
-
-      const page = (result.data ?? []) as T[];
-      rows.push(...page);
-      if (!canPage || page.length < pageSize) return rows;
-    }
-  }
-
   const [assignedTaskRows, legacyTasks, upcomingEvents, users] = await Promise.all([
     fetchDigestRows<Record<string, unknown>>("planning task assignees", () =>
       db
@@ -2231,6 +2240,7 @@ export async function sendWeeklyDigestEmail(): Promise<{ sent: number; failed: n
           )
         `)
         .not("user_id", "is", null)
+        .order("id", { ascending: true })
     ),
     fetchDigestRows<Record<string, unknown>>("planning tasks", () =>
       db
@@ -2241,6 +2251,7 @@ export async function sendWeeklyDigestEmail(): Promise<{ sent: number; failed: n
         `)
         .eq("status", "open")
         .not("assignee_id", "is", null)
+        .order("id", { ascending: true })
     ),
     fetchDigestRows<Record<string, unknown>>("upcoming events", () =>
       db
@@ -2251,6 +2262,7 @@ export async function sendWeeklyDigestEmail(): Promise<{ sent: number; failed: n
         .in("status", ["approved", "submitted"])
         .is("deleted_at", null)
         .order("start_at", { ascending: true })
+        .order("id", { ascending: true })
     ),
     fetchDigestRows<{
       id: string;
@@ -2264,6 +2276,7 @@ export async function sendWeeklyDigestEmail(): Promise<{ sent: number; failed: n
         .from("users")
         .select("id, email, full_name, venue_id, todo_digest_frequency, todo_digest_last_sent_on")
         .is("deactivated_at", null)
+        .order("id", { ascending: true })
     )
   ]);
 
