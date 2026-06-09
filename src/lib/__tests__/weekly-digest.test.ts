@@ -897,4 +897,36 @@ describe("sendMandatoryWeeklyUpdateEmail", () => {
     expect(orderedById("planning_task_assignees")).toBe(true);
     expect(orderedById("planning_tasks")).toBe(true);
   });
+
+  it("pages a second time when the result exactly fills the first page (1000 + 1)", async () => {
+    vi.mocked(getTodayLondonIsoDate).mockReturnValue("2026-06-09");
+
+    const planningTasks = [
+      ...Array.from({ length: 1000 }, (_, i) =>
+        makeTask({ id: `other-${i}`, title: `Other ${i}`, due_date: "2026-06-10", assignee_id: "user-other", planning_item: { id: "pi-o", title: "Other", event: null } })
+      ),
+      makeTask({ id: "harry-edge", title: "Edge task", due_date: "2026-06-10", assignee_id: "harry", planning_item: { id: "pi-h", title: "Harry", event: null } })
+    ];
+
+    const { calls } = setupPagedMockDb({
+      users: {
+        rows: [
+          { ...makeUser({ id: "user-other", email: "other@example.com", venue_id: null }), weekly_digest_last_sent_on: null },
+          { ...makeUser({ id: "harry", email: "harry@example.com", venue_id: null }), weekly_digest_last_sent_on: null }
+        ]
+      },
+      planning_task_assignees: { rows: [] },
+      planning_tasks: { rows: planningTasks },
+      audit_log: { rows: [] },
+      debriefs: { rows: [] }
+    });
+
+    await sendMandatoryWeeklyUpdateEmail();
+
+    const rangeCalls = (calls["planning_tasks"] ?? []).filter((c) => c.method === "range");
+    expect(rangeCalls.length).toBeGreaterThanOrEqual(2);
+
+    const harryCall = mockEmailSend.mock.calls.find((c) => c[0].to[0] === "harry@example.com");
+    expect(harryCall![0].html).toContain("Edge task");
+  });
 });
