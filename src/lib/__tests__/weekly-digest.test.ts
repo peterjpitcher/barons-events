@@ -876,4 +876,25 @@ describe("sendMandatoryWeeklyUpdateEmail", () => {
     expect(harryCall).toBeDefined();
     expect(harryCall![0].html).toContain("Harry task");
   });
+
+  it("orders every paginated query by id so range paging is stable", async () => {
+    vi.mocked(getTodayLondonIsoDate).mockReturnValue("2026-06-09");
+
+    const { calls } = setupPagedMockDb({
+      users: { rows: [{ ...makeUser({ id: "u1", email: "u1@example.com", venue_id: null }), weekly_digest_last_sent_on: null }] },
+      planning_task_assignees: { rows: [] },
+      planning_tasks: { rows: [] },
+      audit_log: { rows: [] },
+      debriefs: { rows: [] }
+    });
+
+    await sendMandatoryWeeklyUpdateEmail();
+
+    const orderedById = (table: string) =>
+      (calls[table] ?? []).some((c) => c.method === "order" && c.args[0] === "id");
+
+    expect(orderedById("users")).toBe(true);
+    expect(orderedById("planning_task_assignees")).toBe(true);
+    expect(orderedById("planning_tasks")).toBe(true);
+  });
 });

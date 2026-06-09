@@ -2238,6 +2238,7 @@ export async function sendWeeklyDigestEmail(): Promise<{ sent: number; failed: n
           )
         `)
         .not("user_id", "is", null)
+        .order("id", { ascending: true })
     ),
     fetchDigestRows<Record<string, unknown>>("planning tasks", () =>
       db
@@ -2248,6 +2249,7 @@ export async function sendWeeklyDigestEmail(): Promise<{ sent: number; failed: n
         `)
         .eq("status", "open")
         .not("assignee_id", "is", null)
+        .order("id", { ascending: true })
     ),
     fetchDigestRows<Record<string, unknown>>("upcoming events", () =>
       db
@@ -2258,6 +2260,7 @@ export async function sendWeeklyDigestEmail(): Promise<{ sent: number; failed: n
         .in("status", ["approved", "submitted"])
         .is("deleted_at", null)
         .order("start_at", { ascending: true })
+        .order("id", { ascending: true })
     ),
     fetchDigestRows<{
       id: string;
@@ -2271,6 +2274,7 @@ export async function sendWeeklyDigestEmail(): Promise<{ sent: number; failed: n
         .from("users")
         .select("id, email, full_name, venue_id, todo_digest_frequency, todo_digest_last_sent_on")
         .is("deactivated_at", null)
+        .order("id", { ascending: true })
     )
   ]);
 
