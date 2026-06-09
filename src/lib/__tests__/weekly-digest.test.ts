@@ -290,6 +290,30 @@ describe("sendWeeklyDigestEmail", () => {
     expect(call.html).toBeDefined();
   });
 
+  it("orders every paginated query by id so range paging is stable", async () => {
+    const tasks = [makeTask({ id: "t1", title: "Book DJ", due_date: "2026-04-22", assignee_id: "user-1" })];
+    const events = [makeEvent()];
+    const users = [makeUser()];
+
+    const { calls } = setupPagedMockDb({
+      audit_log: { rows: [] },       // idempotency: no prior run
+      planning_task_assignees: { rows: [] },
+      planning_tasks: { rows: tasks },
+      events: { rows: events },
+      users: { rows: users }
+    });
+
+    await sendWeeklyDigestEmail();
+
+    const orderedById = (table: string) =>
+      (calls[table] ?? []).some((c) => c.method === "order" && c.args[0] === "id");
+
+    expect(orderedById("users")).toBe(true);
+    expect(orderedById("planning_task_assignees")).toBe(true);
+    expect(orderedById("planning_tasks")).toBe(true);
+    expect(orderedById("events")).toBe(true);
+  });
+
   it("uses multi-assignee rows as the task source and ignores stale legacy assignee fallback", async () => {
     const task = makeTask({ id: "shared-task", title: "Confirm staffing", assignee_id: "user-1" });
     const users = [

@@ -1996,6 +1996,8 @@ export async function sendMandatoryWeeklyUpdateEmail(): Promise<{ sent: number; 
         .order("id", { ascending: true })
     ),
 
+    // audit_log + debriefs are intentionally NOT paginated: both are bounded by the 7-day window
+    // (sevenDaysAgo) and stay well under PostgREST's 1000-row cap. See spec §10 (out of scope).
     db
       .from("audit_log")
       .select("entity_id, created_at")
