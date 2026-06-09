@@ -37,3 +37,6 @@ docs/architecture/.section-hashes.json
 playwright-report/
 test-results/
 .playwright-mcp/
+
+# Node.js compile cache (local build artifact)
+node-compile-cache/
