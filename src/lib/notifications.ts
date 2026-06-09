@@ -1873,6 +1873,24 @@ export async function sendDebriefSubmittedToSltEmail(eventId: string): Promise<v
 }
 
 /**
+ * Fetch ALL rows for a Supabase query, paging past PostgREST's 1000-row response cap.
+ * The builder MUST apply a stable .order() so range/offset pages don't skip or repeat rows.
+ */
+async function fetchDigestRows<T>(label: string, buildQuery: () => any): Promise<T[]> {
+  const pageSize = 1000;
+  const rows: T[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const query = buildQuery();
+    const canPage = typeof query.range === "function";
+    const result = canPage ? await query.range(from, from + pageSize - 1) : await query;
+    if (result.error) throw new Error(`Failed to fetch ${label}: ${result.error.message}`);
+    const page = (result.data ?? []) as T[];
+    rows.push(...page);
+    if (!canPage || page.length < pageSize) return rows;
+  }
+}
+
+/**
  * Mandatory Tuesday weekly update.
  *
  * Sends to every active user once per ISO week. Personal to-dos are per-user;
@@ -2196,28 +2214,6 @@ export async function sendWeeklyDigestEmail(): Promise<{ sent: number; failed: n
   // Parallel data fetch
   const nowIso = new Date().toISOString();
   const fourDaysFromNow = new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString();
-
-  async function fetchDigestRows<T>(label: string, buildQuery: () => any): Promise<T[]> {
-    const pageSize = 1000;
-    const rows: T[] = [];
-
-    for (let from = 0; ; from += pageSize) {
-      const query = buildQuery();
-      const canPage = typeof query.range === "function";
-      const result =
-        canPage
-          ? await query.range(from, from + pageSize - 1)
-          : await query;
-
-      if (result.error) {
-        throw new Error(`Failed to fetch ${label}: ${result.error.message}`);
-      }
-
-      const page = (result.data ?? []) as T[];
-      rows.push(...page);
-      if (!canPage || page.length < pageSize) return rows;
-    }
-  }
 
   const [assignedTaskRows, legacyTasks, upcomingEvents, users] = await Promise.all([
     fetchDigestRows<Record<string, unknown>>("planning task assignees", () =>
