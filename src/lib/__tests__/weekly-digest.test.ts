@@ -190,6 +190,60 @@ function setupMockDb(tableResults: Record<string, { data: unknown; error: unknow
   return dbProxy;
 }
 
+/**
+ * Cap-aware mock admin client for pagination tests.
+ *
+ * Each `.from(table)` returns a fresh chain backed by `tables[table].rows`.
+ * - Awaited WITHOUT `.range()` → resolves only the first 1,000 rows (mimics PostgREST's default cap).
+ * - Awaited WITH `.range(from, to)` → resolves `rows.slice(from, to + 1)`.
+ * Method calls are recorded in the returned `calls` map (keyed by table) for assertions.
+ */
+function setupPagedMockDb(tables: Record<string, { rows: unknown[]; error?: unknown }>) {
+  const calls: Record<string, { method: string; args: unknown[] }[]> = {};
+
+  function makeChain(table: string) {
+    const rows = tables[table]?.rows ?? [];
+    const error = tables[table]?.error ?? null;
+    let range: [number, number] | null = null;
+
+    const record = (method: string, args: unknown[]) => {
+      (calls[table] ??= []).push({ method, args });
+    };
+
+    const chain: any = {
+      insert: vi.fn().mockResolvedValue({ data: null, error: null }),
+      range(from: number, to: number) {
+        record("range", [from, to]);
+        range = [from, to];
+        return chain;
+      },
+      then(resolve: (v: unknown) => void) {
+        const data = error
+          ? null
+          : range
+            ? rows.slice(range[0], range[1] + 1)
+            : rows.slice(0, 1000);
+        resolve({ data, error });
+      }
+    };
+
+    for (const method of [
+      "select", "eq", "neq", "lte", "gte", "lt", "gt", "in", "is", "not", "order", "limit", "update", "delete", "upsert"
+    ]) {
+      chain[method] = (...args: unknown[]) => {
+        record(method, args);
+        return chain;
+      };
+    }
+
+    return chain;
+  }
+
+  const db = { from: vi.fn((table: string) => makeChain(table)) };
+  mockAdmin.mockReturnValue(db);
+  return { db, calls };
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -775,5 +829,51 @@ describe("sendMandatoryWeeklyUpdateEmail", () => {
     expect(call.text).toContain("Your SOP to-dos due now or in the next 14 days");
     expect(call.text).toContain("...and 2 more to-dos in BaronsHub.");
     expect(call.text).toContain("Your helpful weekly update from BaronsHub sent every Tuesday");
+  });
+
+  it("includes a user's tasks even when they fall beyond the first 1,000 rows (pagination)", async () => {
+    vi.mocked(getTodayLondonIsoDate).mockReturnValue("2026-06-09"); // a Tuesday
+
+    // 1,090 legacy tasks: rows 0-999 belong to another user, rows 1000-1089 to Harry.
+    const planningTasks = [
+      ...Array.from({ length: 1000 }, (_, i) =>
+        makeTask({
+          id: `other-${i}`,
+          title: `Other task ${i}`,
+          due_date: "2026-06-10",
+          assignee_id: "user-other",
+          planning_item: { id: "pi-other", title: "Other prep", event: null }
+        })
+      ),
+      ...Array.from({ length: 90 }, (_, i) =>
+        makeTask({
+          id: `harry-${i}`,
+          title: `Harry task ${i}`,
+          due_date: "2026-06-10",
+          assignee_id: "harry",
+          planning_item: { id: "pi-harry", title: "Harry prep", event: null }
+        })
+      )
+    ];
+
+    setupPagedMockDb({
+      users: {
+        rows: [
+          { ...makeUser({ id: "user-other", email: "other@example.com", venue_id: null }), weekly_digest_last_sent_on: null },
+          { ...makeUser({ id: "harry", email: "harry@example.com", full_name: "Harry Smith", venue_id: null }), weekly_digest_last_sent_on: null }
+        ]
+      },
+      planning_task_assignees: { rows: [] },
+      planning_tasks: { rows: planningTasks },
+      audit_log: { rows: [] },
+      debriefs: { rows: [] }
+    });
+
+    const result = await sendMandatoryWeeklyUpdateEmail();
+
+    expect(result.sent).toBe(2);
+    const harryCall = mockEmailSend.mock.calls.find((c) => c[0].to[0] === "harry@example.com");
+    expect(harryCall).toBeDefined();
+    expect(harryCall![0].html).toContain("Harry task");
   });
 });
