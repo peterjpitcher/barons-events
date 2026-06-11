@@ -1,11 +1,17 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Check, ChevronDown, ChevronRight, Copy, Plus, QrCode, Share2, Trash2 } from "lucide-react";
+import { CalendarX, Check, ChevronDown, ChevronRight, Copy, Plus, QrCode, Share2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { SHORT_LINK_BASE_URL, groupLinks, parseVariantName, type ShortLink } from "@/lib/links";
+import {
+  SHORT_LINK_BASE_URL,
+  groupLinks,
+  getVariantLabel,
+  isShortLinkExpired,
+  type ShortLink,
+} from "@/lib/links";
 import { createShortLinkAction, updateShortLinkAction, deleteShortLinkAction } from "@/actions/links";
 import { LinkForm, type LinkFormValues } from "./link-form";
 import { LinkRow } from "./link-row";
@@ -28,6 +34,27 @@ export function LinksManager({ links: initialLinks, canEdit }: LinksManagerProps
   const [confirmDeleteId, setConfirmDeleteId]     = useState<string | null>(null);
   const [expandedGroups, setExpandedGroups]       = useState<Set<string>>(new Set());
 
+  // ── Server-state reconciliation ───────────────────────────────────────────
+  // revalidatePath/router.refresh() deliver fresh `links` props; without this
+  // sync the list would never converge with the server (system-created links,
+  // other admins' changes, variant propagation). Optimistic rows that the
+  // server snapshot hasn't caught up with yet are preserved until confirmed.
+  const optimisticAddsRef = useRef<Set<string>>(new Set());
+  const prevServerLinksRef = useRef<ShortLink[]>(initialLinks);
+
+  useEffect(() => {
+    if (prevServerLinksRef.current === initialLinks) return;
+    prevServerLinksRef.current = initialLinks;
+    setLinks((prev) => {
+      const serverIds = new Set(initialLinks.map((l) => l.id));
+      for (const id of [...optimisticAddsRef.current]) {
+        if (serverIds.has(id)) optimisticAddsRef.current.delete(id); // confirmed by server
+      }
+      const inFlight = prev.filter((l) => !serverIds.has(l.id) && optimisticAddsRef.current.has(l.id));
+      return [...inFlight, ...initialLinks];
+    });
+  }, [initialLinks]);
+
   const groups = groupLinks(links);
 
   // ── Create ────────────────────────────────────────────────────────────────
@@ -48,7 +75,10 @@ export function LinksManager({ links: initialLinks, canEdit }: LinksManagerProps
         return;
       }
 
-      if (result.link) setLinks((prev) => [result.link!, ...prev]);
+      if (result.link) {
+        optimisticAddsRef.current.add(result.link.id);
+        setLinks((prev) => [result.link!, ...prev]);
+      }
       setShowCreateForm(false);
       toast.success(result.message ?? "Link created.");
       router.refresh();
@@ -71,6 +101,9 @@ export function LinksManager({ links: initialLinks, canEdit }: LinksManagerProps
       if (!result.success) {
         if (result.fieldErrors) setEditFieldErrors(result.fieldErrors);
         toast.error(result.message ?? "Could not update link.");
+        // The parent may still have been updated (partial variant failure) —
+        // refresh so the list reflects the server truth.
+        router.refresh();
         return;
       }
 
@@ -98,22 +131,25 @@ export function LinksManager({ links: initialLinks, canEdit }: LinksManagerProps
         return;
       }
 
-      setLinks((prev) => prev.filter((l) => l.id !== id));
+      // The FK cascade also removes the link's variants — mirror that locally.
+      setLinks((prev) => prev.filter((l) => l.id !== id && l.parent_link_id !== id));
       setConfirmDeleteId(null);
       toast.success(result.message ?? "Link deleted.");
+      router.refresh();
     });
   }
 
   // ── New variant callback (called by UtmDropdown → LinkRow) ────────────────
 
-  function handleNewVariant(parentName: string, newLink: ShortLink) {
+  function handleNewVariant(parentId: string, newLink: ShortLink) {
     setLinks((prev) => {
-      // Don't add if it already exists (e.g. reused variant path shouldn't reach here).
+      // Already present (e.g. a reused variant we know about) — no duplicate row.
       if (prev.some((l) => l.id === newLink.id)) return prev;
+      optimisticAddsRef.current.add(newLink.id);
       return [...prev, newLink];
     });
     // Auto-expand the parent group so the user sees the new sub-link.
-    setExpandedGroups((prev) => new Set([...prev, parentName]));
+    setExpandedGroups((prev) => new Set([...prev, parentId]));
   }
 
   async function copyShortUrl(link: ShortLink) {
@@ -146,7 +182,7 @@ export function LinksManager({ links: initialLinks, canEdit }: LinksManagerProps
   const rows: React.ReactNode[] = [];
 
   for (const { parent, variants } of groups) {
-    const isExpanded = expandedGroups.has(parent.name);
+    const isExpanded = expandedGroups.has(parent.id);
     const totalClicks = parent.clicks + variants.reduce((sum, v) => sum + v.clicks, 0);
 
     rows.push(
@@ -164,12 +200,12 @@ export function LinksManager({ links: initialLinks, canEdit }: LinksManagerProps
         onToggleExpand={() =>
           setExpandedGroups((prev) => {
             const next = new Set(prev);
-            if (next.has(parent.name)) next.delete(parent.name);
-            else next.add(parent.name);
+            if (next.has(parent.id)) next.delete(parent.id);
+            else next.add(parent.id);
             return next;
           })
         }
-        onNewVariant={(newLink) => handleNewVariant(parent.name, newLink)}
+        onNewVariant={(newLink) => handleNewVariant(parent.id, newLink)}
         onEdit={() => { setEditingId(parent.id); setEditFieldErrors({}); }}
         onSaveEdit={(values) => handleSaveEdit(parent.id, values)}
         onCancelEdit={() => setEditingId(null)}
@@ -181,12 +217,11 @@ export function LinksManager({ links: initialLinks, canEdit }: LinksManagerProps
 
     if (isExpanded) {
       for (const variant of variants) {
-        const parsed = parseVariantName(variant.name);
         rows.push(
           <VariantRow
             key={variant.id}
             link={variant}
-            touchpointLabel={parsed?.touchpointLabel ?? variant.name}
+            touchpointLabel={getVariantLabel(variant)}
             canEdit={canEdit}
             isPending={isPending}
             confirmingDelete={confirmDeleteId === variant.id}
@@ -199,14 +234,16 @@ export function LinksManager({ links: initialLinks, canEdit }: LinksManagerProps
     }
   }
 
-  const totalLinks = groups.length;
+  const activeCount = groups.filter((g) => !isShortLinkExpired(g.parent.expires_at)).length;
+  const expiredCount = groups.length - activeCount;
 
   return (
     <div className="space-y-4">
       {/* Header bar */}
       <div className="flex items-center justify-between">
         <p className="text-sm text-subtle">
-          {totalLinks} link{totalLinks !== 1 ? "s" : ""}
+          {activeCount} active link{activeCount !== 1 ? "s" : ""}
+          {expiredCount > 0 ? ` · ${expiredCount} expired` : ""}
         </p>
         {canEdit && (
           <Button
@@ -250,9 +287,10 @@ export function LinksManager({ links: initialLinks, canEdit }: LinksManagerProps
         <>
         <div className="space-y-2 md:hidden">
           {groups.map(({ parent, variants }) => {
-            const isExpanded = expandedGroups.has(parent.name);
+            const isExpanded = expandedGroups.has(parent.id);
             const totalClicks = parent.clicks + variants.reduce((sum, variant) => sum + variant.clicks, 0);
             const shortUrl = `${SHORT_LINK_BASE_URL}${parent.code}`;
+            const expired = isShortLinkExpired(parent.expires_at);
             if (editingId === parent.id) {
               return (
                 <div key={parent.id} className="mobile-card">
@@ -289,6 +327,12 @@ export function LinksManager({ links: initialLinks, canEdit }: LinksManagerProps
                       <Badge variant={parent.link_type === "event" ? "success" : parent.link_type === "menu" ? "warning" : "info"} className="capitalize">
                         {parent.link_type}
                       </Badge>
+                      {expired && (
+                        <Badge variant="danger" className="gap-1">
+                          <CalendarX className="h-3 w-3" aria-hidden="true" />
+                          Expired
+                        </Badge>
+                      )}
                       {variants.length > 0 ? (
                         <button
                           type="button"
@@ -296,8 +340,8 @@ export function LinksManager({ links: initialLinks, canEdit }: LinksManagerProps
                           onClick={() =>
                             setExpandedGroups((prev) => {
                               const next = new Set(prev);
-                              if (next.has(parent.name)) next.delete(parent.name);
-                              else next.add(parent.name);
+                              if (next.has(parent.id)) next.delete(parent.id);
+                              else next.add(parent.id);
                               return next;
                             })
                           }
@@ -316,7 +360,7 @@ export function LinksManager({ links: initialLinks, canEdit }: LinksManagerProps
                   </Button>
                   <Button type="button" variant="secondary" className="h-11" onClick={() => void shareShortUrl(parent)}>
                     <Share2 className="h-4 w-4" aria-hidden="true" />
-                    Share QR
+                    Share link
                   </Button>
                 </div>
                 {canEdit ? (
@@ -340,12 +384,11 @@ export function LinksManager({ links: initialLinks, canEdit }: LinksManagerProps
                 {isExpanded && variants.length > 0 ? (
                   <div className="space-y-2 border-t border-[var(--hair)] pt-3">
                     {variants.map((variant) => {
-                      const parsed = parseVariantName(variant.name);
                       return (
                         <div key={variant.id} className="rounded-[8px] bg-[var(--canvas-2)] p-3">
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0">
-                              <p className="font-semibold text-[var(--ink)]">{parsed?.touchpointLabel ?? variant.name}</p>
+                              <p className="font-semibold text-[var(--ink)]">{getVariantLabel(variant)}</p>
                               <p className="mt-1 truncate font-mono text-xs text-[var(--ink-muted)]">{SHORT_LINK_BASE_URL}{variant.code}</p>
                             </div>
                             <span className="text-sm font-semibold tabular-nums text-[var(--navy)]">{variant.clicks}</span>

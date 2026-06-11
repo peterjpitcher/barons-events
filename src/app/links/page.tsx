@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { listShortLinks } from "@/lib/links-server";
 import { canManageLinks } from "@/lib/roles";
+import { groupLinks, isShortLinkExpired } from "@/lib/links";
 import { LinksManager } from "@/components/links/links-manager";
 import { PageHeader } from "@/components/ui/design-primitives";
 
@@ -11,6 +12,11 @@ export default async function LinksPage() {
 
   const links = await listShortLinks();
   const canEdit = canManageLinks(user.role);
+
+  // Header meta must agree with the manager: top-level links only (variants
+  // grouped under their parent), expired links not counted as "active".
+  const groups = groupLinks(links);
+  const activeCount = groups.filter((g) => !isShortLinkExpired(g.parent.expires_at)).length;
 
   return (
     <div className="app-page">
@@ -26,7 +32,7 @@ export default async function LinksPage() {
           and redirect automatically. Click counts update on each visit.
           </>
         }
-        meta={<span>{links.length} active link{links.length === 1 ? "" : "s"}</span>}
+        meta={<span>{activeCount} active link{activeCount === 1 ? "" : "s"}</span>}
       />
 
       <LinksManager links={links} canEdit={canEdit} />
