@@ -17,7 +17,9 @@ const QR_OPTIONS: QRCode.QRCodeToDataURLOptions = {
   width: 512,
   margin: 2,
   errorCorrectionLevel: "M",
-  color: { dark: "rgb(39,54,64)", light: "rgb(255,255,255)" },
+  // The qrcode library only accepts hex colours — CSS rgb()/rgba() strings
+  // throw "Invalid hex color". #273640 is the brand slate (rgb 39,54,64).
+  color: { dark: "#273640", light: "#ffffff" },
 };
 
 type UtmDropdownProps = {
@@ -100,7 +102,8 @@ export function UtmDropdown({ link, mode, disabled, onNewVariant }: UtmDropdownP
         a.href     = dataUrl;
         a.download = `qr-${link.code}-${tp.value}.png`;
         a.click();
-      } catch {
+      } catch (error) {
+        console.error("QR code generation failed:", error);
         toast.error("Could not generate QR code.");
       }
     } finally {
