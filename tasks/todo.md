@@ -1,3 +1,19 @@
+# /links Section Remediation — 2026-06-11
+
+- [x] Root-cause client QR bug (rgb() colours → qrcode lib throws; PR #8)
+- [x] Merge PR #8 to main (5183a88) — production deploy in flight
+- [x] Verify production deployment serves the QR fix (deploy success 19:21)
+- [x] Check Supabase production logs for short_links-related errors (clean)
+- [x] Phase 1: 4-agent discovery (mapper, rules auditor, architect, QA) → tasks/links-remediation/phase-1/
+- [x] Consolidate defect log (18 defects) + remediation plan
+- [x] Migration 20260611195020 applied to production (additive; 43/47 variants backfilled; advisors clean)
+- [x] Phase 2: implement fixes (branch fix/links-remediation) — L-1…L-18 done
+- [x] Phase 3: validation pass — GO, 18/18 FIXED, no regressions
+- [x] Verification pipeline: lint, typecheck, 922 tests, build — all green
+- [ ] Merge PR, verify production deploy + live smoke, final report
+
+---
+
 # Client Enhancement Backlog — 2026-04-17
 
 Source: client request list, 2026-04-17. Session-context: `.claude/session-context.md`.

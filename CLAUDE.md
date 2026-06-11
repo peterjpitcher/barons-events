@@ -96,27 +96,26 @@ npm run advisors         # Supabase advisors (security + performance) — run be
 
 ### Permissions
 - Event creators can edit own events
-- Administrators can moderate all events; office_workers can manage events at their venue
+- Administrators can moderate all events; managers have venue-scoped capabilities only where a capability function explicitly allows it (e.g. debriefs, planning)
 - Check permissions in both UI and server actions (defense in depth)
 - RLS enforces at database level
 
 ### Auth Standard Deviation: Custom Role Model
 
-**Deviation from workspace standard (auth-standard.md §7):** The workspace standard mandates three generic roles (`admin`, `editor`, `viewer`). This project uses three domain-specific roles approved for this application:
+**Deviation from workspace standard (auth-standard.md §7):** The workspace standard mandates three generic roles (`admin`, `editor`, `viewer`). This project uses two domain-specific roles (`UserRole` in `src/lib/types.ts`). Migration `20260605143000_retire_executive_rename_manager_role.sql` retired `executive` (became `manager` with no venue) and renamed `office_worker` to `manager`:
 
 | Application Role | Maps to Standard Tier | Capabilities |
 |---|---|---|
-| `administrator` | `admin` | Full platform access, user management, all event operations |
-| `office_worker` | `editor` | Venue-scoped write access (if venue_id set) or global read-only (if no venue_id); planning CRUD on own items; debrief create/edit (own) |
-| `executive` | `viewer` | Read-only access to all events, planning, and reporting |
+| `administrator` | `admin` | Full platform write access, user management, all event operations, links/QR management |
+| `manager` | `editor`/`viewer` | Read access platform-wide; write only where a capability function explicitly allows it — venue-scoped (requires `venue_id`, e.g. debrief/planning creation) or ownership-scoped (own planning items, own debriefs) |
 
-**Why:** Event management requires venue-scoped write access for some staff and global read-only for others, expressed through a single role with venue_id as the capability switch.
+**Why:** Event management needs venue-scoped write access for some staff and read-only posture for others, expressed through a single `manager` role with `venue_id` as the capability switch (a manager without `venue_id` is effectively read-only).
 
 **Implementation notes:**
-- Roles stored in `public.users.role` column (not Supabase `app_metadata`)
+- Roles stored in `public.users.role` column (not Supabase `app_metadata`); DB CHECK allows `administrator | manager`
 - Role helpers in `src/lib/roles.ts` use explicit capability functions with optional `venueId` parameter
 - Permission checks use `role === "administrator"` for admin operations
-- `venue_id` on the user record acts as a capability switch for office_worker
+- `venue_id` on the user record acts as a capability switch for manager
 - All capability functions are in `src/lib/roles.ts`
 
 ### Email & Notifications
