@@ -1,59 +1,47 @@
 // Server-only: imports Supabase server client — never import from client components.
 import { createSupabaseActionClient, createSupabaseReadonlyClient } from "@/lib/supabase/server";
+import { insertShortLinkWithUniqueCode } from "@/lib/short-link-codes";
 import type { CreateLinkInput, ShortLink, UpdateLinkInput } from "@/lib/links";
-
-// ── Code generation ───────────────────────────────────────────────────────────
-
-function generateCode(): string {
-  const bytes = new Uint8Array(4);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
-}
 
 // ── Queries ───────────────────────────────────────────────────────────────────
 
+const LIST_PAGE_SIZE = 1000;
+
+/**
+ * Lists ALL short links, paging past PostgREST's 1000-row response cap.
+ * Ordered newest-first with an id tiebreak so range pages never skip or
+ * repeat rows (same pattern as the weekly-digest pagination fix, aba7b7a).
+ */
 export async function listShortLinks(): Promise<ShortLink[]> {
   const supabase = await createSupabaseReadonlyClient();
-  const { data, error } = await supabase
-    .from("short_links")
-    .select("*")
-    .order("created_at", { ascending: false });
+  const rows: ShortLink[] = [];
 
-  if (error) throw new Error(`listShortLinks: ${error.message}`);
-  return (data ?? []) as ShortLink[];
+  for (let from = 0; ; from += LIST_PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from("short_links")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(from, from + LIST_PAGE_SIZE - 1);
+
+    if (error) throw new Error(`listShortLinks: ${error.message}`);
+    const page = (data ?? []) as ShortLink[];
+    rows.push(...page);
+    if (page.length < LIST_PAGE_SIZE) return rows;
+  }
 }
 
 export async function createShortLink(input: CreateLinkInput): Promise<ShortLink> {
   const supabase = await createSupabaseActionClient();
-
-  // Generate a unique code (retry up to 5 times on collision)
-  let code = "";
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const candidate = generateCode();
-    const { data: existing } = await supabase
-      .from("short_links")
-      .select("id")
-      .eq("code", candidate)
-      .maybeSingle();
-    if (!existing) { code = candidate; break; }
-  }
-  if (!code) throw new Error("Could not generate a unique link code. Please try again.");
-
-  const { data, error } = await supabase
-    .from("short_links")
-    .insert({
-      code,
-      name:        input.name,
-      destination: input.destination,
-      link_type:   input.link_type,
-      expires_at:  input.expires_at ?? null,
-      created_by:  input.created_by,
-    })
-    .select("*")
-    .single();
-
-  if (error) throw new Error(`createShortLink: ${error.message}`);
-  return data as ShortLink;
+  return insertShortLinkWithUniqueCode(supabase, {
+    name:           input.name,
+    destination:    input.destination,
+    link_type:      input.link_type,
+    expires_at:     input.expires_at ?? null,
+    created_by:     input.created_by,
+    parent_link_id: input.parent_link_id ?? null,
+    touchpoint:     input.touchpoint ?? null,
+  });
 }
 
 export async function updateShortLink(id: string, input: UpdateLinkInput): Promise<ShortLink> {
@@ -74,10 +62,25 @@ export async function updateShortLink(id: string, input: UpdateLinkInput): Promi
   return data as ShortLink;
 }
 
-export async function deleteShortLink(id: string): Promise<void> {
+/**
+ * Deletes a short link and returns the deleted row, or null when no row was
+ * deleted (already gone, or filtered by RLS). Callers must treat null as a
+ * failed delete — previously a 0-row delete reported false success and wrote
+ * a false audit entry.
+ */
+export async function deleteShortLink(
+  id: string,
+): Promise<Pick<ShortLink, "id" | "name" | "code"> | null> {
   const supabase = await createSupabaseActionClient();
-  const { error } = await supabase.from("short_links").delete().eq("id", id);
+  const { data, error } = await supabase
+    .from("short_links")
+    .delete()
+    .eq("id", id)
+    .select("id, name, code")
+    .maybeSingle();
+
   if (error) throw new Error(`deleteShortLink: ${error.message}`);
+  return (data ?? null) as Pick<ShortLink, "id" | "name" | "code"> | null;
 }
 
 export async function getShortLinkById(id: string): Promise<ShortLink | null> {
@@ -91,14 +94,35 @@ export async function getShortLinkById(id: string): Promise<ShortLink | null> {
   return (data ?? null) as ShortLink | null;
 }
 
-/** Returns the first short link whose destination exactly matches, or null. */
-export async function findShortLinkByDestination(destination: string): Promise<Pick<ShortLink, "code"> | null> {
+/**
+ * Returns the UTM variant for a (parent, touchpoint) pair, or null.
+ * Deterministic: the partial unique index short_links_parent_touchpoint_uniq
+ * guarantees at most one row.
+ */
+export async function findVariant(
+  parentLinkId: string,
+  touchpoint: string,
+): Promise<ShortLink | null> {
   const supabase = await createSupabaseReadonlyClient();
   const { data, error } = await supabase
     .from("short_links")
-    .select("code")
-    .eq("destination", destination)
-    .limit(1);
-  if (error) throw new Error(`findShortLinkByDestination: ${error.message}`);
-  return (data?.[0] ?? null) as Pick<ShortLink, "code"> | null;
+    .select("*")
+    .eq("parent_link_id", parentLinkId)
+    .eq("touchpoint", touchpoint)
+    .maybeSingle();
+  if (error) throw new Error(`findVariant: ${error.message}`);
+  return (data ?? null) as ShortLink | null;
+}
+
+/** Lists every UTM variant of a parent link (ordered for stable processing). */
+export async function listVariantsByParentId(parentLinkId: string): Promise<ShortLink[]> {
+  const supabase = await createSupabaseReadonlyClient();
+  const { data, error } = await supabase
+    .from("short_links")
+    .select("*")
+    .eq("parent_link_id", parentLinkId)
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true });
+  if (error) throw new Error(`listVariantsByParentId: ${error.message}`);
+  return (data ?? []) as ShortLink[];
 }

@@ -1,8 +1,8 @@
 "use client";
 
-import { Check, ChevronRight, Pencil, Trash2, X } from "lucide-react";
+import { CalendarX, Check, ChevronRight, Pencil, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { SHORT_LINK_BASE_URL, type ShortLink } from "@/lib/links";
+import { SHORT_LINK_BASE_URL, isShortLinkExpired, type ShortLink } from "@/lib/links";
 import { LinkForm, type LinkFormValues } from "./link-form";
 import { UtmDropdown } from "./utm-dropdown";
 
@@ -142,7 +142,20 @@ export function LinkRow({
 
       {/* Expires */}
       <td className="px-4 py-3 text-sm text-subtle">
-        {link.expires_at ? formatDate(link.expires_at) : <span className="italic">Never</span>}
+        {link.expires_at ? (
+          <span className="inline-flex flex-wrap items-center gap-1.5">
+            {/* Icon + text pairing — state must never be colour-only */}
+            {isShortLinkExpired(link.expires_at) && (
+              <Badge variant="danger" className="gap-1">
+                <CalendarX className="h-3 w-3" aria-hidden="true" />
+                Expired
+              </Badge>
+            )}
+            <span>{formatDate(link.expires_at)}</span>
+          </span>
+        ) : (
+          <span className="italic">Never</span>
+        )}
       </td>
 
       {/* Created */}

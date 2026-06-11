@@ -22,7 +22,11 @@ vi.mock("@/lib/events/edit-context", () => ({
 // vi.fn() returning nothing is enough.
 vi.mock("@/lib/supabase/server", () => ({ createSupabaseActionClient: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({ createSupabaseAdminClient: vi.fn() }));
-vi.mock("@/lib/audit-log", () => ({ recordAuditLogEntry: vi.fn() }));
+vi.mock("@/lib/audit-log", () => ({
+  recordAuditLogEntry: vi.fn(),
+  // event-booking-links audits admin-client link creation via the system logger
+  recordSystemAuditLogEntry: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock("@/lib/events", () => ({
   appendEventVersion: vi.fn(),
   createEventDraft: vi.fn(),

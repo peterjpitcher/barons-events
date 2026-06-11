@@ -1,8 +1,10 @@
 import "server-only";
 
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { SHORT_LINK_BASE_URL, slugifyForUtm, type ShortLink } from "@/lib/links";
-import { SHORT_LINK_HOST } from "@/lib/short-link-config";
+import { slugifyForUtm, type ShortLink } from "@/lib/links";
+import { SHORT_LINK_BASE_URL, SHORT_LINK_HOST } from "@/lib/short-link-config";
+import { insertShortLinkWithUniqueCode } from "@/lib/short-link-codes";
+import { recordSystemAuditLogEntry } from "@/lib/audit-log";
 
 const SHORT_LINK_CODE_PATTERN = /^[0-9a-f]{8}$/;
 const HTTP_PROTOCOLS = new Set(["http:", "https:"]);
@@ -16,12 +18,6 @@ export type TrackedBookingUrlResult = {
   url: string | null;
   status: TrackedBookingUrlStatus;
 };
-
-function generateShortLinkCode(): string {
-  const bytes = new Uint8Array(4);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
-}
 
 function normaliseHost(value: string): string {
   return value.toLowerCase().replace(/:\d+$/, "");
@@ -122,38 +118,30 @@ async function createTrackedBookingShortLink(params: {
   destination: string;
   createdBy: string;
 }): Promise<string> {
-  let code = "";
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const candidate = generateShortLinkCode();
-    const exists = await shortLinkCodeExists(params.db, candidate);
-    if (!exists) {
-      code = candidate;
-      break;
-    }
-  }
-
-  if (!code) {
-    throw new Error("Could not generate a unique short link code.");
-  }
-
-  const { data, error } = await params.db
-    .from("short_links")
-    .insert({
-      code,
+  // Shared insert-first generator: retries code collisions, propagates real errors.
+  let link: ShortLink;
+  try {
+    link = await insertShortLinkWithUniqueCode(params.db, {
       name: params.name,
       destination: params.destination,
       link_type: "booking",
       expires_at: null,
       created_by: params.createdBy
-    })
-    .select("code")
-    .single();
-
-  if (error || !data) {
-    throw new Error(`Could not create short link: ${error?.message ?? "Unknown error"}`);
+    });
+  } catch (error) {
+    throw new Error(`Could not create short link: ${error instanceof Error ? error.message : "Unknown error"}`);
   }
 
-  return (data as Pick<ShortLink, "code">).code;
+  // Admin-client mutation — audit with the service-role logger, attributed to the acting user.
+  await recordSystemAuditLogEntry({
+    entity: "link",
+    entityId: link.id,
+    action: "link.created",
+    actorId: params.createdBy,
+    meta: { name: params.name, linkType: "booking", source: "event_booking" }
+  });
+
+  return link.code;
 }
 
 export async function getOrCreateTrackedBookingUrl(params: {

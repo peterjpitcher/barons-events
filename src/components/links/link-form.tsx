@@ -6,6 +6,7 @@ import { FieldError } from "@/components/ui/field-error";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { LINK_TYPES, type LinkType, type ShortLink } from "@/lib/links";
+import { getTodayLondonIsoDate } from "@/lib/datetime";
 
 export type LinkFormValues = {
   name:        string;
@@ -31,12 +32,22 @@ export function LinkForm({ mode, initialValues, fieldErrors = {}, onSubmit, onCa
     expires_at:  initialValues?.expires_at  ? initialValues.expires_at.slice(0, 10) : "",
   });
 
+  const [localErrors, setLocalErrors] = useState<Record<string, string>>({});
+  const todayLondon = getTodayLondonIsoDate();
+
   function set(field: keyof LinkFormValues, value: string) {
     setValues((prev) => ({ ...prev, [field]: value }));
+    if (localErrors[field]) setLocalErrors((prev) => ({ ...prev, [field]: "" }));
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    // A link must not be born (or saved) already expired.
+    if (values.expires_at && values.expires_at < todayLondon) {
+      setLocalErrors({ expires_at: "Expiry date cannot be in the past" });
+      return;
+    }
+    setLocalErrors({});
     onSubmit(values);
   }
 
@@ -108,11 +119,12 @@ export function LinkForm({ mode, initialValues, fieldErrors = {}, onSubmit, onCa
             type="date"
             value={values.expires_at}
             onChange={(e) => set("expires_at", e.target.value)}
+            min={todayLondon}
             disabled={isPending}
             className="h-12 text-[16px] md:h-10 md:text-sm"
-            aria-describedby={fieldErrors.expires_at ? "link-expires-error" : undefined}
+            aria-describedby={fieldErrors.expires_at || localErrors.expires_at ? "link-expires-error" : undefined}
           />
-          <FieldError id="link-expires-error" message={fieldErrors.expires_at} />
+          <FieldError id="link-expires-error" message={fieldErrors.expires_at || localErrors.expires_at} />
         </div>
       </div>
 

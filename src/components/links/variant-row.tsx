@@ -54,7 +54,7 @@ export function VariantRow({
       <td className="px-4 py-2" colSpan={1}>
         <div className="flex items-center gap-1.5">
           <code className="rounded bg-[var(--paper)] px-2 py-0.5 text-xs font-mono text-[var(--ink)] border border-[var(--hair)]">
-            /l/{link.code}
+            {SHORT_LINK_BASE_URL}{link.code}
           </code>
           <button
             type="button"
