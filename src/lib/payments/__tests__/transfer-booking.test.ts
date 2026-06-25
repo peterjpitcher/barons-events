@@ -215,4 +215,45 @@ describe("processRefund — stable idempotency key", () => {
     expect(result).toEqual({ success: false, error: "refund_local_update_failed" });
     expect(mocks.refundOrder).not.toHaveBeenCalled();
   });
+
+  it("returns refundEmailSent=false when the refund succeeds but email fails", async () => {
+    mocks.from
+      .mockReturnValueOnce(
+        queryResult({
+          data: {
+            id: "tx1",
+            stripe_payment_intent_id: "pi_1",
+            status: "completed",
+            amount_pence: 1000,
+            refunded_amount_pence: 0,
+            booking_id: "b1",
+            event_id: "e1",
+            currency: "gbp",
+          },
+          error: null,
+        })
+      )
+      .mockReturnValueOnce(queryResult({ data: null, error: null }))
+      .mockReturnValueOnce(queryResult({ error: null }))
+      .mockReturnValueOnce(queryResult({ error: null }))
+      .mockReturnValueOnce(queryResult({ error: null }));
+    mocks.refundOrder.mockResolvedValue({ refundId: "re_1", amountPence: 1000, status: "succeeded" });
+    mocks.sendBookingRefundEmail.mockResolvedValue(false);
+
+    const result = await processRefund({
+      transactionId: "tx1",
+      amountPence: null,
+      reason: "Event cancelled",
+      adminUserId: "u1",
+      idempotencyKey: "event_cancel:e1:tx1",
+    });
+
+    expect(result).toEqual({
+      success: true,
+      refundId: "re_1",
+      amountPence: 1000,
+      isFullRefund: true,
+      refundEmailSent: false,
+    });
+  });
 });

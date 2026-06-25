@@ -57,6 +57,17 @@ type PaymentTransactionRow = {
   refunded_amount_pence: number;
 };
 
+export type ProcessRefundResult =
+  | {
+      success: true;
+      refundId: string;
+      amountPence: number;
+      isFullRefund: boolean;
+      /** False when the refund was issued but the customer email could not be sent. */
+      refundEmailSent?: boolean;
+    }
+  | { success: false; error: string };
+
 const STALE_WEBHOOK_PROCESSING_MS = 15 * 60 * 1000;
 
 type BookingPaymentView = {
@@ -963,7 +974,7 @@ export async function processRefund(params: {
    * derived from the transaction id, amount and reason.
    */
   idempotencyKey?: string;
-}): Promise<{ success: true; refundId: string; amountPence: number; isFullRefund: boolean } | { success: false; error: string }> {
+}): Promise<ProcessRefundResult> {
   const db = createSupabaseAdminClient();
   const { data, error } = await db
     .from("payment_transactions")
@@ -1103,13 +1114,14 @@ export async function processRefund(params: {
     actorId: params.adminUserId,
   });
 
-  sendBookingRefundEmail({
+  const refundEmailSent = await sendBookingRefundEmail({
     bookingId: transaction.booking_id,
     amountPence: refund.amountPence,
     currency: transaction.currency,
     isFullRefund,
   }).catch((emailError) => {
     console.warn("Refund email failed:", emailError);
+    return false;
   });
 
   return {
@@ -1117,6 +1129,7 @@ export async function processRefund(params: {
     refundId: refund.refundId,
     amountPence: refund.amountPence,
     isFullRefund,
+    refundEmailSent,
   };
 }
 

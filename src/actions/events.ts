@@ -8,7 +8,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth";
 import { canReviewEvents, canProposeEvents, canEditEvent } from "@/lib/roles";
 import { loadEventEditContext } from "@/lib/events/edit-context";
-import { appendEventVersion, cloneEventForReschedule, createEventDraft, createEventPlanningItem, ensureEventPlanningItem, getEventBookingImpact, recordApproval, softDeleteEvent, updateEventDraft, updateEventAssignee } from "@/lib/events";
+import { appendEventVersion, cloneEventForReschedule, createEventDraft, createEventPlanningItem, ensureEventPlanningItem, findExistingRescheduleClone, getEventBookingImpact, recordApproval, softDeleteEvent, updateEventDraft, updateEventAssignee } from "@/lib/events";
 import {
   buildSaveEventDraftPayload,
   callSaveEventDraftRpc,
@@ -2252,6 +2252,7 @@ export async function cancelEventAction(input: {
   // Refund paid bookings using a stable per-event idempotency key (retry-safe).
   let refundedCount = 0;
   const refundFailures: CancellationAttentionItem[] = [];
+  const manualContact: CancellationAttentionItem[] = [];
   for (const b of paidRefundable) {
     const transactionId = b.payment_transaction_id;
     if (!transactionId) continue;
@@ -2264,6 +2265,9 @@ export async function cancelEventAction(input: {
     });
     if (refund.success) {
       refundedCount += 1;
+      if (refund.refundEmailSent === false) {
+        manualContact.push({ bookingId: b.id, name: nameOf(b), reason: "Refund email could not be sent." });
+      }
     } else {
       refundFailures.push({ bookingId: b.id, name: nameOf(b), reason: `Refund failed: ${refund.error}.` });
     }
@@ -2291,14 +2295,14 @@ export async function cancelEventAction(input: {
 
   // Cancel unpaid/free bookings and email those with an address on file.
   let unpaidCancelledCount = 0;
-  const manualContact: CancellationAttentionItem[] = [];
+  const freeCancelFailures: CancellationAttentionItem[] = [];
   for (const b of unpaidFree) {
     const { error: cancelError } = await supabase
       .from("event_bookings")
       .update({ status: "cancelled" })
       .eq("id", b.id);
     if (cancelError) {
-      manualContact.push({ bookingId: b.id, name: nameOf(b), reason: "Could not cancel booking automatically." });
+      freeCancelFailures.push({ bookingId: b.id, name: nameOf(b), reason: "Could not cancel booking automatically." });
       continue;
     }
     unpaidCancelledCount += 1;
@@ -2319,34 +2323,58 @@ export async function cancelEventAction(input: {
     }
   }
 
-  // Invariant guard (defense in depth): never mark the event cancelled while any
-  // confirmed booking still has an unresolved paid status. Catches the rare case
-  // where a refund reported success but failed to advance the booking row — the
-  // event stays approved so a retry can finish, rather than stranding a paid guest.
-  const { data: lingering } = await supabase
-    .from("event_bookings")
-    .select("id")
-    .eq("event_id", eventId)
-    .eq("status", "confirmed")
-    .in("payment_status", ["completed", "pending", "partially_refunded"]);
-  if (lingering && lingering.length > 0) {
+  if (freeCancelFailures.length > 0) {
     await recordAuditLogEntry({
       entity: "event",
       entityId: eventId,
       action: "event.cancellation_failed",
       actorId: user.id,
-      meta: { reason: "unresolved_paid_bookings", count: lingering.length }
+      meta: { reason: "free_booking_cancel_failures", failed_count: freeCancelFailures.length }
     });
     return {
       success: false,
       status: "blocked",
-      message: "Some paid bookings did not fully resolve. The event remains active — please retry.",
+      message: `${freeCancelFailures.length} free booking(s) could not be cancelled. The event is still active — resolve and retry.`,
       refundedCount,
-      unpaidCancelledCount
+      unpaidCancelledCount,
+      manualContact,
+      blocked: freeCancelFailures
     };
   }
 
-  // No confirmed paid booking remains unresolved → mark the event cancelled.
+  // Invariant guard (defense in depth): never mark the event cancelled while any
+  // confirmed booking remains. Catches rare local write failures after refunds or
+  // free-booking cancellation attempts.
+  const { data: lingering } = await supabase
+    .from("event_bookings")
+    .select("id, first_name, last_name, payment_status")
+    .eq("event_id", eventId)
+    .eq("status", "confirmed");
+  if (lingering && lingering.length > 0) {
+    const unresolved = (lingering as Array<{ id: string; first_name: string; last_name: string | null; payment_status: string }>).map((b) => ({
+      bookingId: b.id,
+      name: `${b.first_name}${b.last_name ? ` ${b.last_name}` : ""}`.trim(),
+      reason: `Booking is still confirmed (payment status: ${b.payment_status}).`
+    }));
+    await recordAuditLogEntry({
+      entity: "event",
+      entityId: eventId,
+      action: "event.cancellation_failed",
+      actorId: user.id,
+      meta: { reason: "unresolved_confirmed_bookings", count: lingering.length }
+    });
+    return {
+      success: false,
+      status: "blocked",
+      message: "Some bookings did not fully resolve. The event remains active — please retry.",
+      refundedCount,
+      unpaidCancelledCount,
+      manualContact,
+      blocked: unresolved
+    };
+  }
+
+  // No confirmed booking remains unresolved → mark the event cancelled.
   const { error: updateError } = await supabase
     .from("events")
     .update({ status: "cancelled" })
@@ -2551,10 +2579,13 @@ export async function rescheduleEventAction(input: {
     };
   }
 
-  // Clone the event onto the new date.
+  // Clone the event onto the new date, or resume a previous partial reschedule.
   let newEventId: string;
   try {
-    newEventId = await cloneEventForReschedule(eventId, startIso, endIso, user.id);
+    const existingCloneId = await findExistingRescheduleClone(eventId);
+    newEventId = existingCloneId
+      ? existingCloneId
+      : await cloneEventForReschedule(eventId, startIso, endIso, user.id);
   } catch (error) {
     console.error("cloneEventForReschedule failed:", error);
     return { success: false, message: "Could not create the rescheduled event. Please try again." };

@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   recordAuditLogEntry: vi.fn().mockResolvedValue(undefined),
   appendEventVersion: vi.fn().mockResolvedValue(undefined),
   cloneEventForReschedule: vi.fn(),
+  findExistingRescheduleClone: vi.fn(),
   getEventBookingImpact: vi.fn(),
   transferBooking: vi.fn(),
   processRefund: vi.fn(),
@@ -28,6 +29,7 @@ vi.mock("@/lib/audit-log", () => ({ recordAuditLogEntry: mocks.recordAuditLogEnt
 vi.mock("@/lib/events", () => ({
   appendEventVersion: mocks.appendEventVersion,
   cloneEventForReschedule: mocks.cloneEventForReschedule,
+  findExistingRescheduleClone: mocks.findExistingRescheduleClone,
   getEventBookingImpact: mocks.getEventBookingImpact,
   createEventDraft: vi.fn(),
   createEventPlanningItem: vi.fn(),
@@ -108,6 +110,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   process.env.EVENT_RESCHEDULE_ENABLED = "true";
   mocks.getUser.mockResolvedValue({ id: "admin-1", role: "administrator", venueId: null });
+  mocks.findExistingRescheduleClone.mockResolvedValue(null);
   mocks.cloneEventForReschedule.mockResolvedValue("new-event-1");
   mocks.sendBookingTransferEmail.mockResolvedValue(true);
 });
@@ -181,6 +184,24 @@ describe("rescheduleEventAction", () => {
       expect(result.failed).toHaveLength(1);
     }
     expect(auditActions()).not.toContain("event.rescheduled");
+  });
+
+  it("reuses an existing reschedule clone instead of creating a second one", async () => {
+    mocks.findExistingRescheduleClone.mockResolvedValue("existing-new-event");
+    mocks.getEventBookingImpact.mockResolvedValue(
+      emptyImpact({ confirmedBookings: 1, paid: [{ id: "bk-paid", name: "Ada", email: "ada@example.com", transactionId: "tx1" }] })
+    );
+    mocks.transferBooking.mockResolvedValue({ success: true, newBookingId: "moved-paid", created: true, manualContactRequired: false });
+    mocks.from
+      .mockReturnValueOnce(approvedEvent)
+      .mockReturnValueOnce(queryResult({ data: [], error: null }))
+      .mockReturnValueOnce(queryResult({ error: null }));
+
+    const result = await rescheduleEventAction({ eventId: EVENT_ID, newStartAt: FUTURE_START, newEndAt: FUTURE_END });
+
+    expect(result.success).toBe(true);
+    expect(mocks.cloneEventForReschedule).not.toHaveBeenCalled();
+    expect(mocks.transferBooking).toHaveBeenCalledWith(expect.objectContaining({ targetEventId: "existing-new-event" }));
   });
 
   it("rejects when the reschedule flag is off", async () => {

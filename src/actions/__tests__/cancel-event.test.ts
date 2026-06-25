@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   from: vi.fn(),
   recordAuditLogEntry: vi.fn().mockResolvedValue(undefined),
   appendEventVersion: vi.fn().mockResolvedValue(undefined),
+  findExistingRescheduleClone: vi.fn(),
   processRefund: vi.fn(),
   sendEventCancellationEmail: vi.fn(),
 }));
@@ -22,6 +23,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createSupabaseAdminClient: vi.fn(() => 
 vi.mock("@/lib/audit-log", () => ({ recordAuditLogEntry: mocks.recordAuditLogEntry }));
 vi.mock("@/lib/events", () => ({
   appendEventVersion: mocks.appendEventVersion,
+  findExistingRescheduleClone: mocks.findExistingRescheduleClone,
   createEventDraft: vi.fn(),
   createEventPlanningItem: vi.fn(),
   ensureEventPlanningItem: vi.fn(),
@@ -164,6 +166,57 @@ describe("cancelEventAction", () => {
     expect(mocks.appendEventVersion).toHaveBeenCalledTimes(1);
   });
 
+  it("blocks cancellation when a free booking cannot be cancelled", async () => {
+    mocks.from
+      .mockReturnValueOnce(approvedEvent)
+      .mockReturnValueOnce(
+        queryResult({
+          data: [
+            { id: "bk-free", first_name: "Bo", last_name: null, email: "bo@example.com", payment_status: "not_required", payment_transaction_id: null },
+          ],
+          error: null,
+        })
+      )
+      .mockReturnValueOnce(queryResult({ error: { message: "db down" } }));
+
+    const result = await cancelEventAction({ eventId: EVENT_ID, reason: null });
+
+    expect(result.success).toBe(false);
+    expect(result.status).toBe("blocked");
+    expect(result.blocked).toHaveLength(1);
+    expect(mocks.appendEventVersion).not.toHaveBeenCalled();
+    expect(auditActions()).toContain("event.cancellation_failed");
+  });
+
+  it("reports manual contact when a paid refund email cannot be sent", async () => {
+    mocks.from
+      .mockReturnValueOnce(approvedEvent)
+      .mockReturnValueOnce(
+        queryResult({
+          data: [
+            { id: "bk1", first_name: "Ada", last_name: null, email: "ada@example.com", payment_status: "completed", payment_transaction_id: "tx1" },
+          ],
+          error: null,
+        })
+      )
+      .mockReturnValueOnce(queryResult({ data: [], error: null }))
+      .mockReturnValueOnce(queryResult({ error: null }));
+    mocks.processRefund.mockResolvedValue({
+      success: true,
+      refundId: "re_1",
+      amountPence: 1000,
+      isFullRefund: true,
+      refundEmailSent: false,
+    });
+
+    const result = await cancelEventAction({ eventId: EVENT_ID, reason: null });
+
+    expect(result.success).toBe(true);
+    expect(result.manualContact).toEqual([
+      { bookingId: "bk1", name: "Ada", reason: "Refund email could not be sent." },
+    ]);
+  });
+
   it("blocks marking the event cancelled if a paid booking lingers as confirmed after refunds", async () => {
     mocks.from
       .mockReturnValueOnce(approvedEvent)
@@ -175,7 +228,7 @@ describe("cancelEventAction", () => {
           error: null,
         })
       )
-      .mockReturnValueOnce(queryResult({ data: [{ id: "bk1" }], error: null })); // invariant guard finds an unresolved booking
+      .mockReturnValueOnce(queryResult({ data: [{ id: "bk1", first_name: "Ada", last_name: null, payment_status: "completed" }], error: null })); // invariant guard finds an unresolved booking
     mocks.processRefund.mockResolvedValue({ success: true, refundId: "re_1", amountPence: 1000, isFullRefund: true });
 
     const result = await cancelEventAction({ eventId: EVENT_ID, reason: null });

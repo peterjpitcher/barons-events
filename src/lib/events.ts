@@ -986,8 +986,63 @@ const RESCHEDULE_CLONE_COLUMNS = [
   "accessibility_notes", "cancellation_window_hours", "booking_enabled",
   "total_capacity", "max_tickets_per_booking", "booking_notes_enabled",
   "sms_promo_enabled", "assignee_id", "manager_responsible_id",
-  "event_image_path", "booking_url",
+  "event_image_path",
 ] as const;
+
+/**
+ * Find an already-created reschedule clone for the source event. This lets a
+ * partially failed reschedule resume onto the same new event instead of making
+ * another clone.
+ */
+export async function findExistingRescheduleClone(originalEventId: string): Promise<string | null> {
+  const admin = createSupabaseAdminClient();
+  const candidateIds: string[] = [];
+  const addCandidate = (id: string | null | undefined) => {
+    if (id && !candidateIds.includes(id)) candidateIds.push(id);
+  };
+
+  const { data: auditRows, error: auditError } = await admin
+    .from("audit_log")
+    .select("entity_id, created_at")
+    .eq("entity", "event")
+    .eq("action", "event.created")
+    .contains("meta", { rescheduled_from: originalEventId })
+    .order("created_at", { ascending: false })
+    .limit(20);
+  if (!auditError) {
+    for (const row of (auditRows ?? []) as Array<{ entity_id: string | null }>) {
+      addCandidate(row.entity_id);
+    }
+  }
+
+  const { data: versionRows, error: versionError } = await admin
+    .from("event_versions")
+    .select("event_id, created_at")
+    .contains("payload", { rescheduled_from: originalEventId })
+    .order("created_at", { ascending: false })
+    .limit(20);
+  if (!versionError) {
+    for (const row of (versionRows ?? []) as Array<{ event_id: string | null }>) {
+      addCandidate(row.event_id);
+    }
+  }
+
+  if (candidateIds.length === 0) return null;
+
+  const { data: events, error: eventsError } = await admin
+    .from("events")
+    .select("id, status, deleted_at")
+    .in("id", candidateIds)
+    .is("deleted_at", null);
+  if (eventsError) return null;
+
+  const reusable = new Set(
+    ((events ?? []) as Array<{ id: string; status: string; deleted_at: string | null }>)
+      .filter((event) => event.status === "approved" && event.deleted_at === null)
+      .map((event) => event.id)
+  );
+  return candidateIds.find((id) => reusable.has(id)) ?? null;
+}
 
 /**
  * Create a new approved event cloning an existing one onto a new date — used by the
@@ -1018,6 +1073,7 @@ export async function cloneEventForReschedule(
   for (const col of RESCHEDULE_CLONE_COLUMNS) {
     insertPayload[col] = source[col] ?? null;
   }
+  insertPayload.booking_url = null;
   insertPayload.status = "approved";
   insertPayload.start_at = newStartAt;
   insertPayload.end_at = newEndAt;

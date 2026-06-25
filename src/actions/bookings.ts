@@ -535,7 +535,7 @@ const refundBookingSchema = z.object({
 });
 
 export type RefundBookingResult =
-  | { success: true; refundId: string; amountPence: number; isFullRefund: boolean }
+  | { success: true; refundId: string; amountPence: number; isFullRefund: boolean; refundEmailSent?: boolean }
   | { success: false; error: string };
 
 export async function refundBookingAction(
