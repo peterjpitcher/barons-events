@@ -33,14 +33,14 @@ export function EventOverflowMenu({
       }
       align="right"
     >
-      {/* Override child button styles to look like menu items:
+      {/* Override menu button styles without affecting dialog buttons:
           full-width, left-aligned, no border-radius/shadow/border */}
       <div
         className={[
-          "[&_button]:w-full [&_button]:justify-start [&_button]:rounded-none",
-          "[&_button]:border-0 [&_button]:shadow-none",
-          "[&_button]:px-3 [&_button]:py-2 [&_button]:text-sm [&_button]:h-auto",
-          "[&_button]:bg-transparent [&_button]:hover:bg-[var(--canvas-2)]",
+          "[&>form>button]:w-full [&>form>button]:justify-start [&>form>button]:rounded-none",
+          "[&>form>button]:border-0 [&>form>button]:shadow-none",
+          "[&>form>button]:px-3 [&>form>button]:py-2 [&>form>button]:text-sm [&>form>button]:h-auto",
+          "[&>form>button]:bg-transparent [&>form>button]:hover:bg-[var(--canvas-2)]",
           "[&_form]:w-full",
         ].join(" ")}
       >
@@ -56,7 +56,7 @@ export function EventOverflowMenu({
         ) : null}
         {canRevertToDraft && <RevertToDraftButton eventId={eventId} />}
         {canDelete && (
-          <div className="-mb-1 overflow-hidden rounded-b-lg [&_button]:!bg-red-600 [&_button]:!text-white [&_button]:hover:!bg-red-700">
+          <div className="-mb-1 overflow-hidden rounded-b-lg [&>button]:!bg-red-600 [&>button]:!text-white [&>button]:hover:!bg-red-700">
             <DeleteEventButton eventId={eventId} />
           </div>
         )}
