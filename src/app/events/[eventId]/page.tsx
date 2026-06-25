@@ -194,8 +194,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
     ["submitted", "needs_revisions", "approved", "rejected"].includes(event.status);
   const canReschedule =
     user.role === "administrator" &&
-    event.status === "approved" &&
-    process.env.EVENT_RESCHEDULE_ENABLED === "true";
+    event.status === "approved";
   const canViewEventBookings = canViewBookings(user.role);
 
   const canReview =
@@ -492,6 +491,11 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
         {canViewEventBookings ? (
           <Button asChild variant="secondary" size="sm">
             <Link href={`/events/${event.id}/bookings`}>Bookings</Link>
+          </Button>
+        ) : null}
+        {canReschedule ? (
+          <Button asChild variant="secondary" size="sm">
+            <Link href={`/events/${event.id}/reschedule`}>Reschedule</Link>
           </Button>
         ) : null}
         {canViewEventPlanning ? (
