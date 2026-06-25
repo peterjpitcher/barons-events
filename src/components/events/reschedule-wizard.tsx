@@ -55,7 +55,7 @@ export function RescheduleWizard(props: RescheduleWizardProps) {
       setResult(res);
       if (res.success) {
         toast.success(`Rescheduled. ${res.movedPaidCount + res.movedFreeCount} booking(s) moved to the new date.`);
-        router.refresh();
+        router.replace(`/events/${res.newEventId}`);
       } else {
         toast.error(res.message);
       }

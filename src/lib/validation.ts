@@ -145,8 +145,7 @@ export const eventDraftSchema = eventDraftBaseSchema.refine(
 
 export const eventFormSchema = eventDraftBaseSchema
   .extend({
-    bookingType: z.enum(BOOKING_FORMATS, { message: "Choose a booking format" }),
-    agePolicy: requiredText(2, 120, "Add an age policy")
+    bookingType: z.enum(BOOKING_FORMATS, { message: "Choose a booking format" })
   })
   .superRefine((values, ctx) => {
     if (values.endAt && values.startAt && new Date(values.endAt) <= new Date(values.startAt)) {

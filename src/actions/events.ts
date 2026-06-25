@@ -1361,6 +1361,7 @@ export async function submitEventForReviewAction(
 
   const eventId = formData.get("eventId");
   const rawEventId = typeof eventId === "string" ? eventId.trim() : "";
+  let editContext: Awaited<ReturnType<typeof loadEventEditContext>> | null = null;
 
   if (!rawEventId) {
     if (!canProposeEvents(user.role)) {
@@ -1375,6 +1376,7 @@ export async function submitEventForReviewAction(
     if (!ctx) {
       return { success: false, message: "Event not found.", operationId };
     }
+    editContext = ctx;
     if (!canEditEvent(user.role, user.id, user.venueId, ctx)) {
       return { success: false, message: "You don't have permission to edit this event.", operationId };
     }
@@ -1457,6 +1459,118 @@ export async function submitEventForReviewAction(
         return { success: false, message: "Missing event reference.", operationId };
       }
       targetEventId = parsedId.data;
+
+      const rawVenueIds = formData
+        .getAll("venueIds")
+        .filter((v): v is string => typeof v === "string" && v.length > 0);
+      const fallbackVenueIdValue = formData.get("venueId");
+      const fallbackVenueId = typeof fallbackVenueIdValue === "string" ? fallbackVenueIdValue : "";
+      const venueIds = rawVenueIds.length > 0 ? rawVenueIds : fallbackVenueId ? [fallbackVenueId] : [];
+      const venueId = venueIds[0] ?? "";
+      const titleValue = formData.get("title");
+      const title = typeof titleValue === "string" ? titleValue : "";
+      const eventTypeValue = formData.get("eventType");
+      const eventType = typeof eventTypeValue === "string" ? eventTypeValue : "";
+      const startAtValue = formData.get("startAt");
+      const startAt = typeof startAtValue === "string" ? startAtValue : "";
+      const endAtValue = formData.get("endAt");
+      const endAt = typeof endAtValue === "string" ? endAtValue : "";
+
+      const parsed = eventFormSchema.safeParse({
+        eventId: targetEventId,
+        venueId,
+        title,
+        eventType,
+        startAt,
+        endAt,
+        venueSpace: normaliseVenueSpacesField(formData.get("venueSpace")),
+        expectedHeadcount: formData.get("expectedHeadcount") ?? undefined,
+        wetPromo: formData.get("wetPromo") ?? undefined,
+        foodPromo: formData.get("foodPromo") ?? undefined,
+        bookingType: formData.get("bookingType") ?? undefined,
+        ticketPrice: formData.get("ticketPrice") ?? undefined,
+        checkInCutoffMinutes: formData.get("checkInCutoffMinutes") ?? undefined,
+        agePolicy: formData.get("agePolicy") ?? undefined,
+        accessibilityNotes: formData.get("accessibilityNotes") ?? undefined,
+        cancellationWindowHours: formData.get("cancellationWindowHours") ?? undefined,
+        termsAndConditions: formData.get("termsAndConditions") ?? undefined,
+        artistNames: formData.get("artistNames") ?? undefined,
+        goalFocus: formData.getAll("goalFocus").length
+          ? formData.getAll("goalFocus").join(",")
+          : formData.get("goalFocus") ?? undefined,
+        costTotal: formData.get("costTotal") ?? undefined,
+        costDetails: formData.get("costDetails") ?? undefined,
+        notes: formData.get("notes") ?? undefined,
+        managerResponsibleId: formData.get("managerResponsibleId") ?? undefined,
+        publicTitle: formData.get("publicTitle") ?? undefined,
+        publicTeaser: formData.get("publicTeaser") ?? undefined,
+        publicDescription: formData.get("publicDescription") ?? undefined,
+        publicHighlights: formData.get("publicHighlights") ?? undefined,
+        bookingUrl: formData.get("bookingUrl") ?? undefined,
+        seoTitle: formData.get("seoTitle") ?? undefined,
+        seoDescription: formData.get("seoDescription") ?? undefined,
+        seoSlug: formData.get("seoSlug") ?? undefined
+      });
+
+      if (!parsed.success) {
+        return {
+          success: false,
+          message: "Check the highlighted fields.",
+          fieldErrors: getFieldErrors(parsed.error),
+          operationId
+        };
+      }
+
+      const values = parsed.data;
+      const startAtIso = normaliseEventDateTimeForStorage(values.startAt);
+      const endAtIso = normaliseEventDateTimeForStorage(values.endAt);
+      if (!values.venueId) {
+        return {
+          success: false,
+          message: "Choose a venue before submitting.",
+          fieldErrors: { venueId: "Choose a venue" },
+          operationId
+        };
+      }
+
+      let managerResponsibleIdValue: string | null = values.managerResponsibleId || null;
+      if (managerResponsibleIdValue && user.role !== "administrator" && editContext?.createdBy !== user.id) {
+        managerResponsibleIdValue = null;
+      }
+
+      await updateEventDraft(targetEventId, {
+        venue_id: values.venueId,
+        title: values.title,
+        event_type: values.eventType,
+        start_at: startAtIso,
+        end_at: endAtIso,
+        venue_space: values.venueSpace,
+        expected_headcount: values.expectedHeadcount ?? null,
+        wet_promo: values.wetPromo ?? null,
+        food_promo: values.foodPromo ?? null,
+        booking_type: values.bookingType ?? null,
+        ticket_price: normaliseTicketPriceForBookingFormat(values.bookingType ?? null, values.ticketPrice ?? null),
+        check_in_cutoff_minutes: values.checkInCutoffMinutes ?? null,
+        age_policy: values.agePolicy ?? null,
+        accessibility_notes: values.accessibilityNotes ?? null,
+        cancellation_window_hours: values.cancellationWindowHours ?? null,
+        terms_and_conditions: values.termsAndConditions ?? null,
+        cost_total: values.costTotal ?? null,
+        cost_details: values.costDetails ?? null,
+        goal_focus: values.goalFocus ?? null,
+        notes: values.notes ?? null,
+        manager_responsible_id: managerResponsibleIdValue,
+        public_title: values.publicTitle ?? null,
+        public_teaser: values.publicTeaser ?? null,
+        public_description: values.publicDescription ?? null,
+        public_highlights: values.publicHighlights ?? null,
+        booking_url: values.bookingUrl ?? null,
+        seo_title: values.seoTitle ?? null,
+        seo_description: values.seoDescription ?? null,
+        seo_slug: values.seoSlug ?? null
+      }, user.id);
+
+      await syncEventVenueAttachments(targetEventId, venueIds);
     } else {
       const rawVenueIds = formData
         .getAll("venueIds")

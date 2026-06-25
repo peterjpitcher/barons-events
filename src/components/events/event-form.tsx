@@ -1243,7 +1243,6 @@ export function EventForm({
           value={agePolicy}
           onChange={(event) => setAgePolicy(event.target.value)}
           placeholder="e.g. 18+ only (ID required)"
-          required
           aria-invalid={Boolean(fieldErrors.agePolicy)}
           aria-describedby={fieldErrors.agePolicy ? "age-policy-error" : undefined}
           className={cn(

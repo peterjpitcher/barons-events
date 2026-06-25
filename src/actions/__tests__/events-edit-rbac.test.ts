@@ -64,7 +64,7 @@ import { loadEventEditContext } from "@/lib/events/edit-context";
 import { redirect } from "next/navigation";
 import { createSupabaseActionClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { createEventDraft, createEventPlanningItem } from "@/lib/events";
+import { createEventDraft, createEventPlanningItem, updateEventDraft } from "@/lib/events";
 import { syncEventArtists } from "@/lib/artists";
 import { generateWebsiteCopy } from "@/lib/ai";
 
@@ -92,6 +92,7 @@ beforeEach(() => {
   vi.mocked(createSupabaseAdminClient).mockReset();
   vi.mocked(createEventDraft).mockReset();
   vi.mocked(createEventPlanningItem).mockReset();
+  vi.mocked(updateEventDraft).mockReset();
   vi.mocked(syncEventArtists).mockReset();
   vi.mocked(generateWebsiteCopy).mockReset();
 });
@@ -430,6 +431,68 @@ describe("saveEventDraftAction — update path (canEditEvent)", () => {
 
 describe("submitEventForReviewAction — update path (canEditEvent)", () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it("returns field errors before publishing an incomplete existing draft", async () => {
+    getUserMock.mockResolvedValue({ id: USER_A, role: "administrator", venueId: null });
+    loadCtxMock.mockResolvedValue({
+      venueId: VENUE_A,
+      managerResponsibleId: null,
+      createdBy: USER_A,
+      status: "draft",
+      deletedAt: null,
+    });
+
+    const result = await submitEventForReviewAction(undefined, formData({
+      eventId: EVENT_ID,
+      venueIds: VENUE_A,
+      title: "Test Event",
+      startAt: "2026-05-30T15:00:00",
+    }));
+
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/highlighted fields/i);
+    expect(result.fieldErrors).toEqual(expect.objectContaining({
+      eventType: expect.any(String),
+      endAt: expect.any(String),
+      venueSpace: expect.any(String),
+      bookingType: expect.any(String),
+    }));
+    expect(result.fieldErrors).not.toHaveProperty("agePolicy");
+    expect(updateEventDraft).not.toHaveBeenCalled();
+  });
+
+  it("saves the posted form values before auto-approving an existing draft", async () => {
+    setupSuccessfulCreateSubmitMocks();
+    getUserMock.mockResolvedValue({ id: USER_A, role: "administrator", venueId: null });
+    loadCtxMock.mockResolvedValue({
+      venueId: VENUE_A,
+      managerResponsibleId: null,
+      createdBy: USER_A,
+      status: "draft",
+      deletedAt: null,
+    });
+
+    const result = await submitEventForReviewAction(undefined, validFullEventForm({
+      eventId: EVENT_ID,
+      title: "Updated test night",
+      venueSpace: "Garden Room",
+    }));
+
+    expect(result.success).toBe(true);
+    expect(result.message).toMatch(/approved/i);
+    expect(createEventDraft).not.toHaveBeenCalled();
+    expect(updateEventDraft).toHaveBeenCalledWith(
+      EVENT_ID,
+      expect.objectContaining({
+        title: "Updated test night",
+        event_type: "Live Music",
+        venue_space: "Garden Room",
+        booking_type: "free_standing",
+        age_policy: "All ages welcome",
+      }),
+      USER_A
+    );
+  });
 
   it("manager at right venue but not manager_responsible is rejected", async () => {
     getUserMock.mockResolvedValue({ id: USER_A, role: "manager", venueId: VENUE_A });

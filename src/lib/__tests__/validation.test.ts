@@ -16,13 +16,13 @@ describe("event validation schemas", () => {
     expect(result.success).toBe(true);
   });
 
-  it("requires booking type and age policy on submit", () => {
+  it("requires booking type on submit", () => {
     const result = eventFormSchema.safeParse(basePayload);
     expect(result.success).toBe(false);
     if (result.success) return;
     const paths = result.error.issues.map((issue) => issue.path.join("."));
     expect(paths).toContain("bookingType");
-    expect(paths).toContain("agePolicy");
+    expect(paths).not.toContain("agePolicy");
   });
 
   it("requires ticket price for paid submit flows", () => {
@@ -41,8 +41,7 @@ describe("event validation schemas", () => {
   it("allows free formats without a cancellation window", () => {
     const result = eventFormSchema.safeParse({
       ...basePayload,
-      bookingType: "free_standing_unreserved",
-      agePolicy: "18+"
+      bookingType: "free_standing_unreserved"
     });
     expect(result.success).toBe(true);
   });
