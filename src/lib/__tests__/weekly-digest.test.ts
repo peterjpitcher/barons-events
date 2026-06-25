@@ -24,6 +24,10 @@ vi.mock("@/lib/supabase/server", () => ({
 
 vi.mock("server-only", () => ({}));
 
+vi.mock("@/lib/planning/sop", () => ({
+  markPastEventOpenTodosNotRequired: vi.fn().mockResolvedValue({ processed: 0, tasks: [], nowIso: "2026-04-23T00:00:00.000Z" })
+}));
+
 vi.mock("@/lib/datetime", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/datetime")>();
   return {
@@ -36,6 +40,7 @@ vi.mock("@/lib/datetime", async (importOriginal) => {
 import { sendMandatoryWeeklyUpdateEmail, sendWeeklyDigestEmail } from "../notifications";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getTodayLondonIsoDate } from "@/lib/datetime";
+import { markPastEventOpenTodosNotRequired } from "@/lib/planning/sop";
 
 const mockAdmin = createSupabaseAdminClient as ReturnType<typeof vi.fn>;
 
@@ -251,6 +256,7 @@ function setupPagedMockDb(tables: Record<string, { rows: unknown[]; error?: unkn
 describe("sendWeeklyDigestEmail", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(markPastEventOpenTodosNotRequired).mockResolvedValue({ processed: 0, tasks: [], nowIso: "2026-04-23T00:00:00.000Z" });
     // Enable operational notifications and provide Resend key.
     delete process.env.NOTIFICATIONS_DISABLED;
     process.env.BARONSHUB_OPERATIONAL_EMAILS_ENABLED = "true";
@@ -288,6 +294,7 @@ describe("sendWeeklyDigestEmail", () => {
     expect(call.to).toEqual(["alice@example.com"]);
     expect(call.subject).toContain("3 tasks need attention");
     expect(call.html).toBeDefined();
+    expect(markPastEventOpenTodosNotRequired).toHaveBeenCalledOnce();
   });
 
   it("orders every paginated query by id so range paging is stable", async () => {
@@ -680,6 +687,20 @@ describe("sendWeeklyDigestEmail", () => {
 
     expect(result).toEqual({ sent: 0, failed: 0, skippedAssignees: 0 });
     expect(mockEmailSend).not.toHaveBeenCalled();
+    expect(markPastEventOpenTodosNotRequired).not.toHaveBeenCalled();
+  });
+
+  it("does not send stale tasks when past-event cleanup fails", async () => {
+    vi.mocked(markPastEventOpenTodosNotRequired).mockRejectedValueOnce(new Error("cleanup failed"));
+    setupMockDb({
+      audit_log: { data: [], error: null },
+      planning_tasks: { data: [makeTask()], error: null },
+      events: { data: [], error: null },
+      users: { data: [makeUser()], error: null }
+    });
+
+    await expect(sendWeeklyDigestEmail()).rejects.toThrow("cleanup failed");
+    expect(mockEmailSend).not.toHaveBeenCalled();
   });
 
   // 12. Preflight query failure
@@ -751,6 +772,7 @@ describe("sendWeeklyDigestEmail", () => {
 describe("sendMandatoryWeeklyUpdateEmail", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(markPastEventOpenTodosNotRequired).mockResolvedValue({ processed: 0, tasks: [], nowIso: "2026-04-23T00:00:00.000Z" });
     delete process.env.NOTIFICATIONS_DISABLED;
     process.env.BARONSHUB_OPERATIONAL_EMAILS_ENABLED = "true";
     process.env.RESEND_API_KEY = "re_test_key";
@@ -853,6 +875,7 @@ describe("sendMandatoryWeeklyUpdateEmail", () => {
     expect(call.text).toContain("Your SOP to-dos due now or in the next 14 days");
     expect(call.text).toContain("...and 2 more to-dos in BaronsHub.");
     expect(call.text).toContain("Your helpful weekly update from BaronsHub sent every Tuesday");
+    expect(markPastEventOpenTodosNotRequired).toHaveBeenCalledOnce();
   });
 
   it("includes a user's tasks even when they fall beyond the first 1,000 rows (pagination)", async () => {

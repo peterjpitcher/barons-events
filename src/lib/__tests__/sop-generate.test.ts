@@ -9,7 +9,12 @@ vi.mock("@/lib/supabase/admin", () => ({
   createSupabaseAdminClient: vi.fn(),
 }));
 
-import { generateSopChecklist, loadSopTemplate, shouldMarkEventTodosNotRequired } from "@/lib/planning/sop";
+import {
+  generateSopChecklist,
+  loadSopTemplate,
+  markPastEventOpenTodosNotRequired,
+  shouldMarkEventTodosNotRequired,
+} from "@/lib/planning/sop";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -22,6 +27,45 @@ function makeClientWithRpc(rpcResult: { data: unknown; error: null | { message: 
   return {
     rpc: makeRpcMock(rpcResult),
   };
+}
+
+type MockDbResult = { data: unknown; error: null | { message: string } };
+type MockDbCall = { table: string; method: string; args: unknown[] };
+
+function makeCleanupClient(results: Record<string, MockDbResult[]>) {
+  const calls: MockDbCall[] = [];
+  const indexes: Record<string, number> = {};
+
+  function makeChain(table: string, result: MockDbResult) {
+    const chain: any = {
+      then(resolve: (value: MockDbResult) => void) {
+        resolve(result);
+      },
+      range(from: number, to: number) {
+        calls.push({ table, method: "range", args: [from, to] });
+        return Promise.resolve(result);
+      }
+    };
+
+    for (const method of ["select", "eq", "in", "is", "lt", "order", "update"]) {
+      chain[method] = (...args: unknown[]) => {
+        calls.push({ table, method, args });
+        return chain;
+      };
+    }
+
+    return chain;
+  }
+
+  const client = {
+    from: vi.fn((table: string) => {
+      const index = indexes[table] ?? 0;
+      indexes[table] = index + 1;
+      return makeChain(table, results[table]?.[index] ?? { data: [], error: null });
+    })
+  };
+
+  return { client, calls };
 }
 
 // ─── generateSopChecklist ────────────────────────────────────────────────────
@@ -105,6 +149,101 @@ describe("shouldMarkEventTodosNotRequired", () => {
 
   it("marks event todos N/A once the event date has passed", () => {
     expect(shouldMarkEventTodosNotRequired("2026-06-11", "2026-06-12")).toBe(true);
+  });
+});
+
+describe("markPastEventOpenTodosNotRequired", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("marks open non-debrief tasks for past events as not required", async () => {
+    const { client, calls } = makeCleanupClient({
+      events: [{ data: [{ id: "event-past" }], error: null }],
+      planning_items: [{ data: [{ id: "planning-past", event_id: "event-past" }], error: null }],
+      sop_task_templates: [{ data: [{ id: "template-debrief" }], error: null }],
+      planning_tasks: [
+        {
+          data: [
+            {
+              id: "task-open",
+              planning_item_id: "planning-past",
+              parent_task_id: null,
+              sop_template_task_id: "template-pre-event",
+              cascade_sop_template_id: null,
+            },
+            {
+              id: "task-child",
+              planning_item_id: "planning-past",
+              parent_task_id: "task-open",
+              sop_template_task_id: null,
+              cascade_sop_template_id: null,
+            },
+            {
+              id: "task-debrief",
+              planning_item_id: "planning-past",
+              parent_task_id: null,
+              sop_template_task_id: "template-debrief",
+              cascade_sop_template_id: null,
+            },
+          ],
+          error: null,
+        },
+        {
+          data: [
+            { id: "task-open", planning_item_id: "planning-past" },
+            { id: "task-child", planning_item_id: "planning-past" },
+          ],
+          error: null,
+        },
+      ],
+      planning_task_dependencies: [
+        { data: [], error: null },
+        { data: [], error: null },
+      ],
+    });
+    (createSupabaseAdminClient as Mock).mockReturnValue(client);
+
+    const result = await markPastEventOpenTodosNotRequired({
+      now: "2026-06-25T12:00:00.000Z",
+      pageSize: 50,
+    });
+
+    expect(result.processed).toBe(2);
+    expect(result.tasks.map((task) => task.id)).toEqual(["task-open", "task-child"]);
+
+    const updateCall = calls.find((call) => call.table === "planning_tasks" && call.method === "update");
+    expect(updateCall?.args[0]).toMatchObject({
+      status: "not_required",
+      completed_at: "2026-06-25T12:00:00.000Z",
+      completed_by: null,
+      is_blocked: false,
+    });
+
+    const updateIds = calls.find(
+      (call) => call.table === "planning_tasks" && call.method === "in" && call.args[0] === "id"
+    );
+    expect(updateIds?.args[1]).toEqual(["task-open", "task-child"]);
+    expect(calls.filter((call) => call.table === "planning_tasks" && call.method === "eq" && call.args[0] === "status" && call.args[1] === "open").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("does nothing when there are no past events", async () => {
+    const { client } = makeCleanupClient({
+      events: [{ data: [], error: null }],
+    });
+    (createSupabaseAdminClient as Mock).mockReturnValue(client);
+
+    const result = await markPastEventOpenTodosNotRequired({
+      now: "2026-06-25T12:00:00.000Z",
+      pageSize: 50,
+    });
+
+    expect(result).toEqual({
+      processed: 0,
+      tasks: [],
+      nowIso: "2026-06-25T12:00:00.000Z",
+    });
+    expect(client.from).not.toHaveBeenCalledWith("planning_tasks");
   });
 });
 

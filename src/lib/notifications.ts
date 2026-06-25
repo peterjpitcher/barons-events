@@ -5,6 +5,7 @@ import type { Database } from "@/lib/supabase/types";
 import { formatSpacesLabel } from "@/lib/venue-spaces";
 import { getTodayLondonIsoDate, formatInLondon } from "@/lib/datetime";
 import { addDays } from "@/lib/planning/utils";
+import { markPastEventOpenTodosNotRequired } from "@/lib/planning/sop";
 import { normaliseTodoDigestFrequency, shouldSendTodoDigestToday } from "@/lib/communication-preferences";
 import { resolveCentralEventsLeadRecipients } from "@/lib/central-events-lead";
 import {
@@ -1941,6 +1942,7 @@ export async function sendMandatoryWeeklyUpdateEmail(): Promise<{ sent: number; 
   }
 
   const db = createSupabaseAdminClient();
+  await markPastEventOpenTodosNotRequired();
   const weekStart = isoWeekStart(todayLondon);
   const todoDueLimit = addDays(todayLondon, 14);
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -2223,6 +2225,8 @@ export async function sendWeeklyDigestEmail(): Promise<{ sent: number; failed: n
   if (existing && existing.length > 0) {
     return { sent: 0, failed: 0, skippedAssignees: 0 };
   }
+
+  await markPastEventOpenTodosNotRequired();
 
   // Parallel data fetch
   const nowIso = new Date().toISOString();

@@ -10,7 +10,53 @@ type GenerateSopOptions = {
   applyEventTodoRules?: boolean;
 };
 
+export type PastEventTodoNotRequiredTask = {
+  id: string;
+  planningItemId: string;
+  eventId: string;
+};
+
+type PastEventTodoCleanupOptions = {
+  now?: Date | string;
+  pageSize?: number;
+};
+
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const DEFAULT_PAGE_SIZE = 1000;
+const DEFAULT_IN_CHUNK_SIZE = 500;
+
+function toIsoTimestamp(value: Date | string | undefined): string {
+  if (!value) return new Date().toISOString();
+  return value instanceof Date ? value.toISOString() : value;
+}
+
+function chunks<T>(values: T[], size = DEFAULT_IN_CHUNK_SIZE): T[][] {
+  const result: T[][] = [];
+  for (let index = 0; index < values.length; index += size) {
+    result.push(values.slice(index, index + size));
+  }
+  return result;
+}
+
+async function fetchRowsInPages<T>(
+  buildQuery: () => any,
+  pageSize = DEFAULT_PAGE_SIZE
+): Promise<T[]> {
+  const rows: T[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const query = buildQuery();
+    const result = typeof query.range === "function"
+      ? await query.range(from, from + pageSize - 1)
+      : await query;
+    if (result.error) throw new Error(result.error.message);
+
+    const page = (result.data ?? []) as T[];
+    rows.push(...page);
+    if (typeof query.range !== "function" || page.length < pageSize) {
+      return rows;
+    }
+  }
+}
 
 export function normaliseSopNotRequiredTemplateIds(values: unknown): string[] {
   const rawValues = Array.isArray(values) ? values : typeof values === "string" ? [values] : [];
@@ -105,6 +151,137 @@ export async function markSopTemplateTasksNotRequired(
 
   const taskIds = ((taskRows ?? []) as Array<{ id: string }>).map((row) => row.id);
   return markOpenTasksNotRequired(taskIds, completedBy);
+}
+
+export async function markPastEventOpenTodosNotRequired(
+  options: PastEventTodoCleanupOptions = {}
+): Promise<{ processed: number; tasks: PastEventTodoNotRequiredTask[]; nowIso: string }> {
+  const nowIso = toIsoTimestamp(options.now);
+  const pageSize = options.pageSize ?? DEFAULT_PAGE_SIZE;
+  const db = createSupabaseAdminClient();
+
+  const pastEvents = await fetchRowsInPages<{ id: string }>(
+    () => db
+      .from("events")
+      .select("id")
+      .lt("end_at", nowIso)
+      .is("deleted_at", null)
+      .order("id", { ascending: true }),
+    pageSize
+  );
+  const eventIds = pastEvents.map((event) => event.id);
+  if (eventIds.length === 0) {
+    return { processed: 0, tasks: [], nowIso };
+  }
+
+  const planningItems: Array<{ id: string; event_id: string }> = [];
+  for (const eventIdChunk of chunks(eventIds)) {
+    planningItems.push(
+      ...(await fetchRowsInPages<{ id: string; event_id: string }>(
+        () => db
+          .from("planning_items")
+          .select("id, event_id")
+          .in("event_id", eventIdChunk)
+          .order("id", { ascending: true }),
+        pageSize
+      ))
+    );
+  }
+
+  const planningItemToEvent = new Map(
+    planningItems
+      .filter((item) => Boolean(item.event_id))
+      .map((item) => [item.id, item.event_id])
+  );
+  const planningItemIds = [...planningItemToEvent.keys()];
+  if (planningItemIds.length === 0) {
+    return { processed: 0, tasks: [], nowIso };
+  }
+
+  const { data: debriefTemplates, error: templateError } = await (db as any)
+    .from("sop_task_templates")
+    .select("id")
+    .eq("template_key", "debrief");
+  if (templateError) throw new Error(templateError.message);
+
+  const debriefTemplateIds = new Set(
+    ((debriefTemplates ?? []) as Array<{ id: string }>).map((template) => template.id)
+  );
+
+  type OpenTaskRow = {
+    id: string;
+    planning_item_id: string;
+    parent_task_id: string | null;
+    sop_template_task_id: string | null;
+    cascade_sop_template_id: string | null;
+  };
+
+  const openTasks: OpenTaskRow[] = [];
+  for (const planningItemIdChunk of chunks(planningItemIds)) {
+    openTasks.push(
+      ...(await fetchRowsInPages<OpenTaskRow>(
+        () => (db as any)
+          .from("planning_tasks")
+          .select("id, planning_item_id, parent_task_id, sop_template_task_id, cascade_sop_template_id")
+          .in("planning_item_id", planningItemIdChunk)
+          .eq("status", "open")
+          .order("id", { ascending: true }),
+        pageSize
+      ))
+    );
+  }
+  if (openTasks.length === 0) {
+    return { processed: 0, tasks: [], nowIso };
+  }
+
+  const debriefTaskIds = new Set(
+    openTasks
+      .filter((task) =>
+        (task.sop_template_task_id && debriefTemplateIds.has(task.sop_template_task_id)) ||
+        (task.cascade_sop_template_id && debriefTemplateIds.has(task.cascade_sop_template_id))
+      )
+      .map((task) => task.id)
+  );
+  const taskIds = openTasks
+    .filter((task) => !debriefTaskIds.has(task.id) && (!task.parent_task_id || !debriefTaskIds.has(task.parent_task_id)))
+    .map((task) => task.id);
+
+  if (taskIds.length === 0) {
+    return { processed: 0, tasks: [], nowIso };
+  }
+
+  const updated: PastEventTodoNotRequiredTask[] = [];
+  for (const taskIdChunk of chunks(taskIds)) {
+    const { data, error } = await (db as any)
+      .from("planning_tasks")
+      .update({
+        status: "not_required",
+        completed_at: nowIso,
+        completed_by: null,
+        is_blocked: false,
+      })
+      .in("id", taskIdChunk)
+      .eq("status", "open")
+      .select("id, planning_item_id");
+
+    if (error) throw new Error(error.message);
+
+    for (const task of (data ?? []) as Array<{ id: string; planning_item_id: string }>) {
+      const eventId = planningItemToEvent.get(task.planning_item_id);
+      if (!eventId) continue;
+      updated.push({
+        id: task.id,
+        planningItemId: task.planning_item_id,
+        eventId,
+      });
+    }
+  }
+
+  for (const task of updated) {
+    await updateBlockedStatus(task.id, "not_required");
+  }
+
+  return { processed: updated.length, tasks: updated, nowIso };
 }
 
 /**
