@@ -46,7 +46,7 @@ export function RevertToDraftButton({ eventId }: RevertToDraftButtonProps) {
       <ConfirmDialog
         open={confirmOpen}
         title="Revert event to draft?"
-        description="This will set the event back to draft, clear the assignee, and remove it from the approved schedule. You can re-approve it at any time."
+        description="This will set the event back to draft, clear the assignee, and make it editable again. You can submit or approve it later."
         confirmLabel="Revert to draft"
         variant="danger"
         onConfirm={handleConfirm}

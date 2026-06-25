@@ -92,13 +92,13 @@ describe('revertToDraftAction', () => {
     expect(result.message).toMatch(/event not found/i);
   });
 
-  it('returns error when event is not approved', async () => {
+  it('returns error when event cannot be reverted', async () => {
     (getCurrentUser as Mock).mockResolvedValue(makeUser());
-    const db = makeDb({ id: '00000000-0000-0000-0000-000000000001', status: 'submitted' });
+    const db = makeDb({ id: '00000000-0000-0000-0000-000000000001', status: 'completed' });
     (createSupabaseActionClient as Mock).mockResolvedValue(db);
     const result = await revertToDraftAction(undefined, makeFormData('00000000-0000-0000-0000-000000000001'));
     expect(result.success).toBe(false);
-    expect(result.message).toMatch(/not currently approved/i);
+    expect(result.message).toMatch(/cannot be reverted/i);
   });
 
   it('sets status to draft and clears assignee for an approved event', async () => {
@@ -112,6 +112,24 @@ describe('revertToDraftAction', () => {
     // Verify the update payload includes status: 'draft' and assignee_id: null
     expect(db.update).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'draft', assignee_id: null })
+    );
+  });
+
+  it('sets status to draft for a rejected event', async () => {
+    (getCurrentUser as Mock).mockResolvedValue(makeUser());
+    const db = makeDb({ id: '00000000-0000-0000-0000-000000000001', status: 'rejected' });
+    (createSupabaseActionClient as Mock).mockResolvedValue(db);
+    const result = await revertToDraftAction(undefined, makeFormData('00000000-0000-0000-0000-000000000001'));
+    expect(result.success).toBe(true);
+    expect(db.update).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'draft', assignee_id: null })
+    );
+    expect(recordAuditLogEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        meta: expect.objectContaining({
+          previousStatus: 'rejected',
+        }),
+      })
     );
   });
 

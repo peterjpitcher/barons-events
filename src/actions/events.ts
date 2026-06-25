@@ -3188,10 +3188,9 @@ export async function revertToDraftAction(
     redirect("/login");
   }
 
-  // Only administrator can revert approved events — managers are blocked by
-  // RLS on approved-status events, and reverting approval is a privileged action.
+  // Only administrators can reopen reviewed/submitted events for editing.
   if (user.role !== "administrator") {
-    return { success: false, message: "Only administrators can revert approved events to draft." };
+    return { success: false, message: "Only administrators can revert events to draft." };
   }
 
   const eventId = formData.get("eventId");
@@ -3213,8 +3212,10 @@ export async function revertToDraftAction(
       return { success: false, message: "Event not found." };
     }
 
-    if (event.status !== "approved") {
-      return { success: false, message: "Event is not currently approved." };
+    const previousStatus = event.status as string;
+    const revertibleStatuses = ["submitted", "needs_revisions", "approved", "rejected"];
+    if (!revertibleStatuses.includes(previousStatus)) {
+      return { success: false, message: "Event cannot be reverted to draft from its current state." };
     }
 
     const { error: updateError } = await supabase
@@ -3234,7 +3235,7 @@ export async function revertToDraftAction(
       actorId: user.id,
       meta: {
         status: "draft",
-        previousStatus: "approved",
+        previousStatus,
         changes: ["Status"],
       },
     });
