@@ -9,6 +9,7 @@ type EventPageHeaderProps = {
   mode: "create" | "edit" | "view";
   status?: EventStatus;
   eventId?: string;
+  canReschedule?: boolean;
   canDelete?: boolean;
   canRevertToDraft?: boolean;
 };
@@ -49,6 +50,7 @@ export function EventPageHeader({
   mode,
   status,
   eventId,
+  canReschedule = false,
   canDelete = false,
   canRevertToDraft = false,
 }: EventPageHeaderProps): React.ReactElement {
@@ -79,6 +81,7 @@ export function EventPageHeader({
         {mode === "edit" && eventId && (
           <EventOverflowMenu
             eventId={eventId}
+            canReschedule={canReschedule}
             canDelete={canDelete}
             canRevertToDraft={canRevertToDraft}
           />

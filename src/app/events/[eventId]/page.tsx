@@ -91,6 +91,10 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
   const canRevertToDraft =
     canEdit && user.role === "administrator" &&
     ["submitted", "needs_revisions", "approved", "rejected"].includes(event.status);
+  const canReschedule =
+    user.role === "administrator" &&
+    event.status === "approved" &&
+    process.env.EVENT_RESCHEDULE_ENABLED === "true";
   const canViewEventBookings = canViewBookings(user.role);
 
   const canReview =
@@ -431,6 +435,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
           mode={canEdit ? "edit" : "view"}
           status={event.status as EventStatus}
           eventId={event.id}
+          canReschedule={canReschedule}
           canDelete={canDelete}
           canRevertToDraft={canRevertToDraft}
         />

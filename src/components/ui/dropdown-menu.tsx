@@ -25,7 +25,7 @@ export function DropdownMenu({ trigger, children, align = "right" }: DropdownMen
     document.addEventListener("keydown", handleEscape);
 
     // Focus first menu item when opened
-    const firstItem = menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]');
+    const firstItem = menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]');
     firstItem?.focus();
 
     return () => {
@@ -51,9 +51,9 @@ export function DropdownMenu({ trigger, children, align = "right" }: DropdownMen
           role="menu"
           className={`absolute ${align === "right" ? "right-0" : "left-0"} top-full z-50 mt-1 min-w-[10rem] rounded-[var(--radius-lg)] border border-[var(--hair)] bg-[var(--paper)] py-1 shadow-card`}
           onKeyDown={(e) => {
-            const items = menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]');
+            const items = menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]');
             if (!items?.length) return;
-            const current = Array.from(items).indexOf(document.activeElement as HTMLButtonElement);
+            const current = Array.from(items).indexOf(document.activeElement as HTMLElement);
             if (e.key === "ArrowDown") {
               e.preventDefault();
               items[(current + 1) % items.length]?.focus();
