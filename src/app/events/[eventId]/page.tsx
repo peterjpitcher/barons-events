@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { Suspense } from "react";
 import { CalendarDays, Clock, Edit, MapPin, Share2 } from "lucide-react";
 import { EventForm } from "@/components/events/event-form";
 import { BookingSettingsCard } from "@/components/events/booking-settings-card";
@@ -27,7 +28,7 @@ import { listEventAttachmentsRollup } from "@/lib/attachments";
 import { InternalNotesPanel } from "@/components/internal-notes/internal-notes-panel";
 import { listInternalNotes } from "@/lib/internal-notes";
 import type { EventStatus } from "@/lib/types";
-import type { PlanningTask, PlanningPerson, PlanningTaskStatus } from "@/lib/planning/types";
+import type { PlanningTask, PlanningTaskStatus } from "@/lib/planning/types";
 
 const statusCopy: Record<string, { label: string; tone: "neutral" | "info" | "success" | "warning" | "danger" }> = {
   draft: { label: "Draft", tone: "neutral" },
@@ -57,6 +58,106 @@ function buildEventImageUrl(path: string | null | undefined): string | null {
     .split("/")
     .map((segment) => encodeURIComponent(segment))
     .join("/")}`;
+}
+
+type EventSopData = {
+  tasks: PlanningTask[];
+  planningItemId: string | null;
+};
+
+async function loadEventSopData(eventId: string, canViewEventPlanning: boolean): Promise<EventSopData> {
+  if (!canViewEventPlanning) {
+    return { tasks: [], planningItemId: null };
+  }
+
+  const db = createSupabaseAdminClient();
+  const { data: planningItem } = await db
+    .from("planning_items")
+    .select(`
+      id, target_date,
+      tasks:planning_tasks(
+        id, planning_item_id, title, assignee_id, due_date, status, completed_at, completed_by,
+        sort_order, sop_section, sop_template_task_id, is_blocked, due_date_manually_overridden, notes,
+        assignee:users!planning_tasks_assignee_id_fkey(id, full_name, email),
+        assignees:planning_task_assignees(user:users(id, full_name, email)),
+        dependencies:planning_task_dependencies!planning_task_dependencies_task_id_fkey(depends_on_task_id)
+      )
+    `)
+    .eq("event_id", eventId)
+    .maybeSingle();
+
+  if (!planningItem) {
+    return { tasks: [], planningItemId: null };
+  }
+
+  const rawTasks = Array.isArray(planningItem.tasks) ? planningItem.tasks : [];
+  type RawUser = { id: string; full_name: string | null; email: string } | null;
+  type RawAssigneeJunction = { user: RawUser | RawUser[] | null };
+  type RawDep = { depends_on_task_id: string };
+  type RawTask = {
+    id: string;
+    planning_item_id: string;
+    title: string;
+    assignee_id: string | null;
+    due_date: string;
+    status: string;
+    completed_at: string | null;
+    completed_by: string | null;
+    sort_order: number;
+    sop_section: string | null;
+    sop_template_task_id: string | null;
+    is_blocked: boolean;
+    due_date_manually_overridden: boolean;
+    manually_assigned?: boolean;
+    notes: string | null;
+    assignee: RawUser | RawUser[] | null;
+    assignees: RawAssigneeJunction[];
+    dependencies: RawDep[];
+  };
+
+  const tasks = rawTasks.map((task: RawTask): PlanningTask => {
+    const assignee = Array.isArray(task.assignee) ? task.assignee[0] : task.assignee;
+    const assigneesRaw = Array.isArray(task.assignees) ? task.assignees : [];
+    const assignees = assigneesRaw.map((a: RawAssigneeJunction) => {
+      const rawUser = a?.user;
+      const u = Array.isArray(rawUser) ? rawUser[0] : rawUser;
+      return { id: u?.id ?? "", name: u?.full_name ?? u?.email ?? "Unknown", email: u?.email ?? "" };
+    });
+    return {
+      id: task.id,
+      planningItemId: task.planning_item_id,
+      title: task.title,
+      assigneeId: task.assignee_id ?? null,
+      assigneeName: assignee?.full_name ?? assignee?.email ?? "To be determined",
+      assignees,
+      dueDate: task.due_date,
+      status: task.status as PlanningTaskStatus,
+      completedAt: task.completed_at ?? null,
+      completedBy: task.completed_by ?? null,
+      sortOrder: task.sort_order ?? 0,
+      sopSection: task.sop_section ?? null,
+      sopTemplateTaskId: task.sop_template_task_id ?? null,
+      isBlocked: task.is_blocked ?? false,
+      dueDateManuallyOverridden: task.due_date_manually_overridden ?? false,
+      manuallyAssigned: task.manually_assigned ?? false,
+      dependsOnTaskIds: Array.isArray(task?.dependencies)
+        ? task.dependencies.map((d: RawDep) => d.depends_on_task_id).filter(Boolean)
+        : [],
+      notes: task.notes ?? null,
+      attachments: [],
+    };
+  });
+
+  return { tasks, planningItemId: planningItem.id };
+}
+
+async function loadEventActorDirectory(actorIds: string[]): Promise<Record<string, { id: string; name: string; email: string }>> {
+  try {
+    return await getUsersByIds(actorIds);
+  } catch (error) {
+    console.error("Could not resolve actor names", error);
+    return {};
+  }
 }
 
 export default async function EventDetailPage({ params }: { params: Promise<{ eventId: string }> }) {
@@ -111,108 +212,6 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
     deletedAt: event.deleted_at
   });
 
-  const [venues, assignableUsers, eventTypes, artists, attachments, internalNotes, userPrefsResult] = await Promise.all([
-    listVenues(),
-    listAssignableUsers(),
-    listEventTypes(),
-    listArtists(),
-    listEventAttachmentsRollup(event.id),
-    listInternalNotes("event", event.id),
-    createSupabaseAdminClient()
-      .from("users")
-      .select("sop_drawer_pinned, debrief_pinned")
-      .eq("id", user.id)
-      .maybeSingle()
-  ]);
-  const userPrefs = userPrefsResult.data;
-
-  // SEC-005 follow-up: attachment upload follows the unified event-edit rule,
-  // not the legacy same-venue check. Non-manager OWs at the same venue no
-  // longer see upload controls for events they can't edit.
-  const canUploadAttachments = canEditEventFromRow(user, eventRowForEdit);
-
-  // ─── Fetch linked planning item & SOP tasks for this event ────────────────
-  let sopTasks: PlanningTask[] = [];
-  let sopPlanningItemId: string | null = null;
-  if (canViewEventPlanning) {
-    const db = createSupabaseAdminClient();
-    const { data: planningItem } = await db
-      .from("planning_items")
-      .select(`
-        id, target_date,
-        tasks:planning_tasks(
-          id, planning_item_id, title, assignee_id, due_date, status, completed_at, completed_by,
-          sort_order, sop_section, sop_template_task_id, is_blocked, due_date_manually_overridden, notes,
-          assignee:users!planning_tasks_assignee_id_fkey(id, full_name, email),
-          assignees:planning_task_assignees(user:users(id, full_name, email)),
-          dependencies:planning_task_dependencies!planning_task_dependencies_task_id_fkey(depends_on_task_id)
-        )
-      `)
-      .eq("event_id", eventId)
-      .maybeSingle();
-
-    if (planningItem) {
-      sopPlanningItemId = planningItem.id;
-      const rawTasks = Array.isArray(planningItem.tasks) ? planningItem.tasks : [];
-      type RawUser = { id: string; full_name: string | null; email: string } | null;
-      type RawAssigneeJunction = { user: RawUser | RawUser[] | null };
-      type RawDep = { depends_on_task_id: string };
-      type RawTask = {
-        id: string;
-        planning_item_id: string;
-        title: string;
-        assignee_id: string | null;
-        due_date: string;
-        status: string;
-        completed_at: string | null;
-        completed_by: string | null;
-        sort_order: number;
-        sop_section: string | null;
-        sop_template_task_id: string | null;
-        is_blocked: boolean;
-        due_date_manually_overridden: boolean;
-        notes: string | null;
-        assignee: RawUser | RawUser[] | null;
-        assignees: RawAssigneeJunction[];
-        dependencies: RawDep[];
-      };
-      sopTasks = rawTasks.map((task: RawTask): PlanningTask => {
-        const assignee = Array.isArray(task.assignee) ? task.assignee[0] : task.assignee;
-        const assigneesRaw = Array.isArray(task.assignees) ? task.assignees : [];
-        const assignees = assigneesRaw.map((a: RawAssigneeJunction) => {
-          const rawUser = a?.user;
-          const u = Array.isArray(rawUser) ? rawUser[0] : rawUser;
-          return { id: u?.id ?? "", name: u?.full_name ?? u?.email ?? "Unknown", email: u?.email ?? "" };
-        });
-        return {
-          id: task.id,
-          planningItemId: task.planning_item_id,
-          title: task.title,
-          assigneeId: task.assignee_id ?? null,
-          assigneeName: assignee?.full_name ?? assignee?.email ?? "To be determined",
-          assignees,
-          dueDate: task.due_date,
-          status: task.status as PlanningTaskStatus,
-          completedAt: task.completed_at ?? null,
-          completedBy: task.completed_by ?? null,
-          sortOrder: task.sort_order ?? 0,
-          sopSection: task.sop_section ?? null,
-          sopTemplateTaskId: task.sop_template_task_id ?? null,
-          isBlocked: task.is_blocked ?? false,
-          dueDateManuallyOverridden: task.due_date_manually_overridden ?? false,
-          manuallyAssigned: (task as any).manually_assigned ?? false,
-          dependsOnTaskIds: Array.isArray(task?.dependencies)
-            ? task.dependencies.map((d: RawDep) => d.depends_on_task_id).filter(Boolean)
-            : [],
-          notes: task.notes ?? null,
-          // Event page doesn't lazy-load per-task attachments here; the
-          // detail page roll-up covers that surface. See issue-log 04.
-          attachments: [],
-        };
-      });
-    }
-  }
-
   const actorIds = new Set<string>();
   actorIds.add(event.created_by);
   if (event.assignee_id) {
@@ -227,12 +226,40 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
     }
   });
 
-  let userDirectory: Record<string, { id: string; name: string; email: string }> = {};
-  try {
-    userDirectory = await getUsersByIds(Array.from(actorIds));
-  } catch (error) {
-    console.error("Could not resolve actor names", error);
-  }
+  const [
+    venues,
+    assignableUsers,
+    eventTypes,
+    artists,
+    attachments,
+    internalNotes,
+    userPrefsResult,
+    sopData,
+    userDirectory
+  ] = await Promise.all([
+    listVenues(),
+    listAssignableUsers(),
+    listEventTypes(),
+    listArtists(),
+    listEventAttachmentsRollup(event.id),
+    listInternalNotes("event", event.id),
+    createSupabaseAdminClient()
+      .from("users")
+      .select("sop_drawer_pinned, debrief_pinned")
+      .eq("id", user.id)
+      .maybeSingle(),
+    loadEventSopData(eventId, canViewEventPlanning),
+    loadEventActorDirectory(Array.from(actorIds))
+  ]);
+  const userPrefs = userPrefsResult.data;
+
+  // SEC-005 follow-up: attachment upload follows the unified event-edit rule,
+  // not the legacy same-venue check. Non-manager OWs at the same venue no
+  // longer see upload controls for events they can't edit.
+  const canUploadAttachments = canEditEventFromRow(user, eventRowForEdit);
+
+  const sopTasks = sopData.tasks;
+  const sopPlanningItemId = sopData.planningItemId;
 
   const assignableDirectory = new Map(assignableUsers.map((person) => [person.id, person]));
 
@@ -274,12 +301,25 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
     </Card>
   ) : null;
 
+  const auditTrailFallback = (
+    <Card>
+      <CardHeader className="!rounded-t-[var(--radius-lg)] !bg-[var(--navy)] px-6 py-3">
+        <CardTitle className="text-sm font-semibold uppercase tracking-wider !text-white">Audit trail</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="text-sm text-muted">Loading audit trail...</p>
+      </CardContent>
+    </Card>
+  );
+
   const auditTrailCard = (
+    <Suspense fallback={auditTrailFallback}>
     <AuditTrailPanel
       entityType="event"
       entityId={event.id}
       description="Track status changes, assignments, and reviewer feedback."
     />
+    </Suspense>
   );
 
   const debriefSnapshotCard = event.debrief ? (

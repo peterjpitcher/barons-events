@@ -242,7 +242,7 @@ export async function listEventAttachmentsRollup(eventId: string): Promise<Attac
 
   // Direct event attachments.
    
-  const direct = await queryAttachmentRows("listEventAttachmentsRollup direct", (selectClause) =>
+  const directPromise = queryAttachmentRows("listEventAttachmentsRollup direct", (selectClause) =>
     (db as any)
       .from("attachments")
       .select(selectClause)
@@ -253,34 +253,32 @@ export async function listEventAttachmentsRollup(eventId: string): Promise<Attac
 
   // Planning items linked to the event.
    
-  const { data: itemRows } = await (db as any)
+  const itemRowsPromise = (db as any)
     .from("planning_items")
     .select("id")
     .eq("event_id", eventId);
+  const [direct, { data: itemRows }] = await Promise.all([directPromise, itemRowsPromise]);
   const itemIds = (itemRows ?? []).map((row: { id: string }) => row.id);
 
-  // Attachments on those planning items.
   let itemAttachments: AttachmentRow[] = [];
-  if (itemIds.length > 0) {
-     
-    itemAttachments = await queryAttachmentRows("listEventAttachmentsRollup items", (selectClause) =>
-      (db as any)
-        .from("attachments")
-        .select(selectClause)
-        .in("planning_item_id", itemIds)
-        .eq("upload_status", "uploaded")
-        .is("deleted_at", null)
-    );
-  }
-
-  // Tasks under those items.
   let taskAttachments: AttachmentRow[] = [];
   if (itemIds.length > 0) {
      
-    const { data: taskRows } = await (db as any)
-      .from("planning_tasks")
-      .select("id")
-      .in("planning_item_id", itemIds);
+    const [loadedItemAttachments, { data: taskRows }] = await Promise.all([
+      queryAttachmentRows("listEventAttachmentsRollup items", (selectClause) =>
+        (db as any)
+          .from("attachments")
+          .select(selectClause)
+          .in("planning_item_id", itemIds)
+          .eq("upload_status", "uploaded")
+          .is("deleted_at", null)
+      ),
+      (db as any)
+        .from("planning_tasks")
+        .select("id")
+        .in("planning_item_id", itemIds)
+    ]);
+    itemAttachments = loadedItemAttachments;
     const taskIds = (taskRows ?? []).map((row: { id: string }) => row.id);
     if (taskIds.length > 0) {
        

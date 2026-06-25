@@ -172,15 +172,19 @@ export async function logAuthEvent(params: LogAuthEventParams): Promise<void> {
 
 export async function listAuditLogForEvent(eventId: string): Promise<AuditLogEntry[]> {
   const supabase = await createSupabaseReadonlyClient();
-  const eventRows = await listAuditRowsForEntityIds(supabase, "event", [eventId]);
-  const scope = await listEventAttachmentAuditScope(supabase, eventId);
-  const attachmentRows = await listAuditRowsForEntityIds(supabase, "attachment", scope.attachmentIds, {
-    optional: true
-  });
-  const attachmentRowsByMeta = await listAttachmentAuditRowsByParentMeta(supabase, [
+  const [eventRows, scope] = await Promise.all([
+    listAuditRowsForEntityIds(supabase, "event", [eventId]),
+    listEventAttachmentAuditScope(supabase, eventId)
+  ]);
+  const [attachmentRows, attachmentRowsByMeta] = await Promise.all([
+    listAuditRowsForEntityIds(supabase, "attachment", scope.attachmentIds, {
+      optional: true
+    }),
+    listAttachmentAuditRowsByParentMeta(supabase, [
     { event_id: eventId },
     ...scope.planningItemIds.map((id) => ({ planning_item_id: id })),
     ...scope.planningTaskIds.map((id) => ({ planning_task_id: id }))
+    ])
   ]);
 
   return normaliseAuditRows([...eventRows, ...attachmentRows, ...attachmentRowsByMeta]);
@@ -274,14 +278,15 @@ async function listAttachmentAuditRowsByParentMeta(
   supabase: AuditClient,
   filters: Array<Record<string, string>>
 ): Promise<AuditLogRow[]> {
-  const rows: AuditLogRow[] = [];
   const seenFilters = new Set<string>();
-
-  for (const filter of filters) {
+  const uniqueFilters = filters.filter((filter) => {
     const key = JSON.stringify(filter);
-    if (seenFilters.has(key)) continue;
+    if (seenFilters.has(key)) return false;
     seenFilters.add(key);
+    return true;
+  });
 
+  const results = await Promise.all(uniqueFilters.map(async (filter) => {
     const { data, error } = await supabase
       .from("audit_log")
       .select("*")
@@ -291,12 +296,12 @@ async function listAttachmentAuditRowsByParentMeta(
 
     if (error) {
       console.error(`Could not load attachment audit by parent metadata: ${error.message}`);
-      continue;
+      return [];
     }
-    rows.push(...((data ?? []) as AuditLogRow[]));
-  }
+    return (data ?? []) as AuditLogRow[];
+  }));
 
-  return rows;
+  return results.flat();
 }
 
 async function listEventAttachmentAuditScope(supabase: AuditClient, eventId: string): Promise<AttachmentAuditScope> {
@@ -304,28 +309,30 @@ async function listEventAttachmentAuditScope(supabase: AuditClient, eventId: str
   const planningItemIds = new Set<string>();
   const planningTaskIds = new Set<string>();
 
-  await addAttachmentIdsFromQuery(
-    ids,
-    supabase.from("attachments").select("id").eq("event_id", eventId),
-    "event attachment audit lookup"
-  );
-
-  const itemIds = await listIdsFromQuery(
-    supabase.from("planning_items").select("id").eq("event_id", eventId),
-    "event planning audit lookup"
-  );
+  const [directAttachmentIds, itemIds] = await Promise.all([
+    listIdsFromQuery(
+      supabase.from("attachments").select("id").eq("event_id", eventId),
+      "event attachment audit lookup"
+    ),
+    listIdsFromQuery(
+      supabase.from("planning_items").select("id").eq("event_id", eventId),
+      "event planning audit lookup"
+    )
+  ]);
+  directAttachmentIds.forEach((id) => ids.add(id));
   itemIds.forEach((id) => planningItemIds.add(id));
   if (itemIds.length > 0) {
-    await addAttachmentIdsFromQuery(
-      ids,
-      supabase.from("attachments").select("id").in("planning_item_id", itemIds),
-      "event planning item attachment audit lookup"
-    );
-
-    const taskIds = await listIdsFromQuery(
-      supabase.from("planning_tasks").select("id").in("planning_item_id", itemIds),
-      "event planning task audit lookup"
-    );
+    const [itemAttachmentIds, taskIds] = await Promise.all([
+      listIdsFromQuery(
+        supabase.from("attachments").select("id").in("planning_item_id", itemIds),
+        "event planning item attachment audit lookup"
+      ),
+      listIdsFromQuery(
+        supabase.from("planning_tasks").select("id").in("planning_item_id", itemIds),
+        "event planning task audit lookup"
+      )
+    ]);
+    itemAttachmentIds.forEach((id) => ids.add(id));
     taskIds.forEach((id) => planningTaskIds.add(id));
     if (taskIds.length > 0) {
       await addAttachmentIdsFromQuery(
