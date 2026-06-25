@@ -33,7 +33,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       entityId: task.id,
       action: "planning_task.auto_not_required",
       actorId: null,
-      meta: { planning_item_id: task.planningItemId, event_id: task.eventId, today }
+      meta: { planning_item_id: task.planningItemId, event_id: task.eventId, reason: task.reason, today }
     });
   }
 

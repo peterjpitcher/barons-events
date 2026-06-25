@@ -160,7 +160,10 @@ describe("markPastEventOpenTodosNotRequired", () => {
   it("marks open non-debrief tasks for past events as not required", async () => {
     const { client, calls } = makeCleanupClient({
       events: [{ data: [{ id: "event-past" }], error: null }],
-      planning_items: [{ data: [{ id: "planning-past", event_id: "event-past" }], error: null }],
+      planning_items: [
+        { data: [{ id: "planning-past", event_id: "event-past" }], error: null },
+        { data: [], error: null },
+      ],
       sop_task_templates: [{ data: [{ id: "template-debrief" }], error: null }],
       planning_tasks: [
         {
@@ -211,6 +214,7 @@ describe("markPastEventOpenTodosNotRequired", () => {
 
     expect(result.processed).toBe(2);
     expect(result.tasks.map((task) => task.id)).toEqual(["task-open", "task-child"]);
+    expect(result.tasks.map((task) => task.reason)).toEqual(["event_passed", "event_passed"]);
 
     const updateCall = calls.find((call) => call.table === "planning_tasks" && call.method === "update");
     expect(updateCall?.args[0]).toMatchObject({
@@ -227,9 +231,61 @@ describe("markPastEventOpenTodosNotRequired", () => {
     expect(calls.filter((call) => call.table === "planning_tasks" && call.method === "eq" && call.args[0] === "status" && call.args[1] === "open").length).toBeGreaterThanOrEqual(2);
   });
 
-  it("does nothing when there are no past events", async () => {
+  it("marks open tasks for standalone past planning items as not required", async () => {
+    const { client, calls } = makeCleanupClient({
+      events: [{ data: [], error: null }],
+      planning_items: [{ data: [{ id: "planning-standalone-past", event_id: null }], error: null }],
+      sop_task_templates: [{ data: [{ id: "template-debrief" }], error: null }],
+      planning_tasks: [
+        {
+          data: [
+            {
+              id: "task-standalone-open",
+              planning_item_id: "planning-standalone-past",
+              parent_task_id: null,
+              sop_template_task_id: "template-pre-event",
+              cascade_sop_template_id: null,
+            },
+          ],
+          error: null,
+        },
+        {
+          data: [
+            { id: "task-standalone-open", planning_item_id: "planning-standalone-past" },
+          ],
+          error: null,
+        },
+      ],
+      planning_task_dependencies: [{ data: [], error: null }],
+    });
+    (createSupabaseAdminClient as Mock).mockReturnValue(client);
+
+    const result = await markPastEventOpenTodosNotRequired({
+      now: "2026-06-25T12:00:00.000Z",
+      today: "2026-06-25",
+      pageSize: 50,
+    });
+
+    expect(result.processed).toBe(1);
+    expect(result.tasks).toEqual([
+      {
+        id: "task-standalone-open",
+        planningItemId: "planning-standalone-past",
+        eventId: null,
+        reason: "planning_item_past",
+      },
+    ]);
+
+    const standaloneTargetDateFilter = calls.find(
+      (call) => call.table === "planning_items" && call.method === "lt" && call.args[0] === "target_date"
+    );
+    expect(standaloneTargetDateFilter?.args[1]).toBe("2026-06-25");
+  });
+
+  it("does nothing when there are no past events or standalone past planning items", async () => {
     const { client } = makeCleanupClient({
       events: [{ data: [], error: null }],
+      planning_items: [{ data: [], error: null }],
     });
     (createSupabaseAdminClient as Mock).mockReturnValue(client);
 

@@ -13,11 +13,13 @@ type GenerateSopOptions = {
 export type PastEventTodoNotRequiredTask = {
   id: string;
   planningItemId: string;
-  eventId: string;
+  eventId: string | null;
+  reason: "event_passed" | "planning_item_past";
 };
 
 type PastEventTodoCleanupOptions = {
   now?: Date | string;
+  today?: string;
   pageSize?: number;
 };
 
@@ -157,6 +159,7 @@ export async function markPastEventOpenTodosNotRequired(
   options: PastEventTodoCleanupOptions = {}
 ): Promise<{ processed: number; tasks: PastEventTodoNotRequiredTask[]; nowIso: string }> {
   const nowIso = toIsoTimestamp(options.now);
+  const today = options.today ?? londonDateString();
   const pageSize = options.pageSize ?? DEFAULT_PAGE_SIZE;
   const db = createSupabaseAdminClient();
 
@@ -170,9 +173,6 @@ export async function markPastEventOpenTodosNotRequired(
     pageSize
   );
   const eventIds = pastEvents.map((event) => event.id);
-  if (eventIds.length === 0) {
-    return { processed: 0, tasks: [], nowIso };
-  }
 
   const planningItems: Array<{ id: string; event_id: string }> = [];
   for (const eventIdChunk of chunks(eventIds)) {
@@ -188,12 +188,26 @@ export async function markPastEventOpenTodosNotRequired(
     );
   }
 
-  const planningItemToEvent = new Map(
-    planningItems
-      .filter((item) => Boolean(item.event_id))
-      .map((item) => [item.id, item.event_id])
+  const standalonePastItems = await fetchRowsInPages<{ id: string; event_id: string | null }>(
+    () => db
+      .from("planning_items")
+      .select("id, event_id")
+      .is("event_id", null)
+      .lt("target_date", today)
+      .order("id", { ascending: true }),
+    pageSize
   );
-  const planningItemIds = [...planningItemToEvent.keys()];
+
+  const planningItemContext = new Map<string, { eventId: string | null; reason: PastEventTodoNotRequiredTask["reason"] }>();
+  for (const item of planningItems) {
+    if (!item.event_id) continue;
+    planningItemContext.set(item.id, { eventId: item.event_id, reason: "event_passed" });
+  }
+  for (const item of standalonePastItems) {
+    planningItemContext.set(item.id, { eventId: null, reason: "planning_item_past" });
+  }
+
+  const planningItemIds = [...planningItemContext.keys()];
   if (planningItemIds.length === 0) {
     return { processed: 0, tasks: [], nowIso };
   }
@@ -267,12 +281,13 @@ export async function markPastEventOpenTodosNotRequired(
     if (error) throw new Error(error.message);
 
     for (const task of (data ?? []) as Array<{ id: string; planning_item_id: string }>) {
-      const eventId = planningItemToEvent.get(task.planning_item_id);
-      if (!eventId) continue;
+      const context = planningItemContext.get(task.planning_item_id);
+      if (!context) continue;
       updated.push({
         id: task.id,
         planningItemId: task.planning_item_id,
-        eventId,
+        eventId: context.eventId,
+        reason: context.reason,
       });
     }
   }
