@@ -10,6 +10,7 @@ import { SmsCampaignStats } from "@/components/events/sms-campaign-stats";
 import { Badge } from "@/components/ui/badge";
 import { CancelBookingButton } from "@/components/bookings/cancel-booking-button";
 import { RefundBookingButton } from "@/components/bookings/refund-booking-button";
+import { TransferBookingButton } from "@/components/bookings/transfer-booking-button";
 import { canManageBookings } from "@/lib/roles";
 import { PageHeader } from "@/components/ui/design-primitives";
 
@@ -60,6 +61,7 @@ export default async function BookingsPage({
   }
 
   const canCancelBookings = canManageBookings(user.role, user.venueId);
+  const transferEnabled = process.env.BOOKING_TRANSFER_ENABLED === "true";
 
   const [bookings, totalTickets, campaignStats] = await Promise.all([
     getBookingsForEvent(eventId),
@@ -115,14 +117,30 @@ export default async function BookingsPage({
         <div className="grid gap-2 md:hidden">
           {bookings.map((booking) => {
             const fullName = `${booking.firstName}${booking.lastName ? ` ${booking.lastName}` : ""}`;
+            const isAdminPaid =
+              booking.status === "confirmed" &&
+              user.role === "administrator" &&
+              booking.paymentTransactionId != null &&
+              booking.paymentAmountPence != null;
+            const canRefund =
+              isAdminPaid &&
+              (booking.paymentStatus === "completed" || booking.paymentStatus === "partially_refunded");
+            const canTransfer = transferEnabled && isAdminPaid && booking.paymentStatus === "completed";
             const action =
-              booking.status === "confirmed" && user.role === "administrator" && booking.paymentTransactionId && booking.paymentAmountPence != null && (booking.paymentStatus === "completed" || booking.paymentStatus === "partially_refunded") ? (
-                <RefundBookingButton
-                  transactionId={booking.paymentTransactionId}
-                  eventId={eventId}
-                  refundableAmountPence={booking.paymentAmountPence - (booking.paymentRefundedAmountPence ?? 0)}
-                  currency={booking.paymentCurrency ?? "gbp"}
-                />
+              canRefund || canTransfer ? (
+                <div className="flex flex-wrap items-start justify-end gap-2">
+                  {canRefund && booking.paymentTransactionId && booking.paymentAmountPence != null ? (
+                    <RefundBookingButton
+                      transactionId={booking.paymentTransactionId}
+                      eventId={eventId}
+                      refundableAmountPence={booking.paymentAmountPence - (booking.paymentRefundedAmountPence ?? 0)}
+                      currency={booking.paymentCurrency ?? "gbp"}
+                    />
+                  ) : null}
+                  {canTransfer ? (
+                    <TransferBookingButton bookingId={booking.id} guestName={fullName} />
+                  ) : null}
+                </div>
               ) : booking.status === "confirmed" && canCancelBookings && !["completed", "partially_refunded", "refunded"].includes(booking.paymentStatus) ? (
                 <CancelBookingButton
                   bookingId={booking.id}
@@ -256,22 +274,43 @@ export default async function BookingsPage({
                     </div>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    {booking.status === "confirmed" && user.role === "administrator" && booking.paymentTransactionId && booking.paymentAmountPence != null && (booking.paymentStatus === "completed" || booking.paymentStatus === "partially_refunded") ? (
-                      <RefundBookingButton
-                        transactionId={booking.paymentTransactionId}
-                        eventId={eventId}
-                        refundableAmountPence={booking.paymentAmountPence - (booking.paymentRefundedAmountPence ?? 0)}
-                        currency={booking.paymentCurrency ?? "gbp"}
-                      />
-                    ) : booking.status === "confirmed" && canCancelBookings && !["completed", "partially_refunded", "refunded"].includes(booking.paymentStatus) ? (
-                      <CancelBookingButton
-                        bookingId={booking.id}
-                        eventId={eventId}
-                        guestName={`${booking.firstName}${booking.lastName ? ` ${booking.lastName}` : ""}`}
-                      />
-                    ) : (
-                      <span className="text-xs text-subtle">—</span>
-                    )}
+                    {(() => {
+                      const isAdminPaid =
+                        booking.status === "confirmed" &&
+                        user.role === "administrator" &&
+                        booking.paymentTransactionId != null &&
+                        booking.paymentAmountPence != null;
+                      const canRefund =
+                        isAdminPaid &&
+                        (booking.paymentStatus === "completed" || booking.paymentStatus === "partially_refunded");
+                      const canTransfer = transferEnabled && isAdminPaid && booking.paymentStatus === "completed";
+                      const guestName = `${booking.firstName}${booking.lastName ? ` ${booking.lastName}` : ""}`;
+                      if (canRefund || canTransfer) {
+                        return (
+                          <div className="flex flex-wrap items-start justify-end gap-2">
+                            {canRefund && booking.paymentTransactionId && booking.paymentAmountPence != null ? (
+                              <RefundBookingButton
+                                transactionId={booking.paymentTransactionId}
+                                eventId={eventId}
+                                refundableAmountPence={booking.paymentAmountPence - (booking.paymentRefundedAmountPence ?? 0)}
+                                currency={booking.paymentCurrency ?? "gbp"}
+                              />
+                            ) : null}
+                            {canTransfer ? (
+                              <TransferBookingButton bookingId={booking.id} guestName={guestName} />
+                            ) : null}
+                          </div>
+                        );
+                      }
+                      if (
+                        booking.status === "confirmed" &&
+                        canCancelBookings &&
+                        !["completed", "partially_refunded", "refunded"].includes(booking.paymentStatus)
+                      ) {
+                        return <CancelBookingButton bookingId={booking.id} eventId={eventId} guestName={guestName} />;
+                      }
+                      return <span className="text-xs text-subtle">—</span>;
+                    })()}
                   </td>
                 </tr>
               ))}

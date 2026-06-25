@@ -78,14 +78,17 @@ export type ActionResult = {
 /** Status of a customer booking. */
 export type BookingStatus = "confirmed" | "cancelled";
 
-/** Payment lifecycle for a booking. */
+/** Payment lifecycle for a booking. `transferred` = the paid booking was moved to
+ * another event; the original booking is cancelled and the payment now belongs to
+ * the new booking. */
 export type BookingPaymentStatus =
   | "not_required"
   | "pending"
   | "completed"
   | "failed"
   | "refunded"
-  | "partially_refunded";
+  | "partially_refunded"
+  | "transferred";
 
 /** A customer record — one per unique mobile number across all bookings. */
 export interface Customer {
