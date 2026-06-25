@@ -3218,14 +3218,12 @@ export async function revertToDraftAction(
       return { success: false, message: "Event cannot be reverted to draft from its current state." };
     }
 
-    const { error: updateError } = await supabase
-      .from("events")
-      .update({ status: "draft", assignee_id: null, updated_at: new Date().toISOString() })
-      .eq("id", event.id);
-
-    if (updateError) {
-      return { success: false, message: "Could not revert event to draft." };
-    }
+    await updateEventWithFallback({
+      supabase,
+      eventId: event.id,
+      payload: { status: "draft", assignee_id: null, updated_at: new Date().toISOString() },
+      contextLabel: "revert-to-draft"
+    });
 
     await recordAuditLogEntry({
 

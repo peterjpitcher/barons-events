@@ -11,6 +11,18 @@ export async function createSupabaseReadonlyClient(): Promise<SupabaseClient> {
     cookies: {
       getAll() {
         return store.getAll().map(({ name, value }) => ({ name, value }));
+      },
+      setAll(cookiesToSet) {
+        cookiesToSet.forEach(({ name, value, options }) => {
+          try {
+            (store as unknown as { set: (args: { name: string; value: string } & Record<string, unknown>) => void }).set(
+              { name, value, ...options }
+            );
+          } catch {
+            // Server Components cannot always mutate cookies. Middleware and
+            // server actions still perform the authoritative session cleanup.
+          }
+        });
       }
     },
     cookieOptions: {

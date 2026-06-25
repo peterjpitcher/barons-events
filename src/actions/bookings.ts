@@ -8,9 +8,9 @@ import { headers } from "next/headers";
 import { checkBookingRateLimit } from "@/lib/public-api/rate-limit";
 import { createBookingAtomic, cancelBooking, getTransferTargetsForBooking, type TransferTarget } from "@/lib/bookings";
 import { getCurrentUser } from "@/lib/auth";
-import { recordAuditLogEntry } from "@/lib/audit-log";
+import { recordAuditLogEntry, recordSystemAuditLogEntry } from "@/lib/audit-log";
 import { canManageBookings } from "@/lib/roles";
-import { sendBookingConfirmationSms } from "@/lib/sms";
+import { logSafeSmsFailure, sendBookingConfirmationSms } from "@/lib/sms";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { upsertCustomerForBooking, linkBookingToCustomer } from "@/lib/customers";
 import { verifyTurnstile } from "@/lib/turnstile";
@@ -304,7 +304,7 @@ export async function createBookingAction(
 
   // Audit — public flow has no authenticated user, so actorId is null.
   // Mobile is omitted from meta; it is PII and the booking row is authoritative.
-  await recordAuditLogEntry({
+  await recordSystemAuditLogEntry({
     entity: "event",
     entityId: data.eventId,
     action: "booking.created",
@@ -314,7 +314,7 @@ export async function createBookingAction(
 
   // Fire confirmation SMS asynchronously — don't block the response
   sendBookingConfirmationSms(bookingId).catch((err) => {
-    console.warn("Failed to send booking confirmation SMS:", err);
+    logSafeSmsFailure("booking_confirmation", err, { bookingId });
   });
 
   // Upsert customer record — non-blocking (booking already confirmed)
@@ -456,7 +456,7 @@ export async function updateExistingBookingAction(
     return { success: false, error: "Could not update booking." };
   }
 
-  await recordAuditLogEntry({
+  await recordSystemAuditLogEntry({
     entity: "event",
     entityId: booking.event_id,
     action: "booking.updated",
@@ -470,7 +470,7 @@ export async function updateExistingBookingAction(
 
   // Fire a confirmation SMS for the updated count — fire-and-forget.
   sendBookingConfirmationSms(parsed.data.bookingId).catch((err) => {
-    console.warn("Failed to send update confirmation SMS:", err);
+    logSafeSmsFailure("booking_update_confirmation", err, { bookingId: parsed.data.bookingId });
   });
 
   return {

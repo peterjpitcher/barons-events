@@ -78,11 +78,20 @@ export function BookingForm({
   const [existingPrompt, setExistingPrompt] = useState<ExistingBookingPrompt | null>(null);
   const [amendedTicketCount, setAmendedTicketCount] = useState(1);
   const [amendedCustomerNotes, setAmendedCustomerNotes] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const [turnstileKey, setTurnstileKey] = useState(0);
   const formRef = useRef<HTMLFormElement>(null);
   const bookingFormat = isBookingFormat(bookingType) ? bookingType : null;
   const ctaLabel = getBookingCtaLabel(bookingFormat);
   const bookingNoun = bookingFormat && isSeatedBookingFormat(bookingFormat) ? "seats" : "tickets";
   const paidTotal = isPaidBooking && ticketPrice != null ? ticketPrice * ticketCount : null;
+  const requiresTurnstileToken =
+    process.env.NODE_ENV === "production" && Boolean(process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY);
+
+  function resetTurnstile() {
+    setTurnstileToken("");
+    setTurnstileKey((key) => key + 1);
+  }
 
   if (isSoldOut) {
     return (
@@ -111,8 +120,17 @@ export function BookingForm({
     setLoading(true);
 
     // Read Turnstile token injected by the widget into the hidden input
-    const turnstileToken =
-      (formRef.current?.querySelector<HTMLInputElement>('[name="cf-turnstile-response"]')?.value) || "";
+    const token =
+      turnstileToken ||
+      (formRef.current?.querySelector<HTMLInputElement>('[name="cf-turnstile-response"]')?.value) ||
+      "";
+
+    if (requiresTurnstileToken && !token) {
+      setLoading(false);
+      setError("Security check expired. Please try again.");
+      resetTurnstile();
+      return;
+    }
 
     const input: CreateBookingInput = {
       eventId,
@@ -123,7 +141,7 @@ export function BookingForm({
       customerNotes: bookingNotesEnabled ? customerNotes.trim() || null : null,
       ticketCount,
       marketingOptIn,
-      turnstileToken,
+      turnstileToken: token,
     };
 
     if (isPaidBooking) {
@@ -151,6 +169,7 @@ export function BookingForm({
         if (!result.success) {
           setLoading(false);
           setError(paidBookingErrorMessage(result.error));
+          resetTurnstile();
           return;
         }
 
@@ -159,6 +178,7 @@ export function BookingForm({
       } catch {
         setLoading(false);
         setError("Payment could not be started. Please try again.");
+        resetTurnstile();
         return;
       }
     }
@@ -191,6 +211,7 @@ export function BookingForm({
       } else {
         setError(result.error || "Something went wrong. Please try again.");
       }
+      resetTurnstile();
       return;
     }
 
@@ -494,7 +515,7 @@ export function BookingForm({
         </p>
 
         <div className="max-w-full overflow-hidden">
-          <TurnstileWidget action="booking" nonce={nonce} />
+          <TurnstileWidget key={turnstileKey} action="booking" nonce={nonce} onTokenChange={setTurnstileToken} />
         </div>
 
         <div className="mobile-actionbar sm:block">
@@ -512,7 +533,13 @@ export function BookingForm({
           </div>
           <button
             type="submit"
-            disabled={loading || !firstName.trim() || !mobile.trim() || (isPaidBooking && !email.trim())}
+            disabled={
+              loading ||
+              !firstName.trim() ||
+              !mobile.trim() ||
+              (isPaidBooking && !email.trim()) ||
+              (requiresTurnstileToken && !turnstileToken)
+            }
             className="inline-flex min-h-12 items-center justify-center rounded-[11px] bg-[var(--navy)] px-5 text-sm font-bold text-white disabled:opacity-50 sm:w-full sm:bg-[var(--mustard)] sm:py-3 sm:uppercase sm:tracking-wider sm:hover:bg-[var(--mustard-dark)]"
           >
             {loading ? (isPaidBooking ? "Opening checkout…" : "Submitting…") : ctaLabel}

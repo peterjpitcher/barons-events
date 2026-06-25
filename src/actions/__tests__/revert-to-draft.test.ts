@@ -6,6 +6,7 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 const redirectError = new Error('NEXT_REDIRECT');
 vi.mock('next/navigation', () => ({ redirect: vi.fn(() => { throw redirectError; }) }));
 vi.mock('@/lib/supabase/server', () => ({ createSupabaseActionClient: vi.fn() }));
+vi.mock('@/lib/supabase/admin', () => ({ createSupabaseAdminClient: vi.fn() }));
 vi.mock('@/lib/auth', () => ({ getCurrentUser: vi.fn() }));
 vi.mock('@/lib/audit-log', () => ({ recordAuditLogEntry: vi.fn() }));
 vi.mock('@/lib/roles', async (importOriginal) => {
@@ -15,6 +16,7 @@ vi.mock('@/lib/roles', async (importOriginal) => {
 
 import { revertToDraftAction } from '@/actions/events';
 import { createSupabaseActionClient } from '@/lib/supabase/server';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { getCurrentUser } from '@/lib/auth';
 import { recordAuditLogEntry } from '@/lib/audit-log';
 import { revalidatePath } from 'next/cache';
@@ -104,13 +106,15 @@ describe('revertToDraftAction', () => {
   it('sets status to draft and clears assignee for an approved event', async () => {
     (getCurrentUser as Mock).mockResolvedValue(makeUser());
     const db = makeDb({ id: '00000000-0000-0000-0000-000000000001', status: 'approved' });
+    const adminDb = makeDb(null);
     (createSupabaseActionClient as Mock).mockResolvedValue(db);
+    (createSupabaseAdminClient as Mock).mockReturnValue(adminDb);
     const result = await revertToDraftAction(undefined, makeFormData('00000000-0000-0000-0000-000000000001'));
     expect(result.success).toBe(true);
     expect(db.from).toHaveBeenCalledWith('events');
-    expect(db._mockEqUpdate).toHaveBeenCalledWith('id', '00000000-0000-0000-0000-000000000001');
+    expect(adminDb._mockEqUpdate).toHaveBeenCalledWith('id', '00000000-0000-0000-0000-000000000001');
     // Verify the update payload includes status: 'draft' and assignee_id: null
-    expect(db.update).toHaveBeenCalledWith(
+    expect(adminDb.update).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'draft', assignee_id: null })
     );
   });
@@ -118,10 +122,12 @@ describe('revertToDraftAction', () => {
   it('sets status to draft for a rejected event', async () => {
     (getCurrentUser as Mock).mockResolvedValue(makeUser());
     const db = makeDb({ id: '00000000-0000-0000-0000-000000000001', status: 'rejected' });
+    const adminDb = makeDb(null);
     (createSupabaseActionClient as Mock).mockResolvedValue(db);
+    (createSupabaseAdminClient as Mock).mockReturnValue(adminDb);
     const result = await revertToDraftAction(undefined, makeFormData('00000000-0000-0000-0000-000000000001'));
     expect(result.success).toBe(true);
-    expect(db.update).toHaveBeenCalledWith(
+    expect(adminDb.update).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'draft', assignee_id: null })
     );
     expect(recordAuditLogEntry).toHaveBeenCalledWith(
@@ -136,7 +142,9 @@ describe('revertToDraftAction', () => {
   it('writes an audit log entry with correct schema', async () => {
     (getCurrentUser as Mock).mockResolvedValue(makeUser());
     const db = makeDb({ id: '00000000-0000-0000-0000-000000000001', status: 'approved' });
+    const adminDb = makeDb(null);
     (createSupabaseActionClient as Mock).mockResolvedValue(db);
+    (createSupabaseAdminClient as Mock).mockReturnValue(adminDb);
     await revertToDraftAction(undefined, makeFormData('00000000-0000-0000-0000-000000000001'));
     expect(recordAuditLogEntry).toHaveBeenCalledWith({
       entity: 'event',
@@ -153,7 +161,9 @@ describe('revertToDraftAction', () => {
   it('revalidates events, event detail, and reviews paths', async () => {
     (getCurrentUser as Mock).mockResolvedValue(makeUser());
     const db = makeDb({ id: '00000000-0000-0000-0000-000000000001', status: 'approved' });
+    const adminDb = makeDb(null);
     (createSupabaseActionClient as Mock).mockResolvedValue(db);
+    (createSupabaseAdminClient as Mock).mockReturnValue(adminDb);
     await revertToDraftAction(undefined, makeFormData('00000000-0000-0000-0000-000000000001'));
     expect(revalidatePath).toHaveBeenCalledWith('/events/00000000-0000-0000-0000-000000000001');
     expect(revalidatePath).toHaveBeenCalledWith('/events');
@@ -164,9 +174,11 @@ describe('revertToDraftAction', () => {
     (getCurrentUser as Mock).mockResolvedValue(makeUser());
     const db = makeDb(
       { id: '00000000-0000-0000-0000-000000000001', status: 'approved' },
-      { message: 'db error' }
+      { message: 'fallback db error' }
     );
+    const adminDb = makeDb(null, { message: 'admin db error' });
     (createSupabaseActionClient as Mock).mockResolvedValue(db);
+    (createSupabaseAdminClient as Mock).mockReturnValue(adminDb);
     const result = await revertToDraftAction(undefined, makeFormData('00000000-0000-0000-0000-000000000001'));
     expect(result.success).toBe(false);
   });

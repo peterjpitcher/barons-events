@@ -1,6 +1,8 @@
 import "server-only";
 import twilio from "twilio";
 
+export const TWILIO_REQUEST_TIMEOUT_MS = 8_000;
+
 // ── Twilio client ────────────────────────────────────────────────────────────
 
 function getTwilioClient() {
@@ -9,7 +11,7 @@ function getTwilioClient() {
   if (!accountSid || !authToken) {
     throw new Error("Twilio credentials not configured");
   }
-  return twilio(accountSid, authToken);
+  return twilio(accountSid, authToken, { timeout: TWILIO_REQUEST_TIMEOUT_MS });
 }
 
 function getFromNumber(): string {

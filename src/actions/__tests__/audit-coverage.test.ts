@@ -22,6 +22,14 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const ACTIONS_DIR = join(__dirname, "..");
 const API_DIR = join(__dirname, "..", "..", "app", "api");
+const PROJECT_ROOT = join(__dirname, "..", "..", "..");
+const SRC_DIR = join(PROJECT_ROOT, "src");
+const LATEST_AUDIT_ALLOWLIST_MIGRATION = join(
+  PROJECT_ROOT,
+  "supabase",
+  "migrations",
+  "20260625200000_fix_audit_action_allowlist.sql"
+);
 
 // Set of `<file>.ts:<functionName>` entries that are intentionally exempt.
 // Add with a one-line reason; remove when the underlying gap is closed.
@@ -39,7 +47,7 @@ const AUDIT_COVERAGE_ALLOWLIST = new Set<string>([
 
 const MUTATION_PATTERN = /\.(insert|update|delete|upsert|rpc)\s*\(/;
 const DIRECT_WRITE_PATTERN = /\.(insert|update|delete|upsert)\s*\(/;
-const AUDIT_PATTERN = /(recordAuditLogEntry|logAuthEvent)\s*\(/;
+const AUDIT_PATTERN = /(recordAuditLogEntry|recordSystemAuditLogEntry|logAuthEvent)\s*\(/;
 const SYSTEM_AUDIT_PATTERN = /(recordAuditLogEntry|recordSystemAuditLogEntry|from\(["']audit_log["']\)\.insert)\s*\(?/;
 
 type FunctionBlock = {
@@ -93,8 +101,12 @@ function listFilesRecursive(dir: string): string[] {
   return readdirSync(dir).flatMap((entry) => {
     const full = join(dir, entry);
     if (statSync(full).isDirectory()) return listFilesRecursive(full);
-    return full.endsWith(".ts") ? [full] : [];
+    return full.endsWith(".ts") || full.endsWith(".tsx") ? [full] : [];
   });
+}
+
+function extractLiteralAuditActions(source: string): string[] {
+  return Array.from(source.matchAll(/action:\s*["'`]([a-z_]+\.[a-z_]+)["'`]/g)).map((match) => match[1]);
 }
 
 describe("audit coverage guard (Wave 0.4)", () => {
@@ -159,5 +171,32 @@ describe("event action audit failure guard", () => {
   it("does not silently swallow audit failures in events.ts", () => {
     const source = readFileSync(join(ACTIONS_DIR, "events.ts"), "utf8");
     expect(source).not.toMatch(/\.catch\(\s*\(\)\s*=>\s*\{\s*\}\s*\)/);
+  });
+});
+
+describe("audit action allowlist drift guard", () => {
+  it("allows every literal audit action emitted by source files", () => {
+    const allowedActions = new Set(
+      Array.from(readFileSync(LATEST_AUDIT_ALLOWLIST_MIGRATION, "utf8").matchAll(/'([a-z_]+\.[a-z_]+)'/g))
+        .map((match) => match[1])
+    );
+    const usedActions = new Map<string, Set<string>>();
+
+    for (const path of listFilesRecursive(SRC_DIR)) {
+      if (path.includes("__tests__") || path.endsWith(".test.ts") || path.endsWith(".test.tsx")) continue;
+
+      const relativePath = path.replace(`${PROJECT_ROOT}/`, "");
+      const source = readFileSync(path, "utf8");
+      for (const action of extractLiteralAuditActions(source)) {
+        if (!usedActions.has(action)) usedActions.set(action, new Set());
+        usedActions.get(action)?.add(relativePath);
+      }
+    }
+
+    const missing = Array.from(usedActions)
+      .filter(([action]) => !allowedActions.has(action))
+      .map(([action, paths]) => `${action} (${Array.from(paths).join(", ")})`);
+
+    expect(missing).toEqual([]);
   });
 });

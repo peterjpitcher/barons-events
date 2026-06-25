@@ -5,7 +5,7 @@ import type Stripe from "stripe";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createPaidBookingAtomic } from "@/lib/bookings";
 import { upsertCustomerForBooking, linkBookingToCustomer } from "@/lib/customers";
-import { sendBookingConfirmationSms } from "@/lib/sms";
+import { logSafeSmsFailure, sendBookingConfirmationSms } from "@/lib/sms";
 import {
   sendBookingPaymentConfirmationEmail,
   sendBookingRefundEmail,
@@ -617,23 +617,21 @@ export async function fulfillCheckoutSession(sessionId: string): Promise<{
     actorId: null,
   });
 
-  const [smsResult, emailResult] = await Promise.allSettled([
-    sendBookingConfirmationSms(transaction.booking_id),
-    sendBookingPaymentConfirmationEmail({
-      bookingId: transaction.booking_id,
-      amountPence: transaction.amount_pence,
-      currency: transaction.currency,
-    }),
-  ]);
+  sendBookingConfirmationSms(transaction.booking_id).catch((error) => {
+    logSafeSmsFailure("paid_booking_confirmation", error, { bookingId: transaction.booking_id });
+  });
 
-  if (smsResult.status === "rejected") {
-    console.warn("Paid booking confirmation SMS failed:", smsResult.reason);
-  }
-  if (emailResult.status === "rejected" || emailResult.value === false) {
-    console.warn(
-      "Paid booking confirmation email failed:",
-      emailResult.status === "rejected" ? emailResult.reason : "email_not_sent"
-    );
+  const emailSent = await sendBookingPaymentConfirmationEmail({
+    bookingId: transaction.booking_id,
+    amountPence: transaction.amount_pence,
+    currency: transaction.currency,
+  }).catch((reason: unknown) => {
+    console.warn("Paid booking confirmation email failed:", reason);
+    return null;
+  });
+
+  if (emailSent === false) {
+    console.warn("Paid booking confirmation email failed:", "email_not_sent");
   }
 
   return {

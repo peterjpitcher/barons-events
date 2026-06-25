@@ -6,6 +6,7 @@ vi.mock("@/lib/bookings", () => ({
   cancelBooking: vi.fn(),
 }));
 vi.mock("@/lib/sms", () => ({
+  logSafeSmsFailure: vi.fn(),
   sendBookingConfirmationSms: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("@/lib/auth", () => ({
@@ -13,6 +14,7 @@ vi.mock("@/lib/auth", () => ({
 }));
 vi.mock("@/lib/audit-log", () => ({
   recordAuditLogEntry: vi.fn(),
+  recordSystemAuditLogEntry: vi.fn(),
 }));
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
@@ -39,6 +41,7 @@ import { createBookingAction, updateExistingBookingAction, cancelBookingAction }
 import { createBookingAtomic, cancelBooking } from "@/lib/bookings";
 import { getCurrentUser } from "@/lib/auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { recordSystemAuditLogEntry } from "@/lib/audit-log";
 import { verifyTurnstile } from "@/lib/turnstile";
 import { checkBookingRateLimit } from "@/lib/public-api/rate-limit";
 
@@ -46,6 +49,7 @@ const mockCreateBookingAtomic = vi.mocked(createBookingAtomic);
 const mockCancelBooking = vi.mocked(cancelBooking);
 const mockGetCurrentUser = vi.mocked(getCurrentUser);
 const mockCreateSupabaseAdminClient = vi.mocked(createSupabaseAdminClient);
+const mockRecordSystemAuditLogEntry = vi.mocked(recordSystemAuditLogEntry);
 const mockVerifyTurnstile = vi.mocked(verifyTurnstile);
 const mockCheckBookingRateLimit = vi.mocked(checkBookingRateLimit);
 
@@ -155,6 +159,13 @@ describe("createBookingAction", () => {
     });
     expect(result.success).toBe(true);
     if (result.success) expect(result.bookingId).toBe("booking-uuid");
+    expect(mockRecordSystemAuditLogEntry).toHaveBeenCalledWith({
+      entity: "event",
+      entityId: VALID_INPUT.eventId,
+      action: "booking.created",
+      meta: { booking_id: "booking-uuid", ticket_count: 1 },
+      actorId: null,
+    });
   });
 
   it("should normalise a UK mobile number without +44 prefix", async () => {
@@ -440,6 +451,17 @@ describe("updateExistingBookingAction", () => {
 
     expect(result.success).toBe(true);
     expect(updateEq).toHaveBeenCalledWith("id", "22222222-2222-4222-8222-222222222222");
+    expect(mockRecordSystemAuditLogEntry).toHaveBeenCalledWith({
+      entity: "event",
+      entityId: VALID_INPUT.eventId,
+      action: "booking.updated",
+      meta: {
+        booking_id: "22222222-2222-4222-8222-222222222222",
+        previous_ticket_count: 1,
+        new_ticket_count: 4,
+      },
+      actorId: null,
+    });
   });
 
   it("updates the booking when the signed token matches", async () => {

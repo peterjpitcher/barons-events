@@ -56,9 +56,20 @@ export const getCurrentUser = cache(async function getCurrentUser(): Promise<App
   }
 
   // Always validate the session server-side — never trust client-injectable headers.
+  let authUserResult: Awaited<ReturnType<typeof supabase.auth.getUser>>;
+  try {
+    authUserResult = await supabase.auth.getUser();
+  } catch {
+    return null;
+  }
+
   const {
-    data: { user }
-  } = await supabase.auth.getUser();
+    data: { user },
+    error: authError
+  } = authUserResult;
+  if (authError) {
+    return null;
+  }
   if (!user) {
     return null;
   }

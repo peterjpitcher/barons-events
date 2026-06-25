@@ -12,6 +12,10 @@ export async function verifyTurnstile(
   action: string,
   mode: "strict" | "lenient" = "lenient",
 ): Promise<boolean> {
+  if (process.env.NODE_ENV !== "production") {
+    return true;
+  }
+
   if (!token) {
     if (mode === "strict") {
       console.warn(`[turnstile] No token received for action="${action}" — rejecting (strict). Widget may not have loaded.`);

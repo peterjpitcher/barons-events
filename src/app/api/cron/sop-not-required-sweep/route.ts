@@ -1,7 +1,7 @@
 import "server-only";
 import { NextResponse } from "next/server";
 import { verifyCronSecret } from "@/lib/cron-auth";
-import { recordAuditLogEntry } from "@/lib/audit-log";
+import { recordSystemAuditLogEntry } from "@/lib/audit-log";
 import { getTodayLondonIsoDate } from "@/lib/datetime";
 import { markPastEventOpenTodosNotRequired } from "@/lib/planning/sop";
 
@@ -28,7 +28,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   }
 
   for (const task of result.tasks) {
-    await recordAuditLogEntry({
+    await recordSystemAuditLogEntry({
       entity: "planning_task",
       entityId: task.id,
       action: "planning_task.auto_not_required",

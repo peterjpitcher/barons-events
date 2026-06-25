@@ -98,6 +98,13 @@ describe("verifyTurnstile", () => {
   });
 
   describe("strict mode in development", () => {
+    it("should return true when no token is provided in non-production", async () => {
+      vi.stubEnv("NODE_ENV", "development");
+      const result = await verifyTurnstile(null, "booking", "strict");
+      expect(result).toBe(true);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
     it("should return true when secret key is missing in non-production", async () => {
       vi.stubEnv("TURNSTILE_SECRET_KEY", "");
       vi.stubEnv("NODE_ENV", "development");

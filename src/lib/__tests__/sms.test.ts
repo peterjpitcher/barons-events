@@ -174,3 +174,31 @@ describe("sendBookingConfirmationSms", () => {
     await expect(sendBookingConfirmationSms("missing-booking")).resolves.not.toThrow();
   });
 });
+
+describe("SMS error logging", () => {
+  it("strips provider request details from logged errors", async () => {
+    const { toSafeSmsError } = await import("../sms");
+    const error = Object.assign(new Error("timeout of 30000ms exceeded"), {
+      code: "ECONNABORTED",
+      config: {
+        headers: {
+          Authorization: "Basic secret",
+        },
+      },
+      response: {
+        status: 504,
+      },
+    });
+
+    const safeError = toSafeSmsError(error);
+
+    expect(safeError).toEqual({
+      name: "Error",
+      message: "timeout of 30000ms exceeded",
+      code: "ECONNABORTED",
+      status: 504,
+    });
+    expect(JSON.stringify(safeError)).not.toContain("Authorization");
+    expect(JSON.stringify(safeError)).not.toContain("Basic secret");
+  });
+});

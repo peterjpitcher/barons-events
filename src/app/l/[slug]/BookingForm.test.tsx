@@ -5,13 +5,20 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createBookingAction, updateExistingBookingAction } from "@/actions/bookings";
 import { BookingForm } from "./BookingForm";
 
+const turnstileMockState = vi.hoisted(() => ({ token: "test-token" }));
+
 vi.mock("@/actions/bookings", () => ({
   createBookingAction: vi.fn(),
   updateExistingBookingAction: vi.fn()
 }));
 
 vi.mock("@/components/turnstile-widget", () => ({
-  TurnstileWidget: () => <input type="hidden" name="cf-turnstile-response" value="test-token" readOnly />
+  TurnstileWidget: ({ onTokenChange }: { onTokenChange?: (token: string) => void }) => (
+    <>
+      <input type="hidden" name="cf-turnstile-response" value={turnstileMockState.token} readOnly />
+      <button type="button" onClick={() => onTokenChange?.("test-token")}>Mock Turnstile token</button>
+    </>
+  )
 }));
 
 const mockCreateBookingAction = vi.mocked(createBookingAction);
@@ -21,6 +28,8 @@ describe("BookingForm booking-format copy", () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
+    turnstileMockState.token = "test-token";
   });
 
   it("uses seats copy for seated formats", () => {
@@ -55,6 +64,35 @@ describe("BookingForm booking-format copy", () => {
     expect(screen.getByRole("heading", { name: "Reserve your tickets" })).toBeTruthy();
     expect(screen.getByText("How many tickets?")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Reserve your tickets" })).toBeTruthy();
+  });
+
+  it("disables submit until a Turnstile token exists when Turnstile is configured", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_TURNSTILE_SITE_KEY", "site-key");
+    turnstileMockState.token = "";
+
+    render(
+      <BookingForm
+        eventId="11111111-1111-4111-8111-111111111111"
+        maxTickets={10}
+        isSoldOut={false}
+        bookingType="free_standing"
+        isPaidBooking={false}
+        ticketPrice={null}
+      />
+    );
+
+    fireEvent.change(screen.getByPlaceholderText("First name *"), { target: { value: "Jane" } });
+    fireEvent.change(screen.getByPlaceholderText("Mobile number *"), { target: { value: "07911123456" } });
+
+    const submitButton = screen.getByRole("button", { name: "Book your tickets" });
+    expect((submitButton as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Mock Turnstile token" }));
+
+    await waitFor(() => {
+      expect((submitButton as HTMLButtonElement).disabled).toBe(false);
+    });
   });
 
   it("lets customers amend the total for an existing booking", async () => {

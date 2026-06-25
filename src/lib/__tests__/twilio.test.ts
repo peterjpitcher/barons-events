@@ -2,8 +2,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // Mock the twilio module before import
 const mockCreate = vi.fn();
+const mockTwilio = vi.fn(() => ({ messages: { create: mockCreate } }));
 vi.mock("twilio", () => ({
-  default: () => ({ messages: { create: mockCreate } }),
+  default: mockTwilio,
 }));
 
 describe("sendTwilioSms", () => {
@@ -20,6 +21,7 @@ describe("sendTwilioSms", () => {
     const { sendTwilioSms } = await import("@/lib/twilio");
     const result = await sendTwilioSms({ to: "+447777777777", body: "Hello" });
 
+    expect(mockTwilio).toHaveBeenCalledWith("AC_test", "test_token", { timeout: 8000 });
     expect(mockCreate).toHaveBeenCalledWith({
       to: "+447777777777",
       from: "+447000000000",

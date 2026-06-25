@@ -31,7 +31,7 @@ vi.mock("@/lib/customers", () => ({
   linkBookingToCustomer: vi.fn(),
 }));
 vi.mock("@/lib/audit-log", () => ({ recordSystemAuditLogEntry: mocks.recordSystemAuditLogEntry }));
-vi.mock("@/lib/sms", () => ({ sendBookingConfirmationSms: vi.fn() }));
+vi.mock("@/lib/sms", () => ({ logSafeSmsFailure: vi.fn(), sendBookingConfirmationSms: vi.fn() }));
 vi.mock("@/lib/notifications", () => ({
   sendBookingPaymentConfirmationEmail: vi.fn(),
   sendBookingRefundEmail: mocks.sendBookingRefundEmail,

@@ -7,6 +7,7 @@ type TurnstileWidgetProps = {
   action: string;
   /** CSP nonce — pass from server component to ensure the injected script is trusted */
   nonce?: string;
+  onTokenChange?: (token: string) => void;
 };
 
 /**
@@ -21,22 +22,27 @@ type TurnstileWidgetProps = {
  * tag carries the nonce for belt-and-suspenders CSP compliance alongside
  * strict-dynamic trust propagation.
  */
-export function TurnstileWidget({ action, nonce }: TurnstileWidgetProps) {
+export function TurnstileWidget({ action, nonce, onTokenChange }: TurnstileWidgetProps) {
   const ref = useRef<TurnstileInstance | null>(null);
   const [token, setToken] = useState("");
   const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 
+  const updateToken = useCallback((nextToken: string) => {
+    setToken(nextToken);
+    onTokenChange?.(nextToken);
+  }, [onTokenChange]);
+
   const handleExpire = useCallback(() => {
-    setToken("");
+    updateToken("");
     ref.current?.reset();
-  }, []);
+  }, [updateToken]);
 
   const handleError = useCallback(() => {
-    setToken("");
-  }, []);
+    updateToken("");
+  }, [updateToken]);
 
-  if (!siteKey) {
-    // Dev fallback: no widget rendered, token will be null (handled by verifyTurnstile lenient/strict)
+  if (process.env.NODE_ENV !== "production" || !siteKey) {
+    // Local dev fallback: no widget rendered, token will be null (handled by verifyTurnstile)
     return null;
   }
 
@@ -56,7 +62,7 @@ export function TurnstileWidget({ action, nonce }: TurnstileWidgetProps) {
             appendTo: "body",
             nonce: nonce || "",
           }}
-          onSuccess={setToken}
+          onSuccess={updateToken}
           onExpire={handleExpire}
           onError={handleError}
         />

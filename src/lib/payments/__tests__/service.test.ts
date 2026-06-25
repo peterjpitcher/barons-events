@@ -37,6 +37,7 @@ vi.mock("@/lib/audit-log", () => ({
 }));
 
 vi.mock("@/lib/sms", () => ({
+  logSafeSmsFailure: vi.fn(),
   sendBookingConfirmationSms: vi.fn().mockResolvedValue(undefined),
 }));
 

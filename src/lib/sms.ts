@@ -5,6 +5,13 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { format } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
 
+type SafeSmsError = {
+  name: string;
+  message: string;
+  code?: string | number;
+  status?: number;
+};
+
 // ── Date formatting ───────────────────────────────────────────────────────────
 
 /**
@@ -16,6 +23,40 @@ export function formatEventDateTime(startAt: Date): { dayDate: string; time: str
   const dayDate = format(london, "EEEE d MMMM");
   const time = format(london, "h:mmaaa");
   return { dayDate, time };
+}
+
+export function toSafeSmsError(error: unknown): SafeSmsError {
+  if (error instanceof Error) {
+    const maybeError = error as Error & {
+      code?: string | number;
+      status?: number;
+      statusCode?: number;
+      response?: { status?: number };
+    };
+    return {
+      name: maybeError.name,
+      message: maybeError.message,
+      code: maybeError.code,
+      status: maybeError.status ?? maybeError.statusCode ?? maybeError.response?.status,
+    };
+  }
+
+  return {
+    name: "UnknownSmsError",
+    message: typeof error === "string" ? error : "Unknown SMS failure",
+  };
+}
+
+export function logSafeSmsFailure(
+  context: string,
+  error: unknown,
+  meta: Record<string, string | number | boolean | null | undefined> = {},
+): void {
+  console.warn("[sms] send failed", {
+    context,
+    error: toSafeSmsError(error),
+    ...meta,
+  });
 }
 
 // ── Public SMS functions ──────────────────────────────────────────────────────
