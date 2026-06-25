@@ -7,6 +7,7 @@ import { recordAuditLogEntry } from "@/lib/audit-log";
 import { parseVenueSpaces } from "@/lib/venue-spaces";
 import { generateSopChecklist } from "@/lib/planning/sop";
 import { canViewVenueLinkedResource } from "@/lib/visibility";
+import { generateUniqueEventSlug } from "@/lib/bookings";
 
 type EventRow = Database["public"]["Tables"]["events"]["Row"];
 type VenueRow = Database["public"]["Tables"]["venues"]["Row"];
@@ -886,6 +887,196 @@ export async function appendEventVersion(eventId: string, actorId: string, versi
   if (error) {
     throw new Error(`Could not log event version: ${error.message}`);
   }
+}
+
+export type EventBookingImpactBlocked = { id: string; name: string; reason: string };
+export type EventBookingImpactFree = {
+  id: string;
+  firstName: string;
+  lastName: string | null;
+  mobile: string;
+  email: string | null;
+  ticketCount: number;
+  customerNotes: string | null;
+};
+export type EventBookingImpact = {
+  confirmedBookings: number;
+  paid: Array<{ id: string; name: string; email: string | null; transactionId: string }>;
+  free: EventBookingImpactFree[];
+  blocked: EventBookingImpactBlocked[];
+  missingEmailCount: number;
+  refundTotalPence: number;
+  currency: string;
+};
+
+/**
+ * Categorise an event's confirmed bookings for the cancellation/reschedule flows:
+ * paid-refundable (completed payment), free (no payment required/failed), and
+ * blocked (pending/partial/inconsistent — must be resolved manually first). Single
+ * source of truth shared by the cancellation preview and the reschedule wizard.
+ */
+export async function getEventBookingImpact(eventId: string): Promise<EventBookingImpact> {
+  const db = createSupabaseAdminClient();
+  const { data, error } = await db
+    .from("event_bookings")
+    .select(
+      "id, first_name, last_name, mobile, email, ticket_count, customer_notes, payment_status, payment_transaction_id, payment_transaction:payment_transactions!event_bookings_payment_transaction_id_fkey(amount_pence, refunded_amount_pence, currency)"
+    )
+    .eq("event_id", eventId)
+    .eq("status", "confirmed");
+  if (error) throw new Error(`Could not load bookings: ${error.message}`);
+
+  type ImpactRow = {
+    id: string;
+    first_name: string;
+    last_name: string | null;
+    mobile: string;
+    email: string | null;
+    ticket_count: number;
+    customer_notes: string | null;
+    payment_status: string;
+    payment_transaction_id: string | null;
+    payment_transaction:
+      | { amount_pence: number; refunded_amount_pence: number | null; currency: string | null }
+      | { amount_pence: number; refunded_amount_pence: number | null; currency: string | null }[]
+      | null;
+  };
+  const rows = (data ?? []) as ImpactRow[];
+  const nameOf = (r: ImpactRow) => `${r.first_name}${r.last_name ? ` ${r.last_name}` : ""}`.trim();
+
+  const paid: EventBookingImpact["paid"] = [];
+  const free: EventBookingImpactFree[] = [];
+  const blocked: EventBookingImpactBlocked[] = [];
+  let missingEmailCount = 0;
+  let refundTotalPence = 0;
+  let currency = "gbp";
+
+  for (const row of rows) {
+    const tx = Array.isArray(row.payment_transaction) ? row.payment_transaction[0] : row.payment_transaction;
+    if (row.payment_status === "completed" && row.payment_transaction_id && tx) {
+      paid.push({ id: row.id, name: nameOf(row), email: row.email, transactionId: row.payment_transaction_id });
+      refundTotalPence += tx.amount_pence - (tx.refunded_amount_pence ?? 0);
+      currency = tx.currency ?? currency;
+      if (!row.email) missingEmailCount += 1;
+    } else if (row.payment_status === "not_required" || row.payment_status === "failed") {
+      free.push({
+        id: row.id,
+        firstName: row.first_name,
+        lastName: row.last_name,
+        mobile: row.mobile,
+        email: row.email,
+        ticketCount: row.ticket_count,
+        customerNotes: row.customer_notes,
+      });
+      if (!row.email) missingEmailCount += 1;
+    } else {
+      blocked.push({ id: row.id, name: nameOf(row), reason: `Payment status: ${row.payment_status}` });
+    }
+  }
+
+  return { confirmedBookings: rows.length, paid, free, blocked, missingEmailCount, refundTotalPence, currency };
+}
+
+const RESCHEDULE_CLONE_COLUMNS = [
+  "venue_id", "title", "event_type", "venue_space", "expected_headcount",
+  "wet_promo", "food_promo", "goal_focus", "notes", "cost_total", "cost_details",
+  "public_title", "public_description", "public_teaser", "public_highlights",
+  "seo_title", "seo_description", "booking_type", "ticket_price",
+  "terms_and_conditions", "check_in_cutoff_minutes", "age_policy",
+  "accessibility_notes", "cancellation_window_hours", "booking_enabled",
+  "total_capacity", "max_tickets_per_booking", "booking_notes_enabled",
+  "sms_promo_enabled", "assignee_id", "manager_responsible_id",
+  "event_image_path", "booking_url",
+] as const;
+
+/**
+ * Create a new approved event cloning an existing one onto a new date — used by the
+ * reschedule wizard. Copies descriptive/config fields (incl. price, capacity,
+ * booking settings, artwork, artists, owner/manager), generates a fresh unique slug,
+ * sets up the planning item + SOP checklist, and audits event.created with
+ * meta.rescheduled_from. Returns the new event id.
+ */
+export async function cloneEventForReschedule(
+  originalEventId: string,
+  newStartAt: string,
+  newEndAt: string,
+  actorId: string
+): Promise<string> {
+  const admin = createSupabaseAdminClient();
+
+  const { data: original, error: loadError } = await admin
+    .from("events")
+    .select("*")
+    .eq("id", originalEventId)
+    .single();
+  if (loadError || !original) {
+    throw new Error(`Could not load event to reschedule: ${loadError?.message ?? "not found"}`);
+  }
+  const source = original as Record<string, unknown>;
+
+  const insertPayload: Record<string, unknown> = {};
+  for (const col of RESCHEDULE_CLONE_COLUMNS) {
+    insertPayload[col] = source[col] ?? null;
+  }
+  insertPayload.status = "approved";
+  insertPayload.start_at = newStartAt;
+  insertPayload.end_at = newEndAt;
+  insertPayload.created_by = actorId;
+  insertPayload.seo_slug = await generateUniqueEventSlug(
+    (source.title as string) ?? "event",
+    new Date(newStartAt)
+  );
+
+  const { data: created, error: insertError } = await admin
+    .from("events")
+    .insert(insertPayload)
+    .select("id, venue_id")
+    .single();
+  if (insertError || !created) {
+    throw new Error(`Could not create rescheduled event: ${insertError?.message ?? "unknown"}`);
+  }
+  const newEventId = (created as { id: string }).id;
+  const venueId = (created as { venue_id: string | null }).venue_id;
+
+  // Copy the artist lineup directly (keeps the same billing order / roles).
+  const { data: artistLinks } = await admin
+    .from("event_artists")
+    .select("artist_id, billing_order, role_label")
+    .eq("event_id", originalEventId)
+    .order("billing_order", { ascending: true });
+  const links = (artistLinks ?? []) as Array<{ artist_id: string; billing_order: number; role_label: string | null }>;
+  if (links.length > 0) {
+    await admin.from("event_artists").insert(
+      links.map((link) => ({
+        event_id: newEventId,
+        artist_id: link.artist_id,
+        billing_order: link.billing_order,
+        role_label: link.role_label,
+        created_by: actorId,
+      }))
+    );
+  }
+
+  await appendEventVersion(newEventId, actorId, {
+    status: "approved",
+    start_at: newStartAt,
+    end_at: newEndAt,
+    rescheduled_from: originalEventId,
+  });
+
+  await ensureEventPlanningItem(newEventId, actorId, {
+    venueIds: venueId ? [venueId] : [],
+  });
+
+  await recordAuditLogEntry({
+    entity: "event",
+    entityId: newEventId,
+    action: "event.created",
+    actorId,
+    meta: { status: "approved", rescheduled_from: originalEventId },
+  });
+
+  return newEventId;
 }
 
 export async function recordApproval(params: {

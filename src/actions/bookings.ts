@@ -6,7 +6,7 @@ import { parsePhoneNumber, isValidPhoneNumber } from "libphonenumber-js";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { checkBookingRateLimit } from "@/lib/public-api/rate-limit";
-import { createBookingAtomic, cancelBooking } from "@/lib/bookings";
+import { createBookingAtomic, cancelBooking, getTransferTargetsForBooking, type TransferTarget } from "@/lib/bookings";
 import { getCurrentUser } from "@/lib/auth";
 import { recordAuditLogEntry } from "@/lib/audit-log";
 import { canManageBookings } from "@/lib/roles";
@@ -15,7 +15,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { upsertCustomerForBooking, linkBookingToCustomer } from "@/lib/customers";
 import { verifyTurnstile } from "@/lib/turnstile";
 import { isBookingFormat, isPaidBookingFormat, type BookingFormat } from "@/lib/booking-format";
-import { processRefund } from "@/lib/payments/service";
+import { processRefund, transferBooking } from "@/lib/payments/service";
 
 const BOOKING_UPDATE_TOKEN_TTL_MS = 10 * 60 * 1000;
 
@@ -570,5 +570,110 @@ export async function refundBookingAction(
   } catch (error) {
     console.error("refundBookingAction failed:", error);
     return { success: false, error: "Refund failed. Please check Stripe before retrying." };
+  }
+}
+
+const transferBookingSchema = z.object({
+  sourceBookingId: z.string().uuid(),
+  targetEventId: z.string().uuid(),
+  reason: z.string().max(500).optional().nullable(),
+});
+
+export type TransferBookingResult =
+  | { success: true; newBookingId: string; manualContactRequired: boolean }
+  | { success: false; error: string };
+
+/** Feature flag gating the booking-transfer flow (UI + server action). */
+function isBookingTransferEnabled(): boolean {
+  return process.env.BOOKING_TRANSFER_ENABLED === "true";
+}
+
+export async function transferBookingAction(
+  input: z.infer<typeof transferBookingSchema>
+): Promise<TransferBookingResult> {
+  const user = await getCurrentUser();
+  if (!user) {
+    return { success: false, error: "Unauthorized" };
+  }
+  if (user.role !== "administrator") {
+    return { success: false, error: "Only administrators can transfer bookings." };
+  }
+  if (!isBookingTransferEnabled()) {
+    return { success: false, error: "Booking transfers are not currently enabled." };
+  }
+
+  const parsed = transferBookingSchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0]?.message ?? "Invalid transfer request." };
+  }
+
+  // Derive the source event from the booking (never trust a caller-supplied event id).
+  const db = createSupabaseAdminClient();
+  const { data: bookingRow, error: bookingError } = await db
+    .from("event_bookings")
+    .select("event_id")
+    .eq("id", parsed.data.sourceBookingId)
+    .maybeSingle();
+  if (bookingError || !bookingRow) {
+    return { success: false, error: "Booking not found." };
+  }
+  const sourceEventId = (bookingRow as { event_id: string }).event_id;
+
+  try {
+    const result = await transferBooking({
+      sourceBookingId: parsed.data.sourceBookingId,
+      targetEventId: parsed.data.targetEventId,
+      adminUserId: user.id,
+      reason: parsed.data.reason ?? null,
+    });
+
+    if (!result.success) return result;
+
+    revalidatePath(`/events/${sourceEventId}/bookings`);
+    revalidatePath(`/events/${parsed.data.targetEventId}/bookings`);
+    revalidatePath(`/events/${sourceEventId}`);
+    revalidatePath(`/events/${parsed.data.targetEventId}`);
+    revalidatePath("/bookings");
+    return {
+      success: true,
+      newBookingId: result.newBookingId,
+      manualContactRequired: result.manualContactRequired,
+    };
+  } catch (error) {
+    console.error("transferBookingAction failed:", error);
+    return { success: false, error: "Transfer failed. Please try again." };
+  }
+}
+
+export type ListTransferTargetsResult =
+  | { success: true; targets: TransferTarget[] }
+  | { success: false; error: string };
+
+/** List the events a paid booking can be transferred to (admin-only, flag-gated). */
+export async function listTransferTargetsAction(
+  sourceBookingId: string
+): Promise<ListTransferTargetsResult> {
+  const user = await getCurrentUser();
+  if (!user) {
+    return { success: false, error: "Unauthorized" };
+  }
+  if (user.role !== "administrator") {
+    return { success: false, error: "Only administrators can transfer bookings." };
+  }
+  if (!isBookingTransferEnabled()) {
+    return { success: false, error: "Booking transfers are not currently enabled." };
+  }
+
+  const parsed = z.string().uuid().safeParse(sourceBookingId);
+  if (!parsed.success) {
+    return { success: false, error: "Invalid booking." };
+  }
+
+  try {
+    const targets = await getTransferTargetsForBooking(parsed.data);
+    return { success: true, targets };
+  } catch (error) {
+    console.error("listTransferTargetsAction failed:", error);
+    return { success: false, error: "Could not load transfer options." };
   }
 }

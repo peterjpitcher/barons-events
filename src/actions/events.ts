@@ -8,21 +8,22 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth";
 import { canReviewEvents, canProposeEvents, canEditEvent } from "@/lib/roles";
 import { loadEventEditContext } from "@/lib/events/edit-context";
-import { appendEventVersion, createEventDraft, createEventPlanningItem, ensureEventPlanningItem, recordApproval, softDeleteEvent, updateEventDraft, updateEventAssignee } from "@/lib/events";
+import { appendEventVersion, cloneEventForReschedule, createEventDraft, createEventPlanningItem, ensureEventPlanningItem, getEventBookingImpact, recordApproval, softDeleteEvent, updateEventDraft, updateEventAssignee } from "@/lib/events";
 import {
   buildSaveEventDraftPayload,
   callSaveEventDraftRpc,
   callSubmitEventForReviewRpc,
   type SaveEventDraftRpcResult
 } from "@/lib/events/save-rpc";
-import { generateUniqueEventSlug } from "@/lib/bookings";
+import { createBookingAtomic, cancelBooking, generateUniqueEventSlug } from "@/lib/bookings";
 import { cleanupOrphanArtists, parseArtistNames, syncEventArtists } from "@/lib/artists";
 import { eventDraftSchema, eventFormSchema, bookingUrlSchema } from "@/lib/validation";
 import { getFieldErrors } from "@/lib/form-errors";
 import type { ActionResult, EventStatus } from "@/lib/types";
 import type { Database } from "@/lib/supabase/database.types";
-import { sendAssigneeReassignmentEmail, sendEventSubmittedEmail, sendNewEventAnnouncementEmail, sendReviewDecisionEmail } from "@/lib/notifications";
+import { sendAssigneeReassignmentEmail, sendBookingTransferEmail, sendEventCancellationEmail, sendEventSubmittedEmail, sendNewEventAnnouncementEmail, sendReviewDecisionEmail } from "@/lib/notifications";
 import { recordAuditLogEntry } from "@/lib/audit-log";
+import { processRefund, transferBooking } from "@/lib/payments/service";
 import { generateTermsAndConditions, generateWebsiteCopy, type GeneratedWebsiteCopy } from "@/lib/ai";
 import { isBookingFormat, isFreeBookingFormat, type BookingFormat } from "@/lib/booking-format";
 import { normaliseEventDateTimeForStorage } from "@/lib/datetime";
@@ -2046,6 +2047,24 @@ export async function updateEventStatusAction(input: {
     };
   }
 
+  // Guard: cancelling an event with confirmed bookings must go through the
+  // cancellation cascade (cancelEventAction) so paid bookings are refunded and
+  // attendees are notified. This prevents silently stranding paying customers.
+  if (nextStatus === "cancelled") {
+    const { count: confirmedCount } = await supabase
+      .from("event_bookings")
+      .select("id", { count: "exact", head: true })
+      .eq("event_id", parsed.data.eventId)
+      .eq("status", "confirmed");
+    if ((confirmedCount ?? 0) > 0) {
+      return {
+        success: false,
+        message:
+          "This event has confirmed bookings. Use the cancel-event flow so paid bookings are refunded and attendees are notified."
+      };
+    }
+  }
+
   const { error: updateError } = await supabase
     .from("events")
     .update({ status: nextStatus })
@@ -2079,6 +2098,599 @@ export async function updateEventStatusAction(input: {
   revalidatePath("/");
 
   return { success: true, message: `Event marked ${nextStatus}.` };
+}
+
+const cancelEventSchema = z.object({
+  eventId: z.string().uuid(),
+  reason: z.string().max(500).optional().nullable()
+});
+
+/** A booking that needs human attention before/after a cancellation. */
+export type CancellationAttentionItem = {
+  bookingId: string;
+  name: string;
+  reason: string;
+};
+
+export type CancelEventCascadeResult = {
+  success: boolean;
+  message?: string;
+  /** "cancelled" when the event was cancelled; "blocked" when it could not be. */
+  status?: "cancelled" | "blocked";
+  refundedCount?: number;
+  refundFailedCount?: number;
+  unpaidCancelledCount?: number;
+  /** Bookings cancelled/refunded but needing manual contact (no email / email failed). */
+  manualContact?: CancellationAttentionItem[];
+  /** Bookings that blocked the cancellation (pending/partial payment, or failed refund). */
+  blocked?: CancellationAttentionItem[];
+};
+
+/** Feature flag gating the event-cancellation cascade (UI + server action). */
+function isEventCancellationCascadeEnabled(): boolean {
+  return process.env.EVENT_CANCELLATION_CASCADE_ENABLED === "true";
+}
+
+/**
+ * Cancel an event, resolving its confirmed bookings safely first. Retry-safe
+ * orchestration (Stripe refunds are external, so this is not one DB transaction):
+ *  - Bookings with pending/partial/inconsistent payment BLOCK the cancellation and
+ *    are returned for manual resolution (the event stays approved).
+ *  - Fully-paid bookings are refunded with a stable per-event idempotency key. If any
+ *    refund fails the event stays approved; successful refunds remain valid and a
+ *    retry skips them (their bookings are now cancelled) and re-attempts the rest.
+ *  - Unpaid/free bookings are cancelled and emailed; missing/failed email becomes a
+ *    manual-contact item.
+ *  - Only once no confirmed paid booking remains unresolved is the event marked
+ *    cancelled.
+ */
+export async function cancelEventAction(input: {
+  eventId: string;
+  reason?: string | null;
+}): Promise<CancelEventCascadeResult> {
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect("/login");
+  }
+  if (!canReviewEvents(user.role)) {
+    return { success: false, message: "Only administrators can cancel events." };
+  }
+  if (!isEventCancellationCascadeEnabled()) {
+    return { success: false, message: "Event cancellation is not currently enabled." };
+  }
+
+  const parsed = cancelEventSchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, message: "Invalid cancellation request." };
+  }
+  const { eventId } = parsed.data;
+  const reason = parsed.data.reason ?? null;
+
+  const supabase = createSupabaseAdminClient();
+
+  const { data: eventRow, error: eventError } = await supabase
+    .from("events")
+    .select("id,status,deleted_at")
+    .eq("id", eventId)
+    .maybeSingle();
+  if (eventError) {
+    return { success: false, message: `Could not load event: ${eventError.message}` };
+  }
+  const event = eventRow as { id: string; status: string; deleted_at: string | null } | null;
+  if (!event || event.deleted_at) {
+    return { success: false, message: "Event not found." };
+  }
+  if (event.status === "cancelled") {
+    return { success: true, status: "cancelled", message: "This event is already cancelled." };
+  }
+  if (event.status !== "approved") {
+    return { success: false, message: "Only approved events can be cancelled." };
+  }
+
+  await recordAuditLogEntry({
+    entity: "event",
+    entityId: eventId,
+    action: "event.cancellation_requested",
+    actorId: user.id,
+    meta: { reason }
+  });
+
+  const { data: bookingRows, error: bookingsError } = await supabase
+    .from("event_bookings")
+    .select("id, first_name, last_name, email, payment_status, payment_transaction_id")
+    .eq("event_id", eventId)
+    .eq("status", "confirmed");
+  if (bookingsError) {
+    return { success: false, message: `Could not load bookings: ${bookingsError.message}` };
+  }
+
+  type ConfirmedBooking = {
+    id: string;
+    first_name: string;
+    last_name: string | null;
+    email: string | null;
+    payment_status: string;
+    payment_transaction_id: string | null;
+  };
+  const bookings = (bookingRows ?? []) as ConfirmedBooking[];
+  const nameOf = (b: ConfirmedBooking) => `${b.first_name}${b.last_name ? ` ${b.last_name}` : ""}`.trim();
+
+  const paidRefundable: ConfirmedBooking[] = [];
+  const unpaidFree: ConfirmedBooking[] = [];
+  const blocked: CancellationAttentionItem[] = [];
+  for (const b of bookings) {
+    if (b.payment_status === "completed" && b.payment_transaction_id) {
+      paidRefundable.push(b);
+    } else if (b.payment_status === "not_required" || b.payment_status === "failed") {
+      unpaidFree.push(b);
+    } else {
+      blocked.push({
+        bookingId: b.id,
+        name: nameOf(b),
+        reason: `Needs manual resolution (payment status: ${b.payment_status}).`
+      });
+    }
+  }
+
+  // Blocked/manual bookings stop the cancellation entirely — resolve them first.
+  if (blocked.length > 0) {
+    await recordAuditLogEntry({
+      entity: "event",
+      entityId: eventId,
+      action: "event.cancellation_failed",
+      actorId: user.id,
+      meta: { reason: "blocked_bookings", blocked_count: blocked.length }
+    });
+    return {
+      success: false,
+      status: "blocked",
+      message: `${blocked.length} booking(s) need manual resolution (pending or partial payment) before this event can be cancelled.`,
+      blocked
+    };
+  }
+
+  // Refund paid bookings using a stable per-event idempotency key (retry-safe).
+  let refundedCount = 0;
+  const refundFailures: CancellationAttentionItem[] = [];
+  for (const b of paidRefundable) {
+    const transactionId = b.payment_transaction_id;
+    if (!transactionId) continue;
+    const refund = await processRefund({
+      transactionId,
+      amountPence: null,
+      reason: reason ?? "Event cancelled",
+      adminUserId: user.id,
+      idempotencyKey: `event_cancel:${eventId}:${transactionId}`
+    });
+    if (refund.success) {
+      refundedCount += 1;
+    } else {
+      refundFailures.push({ bookingId: b.id, name: nameOf(b), reason: `Refund failed: ${refund.error}.` });
+    }
+  }
+
+  // A failed refund stops the cancellation; the event stays approved so a retry
+  // (which skips the now-cancelled refunded bookings) can finish the job.
+  if (refundFailures.length > 0) {
+    await recordAuditLogEntry({
+      entity: "event",
+      entityId: eventId,
+      action: "event.cancellation_failed",
+      actorId: user.id,
+      meta: { reason: "refund_failures", refunded_count: refundedCount, failed_count: refundFailures.length }
+    });
+    return {
+      success: false,
+      status: "blocked",
+      message: `Refunded ${refundedCount} booking(s); ${refundFailures.length} refund(s) failed. The event is still active — resolve and retry.`,
+      refundedCount,
+      refundFailedCount: refundFailures.length,
+      blocked: refundFailures
+    };
+  }
+
+  // Cancel unpaid/free bookings and email those with an address on file.
+  let unpaidCancelledCount = 0;
+  const manualContact: CancellationAttentionItem[] = [];
+  for (const b of unpaidFree) {
+    const { error: cancelError } = await supabase
+      .from("event_bookings")
+      .update({ status: "cancelled" })
+      .eq("id", b.id);
+    if (cancelError) {
+      manualContact.push({ bookingId: b.id, name: nameOf(b), reason: "Could not cancel booking automatically." });
+      continue;
+    }
+    unpaidCancelledCount += 1;
+    await recordAuditLogEntry({
+      entity: "event",
+      entityId: eventId,
+      action: "booking.cancelled",
+      actorId: user.id,
+      meta: { booking_id: b.id, reason: "event_cancelled" }
+    });
+    if (b.email) {
+      const sent = await sendEventCancellationEmail({ bookingId: b.id, reason }).catch(() => false);
+      if (!sent) {
+        manualContact.push({ bookingId: b.id, name: nameOf(b), reason: "Cancellation email could not be sent." });
+      }
+    } else {
+      manualContact.push({ bookingId: b.id, name: nameOf(b), reason: "No email address on file." });
+    }
+  }
+
+  // Invariant guard (defense in depth): never mark the event cancelled while any
+  // confirmed booking still has an unresolved paid status. Catches the rare case
+  // where a refund reported success but failed to advance the booking row — the
+  // event stays approved so a retry can finish, rather than stranding a paid guest.
+  const { data: lingering } = await supabase
+    .from("event_bookings")
+    .select("id")
+    .eq("event_id", eventId)
+    .eq("status", "confirmed")
+    .in("payment_status", ["completed", "pending", "partially_refunded"]);
+  if (lingering && lingering.length > 0) {
+    await recordAuditLogEntry({
+      entity: "event",
+      entityId: eventId,
+      action: "event.cancellation_failed",
+      actorId: user.id,
+      meta: { reason: "unresolved_paid_bookings", count: lingering.length }
+    });
+    return {
+      success: false,
+      status: "blocked",
+      message: "Some paid bookings did not fully resolve. The event remains active — please retry.",
+      refundedCount,
+      unpaidCancelledCount
+    };
+  }
+
+  // No confirmed paid booking remains unresolved → mark the event cancelled.
+  const { error: updateError } = await supabase
+    .from("events")
+    .update({ status: "cancelled" })
+    .eq("id", eventId)
+    .eq("status", "approved");
+  if (updateError) {
+    return {
+      success: false,
+      message: `Bookings were resolved, but the event could not be marked cancelled: ${updateError.message}`,
+      refundedCount,
+      unpaidCancelledCount,
+      manualContact
+    };
+  }
+
+  await recordAuditLogEntry({
+    entity: "event",
+    entityId: eventId,
+    action: "event.cancelled",
+    actorId: user.id,
+    meta: { status: "cancelled", previousStatus: "approved", changes: ["Status"] }
+  });
+  await recordAuditLogEntry({
+    entity: "event",
+    entityId: eventId,
+    action: "event.cancelled_with_cascade",
+    actorId: user.id,
+    meta: {
+      refunded_count: refundedCount,
+      unpaid_cancelled_count: unpaidCancelledCount,
+      manual_contact_count: manualContact.length
+    }
+  });
+  await appendEventVersion(eventId, user.id, { status: "cancelled", previousStatus: "approved" });
+
+  revalidatePath(`/events/${eventId}`);
+  revalidatePath(`/events/${eventId}/bookings`);
+  revalidatePath("/events");
+  revalidatePath("/planning");
+  revalidatePath("/");
+
+  return {
+    success: true,
+    status: "cancelled",
+    message: `Event cancelled. Refunded ${refundedCount} paid booking(s) and cancelled ${unpaidCancelledCount} free booking(s).`,
+    refundedCount,
+    refundFailedCount: 0,
+    unpaidCancelledCount,
+    manualContact
+  };
+}
+
+export type EventCancellationPreview =
+  | { success: false; message: string }
+  | {
+      success: true;
+      /** Whether the cancellation cascade feature flag is enabled. */
+      enabled: boolean;
+      confirmedBookings: number;
+      paidRefundableCount: number;
+      refundTotalPence: number;
+      currency: string;
+      unpaidFreeCount: number;
+      blockedCount: number;
+      missingEmailCount: number;
+    };
+
+/**
+ * Preview the impact of cancelling an event: how many bookings are paid (and the
+ * total to refund), free, blocked (pending/partial), and missing an email. Powers
+ * the cancellation confirmation modal so the admin sees the consequences first.
+ */
+export async function getEventCancellationPreviewAction(
+  eventId: string
+): Promise<EventCancellationPreview> {
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect("/login");
+  }
+  if (!canReviewEvents(user.role)) {
+    return { success: false, message: "Only administrators can cancel events." };
+  }
+
+  const parsed = z.string().uuid().safeParse(eventId);
+  if (!parsed.success) {
+    return { success: false, message: "Invalid event." };
+  }
+
+  try {
+    const impact = await getEventBookingImpact(parsed.data);
+    return {
+      success: true,
+      enabled: isEventCancellationCascadeEnabled(),
+      confirmedBookings: impact.confirmedBookings,
+      paidRefundableCount: impact.paid.length,
+      refundTotalPence: impact.refundTotalPence,
+      currency: impact.currency,
+      unpaidFreeCount: impact.free.length,
+      blockedCount: impact.blocked.length,
+      missingEmailCount: impact.missingEmailCount
+    };
+  } catch (error) {
+    return { success: false, message: `Could not load bookings: ${(error as Error).message}` };
+  }
+}
+
+const rescheduleEventSchema = z.object({
+  eventId: z.string().uuid(),
+  newStartAt: z.string().min(1),
+  newEndAt: z.string().min(1)
+});
+
+export type RescheduleEventResult =
+  | {
+      success: true;
+      newEventId: string;
+      movedPaidCount: number;
+      movedFreeCount: number;
+      manualContact: CancellationAttentionItem[];
+      failed: CancellationAttentionItem[];
+    }
+  | {
+      success: false;
+      status?: "blocked";
+      message: string;
+      newEventId?: string;
+      blocked?: CancellationAttentionItem[];
+      manualContact?: CancellationAttentionItem[];
+      failed?: CancellationAttentionItem[];
+    };
+
+/** Feature flag gating the reschedule wizard (UI + server action). */
+function isEventRescheduleEnabled(): boolean {
+  return process.env.EVENT_RESCHEDULE_ENABLED === "true";
+}
+
+/**
+ * Reschedule an approved event to a new date: clone it onto the new date, move every
+ * confirmed booking across (paid via the idempotent transfer RPC, free via re-book),
+ * then cancel the original. "Transfer all, refund later" — individual refunds happen
+ * afterwards on the new event's bookings page. Blocked bookings (pending/partial) abort
+ * before anything is created; partial move failures leave the original approved (not
+ * cancelled) so no paid guest is stranded.
+ */
+export async function rescheduleEventAction(input: {
+  eventId: string;
+  newStartAt: string;
+  newEndAt: string;
+}): Promise<RescheduleEventResult> {
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect("/login");
+  }
+  if (!canReviewEvents(user.role)) {
+    return { success: false, message: "Only administrators can reschedule events." };
+  }
+  if (!isEventRescheduleEnabled()) {
+    return { success: false, message: "Event rescheduling is not currently enabled." };
+  }
+
+  const parsed = rescheduleEventSchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, message: "Invalid reschedule request." };
+  }
+
+  const startIso = normaliseEventDateTimeForStorage(parsed.data.newStartAt);
+  const endIso = normaliseEventDateTimeForStorage(parsed.data.newEndAt);
+  if (new Date(endIso) <= new Date(startIso)) {
+    return { success: false, message: "The new end time must be after the new start time." };
+  }
+  if (new Date(startIso) <= new Date()) {
+    return { success: false, message: "The new date must be in the future." };
+  }
+
+  const { eventId } = parsed.data;
+  const supabase = createSupabaseAdminClient();
+
+  const { data: eventRow, error: eventError } = await supabase
+    .from("events")
+    .select("id,status,deleted_at")
+    .eq("id", eventId)
+    .maybeSingle();
+  if (eventError) {
+    return { success: false, message: `Could not load event: ${eventError.message}` };
+  }
+  const event = eventRow as { id: string; status: string; deleted_at: string | null } | null;
+  if (!event || event.deleted_at) {
+    return { success: false, message: "Event not found." };
+  }
+  if (event.status !== "approved") {
+    return { success: false, message: "Only approved events can be rescheduled." };
+  }
+
+  // Pre-flight: blocked bookings stop the reschedule before anything is created.
+  const impact = await getEventBookingImpact(eventId);
+  if (impact.blocked.length > 0) {
+    return {
+      success: false,
+      status: "blocked",
+      message: `${impact.blocked.length} booking(s) have pending or partial payment. Refund or resolve them before rescheduling.`,
+      blocked: impact.blocked.map((b) => ({ bookingId: b.id, name: b.name, reason: b.reason }))
+    };
+  }
+
+  // Clone the event onto the new date.
+  let newEventId: string;
+  try {
+    newEventId = await cloneEventForReschedule(eventId, startIso, endIso, user.id);
+  } catch (error) {
+    console.error("cloneEventForReschedule failed:", error);
+    return { success: false, message: "Could not create the rescheduled event. Please try again." };
+  }
+
+  const manualContact: CancellationAttentionItem[] = [];
+  const failed: CancellationAttentionItem[] = [];
+  let movedPaidCount = 0;
+  let movedFreeCount = 0;
+
+  // Paid bookings move via the idempotent transfer RPC (payment follows).
+  for (const paid of impact.paid) {
+    const result = await transferBooking({
+      sourceBookingId: paid.id,
+      targetEventId: newEventId,
+      adminUserId: user.id,
+      reason: "Event rescheduled"
+    });
+    if (result.success) {
+      movedPaidCount += 1;
+      if (result.manualContactRequired) {
+        manualContact.push({ bookingId: paid.id, name: paid.name, reason: "No email / email failed — contact directly." });
+      }
+    } else {
+      failed.push({ bookingId: paid.id, name: paid.name, reason: result.error });
+    }
+  }
+
+  // Free bookings move by re-booking on the new event, then cancelling the original.
+  for (const free of impact.free) {
+    const name = `${free.firstName}${free.lastName ? ` ${free.lastName}` : ""}`.trim();
+    let created: Awaited<ReturnType<typeof createBookingAtomic>>;
+    try {
+      created = await createBookingAtomic({
+        eventId: newEventId,
+        firstName: free.firstName,
+        lastName: free.lastName,
+        mobile: free.mobile,
+        email: free.email,
+        ticketCount: free.ticketCount,
+        customerNotes: free.customerNotes
+      });
+    } catch (error) {
+      console.error("Free booking re-book failed:", error);
+      failed.push({ bookingId: free.id, name, reason: "Could not move booking to the new date." });
+      continue;
+    }
+    if (!created.ok) {
+      failed.push({ bookingId: free.id, name, reason: `Could not move booking (${created.reason}).` });
+      continue;
+    }
+    try {
+      await cancelBooking(free.id);
+    } catch (error) {
+      console.error("Cancel original free booking failed:", error);
+      // Roll back the new booking to avoid a duplicate, then report.
+      await cancelBooking(created.bookingId).catch((rollbackError) => {
+        console.error("Rollback of re-booked free booking failed:", rollbackError);
+      });
+      failed.push({ bookingId: free.id, name, reason: "Could not move booking (cancel failed)." });
+      continue;
+    }
+    movedFreeCount += 1;
+    await recordAuditLogEntry({
+      entity: "event",
+      entityId: eventId,
+      action: "booking.transferred",
+      actorId: user.id,
+      meta: { from_event_id: eventId, to_event_id: newEventId, from_booking_id: free.id, to_booking_id: created.bookingId, free: true }
+    });
+    if (free.email) {
+      const sent = await sendBookingTransferEmail({ newBookingId: created.bookingId, previousEventId: eventId, isPaid: false }).catch(() => false);
+      if (!sent) manualContact.push({ bookingId: free.id, name, reason: "Move email could not be sent." });
+    } else {
+      manualContact.push({ bookingId: free.id, name, reason: "No email address on file." });
+    }
+  }
+
+  // Invariant guard: never cancel the original while any confirmed booking remains.
+  const { data: lingering } = await supabase
+    .from("event_bookings")
+    .select("id")
+    .eq("event_id", eventId)
+    .eq("status", "confirmed");
+  if (lingering && lingering.length > 0) {
+    return {
+      success: false,
+      status: "blocked",
+      newEventId,
+      message: `The new event was created and ${movedPaidCount + movedFreeCount} booking(s) moved, but ${lingering.length} could not. Resolve the remaining booking(s) on the original event's bookings page — already-moved guests are unaffected.`,
+      manualContact,
+      failed
+    };
+  }
+
+  // Cancel the original event (now empty of confirmed bookings).
+  const { error: cancelError } = await supabase
+    .from("events")
+    .update({ status: "cancelled" })
+    .eq("id", eventId)
+    .eq("status", "approved");
+  if (cancelError) {
+    return {
+      success: false,
+      newEventId,
+      message: `Bookings moved, but the original event could not be cancelled: ${cancelError.message}`,
+      manualContact,
+      failed
+    };
+  }
+
+  await recordAuditLogEntry({
+    entity: "event",
+    entityId: eventId,
+    action: "event.cancelled",
+    actorId: user.id,
+    meta: { status: "cancelled", previousStatus: "approved", reason: "rescheduled", changes: ["Status"] }
+  });
+  await recordAuditLogEntry({
+    entity: "event",
+    entityId: eventId,
+    action: "event.rescheduled",
+    actorId: user.id,
+    meta: { new_event_id: newEventId, moved_paid: movedPaidCount, moved_free: movedFreeCount }
+  });
+  await appendEventVersion(eventId, user.id, { status: "cancelled", previousStatus: "approved", rescheduled_to: newEventId });
+
+  revalidatePath(`/events/${eventId}`);
+  revalidatePath(`/events/${eventId}/bookings`);
+  revalidatePath(`/events/${newEventId}`);
+  revalidatePath(`/events/${newEventId}/bookings`);
+  revalidatePath("/events");
+  revalidatePath("/planning");
+  revalidatePath("/");
+
+  return { success: true, newEventId, movedPaidCount, movedFreeCount, manualContact, failed };
 }
 
 export async function generateWebsiteCopyAction(

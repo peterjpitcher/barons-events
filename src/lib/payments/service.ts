@@ -9,6 +9,7 @@ import { sendBookingConfirmationSms } from "@/lib/sms";
 import {
   sendBookingPaymentConfirmationEmail,
   sendBookingRefundEmail,
+  sendBookingTransferEmail,
 } from "@/lib/notifications";
 import { recordSystemAuditLogEntry } from "@/lib/audit-log";
 import { isBookingFormat, isPaidBookingFormat } from "@/lib/booking-format";
@@ -955,6 +956,13 @@ export async function processRefund(params: {
   amountPence?: number | null;
   reason?: string | null;
   adminUserId: string;
+  /**
+   * Optional explicit idempotency key. Callers issuing a refund as part of a
+   * retry-safe orchestration (e.g. the event-cancellation cascade) pass a stable
+   * key so a retry cannot create a second Stripe refund. When omitted, a key is
+   * derived from the transaction id, amount and reason.
+   */
+  idempotencyKey?: string;
 }): Promise<{ success: true; refundId: string; amountPence: number; isFullRefund: boolean } | { success: false; error: string }> {
   const db = createSupabaseAdminClient();
   const { data, error } = await db
@@ -989,11 +997,40 @@ export async function processRefund(params: {
     actorId: params.adminUserId,
   });
 
-  const idempotencyKey = buildRefundIdempotencyKey({
-    transactionId: transaction.id,
-    amountPence,
-    reason: params.reason ?? null,
-  });
+  const idempotencyKey =
+    params.idempotencyKey ??
+    buildRefundIdempotencyKey({
+      transactionId: transaction.id,
+      amountPence,
+      reason: params.reason ?? null,
+    });
+
+  // Retry safety: if a refund with this idempotency key is already recorded, Stripe
+  // has already issued it. Reconcile local transaction/booking state from the
+  // recorded refunds (never re-charge, never double-count the amount) and return
+  // success so a retried cascade converges instead of looping on a stale failure.
+  const { data: existingRefund } = await db
+    .from("payment_refunds")
+    .select("stripe_refund_id, amount_pence")
+    .eq("idempotency_key", idempotencyKey)
+    .maybeSingle();
+  if (existingRefund) {
+    const existing = existingRefund as { stripe_refund_id: string; amount_pence: number };
+    const reconciled = await reconcileRefundState(db, transaction);
+    if (!reconciled.ok) {
+      // Local reconciliation failed — report failure so a retry-safe caller (e.g.
+      // the cancellation cascade) keeps treating this booking as unresolved rather
+      // than wrongly counting it refunded and proceeding to cancel the event.
+      return { success: false, error: "refund_local_update_failed" };
+    }
+    return {
+      success: true,
+      refundId: existing.stripe_refund_id,
+      amountPence: existing.amount_pence,
+      isFullRefund: reconciled.isFullRefund,
+    };
+  }
+
   const refund = await stripePaymentProvider.refundOrder({
     paymentIntentId: transaction.stripe_payment_intent_id,
     amountPence,
@@ -1081,6 +1118,193 @@ export async function processRefund(params: {
     amountPence: refund.amountPence,
     isFullRefund,
   };
+}
+
+/**
+ * Idempotently bring a transaction and its booking to the terminal refunded state
+ * implied by the refunds already recorded for the transaction. Used by the
+ * processRefund retry short-circuit — computes the refunded total from the
+ * payment_refunds rows (sum), never by incrementing, so it cannot double-count.
+ */
+async function reconcileRefundState(
+  db: ReturnType<typeof createSupabaseAdminClient>,
+  transaction: PaymentTransactionRow,
+): Promise<{ ok: true; totalRefundedPence: number; isFullRefund: boolean } | { ok: false }> {
+  const { data: refunds, error: refundsError } = await db
+    .from("payment_refunds")
+    .select("amount_pence")
+    .eq("transaction_id", transaction.id);
+  if (refundsError) return { ok: false };
+
+  const totalRefundedPence = ((refunds ?? []) as Array<{ amount_pence: number | null }>).reduce(
+    (sum, row) => sum + (row.amount_pence ?? 0),
+    0,
+  );
+  const isFullRefund = totalRefundedPence >= transaction.amount_pence;
+  const nextStatus = isFullRefund ? "refunded" : "partially_refunded";
+  const now = new Date().toISOString();
+
+  const { error: txError } = await db
+    .from("payment_transactions")
+    .update({
+      status: nextStatus,
+      refunded_amount_pence: totalRefundedPence,
+      refunded_at: isFullRefund ? now : null,
+      updated_at: now,
+    })
+    .eq("id", transaction.id);
+  if (txError) return { ok: false };
+
+  const { error: bookingError } = await db
+    .from("event_bookings")
+    .update({
+      payment_status: nextStatus,
+      payment_refunded_at: now,
+      ...(isFullRefund ? { status: "cancelled" } : {}),
+    })
+    .eq("id", transaction.booking_id);
+  if (bookingError) return { ok: false };
+
+  return { ok: true, totalRefundedPence, isFullRefund };
+}
+
+const TRANSFER_ERROR_MESSAGES: Record<string, string> = {
+  source_booking_not_found: "Booking not found.",
+  source_not_transferable:
+    "This booking can no longer be transferred — it may already be cancelled, transferred, or unpaid.",
+  same_event_transfer_not_allowed: "Choose a different event to transfer the booking to.",
+  transaction_not_transferable:
+    "This booking's payment can't be transferred — it may be partially refunded or inconsistent. Refund it instead.",
+  target_not_found: "The chosen event could not be found.",
+  target_not_eligible:
+    "The chosen event isn't an approved, future, paid event with bookings open.",
+  price_mismatch:
+    "The chosen event has a different ticket price, so the booking can't be transferred without a refund.",
+  target_capacity_exceeded:
+    "The chosen event doesn't have enough remaining capacity for this booking.",
+};
+
+function mapTransferError(rawMessage: string): string {
+  for (const [code, message] of Object.entries(TRANSFER_ERROR_MESSAGES)) {
+    if (rawMessage.includes(code)) return message;
+  }
+  console.error("transfer_booking RPC failed:", rawMessage);
+  return "The booking could not be transferred. Please try again.";
+}
+
+/**
+ * Move a fully-paid booking to another approved, future, equal-price paid event
+ * without a refund/re-charge. The DB mutation is a single atomic, idempotent RPC
+ * (transfer_booking). On a fresh transfer (created=true) we record the audit event
+ * and email the customer; on an idempotent replay (created=false) we do neither.
+ * payment_transactions.event_id is intentionally left on the original sale event
+ * for finance attribution — only booking_id moves.
+ */
+export async function transferBooking(params: {
+  sourceBookingId: string;
+  targetEventId: string;
+  adminUserId: string;
+  reason?: string | null;
+}): Promise<
+  | { success: true; newBookingId: string; created: boolean; manualContactRequired: boolean }
+  | { success: false; error: string }
+> {
+  const db = createSupabaseAdminClient();
+  const idempotencyKey = `transfer:${params.sourceBookingId}:${params.targetEventId}`;
+
+  await recordSystemAuditLogEntry({
+    entity: "booking",
+    entityId: params.sourceBookingId,
+    action: "booking.transfer_requested",
+    meta: {
+      source_booking_id: params.sourceBookingId,
+      target_event_id: params.targetEventId,
+      reason: params.reason ?? null,
+      admin_user_id: params.adminUserId,
+    },
+    actorId: params.adminUserId,
+  });
+
+  const { data, error } = await db.rpc("transfer_booking", {
+    p_source_booking_id: params.sourceBookingId,
+    p_target_event_id: params.targetEventId,
+    p_admin_user_id: params.adminUserId,
+    p_reason: params.reason ?? null,
+    p_idempotency_key: idempotencyKey,
+  });
+
+  if (error) {
+    return { success: false, error: mapTransferError(error.message) };
+  }
+
+  const result = (data ?? {}) as {
+    booking_id: string;
+    from_event_id?: string;
+    created?: boolean;
+    manual_contact_required?: boolean;
+  };
+  const newBookingId = result.booking_id;
+  const created = result.created === true;
+  let manualContactRequired = result.manual_contact_required === true;
+
+  if (!created) {
+    // Idempotent replay: report the manual-contact state recorded on the original transfer.
+    const { data: existing } = await db
+      .from("booking_transfers")
+      .select("manual_contact_required")
+      .eq("idempotency_key", idempotencyKey)
+      .maybeSingle();
+    manualContactRequired =
+      (existing as { manual_contact_required?: boolean } | null)?.manual_contact_required === true;
+    return { success: true, newBookingId, created, manualContactRequired };
+  }
+
+  await recordSystemAuditLogEntry({
+    entity: "booking",
+    entityId: newBookingId,
+    action: "booking.transferred",
+    meta: {
+      from_booking_id: params.sourceBookingId,
+      to_booking_id: newBookingId,
+      target_event_id: params.targetEventId,
+      admin_user_id: params.adminUserId,
+    },
+    actorId: params.adminUserId,
+  });
+
+  // Email the customer only on a fresh transfer where an email address is on file.
+  if (!manualContactRequired && result.from_event_id) {
+    const sent = await sendBookingTransferEmail({
+      newBookingId,
+      previousEventId: result.from_event_id,
+    }).catch((emailError) => {
+      console.warn("Transfer email failed:", emailError);
+      return false;
+    });
+
+    const nowIso = new Date().toISOString();
+    if (sent) {
+      await db
+        .from("booking_transfers")
+        .update({ transfer_email_sent_at: nowIso })
+        .eq("idempotency_key", idempotencyKey);
+    } else {
+      manualContactRequired = true;
+      await db
+        .from("booking_transfers")
+        .update({ transfer_email_failed_at: nowIso, manual_contact_required: true })
+        .eq("idempotency_key", idempotencyKey);
+      await recordSystemAuditLogEntry({
+        entity: "booking",
+        entityId: newBookingId,
+        action: "booking.transfer_email_failed",
+        meta: { to_booking_id: newBookingId, idempotency_key: idempotencyKey },
+        actorId: params.adminUserId,
+      });
+    }
+  }
+
+  return { success: true, newBookingId, created, manualContactRequired };
 }
 
 export type { SessionStatus };

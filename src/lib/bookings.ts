@@ -209,3 +209,136 @@ export async function getConfirmedTicketCount(eventId: string): Promise<number> 
   if (error) throw new Error(`Failed to count tickets: ${error.message}`);
   return (data ?? []).reduce((sum, row) => sum + (row.ticket_count as number), 0);
 }
+
+/** Explicit paid booking types eligible for transfer (excludes pay-on-arrival/free). */
+const TRANSFER_PAID_BOOKING_TYPES = ["paid_seated", "paid_standing", "paid_standing_unreserved"];
+
+/** A candidate destination event for transferring a paid booking. */
+export interface TransferTarget {
+  eventId: string;
+  title: string;
+  startAt: string;
+  venueId: string;
+  venueName: string | null;
+  ticketPrice: number;
+  /** Remaining capacity, or null when the event has unlimited capacity. */
+  remainingCapacity: number | null;
+  /** True when the target event is at a different venue from the source event. */
+  venueMismatch: boolean;
+}
+
+/**
+ * List the events a paid booking can be transferred to: approved, future,
+ * equal total-price paid events (explicit paid booking types only, no external
+ * booking URL) with enough remaining capacity, excluding the source event.
+ * Returns [] when the source booking is not transferable. The authoritative
+ * eligibility checks live in the transfer_booking RPC — this is the picker view.
+ */
+export async function getTransferTargetsForBooking(sourceBookingId: string): Promise<TransferTarget[]> {
+  const db = createSupabaseAdminClient();
+
+  const { data: bookingData } = await db
+    .from("event_bookings")
+    .select("id, event_id, ticket_count, status, payment_status, payment_transaction_id")
+    .eq("id", sourceBookingId)
+    .maybeSingle();
+  const booking = bookingData as {
+    event_id: string;
+    ticket_count: number;
+    status: string;
+    payment_status: string;
+    payment_transaction_id: string | null;
+  } | null;
+  if (
+    !booking ||
+    booking.status !== "confirmed" ||
+    booking.payment_status !== "completed" ||
+    !booking.payment_transaction_id
+  ) {
+    return [];
+  }
+
+  const { data: txData } = await db
+    .from("payment_transactions")
+    .select("amount_pence, status, refunded_amount_pence")
+    .eq("id", booking.payment_transaction_id)
+    .maybeSingle();
+  const tx = txData as { amount_pence: number; status: string; refunded_amount_pence: number } | null;
+  if (!tx || tx.status !== "completed" || tx.refunded_amount_pence !== 0) {
+    return [];
+  }
+
+  const { data: srcEventData } = await db
+    .from("events")
+    .select("venue_id")
+    .eq("id", booking.event_id)
+    .maybeSingle();
+  const sourceVenueId = (srcEventData as { venue_id: string } | null)?.venue_id ?? null;
+
+  const { data: candidateData, error: candidateError } = await db
+    .from("events")
+    .select("id, title, start_at, venue_id, ticket_price, total_capacity, venue:venues!events_venue_id_fkey(name)")
+    .eq("status", "approved")
+    .eq("booking_enabled", true)
+    .in("booking_type", TRANSFER_PAID_BOOKING_TYPES)
+    .is("booking_url", null)
+    .is("deleted_at", null)
+    .neq("id", booking.event_id)
+    .gt("start_at", new Date().toISOString());
+  if (candidateError || !candidateData) return [];
+
+  const candidates = candidateData as Array<{
+    id: string;
+    title: string;
+    start_at: string;
+    venue_id: string;
+    ticket_price: number | string | null;
+    total_capacity: number | null;
+    venue: { name: string | null } | { name: string | null }[] | null;
+  }>;
+  if (candidates.length === 0) return [];
+
+  // Aggregate confirmed ticket counts for all candidate events in a single query.
+  const candidateIds = candidates.map((c) => c.id);
+  const { data: bookedRows } = await db
+    .from("event_bookings")
+    .select("event_id, ticket_count")
+    .in("event_id", candidateIds)
+    .eq("status", "confirmed");
+  const bookedByEvent = new Map<string, number>();
+  for (const row of (bookedRows ?? []) as Array<{ event_id: string; ticket_count: number }>) {
+    bookedByEvent.set(row.event_id, (bookedByEvent.get(row.event_id) ?? 0) + row.ticket_count);
+  }
+
+  const targets: TransferTarget[] = [];
+  for (const candidate of candidates) {
+    if (candidate.ticket_price === null) continue;
+    const ticketPrice = Number(candidate.ticket_price);
+    if (!Number.isFinite(ticketPrice)) continue;
+
+    // Equal total price only (v1): the new event's total must equal what was paid.
+    const expectedPence = Math.round(ticketPrice * 100) * booking.ticket_count;
+    if (expectedPence !== tx.amount_pence) continue;
+
+    const remainingCapacity =
+      candidate.total_capacity === null
+        ? null
+        : candidate.total_capacity - (bookedByEvent.get(candidate.id) ?? 0);
+    if (remainingCapacity !== null && remainingCapacity < booking.ticket_count) continue;
+
+    const venueRaw = Array.isArray(candidate.venue) ? candidate.venue[0] : candidate.venue;
+    targets.push({
+      eventId: candidate.id,
+      title: candidate.title,
+      startAt: candidate.start_at,
+      venueId: candidate.venue_id,
+      venueName: venueRaw?.name ?? null,
+      ticketPrice,
+      remainingCapacity,
+      venueMismatch: sourceVenueId !== null && candidate.venue_id !== sourceVenueId,
+    });
+  }
+
+  targets.sort((a, b) => a.startAt.localeCompare(b.startAt));
+  return targets;
+}

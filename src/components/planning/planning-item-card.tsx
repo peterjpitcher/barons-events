@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { ArrowRight, Calendar, Check, ChevronDown, ClipboardList, GripVertical, Pencil, Sparkles, Trash2, X } from "lucide-react";
 import { ApproveEventButton } from "@/components/events/approve-event-button";
 import { StatusDropdown } from "@/components/events/status-dropdown";
+import { CancelEventDialog } from "@/components/events/cancel-event-dialog";
 import { archiveDraftEventAction, updateEventStatusAction } from "@/actions/events";
 import {
   convertInspirationItemAction,
@@ -869,12 +870,13 @@ export function EventOverlayCard({ event, canApprove, onChanged }: EventOverlayC
   const hasWebCopy = Boolean(event.publicTitle);
   const [confirmArchive, setConfirmArchive] = useState(false);
   const [isPending, startTransition] = useTransition();
+  // "Cancelled" is handled by the dedicated CancelEventDialog (which refunds paid
+  // bookings and notifies attendees), not this quick status dropdown.
   const statusOptions =
     canApprove && event.status === "approved"
       ? [
           { value: "approved" as const, label: "Approved" },
-          { value: "completed" as const, label: "Completed" },
-          { value: "cancelled" as const, label: "Cancelled" }
+          { value: "completed" as const, label: "Completed" }
         ]
       : [];
 
@@ -905,23 +907,31 @@ export function EventOverlayCard({ event, canApprove, onChanged }: EventOverlayC
           )}
         </div>
         {statusOptions.length > 0 ? (
-          <StatusDropdown
-            value="approved"
-            label="Event status"
-            options={statusOptions}
-            className="shrink-0"
-            toneByValue={{
-              approved: "success",
-              completed: "success",
-              cancelled: "danger"
-            }}
-            onChangeStatus={(status) =>
-              status === "approved"
-                ? Promise.resolve({ success: true, message: "Event status is already approved." })
-                : updateEventStatusAction({ eventId: event.eventId, status })
-            }
-            onChanged={onChanged}
-          />
+          <div className="flex shrink-0 items-center gap-1.5">
+            <StatusDropdown
+              value="approved"
+              label="Event status"
+              options={statusOptions}
+              toneByValue={{
+                approved: "success",
+                completed: "success"
+              }}
+              onChangeStatus={(status) =>
+                status === "approved"
+                  ? Promise.resolve({ success: true, message: "Event status is already approved." })
+                  : updateEventStatusAction({ eventId: event.eventId, status })
+              }
+              onChanged={onChanged}
+            />
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/events/${event.eventId}/reschedule`}>Reschedule</Link>
+            </Button>
+            <CancelEventDialog
+              eventId={event.eventId}
+              eventTitle={event.publicTitle ?? event.title}
+              onChanged={onChanged}
+            />
+          </div>
         ) : (
           <Badge variant={statusTone}>{event.status.replace(/_/g, " ")}</Badge>
         )}

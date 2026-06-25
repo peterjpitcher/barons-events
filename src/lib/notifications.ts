@@ -991,6 +991,144 @@ export async function sendBookingRefundEmail(params: {
   }
 }
 
+/**
+ * Notify a customer that their paid booking has been moved to a new event/date.
+ * Used by the booking-transfer flow. No money moves — the existing payment is
+ * carried over — so the copy must make clear there is nothing more to pay.
+ * Returns false when the booking has no email (caller surfaces "manual contact
+ * required") or when sending fails.
+ */
+export async function sendBookingTransferEmail(params: {
+  newBookingId: string;
+  previousEventId: string;
+  /** True for paid bookings (payment carried over); false for free/RSVP moves. */
+  isPaid?: boolean;
+}): Promise<boolean> {
+  const isPaid = params.isPaid ?? true;
+  if (!areBookingEmailsEnabled()) {
+    logNotificationSkipped("booking-transfer", params.newBookingId);
+    return true;
+  }
+
+  const context = await fetchBookingNotificationContext(params.newBookingId);
+  if (!context?.booking.email) return false;
+
+  const resend = getResendClient();
+  if (!resend) {
+    console.warn("sendBookingTransferEmail skipped: RESEND_API_KEY not configured");
+    return false;
+  }
+
+  const db = createSupabaseAdminClient();
+  const { data: previousEvent } = await db
+    .from("events")
+    .select("title, start_at")
+    .eq("id", params.previousEventId)
+    .maybeSingle();
+
+  const { date, time } = formatInLondon(context.event.start_at);
+  const venueName = context.event.venue?.name ?? "the venue";
+  const previousEventRow = previousEvent as { title: string; start_at: string } | null;
+  const previousLine = previousEventRow
+    ? `${previousEventRow.title} on ${formatInLondon(previousEventRow.start_at).date}`
+    : null;
+
+  const content = renderCustomerBookingEmailTemplate({
+    headline: "Your booking has moved to a new date",
+    intro: `Hi ${context.booking.first_name},`,
+    body: [
+      previousLine
+        ? `${previousLine} has been rescheduled, and your booking has been moved to the new date below.`
+        : "Your booking has been moved to a new date, shown below.",
+    ],
+    details: [
+      { label: "Event", value: context.event.title },
+      { label: "Venue", value: venueName },
+      { label: "New date/time", value: `${date} at ${time}` },
+      { label: "Tickets", value: context.booking.ticket_count },
+      { label: "Booking reference", value: context.booking.id.slice(0, 8) },
+    ],
+    afterDetails: [
+      isPaid
+        ? "Your existing payment has been carried over to the new date — there is nothing more to pay and no need to rebook."
+        : "There's nothing you need to do — we'll see you on the new date.",
+    ],
+  });
+
+  try {
+    await resend.emails.send({
+      from: BOOKING_RESEND_FROM_ADDRESS,
+      to: context.booking.email,
+      subject: "Your booking has moved to a new date",
+      html: content.html,
+      text: content.text,
+    });
+    return true;
+  } catch (error) {
+    console.error("sendBookingTransferEmail failed", error);
+    return false;
+  }
+}
+
+/**
+ * Notify a customer that an event has been cancelled. Used by the event
+ * cancellation cascade for unpaid/free bookings (paid bookings receive the
+ * refund email instead, so this is not sent to them to avoid double-emailing).
+ * Returns false when the booking has no email or when sending fails.
+ */
+export async function sendEventCancellationEmail(params: {
+  bookingId: string;
+  reason?: string | null;
+}): Promise<boolean> {
+  if (!areBookingEmailsEnabled()) {
+    logNotificationSkipped("event-cancellation", params.bookingId);
+    return true;
+  }
+
+  const context = await fetchBookingNotificationContext(params.bookingId);
+  if (!context?.booking.email) return false;
+
+  const resend = getResendClient();
+  if (!resend) {
+    console.warn("sendEventCancellationEmail skipped: RESEND_API_KEY not configured");
+    return false;
+  }
+
+  const { date, time } = formatInLondon(context.event.start_at);
+  const venueName = context.event.venue?.name ?? "the venue";
+  const content = renderCustomerBookingEmailTemplate({
+    headline: "This event has been cancelled",
+    intro: `Hi ${context.booking.first_name},`,
+    body: [
+      `We're sorry to let you know that ${context.event.title} has been cancelled and will no longer take place.`,
+      ...(params.reason ? [params.reason] : []),
+    ],
+    details: [
+      { label: "Event", value: context.event.title },
+      { label: "Venue", value: venueName },
+      { label: "Was scheduled for", value: `${date} at ${time}` },
+      { label: "Booking reference", value: context.booking.id.slice(0, 8) },
+    ],
+    afterDetails: [
+      "If you have any questions, please contact the venue directly.",
+    ],
+  });
+
+  try {
+    await resend.emails.send({
+      from: BOOKING_RESEND_FROM_ADDRESS,
+      to: context.booking.email,
+      subject: `Event cancelled: ${context.event.title}`,
+      html: content.html,
+      text: content.text,
+    });
+    return true;
+  } catch (error) {
+    console.error("sendEventCancellationEmail failed", error);
+    return false;
+  }
+}
+
 async function fetchEventContext(eventId: string): Promise<EventContext | null> {
   const supabase = await createSupabaseReadonlyClient();
   const { data, error } = await supabase
