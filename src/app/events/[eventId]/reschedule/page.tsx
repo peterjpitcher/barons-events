@@ -5,6 +5,7 @@ import { requireAuth } from "@/lib/auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getEventBookingImpact } from "@/lib/events";
 import { toLondonDateTimeInputValue } from "@/lib/datetime";
+import { isEventRescheduleEnabled } from "@/lib/feature-flags";
 import { PageHeader } from "@/components/ui/design-primitives";
 import { RescheduleWizard } from "@/components/events/reschedule-wizard";
 
@@ -41,7 +42,7 @@ export default async function ReschedulePage({ params }: { params: Promise<{ eve
     redirect(`/events/${eventId}`);
   }
 
-  const enabled = process.env.EVENT_RESCHEDULE_ENABLED === "true";
+  const enabled = isEventRescheduleEnabled();
   const impact = await getEventBookingImpact(eventId);
   const venueRaw = Array.isArray(event.venue) ? event.venue[0] : event.venue;
 

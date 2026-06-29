@@ -5,7 +5,7 @@ import type Stripe from "stripe";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createPaidBookingAtomic } from "@/lib/bookings";
 import { upsertCustomerForBooking, linkBookingToCustomer } from "@/lib/customers";
-import { logSafeSmsFailure, sendBookingConfirmationSms } from "@/lib/sms";
+import { logSafeSmsFailure, sendBookingConfirmationSms, sendBookingTransferSms } from "@/lib/sms";
 import {
   sendBookingPaymentConfirmationEmail,
   sendBookingRefundEmail,
@@ -1283,35 +1283,49 @@ export async function transferBooking(params: {
     actorId: params.adminUserId,
   });
 
-  // Email the customer only on a fresh transfer where an email address is on file.
-  if (!manualContactRequired && result.from_event_id) {
-    const sent = await sendBookingTransferEmail({
-      newBookingId,
-      previousEventId: result.from_event_id,
-    }).catch((emailError) => {
-      console.warn("Transfer email failed:", emailError);
-      return false;
-    });
-
-    const nowIso = new Date().toISOString();
-    if (sent) {
-      await db
-        .from("booking_transfers")
-        .update({ transfer_email_sent_at: nowIso })
-        .eq("idempotency_key", idempotencyKey);
-    } else {
-      manualContactRequired = true;
-      await db
-        .from("booking_transfers")
-        .update({ transfer_email_failed_at: nowIso, manual_contact_required: true })
-        .eq("idempotency_key", idempotencyKey);
-      await recordSystemAuditLogEntry({
-        entity: "booking",
-        entityId: newBookingId,
-        action: "booking.transfer_email_failed",
-        meta: { to_booking_id: newBookingId, idempotency_key: idempotencyKey },
-        actorId: params.adminUserId,
+  if (result.from_event_id) {
+    // Email first when an email address is on file.
+    if (!manualContactRequired) {
+      const sent = await sendBookingTransferEmail({
+        newBookingId,
+        previousEventId: result.from_event_id,
+      }).catch((emailError) => {
+        console.warn("Transfer email failed:", emailError);
+        return false;
       });
+
+      const nowIso = new Date().toISOString();
+      if (sent) {
+        await db
+          .from("booking_transfers")
+          .update({ transfer_email_sent_at: nowIso })
+          .eq("idempotency_key", idempotencyKey);
+      } else {
+        manualContactRequired = true;
+        await db
+          .from("booking_transfers")
+          .update({ transfer_email_failed_at: nowIso, manual_contact_required: true })
+          .eq("idempotency_key", idempotencyKey);
+        await recordSystemAuditLogEntry({
+          entity: "booking",
+          entityId: newBookingId,
+          action: "booking.transfer_email_failed",
+          meta: { to_booking_id: newBookingId, idempotency_key: idempotencyKey },
+          actorId: params.adminUserId,
+        });
+      }
+    }
+
+    // If email is missing or failed, try SMS before asking staff to contact manually.
+    if (manualContactRequired) {
+      const smsSent = await sendBookingTransferSms({ newBookingId, isPaid: true });
+      if (smsSent) {
+        manualContactRequired = false;
+        await db
+          .from("booking_transfers")
+          .update({ manual_contact_required: false })
+          .eq("idempotency_key", idempotencyKey);
+      }
     }
   }
 

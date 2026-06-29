@@ -22,6 +22,7 @@ import { getFieldErrors } from "@/lib/form-errors";
 import type { ActionResult, EventStatus } from "@/lib/types";
 import type { Database } from "@/lib/supabase/database.types";
 import { sendAssigneeReassignmentEmail, sendBookingTransferEmail, sendEventCancellationEmail, sendEventSubmittedEmail, sendNewEventAnnouncementEmail, sendReviewDecisionEmail } from "@/lib/notifications";
+import { sendBookingTransferSms } from "@/lib/sms";
 import { recordAuditLogEntry } from "@/lib/audit-log";
 import { processRefund, transferBooking } from "@/lib/payments/service";
 import { generateTermsAndConditions, generateWebsiteCopy, type GeneratedWebsiteCopy } from "@/lib/ai";
@@ -29,6 +30,7 @@ import { isBookingFormat, isFreeBookingFormat, type BookingFormat } from "@/lib/
 import { normaliseEventDateTimeForStorage } from "@/lib/datetime";
 import { normaliseSopNotRequiredTemplateIds } from "@/lib/planning/sop";
 import { getOrCreateTrackedBookingUrl, type TrackedBookingUrlStatus } from "@/lib/event-booking-links";
+import { isEventRescheduleEnabled } from "@/lib/feature-flags";
 import {
   normaliseOptionalText as normaliseOptionalTextField,
   normaliseOptionalNumber as normaliseOptionalNumberField,
@@ -2620,11 +2622,6 @@ export type RescheduleEventResult =
       failed?: CancellationAttentionItem[];
     };
 
-/** Feature flag gating the reschedule wizard (UI + server action). */
-function isEventRescheduleEnabled(): boolean {
-  return process.env.EVENT_RESCHEDULE_ENABLED === "true";
-}
-
 /**
  * Reschedule an approved event to a new date: clone it onto the new date, move every
  * confirmed booking across (paid via the idempotent transfer RPC, free via re-book),
@@ -2770,11 +2767,18 @@ export async function rescheduleEventAction(input: {
       actorId: user.id,
       meta: { from_event_id: eventId, to_event_id: newEventId, from_booking_id: free.id, to_booking_id: created.bookingId, free: true }
     });
-    if (free.email) {
-      const sent = await sendBookingTransferEmail({ newBookingId: created.bookingId, previousEventId: eventId, isPaid: false }).catch(() => false);
-      if (!sent) manualContact.push({ bookingId: free.id, name, reason: "Move email could not be sent." });
-    } else {
-      manualContact.push({ bookingId: free.id, name, reason: "No email address on file." });
+    const emailSent = free.email
+      ? await sendBookingTransferEmail({ newBookingId: created.bookingId, previousEventId: eventId, isPaid: false }).catch(() => false)
+      : false;
+    if (!emailSent) {
+      const smsSent = await sendBookingTransferSms({ newBookingId: created.bookingId, isPaid: false });
+      if (!smsSent) {
+        manualContact.push({
+          bookingId: free.id,
+          name,
+          reason: free.email ? "Move email/SMS could not be sent." : "No email address and SMS could not be sent."
+        });
+      }
     }
   }
 

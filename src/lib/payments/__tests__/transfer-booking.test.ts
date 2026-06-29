@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   recordSystemAuditLogEntry: vi.fn().mockResolvedValue(undefined),
   refundOrder: vi.fn(),
   sendBookingTransferEmail: vi.fn(),
+  sendBookingTransferSms: vi.fn(),
   sendBookingRefundEmail: vi.fn(),
 }));
 
@@ -31,7 +32,11 @@ vi.mock("@/lib/customers", () => ({
   linkBookingToCustomer: vi.fn(),
 }));
 vi.mock("@/lib/audit-log", () => ({ recordSystemAuditLogEntry: mocks.recordSystemAuditLogEntry }));
-vi.mock("@/lib/sms", () => ({ logSafeSmsFailure: vi.fn(), sendBookingConfirmationSms: vi.fn() }));
+vi.mock("@/lib/sms", () => ({
+  logSafeSmsFailure: vi.fn(),
+  sendBookingConfirmationSms: vi.fn(),
+  sendBookingTransferSms: mocks.sendBookingTransferSms,
+}));
 vi.mock("@/lib/notifications", () => ({
   sendBookingPaymentConfirmationEmail: vi.fn(),
   sendBookingRefundEmail: mocks.sendBookingRefundEmail,
@@ -73,6 +78,7 @@ describe("transferBooking", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.from.mockReturnValue(queryResult({ error: null }));
+    mocks.sendBookingTransferSms.mockResolvedValue(true);
   });
 
   it("transfers, records the audit trail, and emails the customer on a fresh transfer", async () => {
@@ -86,6 +92,7 @@ describe("transferBooking", () => {
 
     expect(result).toEqual({ success: true, newBookingId: "b2", created: true, manualContactRequired: false });
     expect(mocks.sendBookingTransferEmail).toHaveBeenCalledWith({ newBookingId: "b2", previousEventId: "e1" });
+    expect(mocks.sendBookingTransferSms).not.toHaveBeenCalled();
     expect(auditActions()).toEqual(expect.arrayContaining(["booking.transfer_requested", "booking.transferred"]));
     expect(mocks.refundOrder).not.toHaveBeenCalled();
   });
@@ -114,7 +121,7 @@ describe("transferBooking", () => {
     expect(mocks.sendBookingTransferEmail).not.toHaveBeenCalled();
   });
 
-  it("flags manual contact when the transfer email fails to send", async () => {
+  it("falls back to SMS when the transfer email fails to send", async () => {
     mocks.rpc.mockResolvedValue({
       data: { booking_id: "b2", from_event_id: "e1", created: true, manual_contact_required: false },
       error: null,
@@ -123,11 +130,12 @@ describe("transferBooking", () => {
 
     const result = await transferBooking(transferInput);
 
-    expect(result).toMatchObject({ success: true, manualContactRequired: true });
+    expect(result).toMatchObject({ success: true, manualContactRequired: false });
+    expect(mocks.sendBookingTransferSms).toHaveBeenCalledWith({ newBookingId: "b2", isPaid: true });
     expect(auditActions()).toContain("booking.transfer_email_failed");
   });
 
-  it("reports manual contact required (and sends no email) when the booking has no email", async () => {
+  it("falls back to SMS when the booking has no email", async () => {
     mocks.rpc.mockResolvedValue({
       data: { booking_id: "b2", from_event_id: "e1", created: true, manual_contact_required: true },
       error: null,
@@ -135,8 +143,23 @@ describe("transferBooking", () => {
 
     const result = await transferBooking(transferInput);
 
-    expect(result).toMatchObject({ success: true, manualContactRequired: true });
+    expect(result).toMatchObject({ success: true, manualContactRequired: false });
     expect(mocks.sendBookingTransferEmail).not.toHaveBeenCalled();
+    expect(mocks.sendBookingTransferSms).toHaveBeenCalledWith({ newBookingId: "b2", isPaid: true });
+  });
+
+  it("reports manual contact required when neither email nor SMS can send", async () => {
+    mocks.rpc.mockResolvedValue({
+      data: { booking_id: "b2", from_event_id: "e1", created: true, manual_contact_required: false },
+      error: null,
+    });
+    mocks.sendBookingTransferEmail.mockResolvedValue(false);
+    mocks.sendBookingTransferSms.mockResolvedValue(false);
+
+    const result = await transferBooking(transferInput);
+
+    expect(result).toMatchObject({ success: true, manualContactRequired: true });
+    expect(mocks.sendBookingTransferSms).toHaveBeenCalledWith({ newBookingId: "b2", isPaid: true });
   });
 });
 

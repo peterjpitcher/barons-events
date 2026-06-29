@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   createBookingAtomic: vi.fn(),
   cancelBooking: vi.fn(),
   sendBookingTransferEmail: vi.fn(),
+  sendBookingTransferSms: vi.fn(),
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -57,6 +58,7 @@ vi.mock("@/lib/notifications", () => ({
   sendNewEventAnnouncementEmail: vi.fn(),
   sendReviewDecisionEmail: vi.fn(),
 }));
+vi.mock("@/lib/sms", () => ({ sendBookingTransferSms: mocks.sendBookingTransferSms }));
 vi.mock("@/lib/ai", () => ({ generateTermsAndConditions: vi.fn(), generateWebsiteCopy: vi.fn() }));
 vi.mock("@/lib/payments/service", () => ({
   processRefund: mocks.processRefund,
@@ -113,6 +115,7 @@ beforeEach(() => {
   mocks.findExistingRescheduleClone.mockResolvedValue(null);
   mocks.cloneEventForReschedule.mockResolvedValue("new-event-1");
   mocks.sendBookingTransferEmail.mockResolvedValue(true);
+  mocks.sendBookingTransferSms.mockResolvedValue(true);
 });
 
 afterAll(() => {
@@ -149,7 +152,30 @@ describe("rescheduleEventAction", () => {
     expect(mocks.transferBooking).toHaveBeenCalledWith(expect.objectContaining({ sourceBookingId: "bk-paid", targetEventId: "new-event-1" }));
     expect(mocks.createBookingAtomic).toHaveBeenCalledWith(expect.objectContaining({ eventId: "new-event-1", firstName: "Bo" }));
     expect(mocks.sendBookingTransferEmail).toHaveBeenCalledWith(expect.objectContaining({ isPaid: false }));
+    expect(mocks.sendBookingTransferSms).not.toHaveBeenCalled();
     expect(auditActions()).toEqual(expect.arrayContaining(["event.cancelled", "event.rescheduled"]));
+  });
+
+  it("uses SMS instead of manual contact when a moved free booking has no email", async () => {
+    mocks.getEventBookingImpact.mockResolvedValue(
+      emptyImpact({
+        confirmedBookings: 1,
+        free: [{ id: "bk-free", firstName: "Bo", lastName: null, mobile: "+447700900000", email: null, ticketCount: 2, customerNotes: null }],
+      })
+    );
+    mocks.createBookingAtomic.mockResolvedValue({ ok: true, bookingId: "moved-free" });
+    mocks.cancelBooking.mockResolvedValue(undefined);
+    mocks.from
+      .mockReturnValueOnce(approvedEvent)
+      .mockReturnValueOnce(queryResult({ data: [], error: null }))
+      .mockReturnValueOnce(queryResult({ error: null }));
+
+    const result = await rescheduleEventAction({ eventId: EVENT_ID, newStartAt: FUTURE_START, newEndAt: FUTURE_END });
+
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.manualContact).toHaveLength(0);
+    expect(mocks.sendBookingTransferEmail).not.toHaveBeenCalled();
+    expect(mocks.sendBookingTransferSms).toHaveBeenCalledWith({ newBookingId: "moved-free", isPaid: false });
   });
 
   it("aborts before creating anything when a booking is blocked (pending payment)", async () => {

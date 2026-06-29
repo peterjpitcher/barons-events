@@ -175,6 +175,47 @@ describe("sendBookingConfirmationSms", () => {
   });
 });
 
+describe("sendBookingTransferSms", () => {
+  beforeEach(() => {
+    process.env.TWILIO_ACCOUNT_SID = "ACtest";
+    process.env.TWILIO_AUTH_TOKEN = "token";
+    process.env.TWILIO_FROM_NUMBER = "+441234567890";
+    vi.clearAllMocks();
+  });
+
+  it("sends moved-date SMS copy for a transferred booking", async () => {
+    const { sendTwilioSms } = await import("@/lib/twilio");
+    const { sendBookingTransferSms } = await import("../sms");
+
+    await expect(sendBookingTransferSms({ newBookingId: "booking-1", isPaid: false })).resolves.toBe(true);
+
+    expect(sendTwilioSms).toHaveBeenCalledWith({
+      to: "+447700900001",
+      body: expect.stringContaining("has moved to"),
+    });
+    expect(sendTwilioSms).toHaveBeenCalledWith({
+      to: "+447700900001",
+      body: expect.stringContaining("There is nothing else you need to do."),
+    });
+  });
+
+  it("returns false when the transferred booking cannot be loaded", async () => {
+    const { createSupabaseAdminClient } = await import("@/lib/supabase/admin");
+    vi.mocked(createSupabaseAdminClient).mockReturnValueOnce({
+      from: vi.fn(() => ({
+        select: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            single: vi.fn().mockResolvedValue({ data: null, error: { message: "not found" } }),
+          })),
+        })),
+      })),
+    } as unknown as ReturnType<typeof createSupabaseAdminClient>);
+
+    const { sendBookingTransferSms } = await import("../sms");
+    await expect(sendBookingTransferSms({ newBookingId: "missing-booking" })).resolves.toBe(false);
+  });
+});
+
 describe("SMS error logging", () => {
   it("strips provider request details from logged errors", async () => {
     const { toSafeSmsError } = await import("../sms");

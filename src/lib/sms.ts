@@ -102,6 +102,65 @@ export async function sendBookingConfirmationSms(bookingId: string): Promise<voi
 }
 
 /**
+ * Sends a booking moved/rescheduled SMS when email is not available.
+ * Returns false when the booking cannot be loaded or Twilio cannot send.
+ */
+export async function sendBookingTransferSms(params: {
+  newBookingId: string;
+  isPaid?: boolean;
+}): Promise<boolean> {
+  const db = createSupabaseAdminClient();
+
+  const { data, error } = await db
+    .from("event_bookings")
+    .select(`
+      id, first_name, mobile,
+      event:events!event_bookings_event_id_fkey (
+        title, start_at,
+        venue:venues!events_venue_id_fkey ( name )
+      )
+    `)
+    .eq("id", params.newBookingId)
+    .single();
+
+  if (error || !data) {
+    console.error("sendBookingTransferSms: booking not found", params.newBookingId, error);
+    return false;
+  }
+
+  type TransferSmsEvent = {
+    title: string;
+    start_at: string;
+    venue: { name: string | null } | { name: string | null }[] | null;
+  };
+  const row = data as unknown as {
+    first_name: string;
+    mobile: string | null;
+    event: TransferSmsEvent | TransferSmsEvent[] | null;
+  };
+  const event = Array.isArray(row.event) ? row.event[0] : row.event;
+  if (!row.mobile || !event) return false;
+
+  const venue = Array.isArray(event.venue) ? event.venue[0] : event.venue;
+  const { dayDate, time } = formatEventDateTime(new Date(event.start_at));
+  const venueName = venue?.name ?? "the venue";
+  const afterDetails = params.isPaid === false
+    ? "There is nothing else you need to do."
+    : "Your payment has moved with it, so there is nothing more to pay.";
+  const body =
+    `Hi ${row.first_name}! ${event.title} at ${venueName} has moved to ${dayDate} at ${time}. ` +
+    `${afterDetails} - Barons Pubs`;
+
+  try {
+    await sendTwilioSms({ to: row.mobile, body });
+    return true;
+  } catch (error) {
+    logSafeSmsFailure("booking_transfer", error, { bookingId: params.newBookingId });
+    return false;
+  }
+}
+
+/**
  * Sends day-before reminder SMS. Called by the sms-reminders cron.
  *
  * Uses claim-before-send pattern: marks the row as sent BEFORE calling Twilio
