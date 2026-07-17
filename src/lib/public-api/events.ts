@@ -4,6 +4,7 @@ import { isBookingFormat, isFreeBookingFormat, type BookingFormat } from "@/lib/
 import { parseVenueSpaces } from "@/lib/venue-spaces";
 import { normaliseOptionalText, normaliseOptionalInteger } from "@/lib/normalise";
 import { SHORT_LINK_HOST } from "@/lib/short-link-config";
+import { normaliseWebsiteTimeText } from "@/lib/datetime";
 
 export const PUBLIC_EVENT_STATUSES = ["approved", "completed"] as const;
 export type PublicEventStatus = (typeof PUBLIC_EVENT_STATUSES)[number];
@@ -97,7 +98,7 @@ function normaliseHighlights(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value
     .filter((item): item is string => typeof item === "string")
-    .map((item) => item.replace(/^\s*[-*•]\s*/, "").trim())
+    .map((item) => normaliseWebsiteTimeText(item.replace(/^\s*[-*•]\s*/, "").trim()))
     .filter(Boolean);
 }
 
@@ -198,7 +199,7 @@ export function toPublicEvent(row: RawEventRow): PublicEvent {
   }
 
   const internalTitle = typeof row.title === "string" ? row.title.trim() : "";
-  const title = normaliseOptionalText(row.public_title) ?? internalTitle;
+  const title = normaliseWebsiteTimeText(normaliseOptionalText(row.public_title) ?? internalTitle);
   const teaser = normaliseOptionalText(row.public_teaser);
   const description = normaliseOptionalText(row.public_description) ?? null;
   const highlights = normaliseHighlights(row.public_highlights);
@@ -220,14 +221,14 @@ export function toPublicEvent(row: RawEventRow): PublicEvent {
     id: row.id,
     slug: buildEventSlug({ id: row.id, title, seoSlug }),
     title,
-    teaser,
+    teaser: teaser ? normaliseWebsiteTimeText(teaser) : null,
     highlights,
     eventType: row.event_type,
     status,
     startAt: row.start_at,
     endAt: row.end_at,
     venueSpaces: parseVenueSpaces(row.venue_space),
-    description,
+    description: description ? normaliseWebsiteTimeText(description) : null,
     bookingType,
     ticketPrice,
     checkInCutoffMinutes,
@@ -239,8 +240,8 @@ export function toPublicEvent(row: RawEventRow): PublicEvent {
     bookingEnabled,
     bookingPageUrl: buildBookingPageUrl(seoSlug, bookingEnabled),
     eventImageUrl: buildEventImageUrl(row.event_image_path),
-    seoTitle,
-    seoDescription,
+    seoTitle: seoTitle ? normaliseWebsiteTimeText(seoTitle) : null,
+    seoDescription: seoDescription ? normaliseWebsiteTimeText(seoDescription) : null,
     seoSlug,
     wetPromo: normaliseOptionalText(row.wet_promo),
     foodPromo: normaliseOptionalText(row.food_promo),

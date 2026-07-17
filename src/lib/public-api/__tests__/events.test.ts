@@ -43,9 +43,9 @@ describe("public-api events helpers", () => {
       id: "aaaaaaa1-0000-4000-8000-000000000001",
       title: "  Cask Ale Showcase  ",
       public_title: "  The Ultimate Cask Ale Showcase  ",
-      public_teaser: "Limited tickets – one-night-only cask line-up.",
-      public_description: "A guest-facing description for the website.",
-      public_highlights: ["Award-winning guest breweries", "Live folk duo from 8pm"],
+      public_teaser: "Doors at 19:00 – limited tickets.",
+      public_description: "Live music from 8:30 PM until 10:00pm.",
+      public_highlights: ["Award-winning guest breweries", "Live folk duo from 8:00pm"],
       booking_type: "paid_standing_unreserved",
       ticket_price: 12.5,
       check_in_cutoff_minutes: 30,
@@ -56,8 +56,8 @@ describe("public-api events helpers", () => {
       booking_url: "https://example.com/book",
       booking_enabled: true,
       event_image_path: null,
-      seo_title: "Cask Ale Showcase",
-      seo_description: "Secure your spot for our cask showcase.",
+      seo_title: "Cask Ale Showcase at 8 PM",
+      seo_description: "Secure your spot before 19:00.",
       seo_slug: "cask-ale-showcase",
       event_type: "Tap Takeover",
       status: "approved",
@@ -76,9 +76,9 @@ describe("public-api events helpers", () => {
     });
 
     expect(event.title).toBe("The Ultimate Cask Ale Showcase");
-    expect(event.teaser).toBe("Limited tickets – one-night-only cask line-up.");
+    expect(event.teaser).toBe("Doors at 7pm – limited tickets.");
     expect(event.highlights).toEqual(["Award-winning guest breweries", "Live folk duo from 8pm"]);
-    expect(event.description).toBe("A guest-facing description for the website.");
+    expect(event.description).toBe("Live music from 8.30pm until 10pm.");
     expect(event.bookingType).toBe("paid_standing_unreserved");
     expect(event.ticketPrice).toBe(12.5);
     expect(event.checkInCutoffMinutes).toBe(30);
@@ -90,6 +90,8 @@ describe("public-api events helpers", () => {
     expect(event.bookingPageUrl).toBe("https://l.baronspubs.com/cask-ale-showcase");
     expect(event.eventImageUrl).toBeNull();
     expect(event.seoSlug).toBe("cask-ale-showcase");
+    expect(event.seoTitle).toBe("Cask Ale Showcase at 8pm");
+    expect(event.seoDescription).toBe("Secure your spot before 7pm.");
     expect(event.venueSpaces).toEqual(["Main Bar", "Riverside Terrace"]);
     expect(event.foodPromo).toBeNull();
     expect(event.status).toBe("approved");

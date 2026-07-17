@@ -57,4 +57,25 @@ describe("event validation schemas", () => {
     const paths = result.error.issues.map((issue) => issue.path.join("."));
     expect(paths).toContain("cancellationWindowHours");
   });
+
+  it("standardises times in manually edited website content", () => {
+    const result = eventDraftSchema.safeParse({
+      ...basePayload,
+      publicTitle: "Sunday lunch at 12:00 PM",
+      publicTeaser: "Doors open at 19:00",
+      publicDescription: "Music runs from 8:30pm until 10.30 PM.",
+      publicHighlights: "Early set at 7:00pm\nLate set at 9.15 PM",
+      seoTitle: "Sunday lunch at 12 PM",
+      seoDescription: "Book by 09:15"
+    });
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.publicTitle).toBe("Sunday lunch at 12pm");
+    expect(result.data.publicTeaser).toBe("Doors open at 7pm");
+    expect(result.data.publicDescription).toBe("Music runs from 8.30pm until 10.30pm.");
+    expect(result.data.publicHighlights).toEqual(["Early set at 7pm", "Late set at 9.15pm"]);
+    expect(result.data.seoTitle).toBe("Sunday lunch at 12pm");
+    expect(result.data.seoDescription).toBe("Book by 9.15am");
+  });
 });

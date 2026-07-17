@@ -181,15 +181,69 @@ const londonTimeChipFormatter = new Intl.DateTimeFormat("en-GB", {
   hour12: true
 });
 
+const websiteTimeFormatter = new Intl.DateTimeFormat("en-GB", {
+  timeZone: LONDON_TIME_ZONE,
+  hour: "numeric",
+  minute: "2-digit",
+  hour12: true
+});
+
+/**
+ * Formats an event time for guest-facing website copy.
+ * Examples: "1.30pm", "2pm", "9.15am".
+ */
+export function formatWebsiteTime(value: string | Date): string | null {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+
+  const parts = websiteTimeFormatter.formatToParts(date);
+  const hour = parts.find((part) => part.type === "hour")?.value.replace(/^0/, "");
+  const minute = parts.find((part) => part.type === "minute")?.value;
+  const dayPeriod = parts.find((part) => part.type === "dayPeriod")?.value.toLowerCase();
+  if (!hour || !minute || !dayPeriod) return null;
+
+  return minute === "00" ? `${hour}${dayPeriod}` : `${hour}.${minute}${dayPeriod}`;
+}
+
+/**
+ * Standardises clock times embedded in guest-facing event copy.
+ *
+ * Handles common 12-hour variants such as "7:30 PM", "7.30pm" and "7 pm",
+ * plus explicit two-digit 24-hour times such as "19:30". A trailing full stop
+ * is left intact because it may be sentence punctuation.
+ */
+export function normaliseWebsiteTimeText(value: string): string {
+  const from12Hour = value.replace(
+    /\b(0?[1-9]|1[0-2])(?:[:.]([0-5]\d))?\s*([ap])\.?\s*m(?![a-z])/gi,
+    (_, hourText: string, minute: string | undefined, dayPeriod: string) => {
+      const hour = Number(hourText);
+      const minuteLabel = minute && minute !== "00" ? `.${minute}` : "";
+      return `${hour}${minuteLabel}${dayPeriod.toLowerCase()}m`;
+    }
+  );
+
+  return from12Hour.replace(
+    /\b([01]\d|2[0-3]):([0-5]\d)\b/g,
+    (_, hourText: string, minute: string) => {
+      const hour24 = Number(hourText);
+      const hour12 = hour24 % 12 || 12;
+      const dayPeriod = hour24 < 12 ? "am" : "pm";
+      return minute === "00" ? `${hour12}${dayPeriod}` : `${hour12}.${minute}${dayPeriod}`;
+    }
+  );
+}
+
 /**
  * Format a UTC/ISO date string into London-local display strings.
- * Returns { date: "Thu 28 May", time: "7:30pm" }.
+ * Returns { date: "Thu 28 May", time: "7.30pm" }.
  */
 export function formatInLondon(isoString: string): { date: string; time: string } {
   const d = new Date(isoString);
   return {
     date: londonDateChipFormatter.format(d),
-    time: londonTimeChipFormatter.format(d).toLowerCase().replace(/\s/g, "")
+    time:
+      formatWebsiteTime(d) ??
+      londonTimeChipFormatter.format(d).toLowerCase().replace(/\s/g, "")
   };
 }
 
