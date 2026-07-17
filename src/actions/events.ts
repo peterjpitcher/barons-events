@@ -27,7 +27,7 @@ import { recordAuditLogEntry } from "@/lib/audit-log";
 import { processRefund, transferBooking } from "@/lib/payments/service";
 import { generateTermsAndConditions, generateWebsiteCopy, type GeneratedWebsiteCopy } from "@/lib/ai";
 import { isBookingFormat, isFreeBookingFormat, type BookingFormat } from "@/lib/booking-format";
-import { normaliseEventDateTimeForStorage } from "@/lib/datetime";
+import { normaliseEventDateTimeForStorage, normaliseWebsiteTimeText } from "@/lib/datetime";
 import { normaliseSopNotRequiredTemplateIds } from "@/lib/planning/sop";
 import { getOrCreateTrackedBookingUrl, type TrackedBookingUrlStatus } from "@/lib/event-booking-links";
 import { isEventRescheduleEnabled } from "@/lib/feature-flags";
@@ -396,25 +396,26 @@ function getFormValues(formData: FormData | undefined, key: string): FormDataEnt
 
 function toWebsiteCopyValues(generated: GeneratedWebsiteCopy): WebsiteCopyValues {
   return {
-    publicTitle: generated.publicTitle,
-    publicTeaser: generated.publicTeaser,
-    publicDescription: generated.publicDescription,
-    publicHighlights: generated.publicHighlights,
-    seoTitle: generated.seoTitle,
-    seoDescription: generated.seoDescription,
+    publicTitle: normaliseWebsiteTimeText(generated.publicTitle),
+    publicTeaser: normaliseWebsiteTimeText(generated.publicTeaser),
+    publicDescription: normaliseWebsiteTimeText(generated.publicDescription),
+    publicHighlights: generated.publicHighlights.map(normaliseWebsiteTimeText),
+    seoTitle: normaliseWebsiteTimeText(generated.seoTitle),
+    seoDescription: normaliseWebsiteTimeText(generated.seoDescription),
     seoSlug: generated.seoSlug
   };
 }
 
 function buildWebsiteCopyUpdatePayload(generated: GeneratedWebsiteCopy): Record<string, unknown> {
+  const values = toWebsiteCopyValues(generated);
   return {
-    public_title: generated.publicTitle,
-    public_teaser: generated.publicTeaser,
-    public_description: generated.publicDescription,
-    public_highlights: generated.publicHighlights,
-    seo_title: generated.seoTitle,
-    seo_description: generated.seoDescription,
-    seo_slug: generated.seoSlug
+    public_title: values.publicTitle,
+    public_teaser: values.publicTeaser,
+    public_description: values.publicDescription,
+    public_highlights: values.publicHighlights,
+    seo_title: values.seoTitle,
+    seo_description: values.seoDescription,
+    seo_slug: values.seoSlug
   };
 }
 

@@ -10,6 +10,7 @@ import {
   isUnreservedBookingFormat,
   type BookingFormat
 } from "@/lib/booking-format";
+import { formatWebsiteTime, normaliseWebsiteTimeText } from "@/lib/datetime";
 import { formatCurrency } from "@/lib/utils/format";
 
 export type WebsiteCopyInput = {
@@ -185,17 +186,7 @@ function formatUkIsoDate(startAt: string): string | null {
 }
 
 function formatUkTime(value: string): string | null {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Europe/London",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true
-  })
-    .format(parsed)
-    .replace(" ", "")
-    .toLowerCase();
+  return formatWebsiteTime(value);
 }
 
 function formatUkTimeRange(startAt: string, endAt: string): string | null {
@@ -238,7 +229,9 @@ function normaliseHighlights(values: unknown, maxItems = 5): string[] {
   for (const value of values) {
     if (typeof value !== "string") continue;
     const cleaned = clampChars(
-      removeUnsafeTokens(stripWrappingQuotes(stripUrls(value.replace(/^\s*[-*•]\s*/, "")))),
+      normaliseWebsiteTimeText(
+        removeUnsafeTokens(stripWrappingQuotes(stripUrls(value.replace(/^\s*[-*•]\s*/, ""))))
+      ),
       90
     );
     if (!cleaned.length) continue;
@@ -249,6 +242,18 @@ function normaliseHighlights(values: unknown, maxItems = 5): string[] {
     if (deduped.length >= maxItems) break;
   }
   return deduped;
+}
+
+function normaliseGeneratedWebsiteCopyTimes(copy: GeneratedWebsiteCopy): GeneratedWebsiteCopy {
+  return {
+    ...copy,
+    publicTitle: normaliseWebsiteTimeText(copy.publicTitle),
+    publicTeaser: normaliseWebsiteTimeText(copy.publicTeaser),
+    publicDescription: normaliseWebsiteTimeText(copy.publicDescription),
+    publicHighlights: copy.publicHighlights.map(normaliseWebsiteTimeText),
+    seoTitle: normaliseWebsiteTimeText(copy.seoTitle),
+    seoDescription: normaliseWebsiteTimeText(copy.seoDescription)
+  };
 }
 
 function buildBookingSummary(input: WebsiteCopyInput): string {
@@ -435,7 +440,7 @@ function buildFallbackWebsiteCopy(input: WebsiteCopyInput): GeneratedWebsiteCopy
   const seoDescription = ensureSeoTextContainsDate(publicTeaser, eventDateForSeo, 155);
   const seoSlug = ensureSlugContainsDate(sanitiseSeoSlug(publicTitle), eventIsoDateForSeo);
 
-  return {
+  return normaliseGeneratedWebsiteCopyTimes({
     publicTitle,
     publicTeaser,
     publicDescription,
@@ -443,7 +448,7 @@ function buildFallbackWebsiteCopy(input: WebsiteCopyInput): GeneratedWebsiteCopy
     seoTitle,
     seoDescription,
     seoSlug
-  };
+  });
 }
 
 function buildWebsiteCopyPrompt(input: WebsiteCopyInput): string {
@@ -676,7 +681,7 @@ function postProcessWebsiteCopy(parsed: GeneratedWebsiteCopy, input: WebsiteCopy
   const cleanedHighlights = normaliseHighlights(parsed.publicHighlights, 5);
   const publicHighlights = cleanedHighlights.length ? cleanedHighlights : fallback.publicHighlights;
 
-  const candidate: GeneratedWebsiteCopy = {
+  const candidate = normaliseGeneratedWebsiteCopyTimes({
     publicTitle: cleanedPublicTitle || fallback.publicTitle,
     publicTeaser: cleanedPublicTeaser || fallback.publicTeaser,
     publicDescription: cleanedDescription || fallback.publicDescription,
@@ -684,7 +689,7 @@ function postProcessWebsiteCopy(parsed: GeneratedWebsiteCopy, input: WebsiteCopy
     seoTitle: ensureSeoTextContainsDate(parsed.seoTitle, eventDateForSeo, 60),
     seoDescription: ensureSeoTextContainsDate(parsed.seoDescription, eventDateForSeo, 155),
     seoSlug: ensureSlugContainsDate(parsed.seoSlug, eventIsoDateForSeo)
-  };
+  });
 
   const allOutputStrings = [
     candidate.publicTitle,
@@ -756,6 +761,7 @@ export async function generateWebsiteCopy(input: WebsiteCopyInput): Promise<Gene
           "- Keep tone energetic, premium, and action-oriented.",
           "- Never write 'at <event name>' (event name is not the location). Use 'for <event name>' when needed.",
           "- UK English spelling and date formatting.",
+          "- Format every clock time exactly like 1.30pm, 2pm or 9.15am: use a dot before minutes, lowercase am/pm, no spaces, and omit .00.",
           "",
           `Event brief:\n${buildWebsiteCopyPrompt(input)}`
         ].join("\n")

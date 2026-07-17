@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { BOOKING_FORMATS, isFreeBookingFormat, isPaidBookingFormat } from "@/lib/booking-format";
+import { normaliseWebsiteTimeText } from "@/lib/datetime";
 
 const trimmedStringOrUndefined = z.preprocess(
   (value) => {
@@ -11,6 +12,11 @@ const trimmedStringOrUndefined = z.preprocess(
 );
 
 const optionalText = (max: number) => trimmedStringOrUndefined.pipe(z.string().max(max).optional());
+const optionalWebsiteText = (max: number) =>
+  z.preprocess(
+    (value) => typeof value === "string" ? normaliseWebsiteTimeText(value) : value,
+    optionalText(max)
+  );
 const requiredText = (min: number, max: number, emptyMessage: string) =>
   z.preprocess(
     (value) => {
@@ -53,14 +59,14 @@ const optionalHighlights = z.preprocess((value) => {
   if (typeof value === "string") {
     const items = value
       .split(/\r?\n/)
-      .map((line) => line.replace(/^\s*[-*•]\s*/, "").trim())
+      .map((line) => normaliseWebsiteTimeText(line.replace(/^\s*[-*•]\s*/, "").trim()))
       .filter(Boolean);
     return items.length ? items : undefined;
   }
   if (Array.isArray(value)) {
     const items = value
       .filter((item): item is string => typeof item === "string")
-      .map((line) => line.replace(/^\s*[-*•]\s*/, "").trim())
+      .map((line) => normaliseWebsiteTimeText(line.replace(/^\s*[-*•]\s*/, "").trim()))
       .filter(Boolean);
     return items.length ? items : undefined;
   }
@@ -127,13 +133,13 @@ const eventDraftBaseSchema = z.object({
   artistNames: optionalText(1000),
   goalFocus: optionalText(120),
   notes: optionalText(3000),
-  publicTitle: optionalText(120),
-  publicTeaser: optionalText(200),
-  publicDescription: optionalText(6000),
+  publicTitle: optionalWebsiteText(120),
+  publicTeaser: optionalWebsiteText(200),
+  publicDescription: optionalWebsiteText(6000),
   publicHighlights: optionalHighlights,
   bookingUrl: bookingUrlSchema,
-  seoTitle: optionalText(80),
-  seoDescription: optionalText(200),
+  seoTitle: optionalWebsiteText(80),
+  seoDescription: optionalWebsiteText(200),
   seoSlug: seoSlugSchema,
   managerResponsibleId: optionalUuid
 });

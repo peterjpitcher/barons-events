@@ -233,12 +233,37 @@ function formatUkTime(value) {
   if (!value) return null;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
-  return new Intl.DateTimeFormat("en-GB", {
-    hour: "2-digit",
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    hour: "numeric",
     minute: "2-digit",
-    hour12: false,
+    hour12: true,
     timeZone: "Europe/London"
-  }).format(date);
+  }).formatToParts(date);
+  const hour = parts.find((part) => part.type === "hour")?.value.replace(/^0/, "");
+  const minute = parts.find((part) => part.type === "minute")?.value;
+  const dayPeriod = parts.find((part) => part.type === "dayPeriod")?.value.toLowerCase();
+  if (!hour || !minute || !dayPeriod) return null;
+  return minute === "00" ? `${hour}${dayPeriod}` : `${hour}.${minute}${dayPeriod}`;
+}
+
+function normaliseWebsiteTimeText(value) {
+  const from12Hour = value.replace(
+    /\b(0?[1-9]|1[0-2])(?:[:.]([0-5]\d))?\s*([ap])\.?\s*m(?![a-z])/gi,
+    (_, hourText, minute, dayPeriod) => {
+      const minuteLabel = minute && minute !== "00" ? `.${minute}` : "";
+      return `${Number(hourText)}${minuteLabel}${dayPeriod.toLowerCase()}m`;
+    }
+  );
+
+  return from12Hour.replace(
+    /\b([01]\d|2[0-3]):([0-5]\d)\b/g,
+    (_, hourText, minute) => {
+      const hour24 = Number(hourText);
+      const hour12 = hour24 % 12 || 12;
+      const dayPeriod = hour24 < 12 ? "am" : "pm";
+      return minute === "00" ? `${hour12}${dayPeriod}` : `${hour12}.${minute}${dayPeriod}`;
+    }
+  );
 }
 
 function formatUkTimeRange(startAt, endAt) {
@@ -279,7 +304,10 @@ function normaliseHighlights(value) {
   const deduped = [];
   const seen = new Set();
   for (const item of value) {
-    const cleaned = clampText(String(item ?? "").replace(/^\s*[-*•]\s*/, ""), 90);
+    const cleaned = clampText(
+      normaliseWebsiteTimeText(String(item ?? "").replace(/^\s*[-*•]\s*/, "")),
+      90
+    );
     if (!cleaned.length) continue;
     const key = cleaned.toLowerCase();
     if (seen.has(key)) continue;
@@ -463,6 +491,7 @@ async function generateWebsiteCopyViaOpenAI(event, options) {
           "- seoTitle <= 60 chars and includes date.",
           "- seoDescription <= 155 chars and includes date.",
           "- seoSlug: lowercase words with hyphens and includes date.",
+          "- Format every clock time exactly like 1.30pm, 2pm or 9.15am: use a dot before minutes, lowercase am/pm, no spaces, and omit .00.",
           "",
           `Event brief:\n${buildEventBrief(event)}`
         ].join("\n")
@@ -526,14 +555,14 @@ async function generateWebsiteCopyViaOpenAI(event, options) {
 
   const eventDateShort = formatUkShortDate(event.start_at);
   const eventIsoDate = toIsoDate(event.start_at);
-  const safeTitle = clampText(parsed.publicTitle, 80);
-  const safeTeaser = clampText(parsed.publicTeaser, 160);
-  const safeDescription = String(parsed.publicDescription ?? "").trim();
+  const safeTitle = normaliseWebsiteTimeText(clampText(parsed.publicTitle, 80));
+  const safeTeaser = normaliseWebsiteTimeText(clampText(parsed.publicTeaser, 160));
+  const safeDescription = normaliseWebsiteTimeText(String(parsed.publicDescription ?? "").trim());
   const safeHighlights = normaliseHighlights(parsed.publicHighlights);
   const fallback = fallbackHighlights(event);
   const mergedHighlights = safeHighlights.length ? safeHighlights : fallback;
-  const safeSeoTitle = ensureIncludesDate(parsed.seoTitle, eventDateShort, 60);
-  const safeSeoDescription = ensureIncludesDate(parsed.seoDescription, eventDateShort, 155);
+  const safeSeoTitle = normaliseWebsiteTimeText(ensureIncludesDate(parsed.seoTitle, eventDateShort, 60));
+  const safeSeoDescription = normaliseWebsiteTimeText(ensureIncludesDate(parsed.seoDescription, eventDateShort, 155));
   const safeSeoSlug = ensureSlugIncludesDate(parsed.seoSlug ?? safeTitle, eventIsoDate);
 
   if (!safeTitle || !safeTeaser || !safeDescription || mergedHighlights.length < 3 || !safeSeoTitle || !safeSeoDescription || !safeSeoSlug) {

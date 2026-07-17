@@ -1,7 +1,7 @@
 import { notFound, permanentRedirect } from "next/navigation";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { formatInLondon } from "@/lib/datetime";
+import { formatInLondon, normaliseWebsiteTimeText } from "@/lib/datetime";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getConfirmedTicketCount } from "@/lib/bookings";
 import { isBookingFormat, isPaidBookingFormat } from "@/lib/booking-format";
@@ -89,11 +89,11 @@ async function getEventBySlug(slug: string): Promise<EventRow | null> {
   return {
     id: raw.id as string,
     title: raw.title as string,
-    public_title: (raw.public_title as string | null) ?? null,
-    public_teaser: (raw.public_teaser as string | null) ?? null,
-    public_description: (raw.public_description as string | null) ?? null,
+    public_title: typeof raw.public_title === "string" ? normaliseWebsiteTimeText(raw.public_title) : null,
+    public_teaser: typeof raw.public_teaser === "string" ? normaliseWebsiteTimeText(raw.public_teaser) : null,
+    public_description: typeof raw.public_description === "string" ? normaliseWebsiteTimeText(raw.public_description) : null,
     public_highlights: Array.isArray(raw.public_highlights)
-      ? (raw.public_highlights as string[])
+      ? (raw.public_highlights as string[]).map(normaliseWebsiteTimeText)
       : null,
     event_image_path: (raw.event_image_path as string | null) ?? null,
     start_at: raw.start_at as string,
