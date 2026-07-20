@@ -28,7 +28,7 @@ const LATEST_AUDIT_ALLOWLIST_MIGRATION = join(
   PROJECT_ROOT,
   "supabase",
   "migrations",
-  "20260625200000_fix_audit_action_allowlist.sql"
+  "20260720120000_add_venue_calendar_notes.sql"
 );
 
 // Set of `<file>.ts:<functionName>` entries that are intentionally exempt.
