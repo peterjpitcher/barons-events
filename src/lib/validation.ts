@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { BOOKING_FORMATS, isFreeBookingFormat, isPaidBookingFormat } from "@/lib/booking-format";
 import { normaliseWebsiteTimeText } from "@/lib/datetime";
+import { daysBetween, parseDateOnly } from "@/lib/planning/utils";
 
 const trimmedStringOrUndefined = z.preprocess(
   (value) => {
@@ -225,3 +226,46 @@ export const debriefSchema = z
       });
     }
   });
+
+const calendarDateString = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD")
+  .refine((value) => {
+    try {
+      parseDateOnly(value);
+      return true;
+    } catch {
+      return false;
+    }
+  }, "Use a real calendar date");
+
+const calendarNoteBase = z.object({
+  venueId: z.string().uuid(),
+  title: requiredText(1, 200, "Add a short title"),
+  detail: optionalText(2000),
+  startDate: calendarDateString,
+  endDate: calendarDateString.nullable().optional(),
+});
+
+function refineNoteDates(
+  values: { startDate: string; endDate?: string | null },
+  ctx: z.RefinementCtx
+): void {
+  if (!values.endDate) return;
+  if (values.endDate < values.startDate) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "End date is before the start date", path: ["endDate"] });
+  } else if (daysBetween(values.startDate, values.endDate) > 31) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Notes can span at most 31 days", path: ["endDate"] });
+  }
+}
+
+export const createCalendarNoteSchema = calendarNoteBase.superRefine(refineNoteDates);
+
+export const updateCalendarNoteSchema = calendarNoteBase
+  .extend({ id: z.string().uuid(), expectedUpdatedAt: z.string().min(1) })
+  .superRefine(refineNoteDates);
+
+export const deleteCalendarNoteSchema = z.object({
+  id: z.string().uuid(),
+  expectedUpdatedAt: z.string().min(1),
+});
