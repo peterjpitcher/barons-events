@@ -87,3 +87,7 @@ For CI, mint short-lived test fixtures with the service-role client at the
 start of each job, export their IDs as env vars, and tear them down after.
 Avoid running the integration suite against a shared stack (use a fresh
 ephemeral Postgres per run).
+
+## Migration RLS suite (`supabase/migrations/__tests__/*.test.ts`)
+
+Gated on `RUN_SUPABASE_MIGRATION_TESTS=1`; the `venue_calendar_notes_rls` suite also needs `SUPABASE_ADMIN_JWT` (an administrator JWT) alongside the existing manager JWTs `SUPABASE_OW_JWT`, `SUPABASE_OTHER_OW_JWT`, and `SUPABASE_OW_NO_VENUE_JWT`.
