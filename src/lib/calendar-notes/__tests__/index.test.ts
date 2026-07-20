@@ -22,8 +22,8 @@ beforeEach(() => {
 
 describe("listCalendarNotes", () => {
   it("maps rows to camelCase with venue name", async () => {
-    const order = vi.fn().mockResolvedValue({ data: [noteRow()], error: null });
-    from.mockReturnValue({ select: () => ({ is: () => ({ order }) }) });
+    const limit = vi.fn().mockResolvedValue({ data: [noteRow()], error: null });
+    from.mockReturnValue({ select: () => ({ is: () => ({ order: () => ({ limit }) }) }) });
     const result = await listCalendarNotes();
     expect(result.truncated).toBe(false);
     expect(result.notes[0]).toMatchObject({
@@ -33,11 +33,12 @@ describe("listCalendarNotes", () => {
   });
 
   it("flags truncation at the cap", async () => {
-    const rows = Array.from({ length: 2000 }, (_, i) => noteRow({ id: `n${i}` }));
-    const order = vi.fn().mockResolvedValue({ data: rows, error: null });
-    from.mockReturnValue({ select: () => ({ is: () => ({ order }) }) });
+    const rows = Array.from({ length: 2001 }, (_, i) => noteRow({ id: `n${i}` }));
+    const limit = vi.fn().mockResolvedValue({ data: rows, error: null });
+    from.mockReturnValue({ select: () => ({ is: () => ({ order: () => ({ limit }) }) }) });
     const result = await listCalendarNotes();
     expect(result.truncated).toBe(true);
+    expect(result.notes).toHaveLength(2000);
   });
 });
 
@@ -54,7 +55,7 @@ describe("findNoteClashes", () => {
     };
     from
       .mockReturnValueOnce({ select: () => ({ is: () => ({ gte: () => ({ lte: () => ({ order: () => eventsResult }) }) }) }) })
-      .mockReturnValueOnce({ select: () => ({ is: () => ({ order: () => ({ data: [noteRow()], error: null }) }) }) });
+      .mockReturnValueOnce({ select: () => ({ is: () => ({ order: () => ({ limit: () => ({ data: [noteRow()], error: null }) }) }) }) });
     const clashes = await findNoteClashes({ all: true });
     expect(clashes).toHaveLength(1);
     expect(clashes[0]).toMatchObject({

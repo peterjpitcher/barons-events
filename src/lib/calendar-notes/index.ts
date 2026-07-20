@@ -67,12 +67,16 @@ export async function listCalendarNotes(
   if (scope?.venueId) {
     query = query.eq("venue_id", scope.venueId);
   }
-  const { data, error } = await query.order("start_date", { ascending: true });
+  // Fetch one past the cap so truncation is detected from the capped fetch
+  // itself, never silently under-reported by an external row limit.
+  const { data, error } = await query
+    .order("start_date", { ascending: true })
+    .limit(LIST_CAP + 1);
   if (error) {
     throw new Error(`Could not load calendar notes: ${error.message}`);
   }
   const rows = (data ?? []) as NoteRow[];
-  const truncated = rows.length >= LIST_CAP;
+  const truncated = rows.length > LIST_CAP;
   if (truncated) {
     console.error(`[calendar-notes] list truncated at ${LIST_CAP} rows`);
   }

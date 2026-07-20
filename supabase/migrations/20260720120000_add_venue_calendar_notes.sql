@@ -63,11 +63,18 @@ create policy "venue calendar notes update scoped"
   on public.venue_calendar_notes
   for update to authenticated
   using (
-    public.current_user_role() = 'administrator'
-    or (
-      public.current_user_role() = 'manager'
-      and public.current_user_venue_id() is not null
-      and venue_id = public.current_user_venue_id()
+    -- deleted_at is null on the USING (OLD row) side makes deletion terminal for
+    -- clients: a soft-deleted note cannot be resurrected or edited via a raw
+    -- PATCH. A legitimate soft-delete still passes because the OLD row is active.
+    -- It is deliberately NOT in with check, or setting deleted_at would fail.
+    deleted_at is null
+    and (
+      public.current_user_role() = 'administrator'
+      or (
+        public.current_user_role() = 'manager'
+        and public.current_user_venue_id() is not null
+        and venue_id = public.current_user_venue_id()
+      )
     )
   )
   with check (
