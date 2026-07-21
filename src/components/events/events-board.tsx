@@ -556,6 +556,10 @@ export function EventsBoard({ user, events, venues, notes, notesFailed, initialM
     setNoteDialog({ mode: "edit", note });
   }, []);
 
+  const handleAddNoteForDate = useCallback((dateKey: string) => {
+    setNoteDialog({ mode: "create", defaultDate: dateKey });
+  }, []);
+
   const venueOptions = useMemo(() => {
     const baseOptions: { value: string; label: string }[] = [{ value: "all", label: "All venues" }];
     if (myVenueId) {
@@ -935,6 +939,8 @@ export function EventsBoard({ user, events, venues, notes, notesFailed, initialM
             getStatusAccent={(status) => statusAccentStyles[status] ?? statusAccentStyles.draft}
             canApproveEvent={canApproveEvent}
             onOpenNote={handleOpenNote}
+            canCreateNote={canAddNote}
+            onAddNoteForDate={handleAddNoteForDate}
           />
         ) : view === "matrix" ? (
           <SevenDayMatrix

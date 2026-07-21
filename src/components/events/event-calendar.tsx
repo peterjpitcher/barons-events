@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import dayjs from "dayjs";
+import { Pin } from "lucide-react";
 import type { EventSummary } from "@/lib/events";
 import type { CalendarNote } from "@/lib/calendar-notes";
 import { ApproveEventButton } from "@/components/events/approve-event-button";
@@ -32,6 +33,8 @@ type EventCalendarProps = {
   getStatusAccent: (status: EventSummary["status"]) => StatusAccent;
   canApproveEvent?: (event: CalendarEvent) => boolean;
   onOpenNote?: (note: CalendarNote) => void;
+  canCreateNote?: boolean;
+  onAddNoteForDate?: (dateKey: string) => void;
 };
 
 function EventListItem({
@@ -183,7 +186,9 @@ export function EventCalendar({
   getStatusLabel,
   getStatusAccent,
   canApproveEvent,
-  onOpenNote
+  onOpenNote,
+  canCreateNote = false,
+  onAddNoteForDate
 }: EventCalendarProps) {
   const start = useMemo(() => startOfIsoWeek(monthCursor.startOf("month")), [monthCursor]);
   const end = useMemo(() => endOfIsoWeek(monthCursor.endOf("month")), [monthCursor]);
@@ -275,6 +280,8 @@ export function EventCalendar({
             return `/events/new?${params.toString()}`;
           })();
 
+          const showAddNote = canCreateNote && Boolean(onAddNoteForDate);
+
           return (
             <div
               key={key}
@@ -283,7 +290,7 @@ export function EventCalendar({
                 dayNotes.length > 0 ? `, ${dayNotes.length} notes` : ""
               }`}
             >
-              <div className="flex items-center justify-between">
+              <div className="flex items-start justify-between gap-1">
                 {quickCreateHref ? (
                   <Link
                     href={quickCreateHref}
@@ -302,15 +309,32 @@ export function EventCalendar({
                     {day.format("D")}
                   </span>
                 )}
-                {quickCreateHref ? (
-                  <Button
-                    asChild
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-xs text-[var(--navy)]"
-                  >
-                    <Link href={quickCreateHref}>Add event</Link>
-                  </Button>
+                {quickCreateHref || showAddNote ? (
+                  <div className="flex flex-col items-end gap-0.5">
+                    {quickCreateHref ? (
+                      <Button
+                        asChild
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs text-[var(--navy)]"
+                      >
+                        <Link href={quickCreateHref}>Add event</Link>
+                      </Button>
+                    ) : null}
+                    {showAddNote ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs text-[var(--plum)]"
+                        aria-label={`Add note on ${day.format("D MMMM YYYY")}`}
+                        onClick={() => onAddNoteForDate?.(key)}
+                      >
+                        <Pin className="mr-1 h-3 w-3" aria-hidden="true" />
+                        Add note
+                      </Button>
+                    ) : null}
+                  </div>
                 ) : null}
               </div>
               <ul className="mt-2 space-y-1 md:space-y-0 md:divide-y md:divide-[var(--hair)]">
