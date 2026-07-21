@@ -10,7 +10,7 @@ import { setUserPinPreferenceAction } from "@/actions/user-preferences";
 import { CalendarNoteDialog, type CalendarNoteDialogNote } from "@/components/calendar-notes/calendar-note-dialog";
 import { PlanningAlertStrip } from "@/components/planning/planning-alert-strip";
 import { PlanningCalendarView } from "@/components/planning/planning-calendar-view";
-import { PlanningItemCard, EventOverlayCard, InspirationItemCard } from "@/components/planning/planning-item-card";
+import { PlanningItemCard, CalendarNoteCard, EventOverlayCard, InspirationItemCard } from "@/components/planning/planning-item-card";
 import { PlanningListView } from "@/components/planning/planning-list-view";
 import { UnifiedTodoList } from "@/components/todos/unified-todo-list";
 import type { PlanningViewEntry } from "@/components/planning/view-types";
@@ -47,7 +47,7 @@ type PlanningBoardProps = {
   currentUserVenueId?: string | null;
   queueItems?: TodoItem[];
   queueInitiallyPinned?: boolean;
-  /** Venue calendar notes rendered on the Calendar tab only. */
+  /** Venue calendar notes rendered on the desktop board, calendar and list views. */
   notes?: CalendarNote[];
   notesTruncated?: boolean;
   notesFailed?: boolean;
@@ -83,12 +83,41 @@ function sortByDateThenTitle<T extends { targetDate: string; title: string }>(ro
   });
 }
 
+/** Date-grouped views (calendar and list) show a multi-day note on every day it
+ * occupies, so a blocked venue reads as blocked on each of those dates. Capped
+ * at a year as a safety net against bad data. */
+function noteToViewEntries(note: CalendarNote): PlanningViewEntry[] {
+  const days: string[] = [];
+  const end = note.endDate ?? note.startDate;
+  let cursor = note.startDate;
+  for (let i = 0; i <= 366 && cursor <= end; i++) {
+    days.push(cursor);
+    if (cursor === end) break;
+    cursor = addDays(cursor, 1);
+  }
+
+  return days.map((day) => ({
+    id: `note-${note.id}-${day}`,
+    source: "note" as const,
+    targetDate: day,
+    title: note.title,
+    venueLabel: note.venueName,
+    noteId: note.id,
+    startDate: note.startDate,
+    endDate: note.endDate,
+    detail: note.detail,
+    venueId: note.venueId,
+    updatedAt: note.updatedAt
+  }));
+}
+
 type ViewMode = "board" | "calendar" | "list" | "todos_by_person";
 type StatusScope = "open" | "closed" | "all";
 type CombinedPlanningRow =
   | { type: "planning"; item: PlanningItem }
   | { type: "event"; event: PlanningEventOverlay }
-  | { type: "inspiration"; item: PlanningInspirationItem };
+  | { type: "inspiration"; item: PlanningInspirationItem }
+  | { type: "note"; note: CalendarNote; targetDate: string; title: string };
 type MobilePlanningRow = Extract<CombinedPlanningRow, { type: "planning" }>;
 
 function isClosedPlanningStatus(status: PlanningItem["status"]): boolean {
@@ -543,20 +572,42 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
     return map;
   }, [data.today, visibleInspirationItems]);
 
+  // Notes follow the venue filter only, matching the calendar: they have no
+  // status or owner for the other filters to bite on.
+  const visibleNotes = useMemo(
+    () => notes.filter((note) => !venueFilter || note.venueId === venueFilter),
+    [notes, venueFilter]
+  );
+
+  // A multi-day note lands in one bucket only, chosen by its start date. Per-day
+  // expansion stays with the date-grouped calendar and list views.
+  const notesByBucket = useMemo(() => {
+    const map: Record<PlanningBucketKey, CalendarNote[]> = {
+      past: [], "0_30": [], "31_60": [], "61_90": [], later: [],
+    };
+    for (const note of visibleNotes) {
+      const offset = daysBetween(data.today, note.startDate);
+      const bucket = bucketForPlanningOffset(offset);
+      map[bucket].push(note);
+    }
+    return map;
+  }, [data.today, visibleNotes]);
+
   const combinedByBucket = useMemo(() => {
-    const typeOrder: Record<string, number> = { planning: 0, event: 1, inspiration: 2 };
+    const typeOrder: Record<string, number> = { note: 0, planning: 1, event: 2, inspiration: 3 };
     const result: Record<PlanningBucketKey, CombinedPlanningRow[]> = { past: [], "0_30": [], "31_60": [], "61_90": [], later: [] };
 
     for (const key of ["past", "0_30", "31_60", "61_90", "later"] as PlanningBucketKey[]) {
       const merged = [
+        ...notesByBucket[key].map((note) => ({ type: "note" as const, note, targetDate: note.startDate, title: note.title })),
         ...planningByBucket[key].map((item) => ({ type: "planning" as const, item, targetDate: item.targetDate, title: item.title })),
         ...eventsByBucket[key].map((event) => ({ type: "event" as const, event, targetDate: event.targetDate, title: event.title })),
         ...inspirationByBucket[key].map((item) => ({ type: "inspiration" as const, item, targetDate: item.eventDate, title: item.eventName }))
       ];
       merged.sort((left, right) => {
         if (left.targetDate !== right.targetDate) return left.targetDate.localeCompare(right.targetDate);
-        const lo = typeOrder[left.type] ?? 3;
-        const ro = typeOrder[right.type] ?? 3;
+        const lo = typeOrder[left.type] ?? 4;
+        const ro = typeOrder[right.type] ?? 4;
         if (lo !== ro) return lo - ro;
         return left.title.localeCompare(right.title);
       });
@@ -564,7 +615,7 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
     }
 
     return result;
-  }, [planningByBucket, eventsByBucket, inspirationByBucket]);
+  }, [notesByBucket, planningByBucket, eventsByBucket, inspirationByBucket]);
 
   // Core buckets: past (if non-empty) + 0-30 + 31-60 + 61-90. "Later" toggled separately.
   const CORE_BUCKETS = BUCKETS.slice(0, 4); // past, 0_30, 31_60, 61_90
@@ -625,14 +676,20 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
       inspirationItem: item
     }));
 
-    return [...planningEntries, ...eventEntries, ...inspirationEntries].sort((left, right) => {
+    const noteEntries: PlanningViewEntry[] = visibleNotes.flatMap(noteToViewEntries);
+
+    return [...noteEntries, ...planningEntries, ...eventEntries, ...inspirationEntries].sort((left, right) => {
       if (left.targetDate !== right.targetDate) return left.targetDate.localeCompare(right.targetDate);
       const lo = sourceOrder[left.source] ?? 4;
       const ro = sourceOrder[right.source] ?? 4;
       if (lo !== ro) return lo - ro;
       return left.title.localeCompare(right.title);
     });
-  }, [filteredPlanningItems, visibleEvents, visibleInspirationItems]);
+  }, [filteredPlanningItems, visibleEvents, visibleInspirationItems, visibleNotes]);
+
+  // A multi-day note is one thing shown, however many days it spans, so it is
+  // counted once here even though the list expands it per day.
+  const shownCount = combinedEntries.filter((entry) => entry.source !== "note").length + visibleNotes.length;
 
   // ─── Calendar dataset ─────────────────────────────────────────────────────
   // The calendar view needs historic activity that's trimmed out of the
@@ -690,33 +747,8 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
             }))
         : [];
 
-    // Notes appear on the calendar only. Multi-day notes are expanded into
-    // one entry per occupied day (capped at a year as a safety net).
-    const noteEntries: PlanningViewEntry[] = notes
-      .filter((note) => !venueFilter || note.venueId === venueFilter)
-      .flatMap((note) => {
-        const days: string[] = [];
-        let cursor = note.startDate;
-        const end = note.endDate ?? note.startDate;
-        for (let i = 0; i <= 366 && cursor <= end; i++) {
-          days.push(cursor);
-          if (cursor === end) break;
-          cursor = addDays(cursor, 1);
-        }
-        return days.map((day) => ({
-          id: `note-${note.id}-${day}`,
-          source: "note" as const,
-          targetDate: day,
-          title: note.title,
-          venueLabel: note.venueName,
-          noteId: note.id,
-          startDate: note.startDate,
-          endDate: note.endDate,
-          detail: note.detail,
-          venueId: note.venueId,
-          updatedAt: note.updatedAt
-        }));
-      });
+    // Multi-day notes are expanded into one entry per occupied day.
+    const noteEntries: PlanningViewEntry[] = visibleNotes.flatMap(noteToViewEntries);
 
     return [...noteEntries, ...planningEntries, ...eventEntries].sort((left, right) => {
       if (left.targetDate !== right.targetDate) return left.targetDate.localeCompare(right.targetDate);
@@ -725,7 +757,7 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
       if (lo !== ro) return lo - ro;
       return left.title.localeCompare(right.title);
     });
-  }, [calendarSource, search, venueFilter, eventVisibility, statusScope, notes]);
+  }, [calendarSource, search, venueFilter, eventVisibility, statusScope, visibleNotes]);
 
   function switchView(mode: ViewMode): void {
     setViewMode(mode);
@@ -770,6 +802,22 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
     });
   }
 
+  /** Board rows carry the whole note, so they open the same dialog directly. */
+  function openNoteRecord(note: CalendarNote): void {
+    setNoteDialog({
+      mode: "edit",
+      note: {
+        id: note.id,
+        venueId: note.venueId,
+        title: note.title,
+        startDate: note.startDate,
+        endDate: note.endDate,
+        detail: note.detail,
+        updatedAt: note.updatedAt
+      }
+    });
+  }
+
   function toggleQueueItem(item: TodoItem) {
     if (!item.planningTaskId) return;
     startTransition(async () => {
@@ -810,6 +858,8 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
               <span>{visibleEvents.length} events</span>
               <span className="h-1 w-1 rounded-full bg-[var(--hair-strong)]" />
               <span>{visibleInspirationItems.length} inspiration</span>
+              <span className="h-1 w-1 rounded-full bg-[var(--hair-strong)]" />
+              <span>{visibleNotes.length} notes</span>
               <span className="h-1 w-1 rounded-full bg-[var(--hair-strong)]" />
               <span className="text-[var(--ink-soft)]">Updated now</span>
             </>
@@ -942,7 +992,7 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
           </Button>
         ) : null}
         <span className="ml-auto font-brand-mono text-[0.625rem] uppercase tracking-[0.05em] text-[var(--ink-soft)]">
-          {combinedEntries.length} shown
+          {shownCount} shown
         </span>
       </section>
 
@@ -1005,6 +1055,19 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
         ) : null}
       </section>
 
+      {/* Notes now appear on the board, calendar and list, so a load failure or
+          truncation must be visible on all of them, never silently absent. */}
+      {notesFailed && viewMode !== "todos_by_person" ? (
+        <p className="rounded-[8px] border border-[var(--burgundy)] bg-[var(--burgundy-tint)] px-3 py-2 text-xs font-medium text-[var(--burgundy)]">
+          Venue notes could not be loaded. Everything else on this view is unaffected.
+        </p>
+      ) : null}
+      {notesTruncated && viewMode !== "todos_by_person" ? (
+        <p className="rounded-[8px] border border-[var(--mustard)] bg-[var(--mustard-tint)] px-3 py-2 text-xs font-medium text-[var(--mustard-dark)]">
+          Some venue notes are not shown.
+        </p>
+      ) : null}
+
       {viewMode === "board" ? (
         <section className="hidden md:block">
           <div className={`grid gap-3 ${
@@ -1051,6 +1114,9 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
                       if (row.type === "inspiration") {
                         return <InspirationItemCard key={row.item.id} item={row.item} />;
                       }
+                      if (row.type === "note") {
+                        return <CalendarNoteCard key={row.note.id} note={row.note} onOpen={openNoteRecord} />;
+                      }
                       return (
                         <EventOverlayCard
                           key={row.event.id}
@@ -1084,16 +1150,6 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
               </Button>
             ) : null}
           </div>
-          {notesFailed ? (
-            <p className="rounded-[8px] border border-[var(--burgundy)] bg-[var(--burgundy-tint)] px-3 py-2 text-xs font-medium text-[var(--burgundy)]">
-              Venue notes could not be loaded. The rest of the calendar is unaffected.
-            </p>
-          ) : null}
-          {notesTruncated ? (
-            <p className="rounded-[8px] border border-[var(--mustard)] bg-[var(--mustard-tint)] px-3 py-2 text-xs font-medium text-[var(--mustard-dark)]">
-              Some venue notes are not shown.
-            </p>
-          ) : null}
           <PlanningCalendarView
             today={data.today}
             entries={calendarCombinedEntries}

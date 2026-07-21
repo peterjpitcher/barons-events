@@ -147,10 +147,9 @@ export function PlanningListView({ today, entries, onOpenPlanningItem, onOpenNot
                   }
 
                   if (entry.source === "note") {
-                    // Notes are calendar-first and normally filtered out of
-                    // the list dataset; this branch keeps the union
-                    // exhaustively handled and renders sensibly if one slips
-                    // through.
+                    // Multi-day notes arrive pre-expanded, one entry per day
+                    // they occupy, so each date group shows the venue as
+                    // blocked.
                     return (
                       <button
                         key={entry.id}

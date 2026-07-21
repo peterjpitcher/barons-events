@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import type { CalendarNote } from "@/lib/calendar-notes";
 import type { PlanningEventOverlay, PlanningInspirationItem, PlanningItem, PlanningPerson, PlanningTask, PlanningVenueOption } from "@/lib/planning/types";
 import { deriveInitialVenueIds } from "@/lib/planning/utils";
 import { formatDate } from "@/lib/utils/format";
@@ -844,6 +845,61 @@ export function InspirationItemCard({ item }: { item: PlanningInspirationItem })
         </Button>
       </div>
     </div>
+  );
+}
+
+const NOTE_DAY_FORMAT = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", day: "numeric" });
+const NOTE_DAY_MONTH_FORMAT = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", day: "numeric", month: "short" });
+const NOTE_DAY_MONTH_YEAR_FORMAT = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Europe/London",
+  day: "numeric",
+  month: "short",
+  year: "numeric"
+});
+
+/** "1 Aug" for a single day, "1 to 3 Aug" for a range inside one month. */
+export function formatNoteDateRange(startDate: string, endDate: string | null): string {
+  const start = new Date(`${startDate}T12:00:00Z`);
+  if (!endDate || endDate === startDate) {
+    return NOTE_DAY_MONTH_FORMAT.format(start);
+  }
+
+  const end = new Date(`${endDate}T12:00:00Z`);
+  if (startDate.slice(0, 4) !== endDate.slice(0, 4)) {
+    return `${NOTE_DAY_MONTH_YEAR_FORMAT.format(start)} to ${NOTE_DAY_MONTH_YEAR_FORMAT.format(end)}`;
+  }
+  if (startDate.slice(0, 7) === endDate.slice(0, 7)) {
+    return `${NOTE_DAY_FORMAT.format(start)} to ${NOTE_DAY_MONTH_FORMAT.format(end)}`;
+  }
+  return `${NOTE_DAY_MONTH_FORMAT.format(start)} to ${NOTE_DAY_MONTH_FORMAT.format(end)}`;
+}
+
+type CalendarNoteCardProps = {
+  note: CalendarNote;
+  onOpen: (note: CalendarNote) => void;
+};
+
+export function CalendarNoteCard({ note, onOpen }: CalendarNoteCardProps) {
+  const dateLabel = formatNoteDateRange(note.startDate, note.endDate);
+
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(note)}
+      aria-label={`Note: ${note.title}, ${note.venueName}, ${dateLabel}`}
+      className="w-full space-y-1 rounded-[8px] border border-[var(--plum)] bg-[var(--plum-tint)] p-2.5 text-left shadow-card transition hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--plum)]"
+    >
+      <span className="flex items-center gap-1 font-brand-mono text-[0.58rem] font-semibold uppercase tracking-[0.12em] text-[var(--plum)]">
+        <span aria-hidden="true">📌</span>
+        Note
+      </span>
+      <span className="line-clamp-2 block text-sm font-semibold leading-snug text-[var(--ink)]">{note.title}</span>
+      <span className="flex flex-wrap items-center gap-1.5 text-xs text-[var(--ink-muted)]">
+        <span className="truncate">{note.venueName}</span>
+        <span className="h-1 w-1 rounded-full bg-[var(--hair-strong)]" aria-hidden="true" />
+        <span>{dateLabel}</span>
+      </span>
+    </button>
   );
 }
 
