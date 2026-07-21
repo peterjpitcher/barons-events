@@ -19,6 +19,7 @@ import {
   Clock,
   List,
   MapPin,
+  Pin,
   Plus,
   Rows3,
   Search,
@@ -27,10 +28,14 @@ import {
   X
 } from "lucide-react";
 import type { EventSummary } from "@/lib/events";
-import { canProposeEvents, canReviewEvents } from "@/lib/roles";
+import type { CalendarNote } from "@/lib/calendar-notes";
+import { addDays } from "@/lib/planning/utils";
+import { canCreateCalendarNote, canManageCalendarNote, canProposeEvents, canReviewEvents } from "@/lib/roles";
 import type { AppUser } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { CalendarNoteDialog } from "@/components/calendar-notes/calendar-note-dialog";
+import { NOTE_ENTRY_CLASS, NOTE_LABEL } from "@/components/calendar-notes/calendar-note-entry-styles";
 import { EventCalendar, type CalendarEvent } from "@/components/events/event-calendar";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -53,10 +58,17 @@ type VenueOption = {
   name: string;
 };
 
+type NoteDialogState =
+  | { mode: "create"; defaultDate?: string }
+  | { mode: "edit"; note: CalendarNote };
+
 type EventsBoardProps = {
   user: AppUser;
   events: EventSummary[];
   venues: VenueOption[];
+  notes: CalendarNote[];
+  notesFailed?: boolean;
+  initialMonth?: string;
 };
 
 const statusConfig: Record<
@@ -199,7 +211,16 @@ function colorForVenue(name: string): string {
   return palette[hash % palette.length];
 }
 
-export function EventsBoard({ user, events, venues }: EventsBoardProps) {
+/** Parse a `month` deep-link value (YYYY-MM) into a month-start cursor, or null when absent/invalid. */
+function parseInitialMonth(value: string | undefined): dayjs.Dayjs | null {
+  if (!value || !/^\d{4}-\d{2}$/.test(value)) {
+    return null;
+  }
+  const parsed = dayjs(`${value}-01`);
+  return parsed.isValid() ? parsed.startOf("month") : null;
+}
+
+export function EventsBoard({ user, events, venues, notes, notesFailed, initialMonth }: EventsBoardProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -225,7 +246,10 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
   const [matrixStart, setMatrixStart] = useState<dayjs.Dayjs>(
     rawMatrixStart ? dayjs(rawMatrixStart) : dayjs().startOf("day")
   );
-  const [monthCursor, setMonthCursor] = useState<dayjs.Dayjs>(dayjs().startOf("month"));
+  const [monthCursor, setMonthCursor] = useState<dayjs.Dayjs>(
+    () => parseInitialMonth(initialMonth) ?? dayjs().startOf("month")
+  );
+  const [noteDialog, setNoteDialog] = useState<NoteDialogState | null>(null);
   const [venueSearch, setVenueSearch] = useState("");
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
@@ -241,13 +265,15 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
   const monthLabel = useMemo(() => monthCursor.format("MMMM YYYY"), [monthCursor]);
 
   useEffect(() => {
-    if (!rawView) {
+    // A month deep-link (e.g. from dashboard note clashes) must land on the month
+    // calendar, so skip the stored-view restore when one is present.
+    if (!rawView && !parseInitialMonth(initialMonth)) {
       const stored = typeof window !== "undefined" ? window.localStorage.getItem(localStorageKey) : null;
       if (stored === "month" || stored === "matrix" || stored === "list") {
         setView(stored);
       }
     }
-  }, [rawView]);
+  }, [rawView, initialMonth]);
 
   useEffect(() => {
     if (view === "matrix" && rawMatrixStart) {
@@ -342,6 +368,11 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
     if (!filteredVenueId) return eventDataset;
     return eventDataset.filter((event) => event.venue?.id === filteredVenueId);
   }, [eventDataset, filteredVenueId]);
+
+  const venueFilteredNotes = useMemo(() => {
+    if (!filteredVenueId) return notes;
+    return notes.filter((note) => note.venueId === filteredVenueId);
+  }, [notes, filteredVenueId]);
 
   const filteredVenuesForMatrix = useMemo(() => {
     if (!filteredVenueId) {
@@ -486,6 +517,45 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
     return filteredEvents.filter((event) => event.end.isAfter(start) && event.start.isBefore(end));
   }, [filteredEvents, listEvents, matrixStart, mobileView, monthCursor]);
 
+  // Notes for the mobile agenda, keyed by occupied YYYY-MM-DD and bounded to the
+  // active mobile view's window (agenda: today onward, matching its upcoming focus).
+  const mobileNotesByDate = useMemo(() => {
+    let startKey: string;
+    let endKey: string | null;
+    if (mobileView === "month") {
+      startKey = monthCursor.startOf("month").format("YYYY-MM-DD");
+      endKey = monthCursor.endOf("month").format("YYYY-MM-DD");
+    } else if (mobileView === "matrix") {
+      const start = matrixStart.isValid() ? matrixStart.startOf("day") : dayjs().startOf("day");
+      startKey = start.format("YYYY-MM-DD");
+      endKey = start.add(7, "day").format("YYYY-MM-DD");
+    } else {
+      startKey = dayjs().format("YYYY-MM-DD");
+      endKey = null;
+    }
+
+    const map = new Map<string, CalendarNote[]>();
+    venueFilteredNotes.forEach((note) => {
+      const lastDate = note.endDate ?? note.startDate;
+      for (let cursor = note.startDate; cursor <= lastDate; cursor = addDays(cursor, 1)) {
+        if (cursor < startKey) continue;
+        if (endKey && cursor > endKey) break;
+        const bucket = map.get(cursor) ?? [];
+        bucket.push(note);
+        map.set(cursor, bucket);
+      }
+    });
+    return map;
+  }, [venueFilteredNotes, matrixStart, mobileView, monthCursor]);
+
+  const canAddNote =
+    user.role === "administrator" ||
+    (myVenueId ? canCreateCalendarNote(user.role, myVenueId, myVenueId) : false);
+
+  const handleOpenNote = useCallback((note: CalendarNote) => {
+    setNoteDialog({ mode: "edit", note });
+  }, []);
+
   const venueOptions = useMemo(() => {
     const baseOptions: { value: string; label: string }[] = [{ value: "all", label: "All venues" }];
     if (myVenueId) {
@@ -570,6 +640,15 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
         }
       />
 
+      {notesFailed ? (
+        <p
+          role="status"
+          className="rounded-[var(--radius-sm)] border border-[var(--hair)] bg-[var(--canvas-2)] px-3 py-2 text-xs text-[var(--ink-muted)]"
+        >
+          Venue notes could not be loaded.
+        </p>
+      ) : null}
+
       <MobileEventsControls
         view={mobileView}
         onChangeView={setMobileView}
@@ -597,6 +676,8 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
       <div className="md:hidden">
         <MobileEventAgenda
           events={mobileVisibleEvents}
+          notesByDate={mobileNotesByDate}
+          onOpenNote={handleOpenNote}
           allFilteredCount={filteredEvents.length}
           hidePastEvents={hidePastEvents}
         />
@@ -606,6 +687,18 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
               <Plus className="h-5 w-5" aria-hidden="true" />
               New event
             </Link>
+          </Button>
+        ) : null}
+        {canAddNote ? (
+          <Button
+            type="button"
+            variant="secondary"
+            className="mobile-fab"
+            style={{ bottom: "calc(9rem + env(safe-area-inset-bottom))" }}
+            onClick={() => setNoteDialog({ mode: "create" })}
+          >
+            <Pin className="h-5 w-5" aria-hidden="true" />
+            Add note
           </Button>
         ) : null}
       </div>
@@ -692,6 +785,16 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
               <Button type="button" variant="outline" size="sm" onClick={() => setMonthCursor(monthCursor.add(1, "month"))}>
                 Next month <ChevronRight className="ml-1 h-4 w-4" />
               </Button>
+              {canAddNote ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setNoteDialog({ mode: "create" })}
+                >
+                  <Pin className="mr-1 h-4 w-4" aria-hidden="true" /> Add note
+                </Button>
+              ) : null}
             </div>
           ) : (
             <div className="flex items-center gap-2">
@@ -817,6 +920,7 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
         {view === "month" ? (
           <EventCalendar
             events={filteredEvents}
+            notes={venueFilteredNotes}
             monthCursor={monthCursor}
             onChangeMonth={setMonthCursor}
             canCreate={
@@ -830,6 +934,7 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
             getStatusLabel={(status) => (statusConfig[status] ?? statusConfig.draft).label}
             getStatusAccent={(status) => statusAccentStyles[status] ?? statusAccentStyles.draft}
             canApproveEvent={canApproveEvent}
+            onOpenNote={handleOpenNote}
           />
         ) : view === "matrix" ? (
           <SevenDayMatrix
@@ -844,6 +949,24 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
           <EventsListTable events={listEvents} allFilteredCount={filteredEvents.length} hidePastEvents={hidePastEvents} />
         )}
       </div>
+
+      {noteDialog ? (
+        <CalendarNoteDialog
+          key={noteDialog.mode === "edit" ? noteDialog.note.id : "create"}
+          open
+          mode={noteDialog.mode}
+          venues={venuesList}
+          canManage={
+            noteDialog.mode === "edit"
+              ? canManageCalendarNote(user.role, myVenueId, noteDialog.note.venueId)
+              : canAddNote
+          }
+          note={noteDialog.mode === "edit" ? noteDialog.note : undefined}
+          defaultDate={noteDialog.mode === "create" ? noteDialog.defaultDate : undefined}
+          fixedVenueId={user.role === "manager" ? myVenueId ?? undefined : undefined}
+          onClose={() => setNoteDialog(null)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -1022,10 +1145,14 @@ function StatusLegend({
 
 function MobileEventAgenda({
   events,
+  notesByDate,
+  onOpenNote,
   allFilteredCount,
   hidePastEvents,
 }: {
   events: EventWithDates[];
+  notesByDate: Map<string, CalendarNote[]>;
+  onOpenNote: (note: CalendarNote) => void;
   allFilteredCount: number;
   hidePastEvents: boolean;
 }) {
@@ -1041,14 +1168,18 @@ function MobileEventAgenda({
       list.push(event);
       map.set(key, list);
     }
-    return Array.from(map.entries()).map(([key, rows]) => ({
+    // Union the event dates with note-occupied dates so note-only days still
+    // get a dated group; YYYY-MM-DD keys sort chronologically.
+    const keys = Array.from(new Set([...map.keys(), ...notesByDate.keys()])).sort();
+    return keys.map((key) => ({
       key,
       day: dayjs(key),
-      rows,
+      rows: map.get(key) ?? [],
+      notes: notesByDate.get(key) ?? [],
     }));
-  }, [sorted]);
+  }, [sorted, notesByDate]);
 
-  if (sorted.length === 0) {
+  if (groups.length === 0) {
     return (
       <div className="mobile-card py-10 text-center text-sm text-[var(--ink-muted)]">
         {hidePastEvents && allFilteredCount > 0
@@ -1072,6 +1203,18 @@ function MobileEventAgenda({
             </span>
           </div>
           <div className="space-y-2">
+            {group.notes.map((note) => (
+              <button
+                key={`note-${note.id}`}
+                type="button"
+                onClick={() => onOpenNote(note)}
+                className={cn(NOTE_ENTRY_CLASS, "w-full text-left")}
+              >
+                <span aria-hidden="true">📌</span>{" "}
+                <span className="font-semibold">{NOTE_LABEL}:</span> {note.title}
+                <span className="block truncate text-[0.68rem] text-[var(--ink-muted)]">{note.venueName}</span>
+              </button>
+            ))}
             {group.rows.map((event) => (
               <MobileEventCard key={event.id} event={event} />
             ))}

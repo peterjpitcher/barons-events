@@ -4,8 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import dayjs from "dayjs";
 import type { EventSummary } from "@/lib/events";
+import type { CalendarNote } from "@/lib/calendar-notes";
 import { ApproveEventButton } from "@/components/events/approve-event-button";
 import { Button } from "@/components/ui/button";
+import { NOTE_ENTRY_CLASS, NOTE_LABEL } from "@/components/calendar-notes/calendar-note-entry-styles";
+import { addDays } from "@/lib/planning/utils";
 import { startOfIsoWeek, endOfIsoWeek, endsInEarlyHoursNextDay } from "@/lib/utils/date";
 
 type StatusAccent = {
@@ -20,6 +23,7 @@ export type CalendarEvent = EventSummary & {
 
 type EventCalendarProps = {
   events: CalendarEvent[];
+  notes: CalendarNote[];
   monthCursor: dayjs.Dayjs;
   onChangeMonth: (cursor: dayjs.Dayjs) => void;
   canCreate: boolean;
@@ -27,6 +31,7 @@ type EventCalendarProps = {
   getStatusLabel: (status: EventSummary["status"]) => string;
   getStatusAccent: (status: EventSummary["status"]) => StatusAccent;
   canApproveEvent?: (event: CalendarEvent) => boolean;
+  onOpenNote?: (note: CalendarNote) => void;
 };
 
 function EventListItem({
@@ -170,13 +175,15 @@ function OverflowList({
 
 export function EventCalendar({
   events,
+  notes,
   monthCursor,
   onChangeMonth,
   canCreate,
   createVenueId,
   getStatusLabel,
   getStatusAccent,
-  canApproveEvent
+  canApproveEvent,
+  onOpenNote
 }: EventCalendarProps) {
   const start = useMemo(() => startOfIsoWeek(monthCursor.startOf("month")), [monthCursor]);
   const end = useMemo(() => endOfIsoWeek(monthCursor.endOf("month")), [monthCursor]);
@@ -210,6 +217,21 @@ export function EventCalendar({
     return map;
   }, [events]);
 
+  const notesByDate = useMemo(() => {
+    const map = new Map<string, CalendarNote[]>();
+
+    notes.forEach((note) => {
+      const lastDate = note.endDate ?? note.startDate;
+      for (let cursor = note.startDate; cursor <= lastDate; cursor = addDays(cursor, 1)) {
+        const bucket = map.get(cursor) ?? [];
+        bucket.push(note);
+        map.set(cursor, bucket);
+      }
+    });
+
+    return map;
+  }, [notes]);
+
   const todayKey = dayjs().format("YYYY-MM-DD");
 
   useEffect(() => {
@@ -234,6 +256,7 @@ export function EventCalendar({
           const isCurrentMonth = day.month() === monthCursor.month();
           const isToday = key === todayKey;
           const dayEvents = eventsByDate.get(key) ?? [];
+          const dayNotes = notesByDate.get(key) ?? [];
 
           const quickCreateHref = (() => {
             if (!canCreate) {
@@ -256,7 +279,9 @@ export function EventCalendar({
             <div
               key={key}
               className="min-h-[7.5rem] bg-[var(--paper)] p-2"
-              aria-label={`${day.format("dddd D MMMM")}, ${dayEvents.length} events`}
+              aria-label={`${day.format("dddd D MMMM")}, ${dayEvents.length} events${
+                dayNotes.length > 0 ? `, ${dayNotes.length} notes` : ""
+              }`}
             >
               <div className="flex items-center justify-between">
                 {quickCreateHref ? (
@@ -289,6 +314,20 @@ export function EventCalendar({
                 ) : null}
               </div>
               <ul className="mt-2 space-y-1 md:space-y-0 md:divide-y md:divide-[var(--hair)]">
+                {dayNotes.map((note) => (
+                  <li key={`note-${note.id}`} className="md:pb-1">
+                    <button
+                      type="button"
+                      onClick={onOpenNote ? () => onOpenNote(note) : undefined}
+                      title={`${NOTE_LABEL}: ${note.title} (${note.venueName})`}
+                      className={`${NOTE_ENTRY_CLASS} w-full text-left transition-shadow hover:shadow-card`}
+                    >
+                      <span aria-hidden="true">📌</span>{" "}
+                      <span className="font-semibold">{NOTE_LABEL}:</span> {note.title}
+                      <span className="block truncate text-[0.68rem] text-subtle">{note.venueName}</span>
+                    </button>
+                  </li>
+                ))}
                 {dayEvents.slice(0, 3).map((event) => (
                   <EventListItem
                     key={event.id}
