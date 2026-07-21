@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import dayjs from "dayjs";
-import { Pin } from "lucide-react";
 import type { EventSummary } from "@/lib/events";
 import type { CalendarNote } from "@/lib/calendar-notes";
 import { ApproveEventButton } from "@/components/events/approve-event-button";
@@ -310,13 +309,13 @@ export function EventCalendar({
                   </span>
                 )}
                 {quickCreateHref || showAddNote ? (
-                  <div className="flex flex-col items-end gap-0.5">
+                  <div className="flex flex-col items-end">
                     {quickCreateHref ? (
                       <Button
                         asChild
                         variant="ghost"
                         size="sm"
-                        className="h-7 px-2 text-xs text-[var(--navy)]"
+                        className="h-5 px-1 text-[0.68rem] font-medium leading-tight text-[var(--navy)]"
                       >
                         <Link href={quickCreateHref}>Add event</Link>
                       </Button>
@@ -326,11 +325,10 @@ export function EventCalendar({
                         type="button"
                         variant="ghost"
                         size="sm"
-                        className="h-7 px-2 text-xs text-[var(--plum)]"
+                        className="h-5 px-1 text-[0.68rem] font-medium leading-tight text-[var(--plum)]"
                         aria-label={`Add note on ${day.format("D MMMM YYYY")}`}
                         onClick={() => onAddNoteForDate?.(key)}
                       >
-                        <Pin className="mr-1 h-3 w-3" aria-hidden="true" />
                         Add note
                       </Button>
                     ) : null}
