@@ -946,13 +946,21 @@ export function EventsBoard({ user, events, venues, notes, notesFailed, initialM
           <SevenDayMatrix
             events={filteredEvents}
             venues={filteredVenuesForMatrix}
+            notes={venueFilteredNotes}
+            onOpenNote={handleOpenNote}
             rangeStart={matrixStart}
             onChangeStart={setMatrixStart}
             canCreate={canCreate}
             createScopeVenueId={createScopeVenueId}
           />
         ) : (
-          <EventsListTable events={listEvents} allFilteredCount={filteredEvents.length} hidePastEvents={hidePastEvents} />
+          <EventsListTable
+            events={listEvents}
+            notes={venueFilteredNotes}
+            onOpenNote={handleOpenNote}
+            allFilteredCount={filteredEvents.length}
+            hidePastEvents={hidePastEvents}
+          />
         )}
       </div>
 
@@ -1279,7 +1287,70 @@ function MobileEventCard({ event }: { event: EventWithDates }) {
   );
 }
 
-function EventsListTable({ events, allFilteredCount, hidePastEvents }: { events: EventWithDates[]; allFilteredCount: number; hidePastEvents: boolean }) {
+// Rows in the list view are either an event or a venue calendar note. Notes are
+// date-only blocks, so they carry no time, artist, space or status of their own.
+type ListRow =
+  | { kind: "event"; key: string; event: EventWithDates }
+  | { kind: "note"; key: string; note: CalendarNote; start: dayjs.Dayjs; end: dayjs.Dayjs };
+
+type ListRowSortValues = {
+  dayStart: number;
+  minutes: number;
+  title: string;
+  venue: string;
+  artist: string;
+  space: string;
+  status: number;
+  start: number;
+};
+
+const UNRANKED_STATUS_ORDER = 999;
+
+function listRowSortValues(row: ListRow): ListRowSortValues {
+  if (row.kind === "note") {
+    return {
+      dayStart: row.start.startOf("day").valueOf(),
+      minutes: 0,
+      title: row.note.title,
+      venue: row.note.venueName,
+      artist: "",
+      space: "",
+      status: UNRANKED_STATUS_ORDER,
+      start: row.start.valueOf()
+    };
+  }
+  return {
+    dayStart: row.event.start.startOf("day").valueOf(),
+    minutes: minutesAfterMidnight(row.event.start),
+    title: row.event.title,
+    venue: row.event.venue?.name ?? "",
+    artist: getEventArtistLabel(row.event),
+    space: row.event.venue_space ?? "",
+    status: statusSortOrder[row.event.status] ?? UNRANKED_STATUS_ORDER,
+    start: row.event.start.valueOf()
+  };
+}
+
+function formatNoteRange(start: dayjs.Dayjs, end: dayjs.Dayjs): string {
+  if (start.isSame(end, "day")) {
+    return start.format("ddd D MMM YYYY");
+  }
+  return `${start.format("ddd D MMM")} to ${end.format("ddd D MMM YYYY")}`;
+}
+
+function EventsListTable({
+  events,
+  notes,
+  onOpenNote,
+  allFilteredCount,
+  hidePastEvents
+}: {
+  events: EventWithDates[];
+  notes: CalendarNote[];
+  onOpenNote: (note: CalendarNote) => void;
+  allFilteredCount: number;
+  hidePastEvents: boolean;
+}) {
   const [sortBy, setSortBy] = useState<{ key: ListSortKey; direction: ListSortDirection }>({
     key: "date",
     direction: "asc"
@@ -1294,27 +1365,53 @@ function EventsListTable({ events, allFilteredCount, hidePastEvents }: { events:
     });
   }, []);
 
-  const sortedEvents = useMemo(() => {
-    const sorted = [...events];
-    sorted.sort((left, right) => {
-      const leftArtistLabel = getEventArtistLabel(left);
-      const rightArtistLabel = getEventArtistLabel(right);
+  // Notes whose whole range has passed are hidden alongside past events so the
+  // toggle behaves consistently across both row kinds.
+  const visibleNotes = useMemo(() => {
+    if (!hidePastEvents) return notes;
+    const now = dayjs();
+    return notes.filter((note) => dayjs(note.endDate ?? note.startDate).endOf("day").isAfter(now));
+  }, [notes, hidePastEvents]);
+
+  const rows = useMemo<ListRow[]>(() => {
+    const eventRows: ListRow[] = events.map((event) => ({
+      kind: "event",
+      key: `event-${event.id}`,
+      event
+    }));
+    // A multi-day note appears once, on its start date, with the range in the
+    // date cell; repeating it per day would bloat a chronological list.
+    const noteRows: ListRow[] = visibleNotes.map((note) => ({
+      kind: "note",
+      key: `note-${note.id}`,
+      note,
+      start: dayjs(note.startDate),
+      end: dayjs(note.endDate ?? note.startDate)
+    }));
+    return [...eventRows, ...noteRows];
+  }, [events, visibleNotes]);
+
+  const sortedRows = useMemo(() => {
+    const sorted = [...rows];
+    sorted.sort((leftRow, rightRow) => {
+      const left = listRowSortValues(leftRow);
+      const right = listRowSortValues(rightRow);
       const result = (() => {
         switch (sortBy.key) {
           case "date":
-            return left.start.startOf("day").valueOf() - right.start.startOf("day").valueOf();
+            return left.dayStart - right.dayStart;
           case "time":
-            return minutesAfterMidnight(left.start) - minutesAfterMidnight(right.start);
+            return left.minutes - right.minutes;
           case "event":
             return compareText(left.title, right.title);
           case "venue":
-            return compareText(left.venue?.name ?? "", right.venue?.name ?? "");
+            return compareText(left.venue, right.venue);
           case "artist":
-            return compareText(leftArtistLabel, rightArtistLabel);
+            return compareText(left.artist, right.artist);
           case "space":
-            return compareText(left.venue_space ?? "", right.venue_space ?? "");
+            return compareText(left.space, right.space);
           case "status":
-            return (statusSortOrder[left.status] ?? 999) - (statusSortOrder[right.status] ?? 999);
+            return left.status - right.status;
           default:
             return 0;
         }
@@ -1324,7 +1421,7 @@ function EventsListTable({ events, allFilteredCount, hidePastEvents }: { events:
         return sortBy.direction === "asc" ? result : -result;
       }
 
-      const startTieBreaker = left.start.valueOf() - right.start.valueOf();
+      const startTieBreaker = left.start - right.start;
       if (startTieBreaker !== 0) {
         return sortBy.direction === "asc" ? startTieBreaker : -startTieBreaker;
       }
@@ -1332,7 +1429,7 @@ function EventsListTable({ events, allFilteredCount, hidePastEvents }: { events:
       return compareText(left.title, right.title);
     });
     return sorted;
-  }, [events, sortBy]);
+  }, [rows, sortBy]);
 
   const sortIcon = useCallback(
     (key: ListSortKey) => {
@@ -1399,7 +1496,7 @@ function EventsListTable({ events, allFilteredCount, hidePastEvents }: { events:
           </tr>
         </thead>
         <tbody>
-          {events.length === 0 ? (
+          {rows.length === 0 ? (
             <tr>
               <td colSpan={7} className="px-6 py-10 text-center text-sm text-subtle">
                 {hidePastEvents && allFilteredCount > 0
@@ -1408,7 +1505,32 @@ function EventsListTable({ events, allFilteredCount, hidePastEvents }: { events:
               </td>
             </tr>
           ) : (
-            sortedEvents.map((event) => {
+            sortedRows.map((row) => {
+              if (row.kind === "note") {
+                const { note } = row;
+                return (
+                  <tr key={row.key} className="border-t border-[var(--hair)] text-sm text-[var(--ink)]">
+                    <td className="px-4 py-3">{formatNoteRange(row.start, row.end)}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">All day</td>
+                    <td className="px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() => onOpenNote(note)}
+                        className={cn(NOTE_ENTRY_CLASS, "w-full text-left")}
+                      >
+                        <span aria-hidden="true">\ud83d\udccc</span>{" "}
+                        <span className="font-semibold">{NOTE_LABEL}:</span> {note.title}
+                      </button>
+                    </td>
+                    <td className="px-4 py-3">{note.venueName}</td>
+                    <td className="px-4 py-3 text-subtle">-</td>
+                    <td className="px-4 py-3 text-subtle">-</td>
+                    <td className="px-4 py-3 text-subtle">-</td>
+                  </tr>
+                );
+              }
+
+              const event = row.event;
               const status = statusConfig[event.status] ?? statusConfig.draft;
               const allVenues = Array.isArray(event.venues) && event.venues.length > 0
                 ? event.venues.map((v) => v.name)
@@ -1421,7 +1543,7 @@ function EventsListTable({ events, allFilteredCount, hidePastEvents }: { events:
               const artistLabel = getEventArtistLabel(event);
               const spaceName = event.venue_space?.trim().length ? event.venue_space : "Space to be confirmed";
               return (
-                <tr key={event.id} className="border-t border-[var(--hair)] text-sm text-[var(--ink)]">
+                <tr key={row.key} className="border-t border-[var(--hair)] text-sm text-[var(--ink)]">
                   <td className="px-4 py-3 whitespace-nowrap">{event.start.format("ddd D MMM YYYY")}</td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     {event.start.format("HH:mm")} - {event.end.format("HH:mm")}
@@ -1460,6 +1582,8 @@ function EventsListTable({ events, allFilteredCount, hidePastEvents }: { events:
 type SevenDayMatrixProps = {
   events: EventWithDates[];
   venues: VenueOption[];
+  notes: CalendarNote[];
+  onOpenNote: (note: CalendarNote) => void;
   rangeStart: dayjs.Dayjs;
   onChangeStart: (value: dayjs.Dayjs) => void;
   canCreate: boolean;
@@ -1469,6 +1593,8 @@ type SevenDayMatrixProps = {
 function SevenDayMatrix({
   events,
   venues,
+  notes,
+  onOpenNote,
   rangeStart,
   onChangeStart,
   canCreate,
@@ -1495,6 +1621,18 @@ function SevenDayMatrix({
       return { venue, events: venueEvents };
     });
   }, [events, venues, rangeEnd, safeStart]);
+
+  // Notes only belong to a venue that has a row here; anything else is skipped.
+  const notesByVenue = useMemo(() => {
+    const map = new Map<string, CalendarNote[]>();
+    venues.forEach((venue) => map.set(venue.id, []));
+    notes.forEach((note) => {
+      const bucket = map.get(note.venueId);
+      if (!bucket) return;
+      bucket.push(note);
+    });
+    return map;
+  }, [notes, venues]);
 
   return (
     <div className="data-table-shell">
@@ -1525,6 +1663,8 @@ function SevenDayMatrix({
                 key={venue.id}
                 venue={venue}
                 events={venueEvents}
+                notes={notesByVenue.get(venue.id) ?? []}
+                onOpenNote={onOpenNote}
                 days={days}
                 canCreate={
                   canCreate &&
@@ -1545,12 +1685,34 @@ function SevenDayMatrix({
 type VenueMatrixRowProps = {
   venue: VenueOption;
   events: EventWithDates[];
+  notes: CalendarNote[];
+  onOpenNote: (note: CalendarNote) => void;
   days: dayjs.Dayjs[];
   canCreate: boolean;
   createVenueId?: string;
 };
 
-function VenueMatrixRow({ venue, events, days, canCreate, createVenueId }: VenueMatrixRowProps) {
+function VenueMatrixRow({ venue, events, notes, onOpenNote, days, canCreate, createVenueId }: VenueMatrixRowProps) {
+  // The matrix is a grid of days, so a multi-day note is expanded inclusively
+  // into every day cell it covers within the visible window.
+  const notesByDayKey = (() => {
+    const startKey = days[0].format("YYYY-MM-DD");
+    const endKey = days[days.length - 1].format("YYYY-MM-DD");
+    const map = new Map<string, CalendarNote[]>();
+    notes.forEach((note) => {
+      const lastDate = note.endDate ?? note.startDate;
+      if (lastDate < startKey || note.startDate > endKey) return;
+      const from = note.startDate > startKey ? note.startDate : startKey;
+      const to = lastDate < endKey ? lastDate : endKey;
+      for (let cursor = from; cursor <= to; cursor = addDays(cursor, 1)) {
+        const bucket = map.get(cursor) ?? [];
+        bucket.push(note);
+        map.set(cursor, bucket);
+      }
+    });
+    return map;
+  })();
+
   const eventsByDay = days.map((day) => {
     const dayStartEdge = day.startOf("day");
     const dayEndEdge = day.endOf("day");
@@ -1599,6 +1761,17 @@ function VenueMatrixRow({ venue, events, days, canCreate, createVenueId }: Venue
                 borderBottomWidth: 0
               }}
             >
+              {(notesByDayKey.get(day.format("YYYY-MM-DD")) ?? []).map((note) => (
+                <button
+                  key={`note-${note.id}-${day.format("YYYY-MM-DD")}`}
+                  type="button"
+                  onClick={() => onOpenNote(note)}
+                  className={cn(NOTE_ENTRY_CLASS, "w-full text-left")}
+                >
+                  <span aria-hidden="true">📌</span>{" "}
+                  <span className="font-semibold">{NOTE_LABEL}:</span> {note.title}
+                </button>
+              ))}
               {eventsByDay[index].map(({ event, displayStart, displayEnd, spansPrevious, spansNext }) => {
                 const status = statusConfig[event.status] ?? statusConfig.draft;
                 const accent = statusAccentStyles[event.status] ?? statusAccentStyles.draft;
