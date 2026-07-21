@@ -208,6 +208,21 @@ export interface Database {
           updated_at: string;
         };
       };
+      venue_calendar_notes: {
+        Row: {
+          id: string;
+          venue_id: string;
+          start_date: string;
+          end_date: string | null;
+          title: string;
+          detail: string | null;
+          created_by: string | null;
+          deleted_by: string | null;
+          created_at: string;
+          updated_at: string;
+          deleted_at: string | null;
+        };
+      };
       planning_series_task_templates: {
         Row: {
           id: string;

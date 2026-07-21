@@ -169,6 +169,26 @@ export function canViewPlanning(role: UserRole): boolean {
   return true;
 }
 
+/** Can create a calendar note for the target venue (admin anywhere; manager for own venue) */
+export function canCreateCalendarNote(
+  role: UserRole,
+  userVenueId: string | null,
+  targetVenueId: string,
+): boolean {
+  if (role === "administrator") return true;
+  return role === "manager" && Boolean(userVenueId) && userVenueId === targetVenueId;
+}
+
+/** Can edit/delete the calendar note at noteVenueId (admin anywhere; manager for own venue) */
+export function canManageCalendarNote(
+  role: UserRole,
+  userVenueId: string | null,
+  noteVenueId: string,
+): boolean {
+  if (role === "administrator") return true;
+  return role === "manager" && Boolean(userVenueId) && userVenueId === noteVenueId;
+}
+
 /** Can manage venues */
 export function canManageVenues(role: UserRole): boolean {
   return role === "administrator";

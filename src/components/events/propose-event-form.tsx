@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { proposeEventAction } from "@/actions/pre-event";
 import { VenueMultiSelect, type VenueOption } from "@/components/venues/venue-multi-select";
+import { normaliseEventDateTimeForStorage } from "@/lib/datetime";
+import { notesClashingWithSelection, type FormNote } from "@/lib/calendar-notes/form-clash";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -18,9 +20,28 @@ type ProposeEventFormProps = {
    * managers a sensible default without restricting the picker.
    */
   defaultVenueId?: string | null;
+  /** Venue calendar notes used for the advisory clash warning near the date field. */
+  clashNotes?: FormNote[];
+  /** True when calendar notes could not be loaded, so the clash check is unavailable. */
+  notesUnavailable?: boolean;
 };
 
 const REQUIRED_NOTICE_DAYS = 62;
+
+/**
+ * Convert a datetime-local input value to the same ISO UTC timestamp the
+ * server action stores (normaliseEventDateTimeForStorage). Returns null for
+ * empty or partial input and DST-gap times, so the advisory clash check
+ * stays quiet instead of throwing while the user is mid-edit.
+ */
+function toClashSelectionIso(value: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value)) return null;
+  try {
+    return normaliseEventDateTimeForStorage(value);
+  } catch {
+    return null;
+  }
+}
 
 function todayIsoDate(): string {
   const today = new Date();
@@ -48,7 +69,7 @@ function formatIsoDate(dateString: string): string {
   }).format(new Date(Date.UTC(year, month - 1, day)));
 }
 
-export function ProposeEventForm({ venues, defaultVenueId }: ProposeEventFormProps) {
+export function ProposeEventForm({ venues, defaultVenueId, clashNotes = [], notesUnavailable = false }: ProposeEventFormProps) {
   const [state, formAction, isPending] = useActionState(proposeEventAction, undefined);
   const [startAt, setStartAt] = useState("");
   const [selectedVenueIds, setSelectedVenueIds] = useState<string[]>(() => {
@@ -78,6 +99,16 @@ export function ProposeEventForm({ venues, defaultVenueId }: ProposeEventFormPro
     const enteredByDate = addDaysIsoDate(eventDate, -REQUIRED_NOTICE_DAYS);
     return enteredByDate < todayIsoDate() ? enteredByDate : null;
   }, [startAt]);
+  // Advisory clash check against venue calendar notes. Uses the same startAt
+  // value the action normalises on submit; proposals have no end time.
+  const clashingNotes = useMemo(() => {
+    const startAtIso = toClashSelectionIso(startAt);
+    if (!startAtIso) return [];
+    return notesClashingWithSelection(
+      { venueIds: selectedVenueIds, startAt: startAtIso, endAt: null },
+      clashNotes
+    );
+  }, [startAt, selectedVenueIds, clashNotes]);
 
   useEffect(() => {
     if (state?.message) {
@@ -124,6 +155,13 @@ export function ProposeEventForm({ venues, defaultVenueId }: ProposeEventFormPro
         {shortNoticeEnteredByDate ? (
           <p className="rounded-[6px] border border-[var(--mustard)] bg-[var(--mustard-tint)] px-2 py-1.5 text-xs text-[var(--mustard-dark)]" role="status">
             Short notice: this event should have been entered by {formatIsoDate(shortNoticeEnteredByDate)}.
+          </p>
+        ) : null}
+        {notesUnavailable ? (
+          <p className="mt-2 text-xs text-subtle">Clash check unavailable. Venue notes could not be loaded.</p>
+        ) : clashingNotes.length > 0 ? (
+          <p role="status" className="mt-2 rounded-[8px] border border-[var(--plum)] bg-[var(--plum-tint)] px-3 py-2 text-xs text-[var(--ink)]">
+            {"⚠️"} Heads up: {clashingNotes.map((n) => `"${n.title}"`).join(", ")} noted at this venue on this date. You can still save.
           </p>
         ) : null}
       </div>

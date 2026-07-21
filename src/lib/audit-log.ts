@@ -24,7 +24,8 @@ type RecordAuditParams = {
     | "attachment"
     | "digest"
     | "payment"
-    | "sales_report";
+    | "sales_report"
+    | "calendar_note";
   entityId: string;
   action: string;
   meta?: Record<string, unknown>;

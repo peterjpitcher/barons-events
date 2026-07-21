@@ -4,6 +4,7 @@ import { ChevronLeft } from "lucide-react";
 import { requireAuth } from "@/lib/auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getEventBookingImpact } from "@/lib/events";
+import { listCalendarNotes } from "@/lib/calendar-notes";
 import { toLondonDateTimeInputValue } from "@/lib/datetime";
 import { isEventRescheduleEnabled } from "@/lib/feature-flags";
 import { PageHeader } from "@/components/ui/design-primitives";
@@ -22,7 +23,7 @@ export default async function ReschedulePage({ params }: { params: Promise<{ eve
   const { data } = await db
     .from("events")
     .select(
-      "id, title, status, deleted_at, start_at, end_at, ticket_price, venue:venues!events_venue_id_fkey(name)"
+      "id, title, status, deleted_at, start_at, end_at, ticket_price, venue_id, venue:venues!events_venue_id_fkey(name), event_venues(venue_id)"
     )
     .eq("id", eventId)
     .maybeSingle();
@@ -34,7 +35,9 @@ export default async function ReschedulePage({ params }: { params: Promise<{ eve
     start_at: string;
     end_at: string | null;
     ticket_price: number | string | null;
+    venue_id: string | null;
     venue: { name: string | null } | { name: string | null }[] | null;
+    event_venues: Array<{ venue_id: string | null }> | null;
   } | null;
 
   if (!event || event.deleted_at) notFound();
@@ -45,6 +48,18 @@ export default async function ReschedulePage({ params }: { params: Promise<{ eve
   const enabled = isEventRescheduleEnabled();
   const impact = await getEventBookingImpact(eventId);
   const venueRaw = Array.isArray(event.venue) ? event.venue[0] : event.venue;
+
+  // The rescheduled event keeps its venue set: event_venues links, falling
+  // back to the primary venue_id (same resolution the clash engine expects).
+  const linkedVenueIds = (event.event_venues ?? [])
+    .map((row) => row.venue_id)
+    .filter((id): id is string => Boolean(id));
+  const clashVenueIds = linkedVenueIds.length > 0 ? linkedVenueIds : event.venue_id ? [event.venue_id] : [];
+
+  // Advisory clash warning data: a failed fetch must never block the wizard.
+  const notesResult = await listCalendarNotes().catch(() => ({ notes: [], truncated: false, failed: true as const }));
+  const clashNotes = notesResult.notes.map((n) => ({ id: n.id, venueId: n.venueId, title: n.title, startDate: n.startDate, endDate: n.endDate }));
+  const notesUnavailable = "failed" in notesResult;
 
   return (
     <div className="app-page">
@@ -80,6 +95,9 @@ export default async function ReschedulePage({ params }: { params: Promise<{ eve
           refundTotalPence: impact.refundTotalPence,
           currency: impact.currency,
         }}
+        venueIds={clashVenueIds}
+        clashNotes={clashNotes}
+        notesUnavailable={notesUnavailable}
       />
     </div>
   );

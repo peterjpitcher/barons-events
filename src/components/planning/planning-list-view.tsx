@@ -9,6 +9,7 @@ type PlanningListViewProps = {
   today: string;
   entries: PlanningViewEntry[];
   onOpenPlanningItem?: (item: PlanningItem) => void;
+  onOpenNote?: (entry: Extract<PlanningViewEntry, { source: "note" }>) => void;
 };
 
 type BoundaryMarker = {
@@ -36,21 +37,21 @@ function formatOffset(today: string, date: string): string {
   return `${offset}d`;
 }
 
-const SOURCE_RANK: Record<string, number> = { planning: 0, event: 1, inspiration: 2 };
+const SOURCE_RANK: Record<string, number> = { note: 0, planning: 1, event: 2, inspiration: 3 };
 
 function sortEntries(entries: PlanningViewEntry[]): PlanningViewEntry[] {
   return [...entries].sort((left, right) => {
     if (left.targetDate !== right.targetDate) {
       return left.targetDate.localeCompare(right.targetDate);
     }
-    const lr = SOURCE_RANK[left.source] ?? 3;
-    const rr = SOURCE_RANK[right.source] ?? 3;
+    const lr = SOURCE_RANK[left.source] ?? 4;
+    const rr = SOURCE_RANK[right.source] ?? 4;
     if (lr !== rr) return lr - rr;
     return left.title.localeCompare(right.title);
   });
 }
 
-export function PlanningListView({ today, entries, onOpenPlanningItem }: PlanningListViewProps) {
+export function PlanningListView({ today, entries, onOpenPlanningItem, onOpenNote }: PlanningListViewProps) {
   const sorted = sortEntries(entries);
 
   const grouped = sorted.reduce<Record<string, PlanningViewEntry[]>>((acc, entry) => {
@@ -142,6 +143,25 @@ export function PlanningListView({ today, entries, onOpenPlanningItem }: Plannin
                           <span className="block text-xs text-subtle">Inspiration · Seasonal occasion</span>
                         </span>
                       </div>
+                    );
+                  }
+
+                  if (entry.source === "note") {
+                    // Multi-day notes arrive pre-expanded, one entry per day
+                    // they occupy, so each date group shows the venue as
+                    // blocked.
+                    return (
+                      <button
+                        key={entry.id}
+                        type="button"
+                        onClick={() => onOpenNote?.(entry)}
+                        className="flex w-full items-center justify-between gap-3 rounded-[var(--radius-sm)] border border-[var(--hair)] border-l-4 border-l-[var(--plum)] bg-[var(--paper)] px-3 py-2 text-left hover:bg-[var(--paper-tint)]"
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-medium text-[var(--ink)]">{"📌 "}{entry.title}</span>
+                          <span className="block text-xs text-subtle">Note · {entry.venueLabel}</span>
+                        </span>
+                      </button>
                     );
                   }
 

@@ -8,6 +8,7 @@ import { listEventTypes } from "@/lib/event-types";
 import { listArtists } from "@/lib/artists";
 import { listAssignableUsers } from "@/lib/users";
 import { loadSopTemplate } from "@/lib/planning/sop";
+import { listCalendarNotes } from "@/lib/calendar-notes";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -51,6 +52,10 @@ export default async function NewEventPage({ searchParams }: PageProps) {
     listAssignableUsers(),
     loadSopTemplate()
   ]);
+  // Advisory clash warning data: a failed fetch must never block the form.
+  const notesResult = await listCalendarNotes().catch(() => ({ notes: [], truncated: false, failed: true as const }));
+  const clashNotes = notesResult.notes.map((n) => ({ id: n.id, venueId: n.venueId, title: n.title, startDate: n.startDate, endDate: n.endDate }));
+  const notesUnavailable = "failed" in notesResult;
   const eventVenues = venues;
   const initialStartAt = parseDateParam(resolvedSearchParams.startAt);
   const initialEndAt =
@@ -81,6 +86,8 @@ export default async function NewEventPage({ searchParams }: PageProps) {
         initialVenueId={initialVenueId}
         users={assignableUsers.map((u) => ({ id: u.id, name: u.name }))}
         sopTemplate={sopTemplate}
+        clashNotes={clashNotes}
+        notesUnavailable={notesUnavailable}
       />
     </div>
   );

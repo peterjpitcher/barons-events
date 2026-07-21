@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
 import { canProposeEvents } from "@/lib/roles";
 import { listVenues } from "@/lib/venues";
+import { listCalendarNotes } from "@/lib/calendar-notes";
 import { ProposeEventForm } from "@/components/events/propose-event-form";
 import { PageHeader } from "@/components/ui/design-primitives";
 import type { VenueOption } from "@/components/venues/venue-multi-select";
@@ -26,6 +27,11 @@ export default async function ProposeEventPage() {
     isInternal: Boolean((v as any).is_internal)
   }));
 
+  // Advisory clash warning data: a failed fetch must never block the form.
+  const notesResult = await listCalendarNotes().catch(() => ({ notes: [], truncated: false, failed: true as const }));
+  const clashNotes = notesResult.notes.map((n) => ({ id: n.id, venueId: n.venueId, title: n.title, startDate: n.startDate, endDate: n.endDate }));
+  const notesUnavailable = "failed" in notesResult;
+
   return (
     <div className="app-page">
       <PageHeader
@@ -43,7 +49,7 @@ export default async function ProposeEventPage() {
           </p>
         </div>
         <div className="rounded-[10px] border border-[var(--hair)] bg-[var(--paper)] p-4 shadow-card">
-          <ProposeEventForm venues={venues} defaultVenueId={null} />
+          <ProposeEventForm venues={venues} defaultVenueId={null} clashNotes={clashNotes} notesUnavailable={notesUnavailable} />
           <p className="mt-4 text-xs text-subtle">
             Need to submit a fully-detailed event straight away? <Link className="underline" href="/events/new">Use the full event form.</Link>
           </p>

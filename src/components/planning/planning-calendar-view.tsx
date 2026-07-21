@@ -7,12 +7,14 @@ import { Button } from "@/components/ui/button";
 import type { PlanningItem } from "@/lib/planning/types";
 import { addDays } from "@/lib/planning/utils";
 import type { PlanningViewEntry } from "@/components/planning/view-types";
+import { NOTE_ENTRY_CLASS, NOTE_LABEL } from "@/components/calendar-notes/calendar-note-entry-styles";
 
 type PlanningCalendarViewProps = {
   today: string;
   entries: PlanningViewEntry[];
   onOpenPlanningItem?: (item: PlanningItem) => void;
   onMovePlanningItem?: (itemId: string, targetDate: string) => void;
+  onOpenNote?: (entry: Extract<PlanningViewEntry, { source: "note" }>) => void;
 };
 
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -56,18 +58,18 @@ function formatDayNumber(dateKey: string): string {
   return parseDateKey(dateKey).toLocaleDateString("en-GB", { day: "numeric", timeZone: "UTC" });
 }
 
-const SOURCE_RANK: Record<string, number> = { planning: 0, event: 1, inspiration: 2 };
+const SOURCE_RANK: Record<string, number> = { note: 0, planning: 1, event: 2, inspiration: 3 };
 
 function sortEntries(entries: PlanningViewEntry[]): PlanningViewEntry[] {
   return [...entries].sort((left, right) => {
-    const lr = SOURCE_RANK[left.source] ?? 3;
-    const rr = SOURCE_RANK[right.source] ?? 3;
+    const lr = SOURCE_RANK[left.source] ?? 4;
+    const rr = SOURCE_RANK[right.source] ?? 4;
     if (lr !== rr) return lr - rr;
     return left.title.localeCompare(right.title);
   });
 }
 
-export function PlanningCalendarView({ today, entries, onOpenPlanningItem, onMovePlanningItem }: PlanningCalendarViewProps) {
+export function PlanningCalendarView({ today, entries, onOpenPlanningItem, onMovePlanningItem, onOpenNote }: PlanningCalendarViewProps) {
   const [activeMonth, setActiveMonth] = useState(monthKey(today));
   const [draggedPlanningItem, setDraggedPlanningItem] = useState<{
     itemId: string;
@@ -121,6 +123,10 @@ export function PlanningCalendarView({ today, entries, onOpenPlanningItem, onMov
         {dayCells.map((dateKey) => {
           const inActiveMonth = dateKey.slice(0, 7) === activeMonth.slice(0, 7);
           const rows = entriesByDate.get(dateKey) ?? [];
+          // Notes always render in full at the top of the cell; only the
+          // remaining entry types are subject to the 3-row overflow cap.
+          const noteRows = rows.filter((row) => row.source === "note");
+          const otherRows = rows.filter((row) => row.source !== "note");
           const isDropCandidate = draggedPlanningItem ? draggedPlanningItem.sourceDate !== dateKey : false;
           const isToday = dateKey === today;
           return (
@@ -147,7 +153,21 @@ export function PlanningCalendarView({ today, entries, onOpenPlanningItem, onMov
             >
               <p className={`text-xs font-semibold ${isToday ? "text-[var(--navy)]" : inActiveMonth ? "text-[var(--ink)]" : "text-subtle"}`}>{formatDayNumber(dateKey)}</p>
               <div className="mt-2 space-y-1">
-                {rows.slice(0, 3).map((entry) => {
+                {[...noteRows, ...otherRows.slice(0, 3)].map((entry) => {
+                  if (entry.source === "note") {
+                    return (
+                      <button
+                        key={entry.id}
+                        type="button"
+                        onClick={() => onOpenNote?.(entry)}
+                        className={`${NOTE_ENTRY_CLASS} w-full text-left hover:bg-[var(--paper-tint)]`}
+                        title={`${NOTE_LABEL}: ${entry.title}`}
+                      >
+                        {"📌 "}{entry.title}
+                      </button>
+                    );
+                  }
+
                   if (entry.source === "planning") {
                     return (
                       <button
@@ -194,8 +214,8 @@ export function PlanningCalendarView({ today, entries, onOpenPlanningItem, onMov
                     </Link>
                   );
                 })}
-                {rows.length > 3 ? (
-                  <p className="px-1 text-[0.7rem] text-subtle">+{rows.length - 3} more</p>
+                {otherRows.length > 3 ? (
+                  <p className="px-1 text-[0.7rem] text-subtle">+{otherRows.length - 3} more</p>
                 ) : null}
               </div>
             </article>

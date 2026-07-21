@@ -19,6 +19,7 @@ import {
   Clock,
   List,
   MapPin,
+  Pin,
   Plus,
   Rows3,
   Search,
@@ -27,10 +28,14 @@ import {
   X
 } from "lucide-react";
 import type { EventSummary } from "@/lib/events";
-import { canProposeEvents, canReviewEvents } from "@/lib/roles";
+import type { CalendarNote } from "@/lib/calendar-notes";
+import { addDays } from "@/lib/planning/utils";
+import { canCreateCalendarNote, canManageCalendarNote, canProposeEvents, canReviewEvents } from "@/lib/roles";
 import type { AppUser } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { CalendarNoteDialog } from "@/components/calendar-notes/calendar-note-dialog";
+import { NOTE_ENTRY_CLASS, NOTE_LABEL } from "@/components/calendar-notes/calendar-note-entry-styles";
 import { EventCalendar, type CalendarEvent } from "@/components/events/event-calendar";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -53,10 +58,17 @@ type VenueOption = {
   name: string;
 };
 
+type NoteDialogState =
+  | { mode: "create"; defaultDate?: string }
+  | { mode: "edit"; note: CalendarNote };
+
 type EventsBoardProps = {
   user: AppUser;
   events: EventSummary[];
   venues: VenueOption[];
+  notes: CalendarNote[];
+  notesFailed?: boolean;
+  initialMonth?: string;
 };
 
 const statusConfig: Record<
@@ -199,7 +211,16 @@ function colorForVenue(name: string): string {
   return palette[hash % palette.length];
 }
 
-export function EventsBoard({ user, events, venues }: EventsBoardProps) {
+/** Parse a `month` deep-link value (YYYY-MM) into a month-start cursor, or null when absent/invalid. */
+function parseInitialMonth(value: string | undefined): dayjs.Dayjs | null {
+  if (!value || !/^\d{4}-\d{2}$/.test(value)) {
+    return null;
+  }
+  const parsed = dayjs(`${value}-01`);
+  return parsed.isValid() ? parsed.startOf("month") : null;
+}
+
+export function EventsBoard({ user, events, venues, notes, notesFailed, initialMonth }: EventsBoardProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -225,7 +246,10 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
   const [matrixStart, setMatrixStart] = useState<dayjs.Dayjs>(
     rawMatrixStart ? dayjs(rawMatrixStart) : dayjs().startOf("day")
   );
-  const [monthCursor, setMonthCursor] = useState<dayjs.Dayjs>(dayjs().startOf("month"));
+  const [monthCursor, setMonthCursor] = useState<dayjs.Dayjs>(
+    () => parseInitialMonth(initialMonth) ?? dayjs().startOf("month")
+  );
+  const [noteDialog, setNoteDialog] = useState<NoteDialogState | null>(null);
   const [venueSearch, setVenueSearch] = useState("");
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
@@ -241,13 +265,15 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
   const monthLabel = useMemo(() => monthCursor.format("MMMM YYYY"), [monthCursor]);
 
   useEffect(() => {
-    if (!rawView) {
+    // A month deep-link (e.g. from dashboard note clashes) must land on the month
+    // calendar, so skip the stored-view restore when one is present.
+    if (!rawView && !parseInitialMonth(initialMonth)) {
       const stored = typeof window !== "undefined" ? window.localStorage.getItem(localStorageKey) : null;
       if (stored === "month" || stored === "matrix" || stored === "list") {
         setView(stored);
       }
     }
-  }, [rawView]);
+  }, [rawView, initialMonth]);
 
   useEffect(() => {
     if (view === "matrix" && rawMatrixStart) {
@@ -342,6 +368,11 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
     if (!filteredVenueId) return eventDataset;
     return eventDataset.filter((event) => event.venue?.id === filteredVenueId);
   }, [eventDataset, filteredVenueId]);
+
+  const venueFilteredNotes = useMemo(() => {
+    if (!filteredVenueId) return notes;
+    return notes.filter((note) => note.venueId === filteredVenueId);
+  }, [notes, filteredVenueId]);
 
   const filteredVenuesForMatrix = useMemo(() => {
     if (!filteredVenueId) {
@@ -486,6 +517,49 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
     return filteredEvents.filter((event) => event.end.isAfter(start) && event.start.isBefore(end));
   }, [filteredEvents, listEvents, matrixStart, mobileView, monthCursor]);
 
+  // Notes for the mobile agenda, keyed by occupied YYYY-MM-DD and bounded to the
+  // active mobile view's window (agenda: today onward, matching its upcoming focus).
+  const mobileNotesByDate = useMemo(() => {
+    let startKey: string;
+    let endKey: string | null;
+    if (mobileView === "month") {
+      startKey = monthCursor.startOf("month").format("YYYY-MM-DD");
+      endKey = monthCursor.endOf("month").format("YYYY-MM-DD");
+    } else if (mobileView === "matrix") {
+      const start = matrixStart.isValid() ? matrixStart.startOf("day") : dayjs().startOf("day");
+      startKey = start.format("YYYY-MM-DD");
+      endKey = start.add(7, "day").format("YYYY-MM-DD");
+    } else {
+      startKey = dayjs().format("YYYY-MM-DD");
+      endKey = null;
+    }
+
+    const map = new Map<string, CalendarNote[]>();
+    venueFilteredNotes.forEach((note) => {
+      const lastDate = note.endDate ?? note.startDate;
+      for (let cursor = note.startDate; cursor <= lastDate; cursor = addDays(cursor, 1)) {
+        if (cursor < startKey) continue;
+        if (endKey && cursor > endKey) break;
+        const bucket = map.get(cursor) ?? [];
+        bucket.push(note);
+        map.set(cursor, bucket);
+      }
+    });
+    return map;
+  }, [venueFilteredNotes, matrixStart, mobileView, monthCursor]);
+
+  const canAddNote =
+    user.role === "administrator" ||
+    (myVenueId ? canCreateCalendarNote(user.role, myVenueId, myVenueId) : false);
+
+  const handleOpenNote = useCallback((note: CalendarNote) => {
+    setNoteDialog({ mode: "edit", note });
+  }, []);
+
+  const handleAddNoteForDate = useCallback((dateKey: string) => {
+    setNoteDialog({ mode: "create", defaultDate: dateKey });
+  }, []);
+
   const venueOptions = useMemo(() => {
     const baseOptions: { value: string; label: string }[] = [{ value: "all", label: "All venues" }];
     if (myVenueId) {
@@ -570,6 +644,15 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
         }
       />
 
+      {notesFailed ? (
+        <p
+          role="status"
+          className="rounded-[var(--radius-sm)] border border-[var(--hair)] bg-[var(--canvas-2)] px-3 py-2 text-xs text-[var(--ink-muted)]"
+        >
+          Venue notes could not be loaded.
+        </p>
+      ) : null}
+
       <MobileEventsControls
         view={mobileView}
         onChangeView={setMobileView}
@@ -597,6 +680,8 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
       <div className="md:hidden">
         <MobileEventAgenda
           events={mobileVisibleEvents}
+          notesByDate={mobileNotesByDate}
+          onOpenNote={handleOpenNote}
           allFilteredCount={filteredEvents.length}
           hidePastEvents={hidePastEvents}
         />
@@ -606,6 +691,18 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
               <Plus className="h-5 w-5" aria-hidden="true" />
               New event
             </Link>
+          </Button>
+        ) : null}
+        {canAddNote ? (
+          <Button
+            type="button"
+            variant="secondary"
+            className="mobile-fab"
+            style={{ bottom: "calc(9rem + env(safe-area-inset-bottom))" }}
+            onClick={() => setNoteDialog({ mode: "create" })}
+          >
+            <Pin className="h-5 w-5" aria-hidden="true" />
+            Add note
           </Button>
         ) : null}
       </div>
@@ -692,6 +789,16 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
               <Button type="button" variant="outline" size="sm" onClick={() => setMonthCursor(monthCursor.add(1, "month"))}>
                 Next month <ChevronRight className="ml-1 h-4 w-4" />
               </Button>
+              {canAddNote ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setNoteDialog({ mode: "create" })}
+                >
+                  <Pin className="mr-1 h-4 w-4" aria-hidden="true" /> Add note
+                </Button>
+              ) : null}
             </div>
           ) : (
             <div className="flex items-center gap-2">
@@ -817,6 +924,7 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
         {view === "month" ? (
           <EventCalendar
             events={filteredEvents}
+            notes={venueFilteredNotes}
             monthCursor={monthCursor}
             onChangeMonth={setMonthCursor}
             canCreate={
@@ -830,20 +938,49 @@ export function EventsBoard({ user, events, venues }: EventsBoardProps) {
             getStatusLabel={(status) => (statusConfig[status] ?? statusConfig.draft).label}
             getStatusAccent={(status) => statusAccentStyles[status] ?? statusAccentStyles.draft}
             canApproveEvent={canApproveEvent}
+            onOpenNote={handleOpenNote}
+            canCreateNote={canAddNote}
+            onAddNoteForDate={handleAddNoteForDate}
           />
         ) : view === "matrix" ? (
           <SevenDayMatrix
             events={filteredEvents}
             venues={filteredVenuesForMatrix}
+            notes={venueFilteredNotes}
+            onOpenNote={handleOpenNote}
             rangeStart={matrixStart}
             onChangeStart={setMatrixStart}
             canCreate={canCreate}
             createScopeVenueId={createScopeVenueId}
           />
         ) : (
-          <EventsListTable events={listEvents} allFilteredCount={filteredEvents.length} hidePastEvents={hidePastEvents} />
+          <EventsListTable
+            events={listEvents}
+            notes={venueFilteredNotes}
+            onOpenNote={handleOpenNote}
+            allFilteredCount={filteredEvents.length}
+            hidePastEvents={hidePastEvents}
+          />
         )}
       </div>
+
+      {noteDialog ? (
+        <CalendarNoteDialog
+          key={noteDialog.mode === "edit" ? noteDialog.note.id : "create"}
+          open
+          mode={noteDialog.mode}
+          venues={venuesList}
+          canManage={
+            noteDialog.mode === "edit"
+              ? canManageCalendarNote(user.role, myVenueId, noteDialog.note.venueId)
+              : canAddNote
+          }
+          note={noteDialog.mode === "edit" ? noteDialog.note : undefined}
+          defaultDate={noteDialog.mode === "create" ? noteDialog.defaultDate : undefined}
+          fixedVenueId={user.role === "manager" ? myVenueId ?? undefined : undefined}
+          onClose={() => setNoteDialog(null)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -1022,10 +1159,14 @@ function StatusLegend({
 
 function MobileEventAgenda({
   events,
+  notesByDate,
+  onOpenNote,
   allFilteredCount,
   hidePastEvents,
 }: {
   events: EventWithDates[];
+  notesByDate: Map<string, CalendarNote[]>;
+  onOpenNote: (note: CalendarNote) => void;
   allFilteredCount: number;
   hidePastEvents: boolean;
 }) {
@@ -1041,14 +1182,18 @@ function MobileEventAgenda({
       list.push(event);
       map.set(key, list);
     }
-    return Array.from(map.entries()).map(([key, rows]) => ({
+    // Union the event dates with note-occupied dates so note-only days still
+    // get a dated group; YYYY-MM-DD keys sort chronologically.
+    const keys = Array.from(new Set([...map.keys(), ...notesByDate.keys()])).sort();
+    return keys.map((key) => ({
       key,
       day: dayjs(key),
-      rows,
+      rows: map.get(key) ?? [],
+      notes: notesByDate.get(key) ?? [],
     }));
-  }, [sorted]);
+  }, [sorted, notesByDate]);
 
-  if (sorted.length === 0) {
+  if (groups.length === 0) {
     return (
       <div className="mobile-card py-10 text-center text-sm text-[var(--ink-muted)]">
         {hidePastEvents && allFilteredCount > 0
@@ -1072,6 +1217,18 @@ function MobileEventAgenda({
             </span>
           </div>
           <div className="space-y-2">
+            {group.notes.map((note) => (
+              <button
+                key={`note-${note.id}`}
+                type="button"
+                onClick={() => onOpenNote(note)}
+                className={cn(NOTE_ENTRY_CLASS, "w-full text-left")}
+              >
+                <span aria-hidden="true">📌</span>{" "}
+                <span className="font-semibold">{NOTE_LABEL}:</span> {note.title}
+                <span className="block truncate text-[0.68rem] text-[var(--ink-muted)]">{note.venueName}</span>
+              </button>
+            ))}
             {group.rows.map((event) => (
               <MobileEventCard key={event.id} event={event} />
             ))}
@@ -1130,7 +1287,70 @@ function MobileEventCard({ event }: { event: EventWithDates }) {
   );
 }
 
-function EventsListTable({ events, allFilteredCount, hidePastEvents }: { events: EventWithDates[]; allFilteredCount: number; hidePastEvents: boolean }) {
+// Rows in the list view are either an event or a venue calendar note. Notes are
+// date-only blocks, so they carry no time, artist, space or status of their own.
+type ListRow =
+  | { kind: "event"; key: string; event: EventWithDates }
+  | { kind: "note"; key: string; note: CalendarNote; start: dayjs.Dayjs; end: dayjs.Dayjs };
+
+type ListRowSortValues = {
+  dayStart: number;
+  minutes: number;
+  title: string;
+  venue: string;
+  artist: string;
+  space: string;
+  status: number;
+  start: number;
+};
+
+const UNRANKED_STATUS_ORDER = 999;
+
+function listRowSortValues(row: ListRow): ListRowSortValues {
+  if (row.kind === "note") {
+    return {
+      dayStart: row.start.startOf("day").valueOf(),
+      minutes: 0,
+      title: row.note.title,
+      venue: row.note.venueName,
+      artist: "",
+      space: "",
+      status: UNRANKED_STATUS_ORDER,
+      start: row.start.valueOf()
+    };
+  }
+  return {
+    dayStart: row.event.start.startOf("day").valueOf(),
+    minutes: minutesAfterMidnight(row.event.start),
+    title: row.event.title,
+    venue: row.event.venue?.name ?? "",
+    artist: getEventArtistLabel(row.event),
+    space: row.event.venue_space ?? "",
+    status: statusSortOrder[row.event.status] ?? UNRANKED_STATUS_ORDER,
+    start: row.event.start.valueOf()
+  };
+}
+
+function formatNoteRange(start: dayjs.Dayjs, end: dayjs.Dayjs): string {
+  if (start.isSame(end, "day")) {
+    return start.format("ddd D MMM YYYY");
+  }
+  return `${start.format("ddd D MMM")} to ${end.format("ddd D MMM YYYY")}`;
+}
+
+function EventsListTable({
+  events,
+  notes,
+  onOpenNote,
+  allFilteredCount,
+  hidePastEvents
+}: {
+  events: EventWithDates[];
+  notes: CalendarNote[];
+  onOpenNote: (note: CalendarNote) => void;
+  allFilteredCount: number;
+  hidePastEvents: boolean;
+}) {
   const [sortBy, setSortBy] = useState<{ key: ListSortKey; direction: ListSortDirection }>({
     key: "date",
     direction: "asc"
@@ -1145,27 +1365,53 @@ function EventsListTable({ events, allFilteredCount, hidePastEvents }: { events:
     });
   }, []);
 
-  const sortedEvents = useMemo(() => {
-    const sorted = [...events];
-    sorted.sort((left, right) => {
-      const leftArtistLabel = getEventArtistLabel(left);
-      const rightArtistLabel = getEventArtistLabel(right);
+  // Notes whose whole range has passed are hidden alongside past events so the
+  // toggle behaves consistently across both row kinds.
+  const visibleNotes = useMemo(() => {
+    if (!hidePastEvents) return notes;
+    const now = dayjs();
+    return notes.filter((note) => dayjs(note.endDate ?? note.startDate).endOf("day").isAfter(now));
+  }, [notes, hidePastEvents]);
+
+  const rows = useMemo<ListRow[]>(() => {
+    const eventRows: ListRow[] = events.map((event) => ({
+      kind: "event",
+      key: `event-${event.id}`,
+      event
+    }));
+    // A multi-day note appears once, on its start date, with the range in the
+    // date cell; repeating it per day would bloat a chronological list.
+    const noteRows: ListRow[] = visibleNotes.map((note) => ({
+      kind: "note",
+      key: `note-${note.id}`,
+      note,
+      start: dayjs(note.startDate),
+      end: dayjs(note.endDate ?? note.startDate)
+    }));
+    return [...eventRows, ...noteRows];
+  }, [events, visibleNotes]);
+
+  const sortedRows = useMemo(() => {
+    const sorted = [...rows];
+    sorted.sort((leftRow, rightRow) => {
+      const left = listRowSortValues(leftRow);
+      const right = listRowSortValues(rightRow);
       const result = (() => {
         switch (sortBy.key) {
           case "date":
-            return left.start.startOf("day").valueOf() - right.start.startOf("day").valueOf();
+            return left.dayStart - right.dayStart;
           case "time":
-            return minutesAfterMidnight(left.start) - minutesAfterMidnight(right.start);
+            return left.minutes - right.minutes;
           case "event":
             return compareText(left.title, right.title);
           case "venue":
-            return compareText(left.venue?.name ?? "", right.venue?.name ?? "");
+            return compareText(left.venue, right.venue);
           case "artist":
-            return compareText(leftArtistLabel, rightArtistLabel);
+            return compareText(left.artist, right.artist);
           case "space":
-            return compareText(left.venue_space ?? "", right.venue_space ?? "");
+            return compareText(left.space, right.space);
           case "status":
-            return (statusSortOrder[left.status] ?? 999) - (statusSortOrder[right.status] ?? 999);
+            return left.status - right.status;
           default:
             return 0;
         }
@@ -1175,7 +1421,7 @@ function EventsListTable({ events, allFilteredCount, hidePastEvents }: { events:
         return sortBy.direction === "asc" ? result : -result;
       }
 
-      const startTieBreaker = left.start.valueOf() - right.start.valueOf();
+      const startTieBreaker = left.start - right.start;
       if (startTieBreaker !== 0) {
         return sortBy.direction === "asc" ? startTieBreaker : -startTieBreaker;
       }
@@ -1183,7 +1429,7 @@ function EventsListTable({ events, allFilteredCount, hidePastEvents }: { events:
       return compareText(left.title, right.title);
     });
     return sorted;
-  }, [events, sortBy]);
+  }, [rows, sortBy]);
 
   const sortIcon = useCallback(
     (key: ListSortKey) => {
@@ -1250,7 +1496,7 @@ function EventsListTable({ events, allFilteredCount, hidePastEvents }: { events:
           </tr>
         </thead>
         <tbody>
-          {events.length === 0 ? (
+          {rows.length === 0 ? (
             <tr>
               <td colSpan={7} className="px-6 py-10 text-center text-sm text-subtle">
                 {hidePastEvents && allFilteredCount > 0
@@ -1259,7 +1505,32 @@ function EventsListTable({ events, allFilteredCount, hidePastEvents }: { events:
               </td>
             </tr>
           ) : (
-            sortedEvents.map((event) => {
+            sortedRows.map((row) => {
+              if (row.kind === "note") {
+                const { note } = row;
+                return (
+                  <tr key={row.key} className="border-t border-[var(--hair)] text-sm text-[var(--ink)]">
+                    <td className="px-4 py-3">{formatNoteRange(row.start, row.end)}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">All day</td>
+                    <td className="px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() => onOpenNote(note)}
+                        className={cn(NOTE_ENTRY_CLASS, "w-full text-left")}
+                      >
+                        <span aria-hidden="true">\ud83d\udccc</span>{" "}
+                        <span className="font-semibold">{NOTE_LABEL}:</span> {note.title}
+                      </button>
+                    </td>
+                    <td className="px-4 py-3">{note.venueName}</td>
+                    <td className="px-4 py-3 text-subtle">-</td>
+                    <td className="px-4 py-3 text-subtle">-</td>
+                    <td className="px-4 py-3 text-subtle">-</td>
+                  </tr>
+                );
+              }
+
+              const event = row.event;
               const status = statusConfig[event.status] ?? statusConfig.draft;
               const allVenues = Array.isArray(event.venues) && event.venues.length > 0
                 ? event.venues.map((v) => v.name)
@@ -1272,7 +1543,7 @@ function EventsListTable({ events, allFilteredCount, hidePastEvents }: { events:
               const artistLabel = getEventArtistLabel(event);
               const spaceName = event.venue_space?.trim().length ? event.venue_space : "Space to be confirmed";
               return (
-                <tr key={event.id} className="border-t border-[var(--hair)] text-sm text-[var(--ink)]">
+                <tr key={row.key} className="border-t border-[var(--hair)] text-sm text-[var(--ink)]">
                   <td className="px-4 py-3 whitespace-nowrap">{event.start.format("ddd D MMM YYYY")}</td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     {event.start.format("HH:mm")} - {event.end.format("HH:mm")}
@@ -1311,6 +1582,8 @@ function EventsListTable({ events, allFilteredCount, hidePastEvents }: { events:
 type SevenDayMatrixProps = {
   events: EventWithDates[];
   venues: VenueOption[];
+  notes: CalendarNote[];
+  onOpenNote: (note: CalendarNote) => void;
   rangeStart: dayjs.Dayjs;
   onChangeStart: (value: dayjs.Dayjs) => void;
   canCreate: boolean;
@@ -1320,6 +1593,8 @@ type SevenDayMatrixProps = {
 function SevenDayMatrix({
   events,
   venues,
+  notes,
+  onOpenNote,
   rangeStart,
   onChangeStart,
   canCreate,
@@ -1346,6 +1621,18 @@ function SevenDayMatrix({
       return { venue, events: venueEvents };
     });
   }, [events, venues, rangeEnd, safeStart]);
+
+  // Notes only belong to a venue that has a row here; anything else is skipped.
+  const notesByVenue = useMemo(() => {
+    const map = new Map<string, CalendarNote[]>();
+    venues.forEach((venue) => map.set(venue.id, []));
+    notes.forEach((note) => {
+      const bucket = map.get(note.venueId);
+      if (!bucket) return;
+      bucket.push(note);
+    });
+    return map;
+  }, [notes, venues]);
 
   return (
     <div className="data-table-shell">
@@ -1376,6 +1663,8 @@ function SevenDayMatrix({
                 key={venue.id}
                 venue={venue}
                 events={venueEvents}
+                notes={notesByVenue.get(venue.id) ?? []}
+                onOpenNote={onOpenNote}
                 days={days}
                 canCreate={
                   canCreate &&
@@ -1396,12 +1685,34 @@ function SevenDayMatrix({
 type VenueMatrixRowProps = {
   venue: VenueOption;
   events: EventWithDates[];
+  notes: CalendarNote[];
+  onOpenNote: (note: CalendarNote) => void;
   days: dayjs.Dayjs[];
   canCreate: boolean;
   createVenueId?: string;
 };
 
-function VenueMatrixRow({ venue, events, days, canCreate, createVenueId }: VenueMatrixRowProps) {
+function VenueMatrixRow({ venue, events, notes, onOpenNote, days, canCreate, createVenueId }: VenueMatrixRowProps) {
+  // The matrix is a grid of days, so a multi-day note is expanded inclusively
+  // into every day cell it covers within the visible window.
+  const notesByDayKey = (() => {
+    const startKey = days[0].format("YYYY-MM-DD");
+    const endKey = days[days.length - 1].format("YYYY-MM-DD");
+    const map = new Map<string, CalendarNote[]>();
+    notes.forEach((note) => {
+      const lastDate = note.endDate ?? note.startDate;
+      if (lastDate < startKey || note.startDate > endKey) return;
+      const from = note.startDate > startKey ? note.startDate : startKey;
+      const to = lastDate < endKey ? lastDate : endKey;
+      for (let cursor = from; cursor <= to; cursor = addDays(cursor, 1)) {
+        const bucket = map.get(cursor) ?? [];
+        bucket.push(note);
+        map.set(cursor, bucket);
+      }
+    });
+    return map;
+  })();
+
   const eventsByDay = days.map((day) => {
     const dayStartEdge = day.startOf("day");
     const dayEndEdge = day.endOf("day");
@@ -1450,6 +1761,17 @@ function VenueMatrixRow({ venue, events, days, canCreate, createVenueId }: Venue
                 borderBottomWidth: 0
               }}
             >
+              {(notesByDayKey.get(day.format("YYYY-MM-DD")) ?? []).map((note) => (
+                <button
+                  key={`note-${note.id}-${day.format("YYYY-MM-DD")}`}
+                  type="button"
+                  onClick={() => onOpenNote(note)}
+                  className={cn(NOTE_ENTRY_CLASS, "w-full text-left")}
+                >
+                  <span aria-hidden="true">📌</span>{" "}
+                  <span className="font-semibold">{NOTE_LABEL}:</span> {note.title}
+                </button>
+              ))}
               {eventsByDay[index].map(({ event, displayStart, displayEnd, spansPrevious, spansNext }) => {
                 const status = statusConfig[event.status] ?? statusConfig.draft;
                 const accent = statusAccentStyles[event.status] ?? statusAccentStyles.draft;

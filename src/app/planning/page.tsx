@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { PlanningBoard } from "@/components/planning/planning-board";
 import { getCurrentUser } from "@/lib/auth";
+import { listCalendarNotes } from "@/lib/calendar-notes";
 import { getDashboardTodoItems } from "@/lib/dashboard";
 import { listPlanningBoardData } from "@/lib/planning";
 import { londonDateString } from "@/lib/planning/utils";
@@ -23,7 +24,7 @@ export default async function PlanningPage() {
     redirect("/unauthorized");
   }
 
-  const [venues, boardData, calendarData, queueResult, userPrefsResult] = await Promise.all([
+  const [venues, boardData, calendarData, queueResult, userPrefsResult, notesResult] = await Promise.all([
     listVenues(),
     listPlanningBoardData({
       user,
@@ -44,7 +45,9 @@ export default async function PlanningPage() {
       .from("users")
       .select("planning_queue_pinned")
       .eq("id", user.id)
-      .maybeSingle()
+      .maybeSingle(),
+    // All staff see all venue notes; a notes failure must not fail the page.
+    listCalendarNotes().catch(() => ({ notes: [], truncated: false, failed: true as const }))
   ]);
   const userPrefs = userPrefsResult.data;
   const visibleVenues =
@@ -69,6 +72,9 @@ export default async function PlanningPage() {
       currentUserVenueId={user.venueId}
       queueItems={queueResult.items}
       queueInitiallyPinned={Boolean(userPrefs?.planning_queue_pinned)}
+      notes={notesResult.notes}
+      notesTruncated={notesResult.truncated}
+      notesFailed={"failed" in notesResult}
     />
   );
 }

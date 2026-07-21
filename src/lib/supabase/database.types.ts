@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "13.0.5"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       ai_content: {
@@ -231,6 +256,57 @@ export type Database = {
           },
         ]
       }
+      attachment_versions: {
+        Row: {
+          attachment_id: string
+          created_at: string
+          id: string
+          mime_type: string
+          original_filename: string
+          size_bytes: number
+          storage_path: string
+          uploaded_by: string | null
+          version_no: number
+        }
+        Insert: {
+          attachment_id: string
+          created_at?: string
+          id?: string
+          mime_type: string
+          original_filename: string
+          size_bytes: number
+          storage_path: string
+          uploaded_by?: string | null
+          version_no: number
+        }
+        Update: {
+          attachment_id?: string
+          created_at?: string
+          id?: string
+          mime_type?: string
+          original_filename?: string
+          size_bytes?: number
+          storage_path?: string
+          uploaded_by?: string | null
+          version_no?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attachment_versions_attachment_id_fkey"
+            columns: ["attachment_id"]
+            isOneToOne: false
+            referencedRelation: "attachments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attachment_versions_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       attachments: {
         Row: {
           created_at: string
@@ -321,57 +397,6 @@ export type Database = {
           },
         ]
       }
-      attachment_versions: {
-        Row: {
-          attachment_id: string
-          created_at: string
-          id: string
-          mime_type: string
-          original_filename: string
-          size_bytes: number
-          storage_path: string
-          uploaded_by: string | null
-          version_no: number
-        }
-        Insert: {
-          attachment_id: string
-          created_at?: string
-          id?: string
-          mime_type: string
-          original_filename: string
-          size_bytes: number
-          storage_path: string
-          uploaded_by?: string | null
-          version_no: number
-        }
-        Update: {
-          attachment_id?: string
-          created_at?: string
-          id?: string
-          mime_type?: string
-          original_filename?: string
-          size_bytes?: number
-          storage_path?: string
-          uploaded_by?: string | null
-          version_no?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "attachment_versions_attachment_id_fkey"
-            columns: ["attachment_id"]
-            isOneToOne: false
-            referencedRelation: "attachments"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "attachment_versions_uploaded_by_fkey"
-            columns: ["uploaded_by"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       audit_log: {
         Row: {
           action: string
@@ -401,6 +426,115 @@ export type Database = {
           meta?: Json | null
         }
         Relationships: []
+      }
+      booking_transfers: {
+        Row: {
+          admin_user_id: string | null
+          amount_pence: number
+          created_at: string
+          from_booking_id: string | null
+          from_event_id: string | null
+          from_event_start_at: string | null
+          from_event_title: string
+          id: string
+          idempotency_key: string
+          manual_contact_required: boolean
+          reason: string | null
+          ticket_count: number
+          to_booking_id: string | null
+          to_event_id: string | null
+          to_event_start_at: string | null
+          to_event_title: string
+          transaction_id: string | null
+          transfer_email_failed_at: string | null
+          transfer_email_sent_at: string | null
+        }
+        Insert: {
+          admin_user_id?: string | null
+          amount_pence: number
+          created_at?: string
+          from_booking_id?: string | null
+          from_event_id?: string | null
+          from_event_start_at?: string | null
+          from_event_title: string
+          id?: string
+          idempotency_key: string
+          manual_contact_required?: boolean
+          reason?: string | null
+          ticket_count: number
+          to_booking_id?: string | null
+          to_event_id?: string | null
+          to_event_start_at?: string | null
+          to_event_title: string
+          transaction_id?: string | null
+          transfer_email_failed_at?: string | null
+          transfer_email_sent_at?: string | null
+        }
+        Update: {
+          admin_user_id?: string | null
+          amount_pence?: number
+          created_at?: string
+          from_booking_id?: string | null
+          from_event_id?: string | null
+          from_event_start_at?: string | null
+          from_event_title?: string
+          id?: string
+          idempotency_key?: string
+          manual_contact_required?: boolean
+          reason?: string | null
+          ticket_count?: number
+          to_booking_id?: string | null
+          to_event_id?: string | null
+          to_event_start_at?: string | null
+          to_event_title?: string
+          transaction_id?: string | null
+          transfer_email_failed_at?: string | null
+          transfer_email_sent_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "booking_transfers_admin_user_id_fkey"
+            columns: ["admin_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "booking_transfers_from_booking_id_fkey"
+            columns: ["from_booking_id"]
+            isOneToOne: false
+            referencedRelation: "event_bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "booking_transfers_from_event_id_fkey"
+            columns: ["from_event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "booking_transfers_to_booking_id_fkey"
+            columns: ["to_booking_id"]
+            isOneToOne: false
+            referencedRelation: "event_bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "booking_transfers_to_event_id_fkey"
+            columns: ["to_event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "booking_transfers_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "payment_transactions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       business_settings: {
         Row: {
@@ -777,159 +911,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      payment_transactions: {
-        Row: {
-          amount_pence: number
-          booking_id: string
-          completed_at: string | null
-          created_at: string
-          currency: string
-          event_id: string
-          failed_at: string | null
-          id: string
-          idempotency_key: string
-          metadata: Json
-          refunded_amount_pence: number
-          refunded_at: string | null
-          status: string
-          stripe_checkout_session_id: string
-          stripe_customer_id: string | null
-          stripe_payment_intent_id: string | null
-          updated_at: string
-        }
-        Insert: {
-          amount_pence: number
-          booking_id: string
-          completed_at?: string | null
-          created_at?: string
-          currency?: string
-          event_id: string
-          failed_at?: string | null
-          id?: string
-          idempotency_key: string
-          metadata?: Json
-          refunded_amount_pence?: number
-          refunded_at?: string | null
-          status?: string
-          stripe_checkout_session_id: string
-          stripe_customer_id?: string | null
-          stripe_payment_intent_id?: string | null
-          updated_at?: string
-        }
-        Update: {
-          amount_pence?: number
-          booking_id?: string
-          completed_at?: string | null
-          created_at?: string
-          currency?: string
-          event_id?: string
-          failed_at?: string | null
-          id?: string
-          idempotency_key?: string
-          metadata?: Json
-          refunded_amount_pence?: number
-          refunded_at?: string | null
-          status?: string
-          stripe_checkout_session_id?: string
-          stripe_customer_id?: string | null
-          stripe_payment_intent_id?: string | null
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "payment_transactions_booking_id_fkey"
-            columns: ["booking_id"]
-            isOneToOne: false
-            referencedRelation: "event_bookings"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "payment_transactions_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
-            referencedRelation: "events"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      payment_refunds: {
-        Row: {
-          admin_user_id: string | null
-          amount_pence: number
-          booking_id: string
-          created_at: string
-          event_id: string
-          id: string
-          idempotency_key: string
-          reason: string | null
-          status: string
-          stripe_refund_id: string
-          transaction_id: string
-        }
-        Insert: {
-          admin_user_id?: string | null
-          amount_pence: number
-          booking_id: string
-          created_at?: string
-          event_id: string
-          id?: string
-          idempotency_key: string
-          reason?: string | null
-          status?: string
-          stripe_refund_id: string
-          transaction_id: string
-        }
-        Update: {
-          admin_user_id?: string | null
-          amount_pence?: number
-          booking_id?: string
-          created_at?: string
-          event_id?: string
-          id?: string
-          idempotency_key?: string
-          reason?: string | null
-          status?: string
-          stripe_refund_id?: string
-          transaction_id?: string
-        }
-        Relationships: []
-      }
-      payment_webhooks: {
-        Row: {
-          attempts: number
-          error_message: string | null
-          event_type: string
-          id: string
-          payload_summary: Json
-          processed_at: string | null
-          received_at: string
-          status: string
-          stripe_event_id: string
-        }
-        Insert: {
-          attempts?: number
-          error_message?: string | null
-          event_type: string
-          id?: string
-          payload_summary?: Json
-          processed_at?: string | null
-          received_at?: string
-          status?: string
-          stripe_event_id: string
-        }
-        Update: {
-          attempts?: number
-          error_message?: string | null
-          event_type?: string
-          id?: string
-          payload_summary?: Json
-          processed_at?: string | null
-          received_at?: string
-          status?: string
-          stripe_event_id?: string
-        }
-        Relationships: []
       }
       event_creation_batches: {
         Row: {
@@ -1346,25 +1327,25 @@ export type Database = {
           body: string
           created_at: string
           created_by: string | null
-          entity_id: string
-          entity_type: "event" | "planning_item"
           id: string
+          parent_id: string
+          parent_type: string
         }
         Insert: {
           body: string
           created_at?: string
           created_by?: string | null
-          entity_id: string
-          entity_type: "event" | "planning_item"
           id?: string
+          parent_id: string
+          parent_type: string
         }
         Update: {
           body?: string
           created_at?: string
           created_by?: string | null
-          entity_id?: string
-          entity_type?: "event" | "planning_item"
           id?: string
+          parent_id?: string
+          parent_type?: string
         }
         Relationships: [
           {
@@ -1424,6 +1405,188 @@ export type Database = {
           status?: string
           type?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      payment_refunds: {
+        Row: {
+          admin_user_id: string | null
+          amount_pence: number
+          booking_id: string
+          created_at: string
+          event_id: string
+          id: string
+          idempotency_key: string
+          reason: string | null
+          status: string
+          stripe_refund_id: string
+          transaction_id: string
+        }
+        Insert: {
+          admin_user_id?: string | null
+          amount_pence: number
+          booking_id: string
+          created_at?: string
+          event_id: string
+          id?: string
+          idempotency_key: string
+          reason?: string | null
+          status?: string
+          stripe_refund_id: string
+          transaction_id: string
+        }
+        Update: {
+          admin_user_id?: string | null
+          amount_pence?: number
+          booking_id?: string
+          created_at?: string
+          event_id?: string
+          id?: string
+          idempotency_key?: string
+          reason?: string | null
+          status?: string
+          stripe_refund_id?: string
+          transaction_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_refunds_admin_user_id_fkey"
+            columns: ["admin_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_refunds_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "event_bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_refunds_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_refunds_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "payment_transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payment_transactions: {
+        Row: {
+          amount_pence: number
+          booking_id: string
+          completed_at: string | null
+          created_at: string
+          currency: string
+          event_id: string
+          failed_at: string | null
+          id: string
+          idempotency_key: string
+          metadata: Json
+          refunded_amount_pence: number
+          refunded_at: string | null
+          status: string
+          stripe_checkout_session_id: string
+          stripe_customer_id: string | null
+          stripe_payment_intent_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount_pence: number
+          booking_id: string
+          completed_at?: string | null
+          created_at?: string
+          currency?: string
+          event_id: string
+          failed_at?: string | null
+          id?: string
+          idempotency_key: string
+          metadata?: Json
+          refunded_amount_pence?: number
+          refunded_at?: string | null
+          status?: string
+          stripe_checkout_session_id: string
+          stripe_customer_id?: string | null
+          stripe_payment_intent_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount_pence?: number
+          booking_id?: string
+          completed_at?: string | null
+          created_at?: string
+          currency?: string
+          event_id?: string
+          failed_at?: string | null
+          id?: string
+          idempotency_key?: string
+          metadata?: Json
+          refunded_amount_pence?: number
+          refunded_at?: string | null
+          status?: string
+          stripe_checkout_session_id?: string
+          stripe_customer_id?: string | null
+          stripe_payment_intent_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_transactions_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "event_bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_transactions_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payment_webhooks: {
+        Row: {
+          attempts: number
+          error_message: string | null
+          event_type: string
+          id: string
+          payload_summary: Json
+          processed_at: string | null
+          received_at: string
+          status: string
+          stripe_event_id: string
+        }
+        Insert: {
+          attempts?: number
+          error_message?: string | null
+          event_type: string
+          id?: string
+          payload_summary?: Json
+          processed_at?: string | null
+          received_at?: string
+          status?: string
+          stripe_event_id: string
+        }
+        Update: {
+          attempts?: number
+          error_message?: string | null
+          event_type?: string
+          id?: string
+          payload_summary?: Json
+          processed_at?: string | null
+          received_at?: string
+          status?: string
+          stripe_event_id?: string
         }
         Relationships: []
       }
@@ -1680,6 +1843,7 @@ export type Database = {
           recurrence_interval: number
           recurrence_monthday: number | null
           recurrence_weekdays: number[] | null
+          sop_not_required_template_ids: string[]
           starts_on: string
           title: string
           type_label: string
@@ -1699,6 +1863,7 @@ export type Database = {
           recurrence_interval?: number
           recurrence_monthday?: number | null
           recurrence_weekdays?: number[] | null
+          sop_not_required_template_ids?: string[]
           starts_on: string
           title: string
           type_label: string
@@ -1718,6 +1883,7 @@ export type Database = {
           recurrence_interval?: number
           recurrence_monthday?: number | null
           recurrence_weekdays?: number[] | null
+          sop_not_required_template_ids?: string[]
           starts_on?: string
           title?: string
           type_label?: string
@@ -2014,6 +2180,8 @@ export type Database = {
           id: string
           link_type: string
           name: string
+          parent_link_id: string | null
+          touchpoint: string | null
           updated_at: string
         }
         Insert: {
@@ -2026,6 +2194,8 @@ export type Database = {
           id?: string
           link_type?: string
           name: string
+          parent_link_id?: string | null
+          touchpoint?: string | null
           updated_at?: string
         }
         Update: {
@@ -2038,6 +2208,8 @@ export type Database = {
           id?: string
           link_type?: string
           name?: string
+          parent_link_id?: string | null
+          touchpoint?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -2046,6 +2218,13 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "short_links_parent_link_id_fkey"
+            columns: ["parent_link_id"]
+            isOneToOne: false
+            referencedRelation: "short_links"
             referencedColumns: ["id"]
           },
         ]
@@ -2384,6 +2563,70 @@ export type Database = {
           },
         ]
       }
+      venue_calendar_notes: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          deleted_by: string | null
+          detail: string | null
+          end_date: string | null
+          id: string
+          start_date: string
+          title: string
+          updated_at: string
+          venue_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          detail?: string | null
+          end_date?: string | null
+          id?: string
+          start_date: string
+          title: string
+          updated_at?: string
+          venue_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          detail?: string | null
+          end_date?: string | null
+          id?: string
+          start_date?: string
+          title?: string
+          updated_at?: string
+          venue_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "venue_calendar_notes_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "venue_calendar_notes_deleted_by_fkey"
+            columns: ["deleted_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "venue_calendar_notes_venue_id_fkey"
+            columns: ["venue_id"]
+            isOneToOne: false
+            referencedRelation: "venues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       venue_default_reviewers: {
         Row: {
           created_at: string
@@ -2407,6 +2650,7 @@ export type Database = {
       }
       venue_opening_hours: {
         Row: {
+          availability: string
           close_time: string | null
           created_at: string
           day_of_week: number
@@ -2418,6 +2662,7 @@ export type Database = {
           venue_id: string
         }
         Insert: {
+          availability?: string
           close_time?: string | null
           created_at?: string
           day_of_week: number
@@ -2429,6 +2674,7 @@ export type Database = {
           venue_id: string
         }
         Update: {
+          availability?: string
           close_time?: string | null
           created_at?: string
           day_of_week?: number
@@ -2488,6 +2734,7 @@ export type Database = {
       }
       venue_opening_overrides: {
         Row: {
+          availability: string
           close_time: string | null
           created_at: string
           created_by: string | null
@@ -2500,6 +2747,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          availability?: string
           close_time?: string | null
           created_at?: string
           created_by?: string | null
@@ -2512,6 +2760,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          availability?: string
           close_time?: string | null
           created_at?: string
           created_by?: string | null
@@ -2682,19 +2931,32 @@ export type Database = {
         Returns: undefined
       }
       cascade_internal_bypass: { Args: never; Returns: boolean }
+      central_events_lead_ids: { Args: never; Returns: string[] }
       cleanup_auth_records: { Args: never; Returns: undefined }
-      create_booking: {
-        Args: {
-          p_email: string
-          p_event_id: string
-          p_first_name: string
-          p_last_name: string
-          p_mobile: string
-          p_customer_notes: string
-          p_ticket_count: number
-        }
-        Returns: Json
-      }
+      create_booking:
+        | {
+            Args: {
+              p_email: string
+              p_event_id: string
+              p_first_name: string
+              p_last_name: string
+              p_mobile: string
+              p_ticket_count: number
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_customer_notes: string
+              p_email: string
+              p_event_id: string
+              p_first_name: string
+              p_last_name: string
+              p_mobile: string
+              p_ticket_count: number
+            }
+            Returns: Json
+          }
       create_booking_from_campaign: {
         Args: { p_campaign_send_id: string; p_ticket_count: number }
         Returns: Json
@@ -2711,8 +2973,44 @@ export type Database = {
         Args: { p_idempotency_key: string; p_payload: Json }
         Returns: Json
       }
+      create_paid_booking:
+        | {
+            Args: {
+              p_email: string
+              p_event_id: string
+              p_first_name: string
+              p_last_name: string
+              p_mobile: string
+              p_ticket_count: number
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_customer_notes: string
+              p_email: string
+              p_event_id: string
+              p_first_name: string
+              p_last_name: string
+              p_mobile: string
+              p_ticket_count: number
+            }
+            Returns: Json
+          }
+      current_user_assigned_to_planning_task: {
+        Args: { p_task_id: string }
+        Returns: boolean
+      }
       current_user_role: { Args: never; Returns: string }
       current_user_venue_id: { Args: never; Returns: string }
+      ensure_debrief_sop_task: {
+        Args: {
+          p_created_by: string
+          p_planning_item_id: string
+          p_target_date: string
+        }
+        Returns: number
+      }
       event_visible_to_current_user: {
         Args: { p_event_id: string; p_primary_venue_id: string }
         Returns: boolean
@@ -2879,18 +3177,27 @@ export type Database = {
         Args: { p_actor_id: string; p_artist_ids: string[]; p_event_id: string }
         Returns: undefined
       }
+      transfer_booking: {
+        Args: {
+          p_admin_user_id: string
+          p_idempotency_key: string
+          p_reason: string
+          p_source_booking_id: string
+          p_target_event_id: string
+        }
+        Returns: Json
+      }
     }
     Enums: {
       event_status:
-        | "pending_approval"
-        | "approved_pending_details"
         | "draft"
         | "submitted"
         | "needs_revisions"
         | "approved"
         | "rejected"
-        | "cancelled"
+        | "published"
         | "completed"
+      user_role: "venue_manager" | "reviewer" | "central_planner" | "executive"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -3016,19 +3323,21 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       event_status: [
-        "pending_approval",
-        "approved_pending_details",
         "draft",
         "submitted",
         "needs_revisions",
         "approved",
         "rejected",
-        "cancelled",
+        "published",
         "completed",
       ],
+      user_role: ["venue_manager", "reviewer", "central_planner", "executive"],
     },
   },
 } as const
