@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useId } from "react";
+import { useEffect, useRef, useId, useState } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 
 type ConfirmDialogProps = {
@@ -26,6 +27,11 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   const cancelRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -38,26 +44,33 @@ export function ConfirmDialog({
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        // Capture phase plus stopPropagation so an underlying surface (e.g. a
+        // Sheet that also closes on Escape) does not react to the same press.
+        e.stopPropagation();
         onCancel();
       } else if (e.key === "Enter") {
         e.preventDefault();
+        e.stopPropagation();
         onConfirm();
       }
     };
 
-    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown, true);
 
     return () => {
       document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keydown", handleKeyDown, true);
     };
   }, [open, onCancel, onConfirm]);
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
-  return (
+  // Rendered through a portal above any other overlay: a confirmation is always
+  // the topmost surface, and an inline render would sit behind a Sheet's
+  // backdrop, which would swallow the confirm click.
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--overlay-scrim)] p-4 backdrop-blur-[2px]"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-[var(--overlay-scrim)] p-4 backdrop-blur-[2px]"
       onClick={onCancel}
       role="presentation"
     >
@@ -88,6 +101,7 @@ export function ConfirmDialog({
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
