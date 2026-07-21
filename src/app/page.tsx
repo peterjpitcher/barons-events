@@ -11,6 +11,7 @@ import {
   getDashboardOperationsSnapshot,
   getRecentActivity,
 } from "@/lib/dashboard";
+import { findNoteClashes } from "@/lib/calendar-notes";
 import { UnifiedTodoList } from "@/components/todos/unified-todo-list";
 import { UpcomingEventsCard } from "@/components/dashboard/context-cards/upcoming-events-card";
 import { PipelineCard } from "@/components/dashboard/context-cards/pipeline-card";
@@ -215,18 +216,23 @@ export default async function OverviewPage(): Promise<React.ReactNode> {
   let debriefsDue: Awaited<ReturnType<typeof getDebriefsDue>> | null = null;
   let recentActivity: Awaited<ReturnType<typeof getRecentActivity>> | null =
     null;
+  let noteClashes: Awaited<ReturnType<typeof findNoteClashes>> | null = null;
 
   if (user.role === "administrator") {
-    const [sc, cf, dd, ra] = await Promise.all([
+    const [sc, cf, dd, ra, nc] = await Promise.all([
       safeFetch(getStatusCounts()),
       safeFetch(findConflicts()),
       safeFetch(getDebriefsDue(user)),
       safeFetch(getRecentActivity()),
+      safeFetch(findNoteClashes({ all: true })),
     ]);
     statusCounts = sc;
     conflicts = cf;
     debriefsDue = dd;
     recentActivity = ra;
+    noteClashes = nc;
+  } else if (user.role === "manager" && user.venueId) {
+    noteClashes = await safeFetch(findNoteClashes({ venueId: user.venueId }));
   }
 
   // Compute alert badge counts
@@ -278,16 +284,21 @@ export default async function OverviewPage(): Promise<React.ReactNode> {
         <EventReadinessCard events={operationsSnapshot?.readiness ?? null} />
         {user.role === "administrator" ? (
           <>
-            <ConflictsCard conflicts={conflicts} />
+            <ConflictsCard conflicts={conflicts} noteClashes={noteClashes} />
             <DebriefsOutstandingCard debriefs={debriefsDue} />
             <RecentActivityCard activity={recentActivity} />
           </>
         ) : null}
         {user.role === "manager" ? (
-          <UpcomingEventsCard
-            events={upcomingEvents}
-            userRole={user.role}
-          />
+          <>
+            {user.venueId ? (
+              <ConflictsCard conflicts={[]} noteClashes={noteClashes} />
+            ) : null}
+            <UpcomingEventsCard
+              events={upcomingEvents}
+              userRole={user.role}
+            />
+          </>
         ) : null}
       </div>
 
@@ -308,7 +319,7 @@ export default async function OverviewPage(): Promise<React.ReactNode> {
             <>
               <BookingPulseCard pulse={operationsSnapshot?.bookingPulse ?? null} />
               <PipelineCard counts={statusCounts} />
-              <ConflictsCard conflicts={conflicts} />
+              <ConflictsCard conflicts={conflicts} noteClashes={noteClashes} />
               <DebriefsOutstandingCard debriefs={debriefsDue} />
               <RecentActivityCard activity={recentActivity} />
             </>
@@ -317,6 +328,9 @@ export default async function OverviewPage(): Promise<React.ReactNode> {
           {user.role === "manager" && (
             <>
               <BookingPulseCard pulse={operationsSnapshot?.bookingPulse ?? null} />
+              {user.venueId ? (
+                <ConflictsCard conflicts={[]} noteClashes={noteClashes} />
+              ) : null}
               <UpcomingEventsCard
                 events={upcomingEvents}
                 userRole={user.role}
