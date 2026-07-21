@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { CalendarRange, Check, ClipboardList, LayoutGrid, List, MoveHorizontal, Pin, PinOff, Plus, RefreshCw, Search, Users } from "lucide-react";
 import { movePlanningItemDateAction, refreshInspirationItemsAction, togglePlanningTaskStatusAction } from "@/actions/planning";
 import { setUserPinPreferenceAction } from "@/actions/user-preferences";
+import { CalendarNoteDialog, type CalendarNoteDialogNote } from "@/components/calendar-notes/calendar-note-dialog";
 import { PlanningAlertStrip } from "@/components/planning/planning-alert-strip";
 import { PlanningCalendarView } from "@/components/planning/planning-calendar-view";
 import { PlanningItemCard, EventOverlayCard, InspirationItemCard } from "@/components/planning/planning-item-card";
@@ -27,8 +28,9 @@ import type {
   PlanningVenueOption,
   TodoAlertFilter
 } from "@/lib/planning/types";
-import { bucketForDayOffset, daysBetween, planningItemsToTodoItems } from "@/lib/planning/utils";
-import { canCreatePlanningItems, canManageAllPlanning } from "@/lib/roles";
+import { addDays, bucketForDayOffset, daysBetween, planningItemsToTodoItems } from "@/lib/planning/utils";
+import type { CalendarNote } from "@/lib/calendar-notes";
+import { canCreatePlanningItems, canManageAllPlanning, canManageCalendarNote } from "@/lib/roles";
 import type { UserRole } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -45,6 +47,10 @@ type PlanningBoardProps = {
   currentUserVenueId?: string | null;
   queueItems?: TodoItem[];
   queueInitiallyPinned?: boolean;
+  /** Venue calendar notes rendered on the Calendar tab only. */
+  notes?: CalendarNote[];
+  notesTruncated?: boolean;
+  notesFailed?: boolean;
 };
 
 type BucketConfig = {
@@ -397,7 +403,7 @@ function TodoQueueRail({
   );
 }
 
-export function PlanningBoard({ data, calendarData, venues, canApproveEvents, userRole, currentUserId, currentUserVenueId, queueItems = [], queueInitiallyPinned = false }: PlanningBoardProps) {
+export function PlanningBoard({ data, calendarData, venues, canApproveEvents, userRole, currentUserId, currentUserVenueId, queueItems = [], queueInitiallyPinned = false, notes = [], notesTruncated = false, notesFailed = false }: PlanningBoardProps) {
   const router = useRouter();
   const [viewMode, setViewMode] = useState<ViewMode>("board");
   const [showLater, setShowLater] = useState(false);
@@ -409,8 +415,19 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
   const [venueFilter, setVenueFilter] = useState("");
   const [eventVisibility, setEventVisibility] = useState<"with_events" | "planning_only">("with_events");
   const [todoAlertFilter, setTodoAlertFilter] = useState<TodoAlertFilter | null>(null);
+  const [noteDialog, setNoteDialog] = useState<
+    | { mode: "create" }
+    | { mode: "edit"; note: CalendarNoteDialogNote }
+    | null
+  >(null);
   const [isPending, startTransition] = useTransition();
   const scopeData = statusScope === "open" ? data : calendarData ?? data;
+
+  // Administrators can add notes anywhere; managers only for their own venue.
+  const canCreateNote = userRole
+    ? canManageCalendarNote(userRole, currentUserVenueId ?? null, currentUserVenueId ?? "")
+    : false;
+  const noteFixedVenueId = userRole === "manager" && currentUserVenueId ? currentUserVenueId : undefined;
 
   const filteredPlanningItems = useMemo(() => {
     const needle = search.trim().toLowerCase();
@@ -577,7 +594,7 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
   }, [combinedByBucket, currentUserId, mobileBlockedOnly, mobileMineOnly]);
 
   const combinedEntries = useMemo<PlanningViewEntry[]>(() => {
-    const sourceOrder: Record<string, number> = { planning: 0, event: 1, inspiration: 2 };
+    const sourceOrder: Record<string, number> = { note: 0, planning: 1, event: 2, inspiration: 3 };
 
     const planningEntries: PlanningViewEntry[] = filteredPlanningItems.map((item) => ({
       id: `planning-${item.id}`,
@@ -610,8 +627,8 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
 
     return [...planningEntries, ...eventEntries, ...inspirationEntries].sort((left, right) => {
       if (left.targetDate !== right.targetDate) return left.targetDate.localeCompare(right.targetDate);
-      const lo = sourceOrder[left.source] ?? 3;
-      const ro = sourceOrder[right.source] ?? 3;
+      const lo = sourceOrder[left.source] ?? 4;
+      const ro = sourceOrder[right.source] ?? 4;
       if (lo !== ro) return lo - ro;
       return left.title.localeCompare(right.title);
     });
@@ -625,7 +642,7 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
   const calendarSource = calendarData ?? data;
 
   const calendarCombinedEntries = useMemo<PlanningViewEntry[]>(() => {
-    const sourceOrder: Record<string, number> = { planning: 0, event: 1, inspiration: 2 };
+    const sourceOrder: Record<string, number> = { note: 0, planning: 1, event: 2, inspiration: 3 };
     const needle = search.trim().toLowerCase();
 
     const matchesSearch = (haystack: string): boolean =>
@@ -673,14 +690,42 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
             }))
         : [];
 
-    return [...planningEntries, ...eventEntries].sort((left, right) => {
+    // Notes appear on the calendar only. Multi-day notes are expanded into
+    // one entry per occupied day (capped at a year as a safety net).
+    const noteEntries: PlanningViewEntry[] = notes
+      .filter((note) => !venueFilter || note.venueId === venueFilter)
+      .flatMap((note) => {
+        const days: string[] = [];
+        let cursor = note.startDate;
+        const end = note.endDate ?? note.startDate;
+        for (let i = 0; i <= 366 && cursor <= end; i++) {
+          days.push(cursor);
+          if (cursor === end) break;
+          cursor = addDays(cursor, 1);
+        }
+        return days.map((day) => ({
+          id: `note-${note.id}-${day}`,
+          source: "note" as const,
+          targetDate: day,
+          title: note.title,
+          venueLabel: note.venueName,
+          noteId: note.id,
+          startDate: note.startDate,
+          endDate: note.endDate,
+          detail: note.detail,
+          venueId: note.venueId,
+          updatedAt: note.updatedAt
+        }));
+      });
+
+    return [...noteEntries, ...planningEntries, ...eventEntries].sort((left, right) => {
       if (left.targetDate !== right.targetDate) return left.targetDate.localeCompare(right.targetDate);
-      const lo = sourceOrder[left.source] ?? 3;
-      const ro = sourceOrder[right.source] ?? 3;
+      const lo = sourceOrder[left.source] ?? 4;
+      const ro = sourceOrder[right.source] ?? 4;
       if (lo !== ro) return lo - ro;
       return left.title.localeCompare(right.title);
     });
-  }, [calendarSource, search, venueFilter, eventVisibility, statusScope]);
+  }, [calendarSource, search, venueFilter, eventVisibility, statusScope, notes]);
 
   function switchView(mode: ViewMode): void {
     setViewMode(mode);
@@ -707,6 +752,21 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
 
       toast.success(`Moved to ${targetDate}.`);
       refreshBoard();
+    });
+  }
+
+  function openNoteEntry(entry: Extract<PlanningViewEntry, { source: "note" }>): void {
+    setNoteDialog({
+      mode: "edit",
+      note: {
+        id: entry.noteId,
+        venueId: entry.venueId,
+        title: entry.title,
+        startDate: entry.startDate,
+        endDate: entry.endDate,
+        detail: entry.detail,
+        updatedAt: entry.updatedAt
+      }
     });
   }
 
@@ -1014,11 +1074,26 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
 
       {viewMode === "calendar" ? (
         <div className="hidden space-y-2 md:block">
-          <div className="rounded-[8px] border border-[var(--hair)] bg-[var(--paper)] p-2 shadow-card">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-[8px] border border-[var(--hair)] bg-[var(--paper)] p-2 shadow-card">
             <p className="text-xs text-[var(--ink-muted)]">
               Calendar follows the status, venue, source, and search filters above across the full historic dataset.
             </p>
+            {canCreateNote ? (
+              <Button type="button" size="sm" variant="secondary" onClick={() => setNoteDialog({ mode: "create" })}>
+                <Pin className="h-4 w-4" aria-hidden="true" /> Add note
+              </Button>
+            ) : null}
           </div>
+          {notesFailed ? (
+            <p className="rounded-[8px] border border-[var(--burgundy)] bg-[var(--burgundy-tint)] px-3 py-2 text-xs font-medium text-[var(--burgundy)]">
+              Venue notes could not be loaded. The rest of the calendar is unaffected.
+            </p>
+          ) : null}
+          {notesTruncated ? (
+            <p className="rounded-[8px] border border-[var(--mustard)] bg-[var(--mustard-tint)] px-3 py-2 text-xs font-medium text-[var(--mustard-dark)]">
+              Some venue notes are not shown.
+            </p>
+          ) : null}
           <PlanningCalendarView
             today={data.today}
             entries={calendarCombinedEntries}
@@ -1026,6 +1101,7 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
             onMovePlanningItem={userRole && canCreatePlanningItems(userRole, currentUserVenueId)
               ? movePlanningItemInCalendar
               : undefined}
+            onOpenNote={openNoteEntry}
           />
         </div>
       ) : null}
@@ -1036,6 +1112,7 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
             today={data.today}
             entries={combinedEntries}
             onOpenPlanningItem={(item) => router.push(`/planning/${item.id}`)}
+            onOpenNote={openNoteEntry}
           />
         </div>
       ) : null}
@@ -1057,6 +1134,25 @@ export function PlanningBoard({ data, calendarData, venues, canApproveEvents, us
             onOpenPlanningItemId={(id) => router.push(`/planning/${id}`)}
           />
         </div>
+      ) : null}
+
+      {noteDialog ? (
+        <CalendarNoteDialog
+          open
+          mode={noteDialog.mode}
+          venues={venues.map((venue) => ({ id: venue.id, name: venue.name }))}
+          canManage={
+            noteDialog.mode === "edit"
+              ? userRole
+                ? canManageCalendarNote(userRole, currentUserVenueId ?? null, noteDialog.note.venueId)
+                : false
+              : canCreateNote
+          }
+          note={noteDialog.mode === "edit" ? noteDialog.note : undefined}
+          defaultDate={noteDialog.mode === "create" ? data.today : undefined}
+          fixedVenueId={noteFixedVenueId}
+          onClose={() => setNoteDialog(null)}
+        />
       ) : null}
 
       <TodoQueueRail

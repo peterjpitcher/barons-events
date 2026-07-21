@@ -26,4 +26,18 @@ export type PlanningViewEntry =
       targetDate: string;
       title: string;
       inspirationItem: PlanningInspirationItem;
+    }
+  | {
+      id: string;
+      source: "note";
+      targetDate: string;
+      title: string;
+      venueLabel: string;
+      noteId: string;
+      startDate: string;
+      endDate: string | null;
+      detail: string | null;
+      venueId: string;
+      /** Needed by the note dialog for optimistic concurrency checks. */
+      updatedAt: string;
     };
