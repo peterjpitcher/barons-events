@@ -36,7 +36,8 @@ import {
 } from "@/lib/booking-format";
 import { EVENT_GOALS } from "@/lib/event-goals";
 import { cn } from "@/lib/utils";
-import { toLondonDateTimeInputValue } from "@/lib/datetime";
+import { normaliseEventDateTimeForStorage, toLondonDateTimeInputValue } from "@/lib/datetime";
+import { notesClashingWithSelection, type FormNote } from "@/lib/calendar-notes/form-clash";
 import type { EventSummary } from "@/lib/events";
 import type { UserRole } from "@/lib/types";
 import type { ArtistOption } from "@/lib/artists";
@@ -92,7 +93,26 @@ export type EventFormProps = {
   canSubmitDebrief?: boolean;
   debriefInitiallyPinned?: boolean;
   reserveFloatingActionSpace?: boolean;
+  /** Venue calendar notes used for the advisory clash warning near the date fields. */
+  clashNotes?: FormNote[];
+  /** True when calendar notes could not be loaded, so the clash check is unavailable. */
+  notesUnavailable?: boolean;
 };
+
+/**
+ * Convert a datetime-local input value to the same ISO UTC timestamp the
+ * server actions store (normaliseEventDateTimeForStorage). Returns null for
+ * empty or partial input and DST-gap times, so the advisory clash check
+ * stays quiet instead of throwing while the user is mid-edit.
+ */
+function toClashSelectionIso(value: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value)) return null;
+  try {
+    return normaliseEventDateTimeForStorage(value);
+  } catch {
+    return null;
+  }
+}
 
 function MobilePersistedFormSection({
   storageKey,
@@ -266,7 +286,9 @@ export function EventForm({
   debrief = null,
   canSubmitDebrief = false,
   debriefInitiallyPinned = false,
-  reserveFloatingActionSpace = true
+  reserveFloatingActionSpace = true,
+  clashNotes = [],
+  notesUnavailable = false
 }: EventFormProps) {
   const [draftState, draftAction, isSavingPending] = useActionState(saveEventDraftAction, undefined);
   const [submitState, submitAction, isSubmittingPending] = useActionState(submitEventForReviewAction, undefined);
@@ -982,6 +1004,19 @@ export function EventForm({
     </div>
   );
 
+  // Advisory clash check against venue calendar notes. Reuses the exact
+  // venue/date state the form submits (startAt/endAt datetime-local inputs
+  // and the single/multi venue selection); saving is never blocked.
+  const clashingNotes = useMemo(() => {
+    const venueIds = isMultiCapable ? selectedVenueIds : selectedVenueId ? [selectedVenueId] : [];
+    const startAtIso = toClashSelectionIso(startValue);
+    if (!startAtIso) return [];
+    return notesClashingWithSelection(
+      { venueIds, startAt: startAtIso, endAt: toClashSelectionIso(endValue) },
+      clashNotes
+    );
+  }, [isMultiCapable, selectedVenueIds, selectedVenueId, startValue, endValue, clashNotes]);
+
   const timingFields = (
     <div className="grid gap-3 md:grid-cols-2">
       <div className="space-y-1">
@@ -1026,6 +1061,13 @@ export function EventForm({
         />
         <FieldError id="end-at-error" message={fieldErrors.endAt} />
       </div>
+      {notesUnavailable ? (
+        <p className="mt-2 text-xs text-subtle md:col-span-2">Clash check unavailable. Venue notes could not be loaded.</p>
+      ) : clashingNotes.length > 0 ? (
+        <p role="status" className="mt-2 rounded-[8px] border border-[var(--plum)] bg-[var(--plum-tint)] px-3 py-2 text-xs text-[var(--ink)] md:col-span-2">
+          {"⚠️"} Heads up: {clashingNotes.map((n) => `"${n.title}"`).join(", ")} noted at this venue on this date. You can still save.
+        </p>
+      ) : null}
     </div>
   );
 

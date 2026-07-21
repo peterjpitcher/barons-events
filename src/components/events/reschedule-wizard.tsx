@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import { rescheduleEventAction, type RescheduleEventResult } from "@/actions/events";
+import { normaliseEventDateTimeForStorage } from "@/lib/datetime";
+import { notesClashingWithSelection, type FormNote } from "@/lib/calendar-notes/form-clash";
 import { Button } from "@/components/ui/button";
 
 type BlockedItem = { id: string; name: string; reason: string };
@@ -25,10 +27,31 @@ type RescheduleWizardProps = {
     refundTotalPence: number;
     currency: string;
   };
+  /** Venue ids of the event being rescheduled (the venue stays the same). */
+  venueIds?: string[];
+  /** Venue calendar notes used for the advisory clash warning near the date fields. */
+  clashNotes?: FormNote[];
+  /** True when calendar notes could not be loaded, so the clash check is unavailable. */
+  notesUnavailable?: boolean;
 };
 
 function gbp(pence: number, currency: string): string {
   return new Intl.NumberFormat("en-GB", { style: "currency", currency: currency.toUpperCase() }).format(pence / 100);
+}
+
+/**
+ * Convert a datetime-local input value to the same ISO UTC timestamp the
+ * server action stores (normaliseEventDateTimeForStorage). Returns null for
+ * empty or partial input and DST-gap times, so the advisory clash check
+ * stays quiet instead of throwing while the user is mid-edit.
+ */
+function toClashSelectionIso(value: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value)) return null;
+  try {
+    return normaliseEventDateTimeForStorage(value);
+  } catch {
+    return null;
+  }
 }
 
 export function RescheduleWizard(props: RescheduleWizardProps) {
@@ -41,6 +64,17 @@ export function RescheduleWizard(props: RescheduleWizardProps) {
 
   const hasBlocked = props.impact.blocked.length > 0;
   const totalMoving = props.impact.paidCount + props.impact.freeCount;
+
+  // Advisory clash check against venue calendar notes for the NEW proposed
+  // date. The venue set stays the same as the original event.
+  const clashingNotes = useMemo(() => {
+    const startIso = toClashSelectionIso(startAt);
+    if (!startIso) return [];
+    return notesClashingWithSelection(
+      { venueIds: props.venueIds ?? [], startAt: startIso, endAt: toClashSelectionIso(endAt) },
+      props.clashNotes ?? []
+    );
+  }, [startAt, endAt, props.venueIds, props.clashNotes]);
 
   function dateError(): string | null {
     if (!startAt || !endAt) return "Choose a start and end time.";
@@ -162,6 +196,13 @@ export function RescheduleWizard(props: RescheduleWizardProps) {
               />
             </label>
           </div>
+          {props.notesUnavailable ? (
+            <p className="mt-2 text-xs text-subtle">Clash check unavailable. Venue notes could not be loaded.</p>
+          ) : clashingNotes.length > 0 ? (
+            <p role="status" className="mt-2 rounded-[8px] border border-[var(--plum)] bg-[var(--plum-tint)] px-3 py-2 text-xs text-[var(--ink)]">
+              {"⚠️"} Heads up: {clashingNotes.map((n) => `"${n.title}"`).join(", ")} noted at this venue on this date. You can still save.
+            </p>
+          ) : null}
           {dateError() ? (
             <p className="flex items-start gap-1 text-xs text-[var(--ink)]">
               <span aria-hidden="true">⚠</span>

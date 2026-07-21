@@ -27,6 +27,7 @@ import { ProposalDecisionCard } from "@/components/events/proposal-decision-card
 import { listEventAttachmentsRollup } from "@/lib/attachments";
 import { InternalNotesPanel } from "@/components/internal-notes/internal-notes-panel";
 import { listInternalNotes } from "@/lib/internal-notes";
+import { listCalendarNotes } from "@/lib/calendar-notes";
 import type { EventStatus } from "@/lib/types";
 import type { PlanningTask, PlanningTaskStatus } from "@/lib/planning/types";
 
@@ -251,6 +252,11 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
     loadEventActorDirectory(Array.from(actorIds))
   ]);
   const userPrefs = userPrefsResult.data;
+
+  // Advisory clash warning data: a failed fetch must never block the form.
+  const notesResult = await listCalendarNotes().catch(() => ({ notes: [], truncated: false, failed: true as const }));
+  const clashNotes = notesResult.notes.map((n) => ({ id: n.id, venueId: n.venueId, title: n.title, startDate: n.startDate, endDate: n.endDate }));
+  const notesUnavailable = "failed" in notesResult;
 
   // SEC-005 follow-up: attachment upload follows the unified event-edit rule,
   // not the legacy same-venue check. Non-manager OWs at the same venue no
@@ -523,6 +529,8 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
           canSubmitDebrief={canSubmitDebrief}
           debriefInitiallyPinned={Boolean(userPrefs?.debrief_pinned)}
           reserveFloatingActionSpace={false}
+          clashNotes={clashNotes}
+          notesUnavailable={notesUnavailable}
         />
       </div>
 
