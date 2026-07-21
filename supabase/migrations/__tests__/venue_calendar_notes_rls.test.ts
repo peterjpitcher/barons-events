@@ -89,17 +89,57 @@ describeFn("migration: venue_calendar_notes RLS", () => {
     if (data?.id) created.push(data.id);
   });
 
-  it("hides soft-deleted notes from reads", async () => {
+  it("lets a manager soft-delete their own venue's note", async () => {
     const { data } = await admin
       .from("venue_calendar_notes")
-      .insert({ venue_id: venueA, start_date: "2026-08-03", title: "To hide" })
-      .select("id")
+      .insert({ venue_id: venueA, start_date: "2026-08-03", title: "To delete", created_by: managerAId })
+      .select("id,updated_at")
       .single();
+
     if (data?.id) {
       created.push(data.id);
-      await admin.from("venue_calendar_notes").update({ deleted_at: new Date().toISOString() }).eq("id", data.id);
-      const { data: visible } = await asJwt(MGR_A_JWT).from("venue_calendar_notes").select("id").eq("id", data.id);
-      expect(visible ?? []).toHaveLength(0);
+      // The read policy must not carry "deleted_at is null": Postgres applies
+      // read policies to the new row of an update, which would refuse this.
+      const { error } = await asJwt(MGR_A_JWT)
+        .from("venue_calendar_notes")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", data.id)
+        .is("deleted_at", null)
+        .select("id")
+        .maybeSingle();
+      expect(error).toBeNull();
+    }
+  });
+
+  it("keeps deletion terminal: a soft-deleted note cannot be edited or resurrected", async () => {
+    const { data } = await admin
+      .from("venue_calendar_notes")
+      .insert({
+        venue_id: venueA,
+        start_date: "2026-08-04",
+        title: "Already deleted",
+        created_by: managerAId,
+        deleted_at: new Date().toISOString()
+      })
+      .select("id")
+      .single();
+
+    if (data?.id) {
+      created.push(data.id);
+      // The update policy still gates on "deleted_at is null" in its USING
+      // clause, so these affect zero rows.
+      await asJwt(MGR_A_JWT)
+        .from("venue_calendar_notes")
+        .update({ title: "resurrected", deleted_at: null })
+        .eq("id", data.id);
+
+      const { data: after } = await admin
+        .from("venue_calendar_notes")
+        .select("title,deleted_at")
+        .eq("id", data.id)
+        .single();
+      expect(after?.title).toBe("Already deleted");
+      expect(after?.deleted_at).not.toBeNull();
     }
   });
 });

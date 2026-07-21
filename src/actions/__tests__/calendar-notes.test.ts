@@ -97,13 +97,49 @@ describe("updateCalendarNote", () => {
 });
 
 describe("deleteCalendarNote", () => {
+  function mockLoadExisting() {
+    const maybeSingle = vi
+      .fn()
+      .mockResolvedValue({ data: { id: NOTE_ID, venue_id: VENUE_A, deleted_at: null, updated_at: "t0" }, error: null });
+    actionFrom.mockReturnValueOnce({ select: () => ({ eq: () => ({ maybeSingle }) }) });
+  }
+
+  function mockSoftDelete(result: { data?: unknown; error?: unknown }) {
+    const maybeSingle = vi.fn().mockResolvedValue({ data: result.data ?? null, error: result.error ?? null });
+    actionFrom.mockReturnValueOnce({
+      update: () => ({ eq: () => ({ is: () => ({ eq: () => ({ select: () => ({ maybeSingle }) }) }) }) })
+    });
+  }
+
   it("soft-deletes and audits", async () => {
-    const maybeSingleLoad = vi.fn().mockResolvedValue({ data: { id: NOTE_ID, venue_id: VENUE_A, deleted_at: null, updated_at: "t0" }, error: null });
-    actionFrom.mockReturnValueOnce({ select: () => ({ eq: () => ({ maybeSingle: maybeSingleLoad }) }) });
-    const maybeSingleDel = vi.fn().mockResolvedValue({ data: { id: NOTE_ID }, error: null });
-    actionFrom.mockReturnValueOnce({ update: () => ({ eq: () => ({ is: () => ({ eq: () => ({ select: () => ({ maybeSingle: maybeSingleDel }) }) }) }) }) });
+    mockLoadExisting();
+    mockSoftDelete({ data: { id: NOTE_ID } });
+
     const result = await deleteCalendarNote({ id: NOTE_ID, expectedUpdatedAt: "t0" });
+
     expect(result.success).toBe(true);
     expect(mockAudit).toHaveBeenCalledWith(expect.objectContaining({ action: "calendar_note.deleted" }));
+  });
+
+  it("reports a conflict when the concurrency token is stale", async () => {
+    mockLoadExisting();
+    mockSoftDelete({ data: null });
+
+    const result = await deleteCalendarNote({ id: NOTE_ID, expectedUpdatedAt: "stale" });
+
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/changed/i);
+    expect(mockAudit).not.toHaveBeenCalled();
+  });
+
+  it("surfaces a database error from the update", async () => {
+    mockLoadExisting();
+    mockSoftDelete({ error: { message: "boom" } });
+
+    const result = await deleteCalendarNote({ id: NOTE_ID, expectedUpdatedAt: "t0" });
+
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/could not delete/i);
+    expect(mockAudit).not.toHaveBeenCalled();
   });
 });
