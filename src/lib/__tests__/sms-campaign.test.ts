@@ -6,12 +6,38 @@ vi.mock("date-fns-tz", async () => {
   return { ...actual };
 });
 
+const { twilioSend, createShortLink } = vi.hoisted(() => ({
+  twilioSend: vi.fn<(params: { to: string; body: string }) => Promise<{ sid: string }>>(),
+  createShortLink: vi.fn<(params: { name: string; destination: string }) => Promise<string | null>>(),
+}));
+
+vi.mock("@/lib/twilio", () => ({ sendTwilioSms: twilioSend }));
+vi.mock("@/lib/system-short-links", () => ({ createSystemShortLink: createShortLink }));
+
+// Minimal Supabase stand-in: the campaign send claims a row, then updates it.
+// The update chain is a thenable so `.update().eq().eq().eq()` can be awaited.
+vi.mock("@/lib/supabase/admin", () => {
+  const buildUpdateChain = (): Record<string, unknown> => {
+    const chain: Record<string, unknown> = {};
+    chain.eq = () => chain;
+    chain.then = (resolve: (value: { error: null }) => void) => resolve({ error: null });
+    return chain;
+  };
+  const table = {
+    insert: async () => ({ error: null }),
+    update: () => buildUpdateChain(),
+  };
+  return { createSupabaseAdminClient: () => ({ from: () => table }) };
+});
+
 import {
   resolveCtaMode,
   getCapacityHint,
   generateReplyCode,
   getWaveDue,
   renderCampaignSms,
+  sendCampaignSms,
+  type CampaignEvent,
 } from "@/lib/sms-campaign";
 
 // ── resolveCtaMode ──────────────────────────────────────────────────────────
@@ -261,5 +287,83 @@ describe("renderCampaignSms", () => {
       });
       expect(result).toContain("Pay £7.5 on arrival.");
     });
+  });
+});
+
+// ── sendCampaignSms link resolution ─────────────────────────────────────────
+
+describe("sendCampaignSms link resolution", () => {
+  const customer = {
+    customerId: "cust-1",
+    firstName: "Sarah",
+    mobile: "+447700900123",
+  };
+
+  function buildCampaignEvent(overrides: Partial<CampaignEvent> = {}): CampaignEvent {
+    return {
+      id: "aaaaaaa1-0000-4000-8000-000000000009",
+      title: "Quiz Night",
+      publicTitle: "Quiz Night",
+      eventType: "quiz",
+      bookingType: "free_standing",
+      venueId: "venue-1",
+      venueName: "The Duke's Head",
+      startAt: new Date("2026-04-30T19:00:00Z"),
+      ticketPrice: null,
+      totalCapacity: null,
+      bookingUrl: null,
+      seoSlug: null,
+      maxTicketsPerBooking: 10,
+      ...overrides,
+    };
+  }
+
+  function sentBody(): string {
+    expect(twilioSend).toHaveBeenCalledTimes(1);
+    return twilioSend.mock.calls[0][0].body;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    twilioSend.mockResolvedValue({ sid: "SM_TEST" });
+    // Returning null exercises the fallback, so the raw destination lands in
+    // the body and the assertions can see which URL was chosen.
+    createShortLink.mockResolvedValue(null);
+  });
+
+  it("still sends a link when the event has no booking url and no slug", async () => {
+    // An event with neither used to abandon the send. The id-suffixed landing
+    // URL means there is always something to link to.
+    const event = buildCampaignEvent({ bookingUrl: null, seoSlug: null });
+
+    const sent = await sendCampaignSms({ event, customer, wave: 1, confirmedTickets: 0 });
+
+    expect(sent).toBe(true);
+    const body = sentBody();
+    expect(body).toContain("l.baronspubs.com/");
+    expect(body).toContain(event.id);
+  });
+
+  it("uses the seo slug landing url when there is no booking url", async () => {
+    const event = buildCampaignEvent({ bookingUrl: null, seoSlug: "quiz-night-dukes-head" });
+
+    const sent = await sendCampaignSms({ event, customer, wave: 2, confirmedTickets: 0 });
+
+    expect(sent).toBe(true);
+    expect(sentBody()).toContain("l.baronspubs.com/quiz-night-dukes-head");
+  });
+
+  it("prefers the booking url when the event has one", async () => {
+    const event = buildCampaignEvent({
+      bookingUrl: "https://tickets.example.com/quiz",
+      seoSlug: "quiz-night-dukes-head",
+    });
+
+    const sent = await sendCampaignSms({ event, customer, wave: 3, confirmedTickets: 0 });
+
+    expect(sent).toBe(true);
+    const body = sentBody();
+    expect(body).toContain("tickets.example.com/quiz");
+    expect(body).not.toContain("l.baronspubs.com/");
   });
 });

@@ -2,6 +2,7 @@ import "server-only";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { sendTwilioSms } from "@/lib/twilio";
 import { createSystemShortLink } from "@/lib/system-short-links";
+import { resolveEventCtaUrl } from "@/lib/event-public-url";
 import {
   isPaidBookingFormat,
   isPayOnArrivalBookingFormat,
@@ -18,6 +19,8 @@ export type CtaMode = "link" | "reply";
 
 export interface CampaignEvent {
   id: string;
+  /** Internal title, used to build the landing URL when there is no seo slug. */
+  title: string;
   publicTitle: string;
   eventType: string;
   bookingType: BookingFormat;
@@ -184,16 +187,17 @@ export async function sendCampaignSms(params: {
 
   const ctaMode = resolveCtaMode(event.bookingType);
   const replyCode = ctaMode === "reply" ? generateReplyCode() : null;
+  // Always resolvable: the booking URL if there is one, otherwise the event's
+  // landing page, which falls back to an id-suffixed URL when there is no slug.
   const linkDestination =
     ctaMode === "link"
-      ? event.bookingUrl ??
-        (event.seoSlug ? `https://l.baronspubs.com/${event.seoSlug}` : null)
+      ? resolveEventCtaUrl({
+          id: event.id,
+          title: event.title,
+          seoSlug: event.seoSlug,
+          bookingUrl: event.bookingUrl,
+        })
       : null;
-
-  if (ctaMode === "link" && !linkDestination) {
-    console.warn("Campaign link unavailable:", event.id);
-    return false;
-  }
 
   // Step 1: Claim — insert row with status 'claimed'
   const { error: claimError } = await db
