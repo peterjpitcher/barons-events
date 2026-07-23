@@ -490,6 +490,19 @@ export async function createEventDraft(payload: {
   const termsAndConditions = normaliseOptionalText(payload.termsAndConditions);
   const publicHighlights = normaliseOptionalHighlights(payload.publicHighlights);
 
+  // Every event gets a slug at birth so its public URL is readable from day
+  // one. Existing events are deliberately left alone: writing a seo_slug to a
+  // live row would change PublicEvent.slug underneath the brand site.
+  let seoSlug = normaliseOptionalText(payload.seoSlug);
+  if (!seoSlug) {
+    try {
+      seoSlug = await generateUniqueEventSlug(payload.title, new Date(payload.startAt));
+    } catch (error) {
+      console.error("Could not generate a slug for the new event:", error);
+      seoSlug = null;
+    }
+  }
+
   const insertPayload: Record<string, unknown> = {
     venue_id: payload.venueId,
     created_by: payload.createdBy,
@@ -520,7 +533,7 @@ export async function createEventDraft(payload: {
     booking_url: payload.bookingUrl ?? null,
     seo_title: payload.seoTitle ?? null,
     seo_description: payload.seoDescription ?? null,
-    seo_slug: payload.seoSlug ?? null,
+    seo_slug: seoSlug,
     assignee_id: payload.createdBy
   };
 
