@@ -1438,7 +1438,10 @@ export async function submitEventForReviewAction(
       after(() => notifyNewEvent({
         eventId: parsedId.data,
         actorUserId: user.id,
-        transition: "admin_publish",
+        // This branch submits for review (the RPC sets status='submitted'), so
+        // it is manager_submit. Marking it admin_publish would tell the creator
+        // their event was APPROVED and would send the reviewer nothing.
+        transition: "manager_submit",
         isFirstPublish: wasDraft
       }));
       revalidatePath(`/events/${parsedId.data}`);

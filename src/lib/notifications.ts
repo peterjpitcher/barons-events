@@ -1695,14 +1695,40 @@ export async function notifyNewEvent(params: {
       };
     });
 
-    const response = await resend.batch.send(payload, {
-      idempotencyKey: `new-event:${params.eventId}:${params.transition}`
-    });
+    // Resend caps a batch at 100 messages and defaults to strict validation, so
+    // an oversized batch fails in full rather than partially. Chunk instead.
+    const RESEND_BATCH_LIMIT = 100;
 
-    // Resend RESOLVES on provider error rather than rejecting. Never treat a
-    // resolved promise as success.
-    const accepted = response.error ? 0 : (response.data?.data?.length ?? 0);
-    const failed = payload.length - accepted;
+    // The provider idempotency key must describe the PAYLOAD, not just the
+    // event. A republish after revert-to-draft finds the claim already held,
+    // filters the announcement out, and sends only the creator's confirmation.
+    // Reusing the first broadcast's key for that different payload would risk
+    // the provider replaying the original cached response.
+    const payloadShape = `${payload.length}:${[...new Set(messages.map((m) => m.kind))].sort().join("+")}`;
+
+    let accepted = 0;
+    let providerError: string | null = null;
+
+    try {
+      for (let offset = 0; offset < payload.length; offset += RESEND_BATCH_LIMIT) {
+        const chunk = payload.slice(offset, offset + RESEND_BATCH_LIMIT);
+        const response = await resend.batch.send(chunk, {
+          idempotencyKey: `new-event:${params.eventId}:${params.transition}:${payloadShape}:${offset}`
+        });
+        // Resend RESOLVES on provider error rather than rejecting. Never treat
+        // a resolved promise as success.
+        if (response.error) {
+          providerError = response.error.message;
+          break;
+        }
+        accepted += response.data?.data?.length ?? 0;
+      }
+    } catch (sendError) {
+      // A thrown send (network, DNS, timeout) must still fall through to the
+      // release below. Letting it reach the outer catch would strand the claim
+      // and make the announcement permanently unsendable by any retry.
+      providerError = sendError instanceof Error ? sendError.message : String(sendError);
+    }
 
     console.log(
       JSON.stringify({
@@ -1711,14 +1737,15 @@ export async function notifyNewEvent(params: {
         transition: params.transition,
         planned: payload.length,
         accepted,
-        failed,
+        failed: payload.length - accepted,
         suppressed: plan.suppressed.length,
-        error: response.error?.message ?? null
+        error: providerError
       })
     );
 
-    // Release only on TOTAL failure. Partial success keeps the claim so a retry
-    // cannot duplicate.
+    // Release when NOTHING was accepted, including when the send threw. If some
+    // messages were accepted the claim stands, so a retry cannot re-broadcast
+    // to the people who already received it.
     if (claimed && accepted === 0) {
       await releaseNewEventAnnouncementClaim(params.eventId);
     }

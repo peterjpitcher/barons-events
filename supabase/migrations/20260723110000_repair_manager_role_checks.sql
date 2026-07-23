@@ -7,15 +7,29 @@
 -- create_multi_venue_event_proposals, create_multi_venue_planning_items)
 -- normalise office_worker -> manager and are deliberately left alone.
 --
--- Venue semantics per product decision 2026-07-23: a manager with venue_id set
--- works at that one venue; venue_id null means they work across all venues.
--- The old "office workers without a venue assignment cannot ..." exceptions are
--- therefore backwards and are removed.
+-- SCOPE: this migration swaps a dead role literal and nothing else. It does not
+-- change the permission surface. Every venue predicate keeps the exact shape it
+-- had before, including the "managers without a venue assignment" rejection.
+--
+-- An earlier draft widened those predicates so that a manager with a null
+-- venue_id counted as "works at every venue". That was reverted. It conflicts
+-- with the checked-in role model (CLAUDE.md and src/lib/roles.ts), which treats
+-- a manager without a venue as effectively read-only, and 13 of 14 active
+-- managers currently have a null venue_id, so the permissive reading would have
+-- silently granted estate-wide write. Changing that rule is a product decision
+-- and belongs in its own commit, not in a repair.
+--
+-- NOTE on enforce_event_status_transitions: its manager branch is currently
+-- unreachable. A user-session write to public.events is rejected first by
+-- events_require_admin_or_service_write, no RLS policy lets a manager set
+-- status='draft' (the assignee policy's WITH CHECK excludes it), and a
+-- service_role caller returns earlier at the auth.role() check. The literal is
+-- corrected here for consistency, not because it unblocks anything today.
 --
 -- Every body below is reproduced from the live definition (pg_get_functiondef)
--- unchanged apart from the role literals, the venue predicate noted per
--- function, and the error message wording. create or replace replaces the whole
--- body, so any drift here would silently change behaviour.
+-- unchanged apart from the role literals and the error message wording.
+-- create or replace replaces the whole body, so any drift here would silently
+-- change behaviour.
 
 begin;
 
@@ -71,13 +85,18 @@ begin
     if v_user_deactivated is not null then
       raise exception 'Deactivated users cannot update events';
     end if;
-    if v_user_role = 'manager'
-       and (v_user_venue is null or v_user_venue = new.venue_id) then
+    -- Venue predicate deliberately UNCHANGED from the pre-repair definition:
+    -- a venue-scoped manager only, never a manager with a null venue_id. This
+    -- repair swaps the dead role literal and nothing else. Widening it to
+    -- include null-venue managers would contradict the checked-in role model
+    -- (CLAUDE.md, src/lib/roles.ts), which treats a manager without a venue as
+    -- effectively read-only, and would need an explicit product decision.
+    if v_user_role = 'manager' and v_user_venue is not null and v_user_venue = new.venue_id then
       return new;
     end if;
 
     raise exception
-      'Only the creator, a manager at the event venue, or an administrator can complete this proposal';
+      'Only the creator, a venue-scoped manager at the event venue, or an administrator can complete this proposal';
   end if;
 
   -- All other transitions out of pending_approval or approved_pending_details
@@ -926,10 +945,16 @@ begin
   v_venue_ids := (select array_agg((x)::uuid)
                   from jsonb_array_elements_text(p_payload->'venue_ids') x);
 
+  -- Both venue checks below are deliberately UNCHANGED in shape from the
+  -- pre-repair definition. Only the dead role literal is swapped. Removing the
+  -- null-venue rejection would let a manager with no venue create events at
+  -- every venue in the estate, which is a permission widening, not a repair.
+  if v_user_role = 'manager' and v_user_venue is null then
+    raise exception 'Managers without a venue assignment cannot create events';
+  end if;
+
   foreach v_venue_id in array v_venue_ids loop
-    if v_user_role = 'manager'
-       and v_user_venue is not null
-       and v_user_venue != v_venue_id then
+    if v_user_role = 'manager' and v_user_venue != v_venue_id then
       raise exception 'Manager % cannot manage venue %', v_created_by, v_venue_id;
     end if;
   end loop;

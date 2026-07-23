@@ -152,6 +152,28 @@ describe("notifyNewEvent", () => {
     expect(eqSecond).toHaveBeenCalledWith("transition_key", "new_event");
   });
 
+  it("releases the claim when the batch send THROWS", async () => {
+    // A thrown send (network, DNS, timeout) must not strand the claim. If it
+    // does, that event's announcement can never be sent again by any retry.
+    mocks.batchSend.mockRejectedValue(new Error("socket hang up"));
+
+    const eqSecond = vi.fn().mockResolvedValue({ error: null });
+    const eqFirst = vi.fn().mockReturnValue({ eq: eqSecond });
+    const del = vi.fn().mockReturnValue({ eq: eqFirst });
+    setupDb({ deleteSpy: del });
+
+    await notifyNewEvent({
+      eventId: "e-1",
+      actorUserId: "u-1",
+      transition: "admin_publish",
+      isFirstPublish: true,
+    });
+
+    expect(del).toHaveBeenCalled();
+    expect(eqFirst).toHaveBeenCalledWith("event_id", "e-1");
+    expect(eqSecond).toHaveBeenCalledWith("transition_key", "new_event");
+  });
+
   it("keeps the claim on partial success", async () => {
     mocks.batchSend.mockResolvedValue({ data: { data: [{ id: "m1" }] }, error: null });
     const { del } = setupDb();
@@ -210,7 +232,12 @@ describe("notifyNewEvent", () => {
 
     expect(mocks.batchSend).toHaveBeenCalledTimes(1);
     const [payload, options] = mocks.batchSend.mock.calls[0];
-    expect(options).toEqual({ idempotencyKey: "new-event:e-1:admin_publish" });
+    // The key describes the PAYLOAD, not just the event. A later republish
+    // carries a different message set and must not collide with this one's
+    // cached provider response. Trailing 0 is the chunk offset.
+    expect(options).toEqual({
+      idempotencyKey: "new-event:e-1:admin_publish:2:announcement:0",
+    });
     // The actor is also the creator, so their decision email is suppressed and
     // they receive only the announcement.
     expect(payload).toHaveLength(2);
