@@ -1,6 +1,7 @@
 import "server-only";
 
 import { isBookingFormat, isFreeBookingFormat, type BookingFormat } from "@/lib/booking-format";
+import { buildEventSlug, slugify } from "@/lib/event-slug";
 import { parseVenueSpaces } from "@/lib/venue-spaces";
 import { normaliseOptionalText, normaliseOptionalInteger } from "@/lib/normalise";
 import { SHORT_LINK_HOST } from "@/lib/short-link-config";
@@ -126,20 +127,7 @@ export function isValidIsoDate(value: string): boolean {
   return !Number.isNaN(Date.parse(value));
 }
 
-export function slugify(value: string): string {
-  return value
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-}
-
-export function buildEventSlug(event: { id: string; title: string; seoSlug?: string | null }): string {
-  const slugBase = typeof event.seoSlug === "string" && event.seoSlug.trim().length ? event.seoSlug : event.title;
-  const base = slugify(slugBase) || "event";
-  return `${base}--${event.id}`;
-}
+export { buildEventSlug, slugify };
 
 export function encodeCursor(cursor: PublicEventsCursor): string {
   return Buffer.from(JSON.stringify(cursor)).toString("base64url");
