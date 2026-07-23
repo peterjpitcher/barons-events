@@ -1431,11 +1431,15 @@ export async function submitEventForReviewAction(
     }
 
     if (result.success) {
+      // Evaluated NOW, not inside the closure: after() defers the callback, so
+      // reading .status lazily would pick up any later mutation and silently
+      // stop every announcement with no test failure.
+      const wasDraft = preSubmitContext?.status === "draft";
       after(() => notifyNewEvent({
         eventId: parsedId.data,
         actorUserId: user.id,
         transition: "admin_publish",
-        isFirstPublish: preSubmitContext?.status === "draft"
+        isFirstPublish: wasDraft
       }));
       revalidatePath(`/events/${parsedId.data}`);
       revalidatePath("/events");
@@ -1842,13 +1846,17 @@ export async function submitEventForReviewAction(
       });
 
       // Captured because targetEventId is a mutable let: the closure runs after
-      // this scope has moved on, so narrowing must be pinned to a const.
+      // this scope has moved on, so narrowing must be pinned to a const. The
+      // status is pinned for the same reason: reading it lazily inside the
+      // deferred closure would silently break the guard if anything later
+      // mutates existingEvent.
       const announceEventId = targetEventId;
+      const wasDraftBeforeApproval = existingEvent.status === "draft";
       after(() => notifyNewEvent({
         eventId: announceEventId,
         actorUserId: user.id,
         transition: "admin_publish",
-        isFirstPublish: existingEvent.status === "draft"
+        isFirstPublish: wasDraftBeforeApproval
       }));
 
       revalidatePath(`/events/${targetEventId}`);
