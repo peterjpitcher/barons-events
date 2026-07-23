@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { z } from "zod";
 import { createSupabaseActionClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -21,7 +22,7 @@ import { eventDraftSchema, eventFormSchema, bookingUrlSchema } from "@/lib/valid
 import { getFieldErrors } from "@/lib/form-errors";
 import type { ActionResult, EventStatus } from "@/lib/types";
 import type { Database } from "@/lib/supabase/database.types";
-import { sendAssigneeReassignmentEmail, sendBookingTransferEmail, sendEventCancellationEmail, sendEventSubmittedEmail, sendNewEventAnnouncementEmail, sendReviewDecisionEmail } from "@/lib/notifications";
+import { sendAssigneeReassignmentEmail, sendBookingTransferEmail, sendEventCancellationEmail, sendReviewDecisionEmail, notifyNewEvent } from "@/lib/notifications";
 import { sendBookingTransferSms } from "@/lib/sms";
 import { recordAuditLogEntry } from "@/lib/audit-log";
 import { processRefund, transferBooking } from "@/lib/payments/service";
@@ -1430,9 +1431,19 @@ export async function submitEventForReviewAction(
     }
 
     if (result.success) {
-      if (preSubmitContext?.status === "draft") {
-        void sendNewEventAnnouncementEmail(parsedId.data);
-      }
+      // Evaluated NOW, not inside the closure: after() defers the callback, so
+      // reading .status lazily would pick up any later mutation and silently
+      // stop every announcement with no test failure.
+      const wasDraft = preSubmitContext?.status === "draft";
+      after(() => notifyNewEvent({
+        eventId: parsedId.data,
+        actorUserId: user.id,
+        // This branch submits for review (the RPC sets status='submitted'), so
+        // it is manager_submit. Marking it admin_publish would tell the creator
+        // their event was APPROVED and would send the reviewer nothing.
+        transition: "manager_submit",
+        isFirstPublish: wasDraft
+      }));
       revalidatePath(`/events/${parsedId.data}`);
       revalidatePath("/events");
       revalidatePath("/reviews");
@@ -1837,10 +1848,19 @@ export async function submitEventForReviewAction(
         previousAssignee: (existingEvent.assignee_id as string | null) ?? null
       });
 
-      await sendReviewDecisionEmail(targetEventId, "approved");
-      if (existingEvent.status === "draft") {
-        void sendNewEventAnnouncementEmail(targetEventId);
-      }
+      // Captured because targetEventId is a mutable let: the closure runs after
+      // this scope has moved on, so narrowing must be pinned to a const. The
+      // status is pinned for the same reason: reading it lazily inside the
+      // deferred closure would silently break the guard if anything later
+      // mutates existingEvent.
+      const announceEventId = targetEventId;
+      const wasDraftBeforeApproval = existingEvent.status === "draft";
+      after(() => notifyNewEvent({
+        eventId: announceEventId,
+        actorUserId: user.id,
+        transition: "admin_publish",
+        isFirstPublish: wasDraftBeforeApproval
+      }));
 
       revalidatePath(`/events/${targetEventId}`);
       revalidatePath("/events");
@@ -1933,10 +1953,15 @@ export async function submitEventForReviewAction(
         submitted_at: new Date().toISOString()
       });
 
-      await sendEventSubmittedEmail(targetEventId);
-      if (statusBefore === "draft") {
-        void sendNewEventAnnouncementEmail(targetEventId);
-      }
+      // Captured because targetEventId is a mutable let: the closure runs after
+      // this scope has moved on, so narrowing must be pinned to a const.
+      const submittedEventId = targetEventId;
+      after(() => notifyNewEvent({
+        eventId: submittedEventId,
+        actorUserId: user.id,
+        transition: "manager_submit",
+        isFirstPublish: statusBefore === "draft"
+      }));
 
       revalidatePath(`/events/${targetEventId}`);
       revalidatePath("/events");

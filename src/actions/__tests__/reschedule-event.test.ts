@@ -17,6 +17,12 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+// after() has no request scope under Vitest, so swallow the callback. The
+// notifications module is mocked below, so nothing is lost.
+vi.mock("next/server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/server")>()),
+  after: vi.fn(),
+}));
 vi.mock("next/navigation", () => ({
   redirect: vi.fn(() => {
     throw new Error("NEXT_REDIRECT");
@@ -54,8 +60,7 @@ vi.mock("@/lib/notifications", () => ({
   sendAssigneeReassignmentEmail: vi.fn(),
   sendBookingTransferEmail: mocks.sendBookingTransferEmail,
   sendEventCancellationEmail: vi.fn(),
-  sendEventSubmittedEmail: vi.fn(),
-  sendNewEventAnnouncementEmail: vi.fn(),
+  notifyNewEvent: vi.fn(),
   sendReviewDecisionEmail: vi.fn(),
 }));
 vi.mock("@/lib/sms", () => ({ sendBookingTransferSms: mocks.sendBookingTransferSms }));
