@@ -13,6 +13,11 @@ import {
   renderMonthlySalesReportEmail,
   type SalesReport,
 } from "@/lib/monthly-sales-report";
+import {
+  planNewEventNotifications,
+  type NewEventTransition,
+  type NotificationPerson,
+} from "@/lib/notifications/plan-new-event";
 
 const RESEND_FROM_ADDRESS = process.env.RESEND_FROM_EMAIL ?? "BaronsHub 1.1 <noreply@auth.orangejelly.co.uk>";
 const BOOKING_RESEND_FROM_ADDRESS =
@@ -27,15 +32,22 @@ type EventRow = Database["public"]["Tables"]["events"]["Row"];
 type UserRow = Database["public"]["Tables"]["users"]["Row"];
 type DebriefRow = Database["public"]["Tables"]["debriefs"]["Row"];
 
-type EventContext = EventRow & {
+/**
+ * The smallest event shape the new-event email builders need. Both
+ * EventContext and AnnouncementEventContext widen it, so a builder can be
+ * called with either.
+ */
+type NewEventEmailContext = EventRow & {
   venue: { name: string | null } | null;
   creator: Pick<UserRow, "id" | "email" | "full_name"> | null;
   assignee: Pick<UserRow, "id" | "email" | "full_name"> | null;
+};
+
+type EventContext = NewEventEmailContext & {
   debrief: DebriefRow | null;
 };
 
-type AnnouncementEventContext = EventRow & {
-  venue: { name: string | null } | null;
+type AnnouncementEventContext = NewEventEmailContext & {
   event_venues?: Array<{
     venue_id: string | null;
     venue: { name: string | null } | null;
@@ -1192,6 +1204,8 @@ async function fetchAnnouncementEventContext(eventId: string): Promise<Announcem
       `
       *,
       venue:venues!events_venue_id_fkey(name),
+      creator:users!events_created_by_fkey(id,full_name,email),
+      assignee:users!events_assignee_id_fkey(id,full_name,email),
       event_venues(venue_id, venue:venues(name))
     `
     )
@@ -1203,26 +1217,6 @@ async function fetchAnnouncementEventContext(eventId: string): Promise<Announcem
   }
 
   return (data as AnnouncementEventContext) ?? null;
-}
-
-async function listNewEventAnnouncementRecipients(
-  venueIds: Set<string>
-): Promise<Array<Pick<UserRow, "id" | "email" | "full_name" | "venue_id">>> {
-  const supabase = createSupabaseAdminClient();
-  const { data, error } = await (supabase as any)
-    .from("users")
-    .select("id,email,full_name,venue_id")
-    .is("deactivated_at", null)
-    .not("email", "is", null)
-    .order("full_name", { ascending: true });
-
-  if (error) {
-    throw new Error(`Could not list users for event announcement: ${error.message}`);
-  }
-
-  return ((data ?? []) as Array<Pick<UserRow, "id" | "email" | "full_name" | "venue_id">>)
-    .filter((user) => Boolean(user.email))
-    .filter((user) => !user.venue_id || venueIds.has(user.venue_id));
 }
 
 const dateFormatter = new Intl.DateTimeFormat("en-GB", {
@@ -1401,110 +1395,87 @@ export async function sendProposalSubmittedEmailOnce(params: {
   }
 }
 
-export async function sendEventSubmittedEmail(eventId: string) {
-  if (!areOperationalEmailsEnabled()) {
-    logNotificationSkipped("sendEventSubmittedEmail", { eventId });
-    return;
-  }
-  const resend = getResendClient();
-  if (!resend) return;
+type BuiltEmail = { subject: string; html: string; text: string };
 
-  try {
-    const event = await fetchEventContext(eventId);
-    if (!event?.assignee?.email) return;
-
-    const { html, text } = renderEmailTemplate({
-      headline: "New event waiting for review",
-      intro: `${buildGreeting(event.assignee, "Hello")} ${event.creator?.full_name ?? "A venue manager"} just sent in "${event.title}".`,
-      body: [
-        "Take a look at the details, leave quick feedback, or mark it ready to go live.",
-        "Head straight to your review queue to keep things moving."
-      ],
-      button: { label: "Open my review queue", url: assigneeQueueLink() },
-      meta: [
-        `Event: ${event.title}`,
-        `Venue: ${event.venue?.name ?? "Unknown venue"}`,
-        `When: ${formatEventWindow(event)}`,
-        formatSpacesLabel(event.venue_space),
-        `Assignee: ${event.assignee?.full_name ?? "Unassigned"}`
-      ]
-    });
-
-    await resend.emails.send({
-      from: RESEND_FROM_ADDRESS,
-      to: event.assignee.email,
-      subject: `New event ready for review: ${event.title}`,
-      html,
-      text
-    });
-  } catch (error) {
-    console.warn("Failed to send submission email", error);
-  }
+/**
+ * Wording is identical to the original sendEventSubmittedEmail body. Only the
+ * greeting name is now passed in, so the orchestrator can address whichever
+ * recipient the planner picked.
+ */
+function buildSubmittedForReviewEmail(
+  event: NewEventEmailContext,
+  recipientName: string | null
+): BuiltEmail {
+  const { html, text } = renderEmailTemplate({
+    headline: "New event waiting for review",
+    intro: `${buildGreeting({ full_name: recipientName }, "Hello")} ${event.creator?.full_name ?? "A venue manager"} just sent in "${event.title}".`,
+    body: [
+      "Take a look at the details, leave quick feedback, or mark it ready to go live.",
+      "Head straight to your review queue to keep things moving."
+    ],
+    button: { label: "Open my review queue", url: assigneeQueueLink() },
+    meta: [
+      `Event: ${event.title}`,
+      `Venue: ${event.venue?.name ?? "Unknown venue"}`,
+      `When: ${formatEventWindow(event)}`,
+      formatSpacesLabel(event.venue_space),
+      `Assignee: ${event.assignee?.full_name ?? "Unassigned"}`
+    ]
+  });
+  return { subject: `New event ready for review: ${event.title}`, html, text };
 }
 
-export async function sendNewEventAnnouncementEmail(eventId: string): Promise<void> {
-  if (!areOperationalEmailsEnabled()) {
-    logNotificationSkipped("sendNewEventAnnouncementEmail", { eventId });
-    return;
-  }
-  const resend = getResendClient();
-  if (!resend) return;
+/**
+ * Wording is identical to the original sendNewEventAnnouncementEmail body.
+ */
+function buildAnnouncementEmail(
+  event: EventRow,
+  venueLabel: string,
+  recipientName: string | null
+): BuiltEmail {
+  const { html, text } = renderEmailTemplate({
+    headline: "New event coming soon!",
+    intro: `${buildGreeting({ full_name: recipientName })} "${event.title}" has just been added to BaronsHub.`,
+    body: [
+      "The plan is now live for the team, with dates, venue details and next steps ready to review.",
+      "Open the event to see what is coming up and where your team fits in."
+    ],
+    button: { label: "Open event", url: eventLink(event.id) },
+    meta: [
+      `Event: ${event.title}`,
+      `Venue: ${venueLabel}`,
+      `When: ${formatEventWindow(event)}`,
+      formatSpacesLabel(event.venue_space)
+    ]
+  });
+  return { subject: `New event coming soon: ${event.title}`, html, text };
+}
 
-  try {
-    const event = await fetchAnnouncementEventContext(eventId);
-    if (!event) return;
-
-    const venueIds = new Set(
-      [
-        event.venue_id,
-        ...((event.event_venues ?? []).map((link) => link.venue_id))
-      ].filter((id): id is string => Boolean(id))
-    );
-    const venueNames = Array.from(
-      new Set(
-        [
-          event.venue?.name,
-          ...((event.event_venues ?? []).map((link) => link.venue?.name))
-        ].filter((name): name is string => Boolean(name))
-      )
-    );
-
-    const recipients = await listNewEventAnnouncementRecipients(venueIds);
-    if (!recipients.length) return;
-
-    const subject = `New event coming soon: ${event.title}`;
-    const venueLabel = venueNames.length ? venueNames.join(", ") : "Venue to be confirmed";
-
-    await Promise.allSettled(
-      recipients.map((recipient) => {
-        const { html, text } = renderEmailTemplate({
-          headline: "New event coming soon!",
-          intro: `${buildGreeting(recipient)} "${event.title}" has just been added to BaronsHub.`,
-          body: [
-            "The plan is now live for the team, with dates, venue details and next steps ready to review.",
-            "Open the event to see what is coming up and where your team fits in."
-          ],
-          button: { label: "Open event", url: eventLink(eventId) },
-          meta: [
-            `Event: ${event.title}`,
-            `Venue: ${venueLabel}`,
-            `When: ${formatEventWindow(event)}`,
-            formatSpacesLabel(event.venue_space)
-          ]
-        });
-
-        return resend.emails.send({
-          from: RESEND_FROM_ADDRESS,
-          to: recipient.email,
-          subject,
-          html,
-          text
-        });
-      })
-    );
-  } catch (error) {
-    console.warn("Failed to send new event announcement email", error);
-  }
+/**
+ * Wording is identical to the original sendReviewDecisionEmail body. The
+ * recipient is always the event creator, so the greeting still reads from
+ * event.creator.
+ */
+function buildReviewDecisionEmail(
+  event: NewEventEmailContext,
+  decision: string
+): BuiltEmail {
+  const { html, text } = renderEmailTemplate({
+    headline: `Your event is now marked ${decision.replace(/_/g, " ")}`,
+    intro: `${buildGreeting(event.creator)} "${event.title}" has moved to ${decision.replace(/_/g, " ")}.`,
+    body: [
+      "Review the notes and make any updates needed so we can keep momentum.",
+      "Once everything looks good, push the latest version live."
+    ],
+    button: { label: "Open your event", url: eventLink(event.id) },
+    meta: [
+      `Event: ${event.title}`,
+      `Venue: ${event.venue?.name ?? "Unknown venue"}`,
+      `When: ${formatEventWindow(event)}`,
+      `Status: ${decision.replace(/_/g, " ")}`
+    ]
+  });
+  return { subject: `Update on your event: ${event.title}`, html, text };
 }
 
 export async function sendReviewDecisionEmail(eventId: string, decision: string) {
@@ -1519,31 +1490,240 @@ export async function sendReviewDecisionEmail(eventId: string, decision: string)
     const event = await fetchEventContext(eventId);
     if (!event?.creator?.email) return;
 
-    const { html, text } = renderEmailTemplate({
-      headline: `Your event is now marked ${decision.replace(/_/g, " ")}`,
-      intro: `${buildGreeting(event.creator)} "${event.title}" has moved to ${decision.replace(/_/g, " ")}.`,
-      body: [
-        "Review the notes and make any updates needed so we can keep momentum.",
-        "Once everything looks good, push the latest version live."
-      ],
-      button: { label: "Open your event", url: eventLink(eventId) },
-      meta: [
-        `Event: ${event.title}`,
-        `Venue: ${event.venue?.name ?? "Unknown venue"}`,
-        `When: ${formatEventWindow(event)}`,
-        `Status: ${decision.replace(/_/g, " ")}`
-      ]
-    });
+    const built = buildReviewDecisionEmail(event, decision);
 
     await resend.emails.send({
       from: RESEND_FROM_ADDRESS,
       to: event.creator.email,
-      subject: `Update on your event: ${event.title}`,
-      html,
-      text
+      subject: built.subject,
+      html: built.html,
+      text: built.text
     });
   } catch (error) {
     console.warn("Failed to send decision email", error);
+  }
+}
+
+/**
+ * Every active user with an email, in a stable order. There is deliberately NO
+ * venue filter: product decision 2026-07-23 is that the new-event announcement
+ * goes to every application user.
+ */
+async function listActiveNotificationPeople(): Promise<NotificationPerson[]> {
+  const db = createSupabaseAdminClient();
+  const { data, error } = await (db as any)
+    .from("users")
+    .select("id, email, full_name, venue_id, is_central_events_lead, role")
+    .is("deactivated_at", null)
+    .not("email", "is", null)
+    .order("full_name", { ascending: true });
+
+  if (error) {
+    throw new Error(`Could not list users for new-event notifications: ${error.message}`);
+  }
+
+  type ActiveUserRow = Pick<
+    UserRow,
+    "id" | "email" | "full_name" | "venue_id" | "is_central_events_lead" | "role"
+  >;
+
+  return ((data ?? []) as ActiveUserRow[])
+    .filter((user) => Boolean(user.email))
+    .map((user) => ({
+      userId: user.id,
+      email: user.email,
+      fullName: user.full_name,
+      venueId: user.venue_id,
+      isCentralEventsLead: Boolean(user.is_central_events_lead),
+      isAdministrator: user.role === "administrator"
+    }));
+}
+
+/**
+ * Turns an event's creator or assignee join into a planner person. Prefers the
+ * canonical active-user record so venue and role stay accurate; falls back to
+ * the join when the person is deactivated, because a targeted confirmation
+ * still belongs to them.
+ */
+function toPerson(
+  user: Pick<UserRow, "id" | "email" | "full_name"> | null | undefined,
+  activeUsers: NotificationPerson[]
+): NotificationPerson | null {
+  if (!user?.id || !user.email) return null;
+  const known = activeUsers.find((person) => person.userId === user.id);
+  if (known) return known;
+  return {
+    userId: user.id,
+    email: user.email,
+    fullName: user.full_name,
+    venueId: null,
+    isCentralEventsLead: false,
+    isAdministrator: false
+  };
+}
+
+/** The event's own venue plus every linked multi-venue entry, deduplicated. */
+function collectVenueIds(event: AnnouncementEventContext): string[] {
+  return Array.from(
+    new Set(
+      [event.venue_id, ...(event.event_venues ?? []).map((link) => link.venue_id)].filter(
+        (id): id is string => Boolean(id)
+      )
+    )
+  );
+}
+
+/** Human-readable venue list for the announcement meta block. */
+function buildVenueLabel(event: AnnouncementEventContext): string {
+  const names = Array.from(
+    new Set(
+      [event.venue?.name, ...(event.event_venues ?? []).map((link) => link.venue?.name)].filter(
+        (name): name is string => Boolean(name)
+      )
+    )
+  );
+  return names.length ? names.join(", ") : "Venue to be confirmed";
+}
+
+/**
+ * Takes the at-most-once barrier for the new-event announcement. Returns false
+ * when somebody else already holds it, which is a normal outcome rather than an
+ * error.
+ */
+async function claimNewEventAnnouncement(params: {
+  eventId: string;
+  actorUserId: string;
+  plannedCount: number;
+}): Promise<boolean> {
+  const db = createSupabaseAdminClient();
+  const { data, error } = await (db as any)
+    .from("event_notification_claims")
+    .insert({
+      event_id: params.eventId,
+      transition_key: "new_event",
+      claimed_by: params.actorUserId,
+      planned_count: params.plannedCount
+    })
+    .select("event_id")
+    .maybeSingle();
+
+  // Unique violation means somebody else already claimed it. Not an error.
+  if (error) {
+    if (error.code === "23505") return false;
+    throw new Error(`Could not claim new-event announcement: ${error.message}`);
+  }
+  return Boolean(data);
+}
+
+/** Re-arms the announcement after a total send failure. */
+async function releaseNewEventAnnouncementClaim(eventId: string): Promise<void> {
+  const db = createSupabaseAdminClient();
+  await (db as any)
+    .from("event_notification_claims")
+    .delete()
+    .eq("event_id", eventId)
+    .eq("transition_key", "new_event");
+}
+
+/**
+ * Sends exactly one email per person for a new event.
+ *
+ * The planner decides who gets what; this function only performs I/O. The
+ * claim gates the ANNOUNCEMENT subset only, so a revert-and-republish still
+ * delivers the creator's targeted confirmation without re-broadcasting.
+ */
+export async function notifyNewEvent(params: {
+  eventId: string;
+  actorUserId: string;
+  transition: NewEventTransition;
+  isFirstPublish: boolean;
+}): Promise<void> {
+  if (!areOperationalEmailsEnabled()) {
+    logNotificationSkipped("notifyNewEvent", { eventId: params.eventId });
+    return; // never claim when email is off
+  }
+  const resend = getResendClient();
+  if (!resend) return; // never claim without a provider
+
+  try {
+    const [event, activeUsers] = await Promise.all([
+      fetchAnnouncementEventContext(params.eventId),
+      listActiveNotificationPeople()
+    ]);
+    if (!event) return;
+
+    const plan = planNewEventNotifications({
+      transition: params.transition,
+      isFirstPublish: params.isFirstPublish,
+      actorUserId: params.actorUserId,
+      eventVenueIds: collectVenueIds(event),
+      creator: toPerson(event.creator, activeUsers),
+      assignee: toPerson(event.assignee, activeUsers),
+      activeUsers
+    });
+
+    let messages = plan.messages;
+    let claimed = false;
+
+    if (plan.requiresClaim && messages.some((message) => message.kind === "announcement")) {
+      claimed = await claimNewEventAnnouncement({
+        eventId: params.eventId,
+        actorUserId: params.actorUserId,
+        plannedCount: messages.length
+      });
+      if (!claimed) {
+        messages = messages.filter((message) => message.kind !== "announcement");
+      }
+    }
+
+    if (messages.length === 0) return;
+
+    const venueLabel = buildVenueLabel(event);
+    const payload = messages.map((message) => {
+      const built =
+        message.kind === "announcement"
+          ? buildAnnouncementEmail(event, venueLabel, message.fullName)
+          : message.kind === "submitted_for_review"
+            ? buildSubmittedForReviewEmail(event, message.fullName)
+            : buildReviewDecisionEmail(event, "approved");
+      return {
+        from: RESEND_FROM_ADDRESS,
+        to: [message.sendTo],
+        subject: built.subject,
+        html: built.html,
+        text: built.text
+      };
+    });
+
+    const response = await resend.batch.send(payload, {
+      idempotencyKey: `new-event:${params.eventId}:${params.transition}`
+    });
+
+    // Resend RESOLVES on provider error rather than rejecting. Never treat a
+    // resolved promise as success.
+    const accepted = response.error ? 0 : (response.data?.data?.length ?? 0);
+    const failed = payload.length - accepted;
+
+    console.log(
+      JSON.stringify({
+        event: "notify_new_event",
+        eventId: params.eventId,
+        transition: params.transition,
+        planned: payload.length,
+        accepted,
+        failed,
+        suppressed: plan.suppressed.length,
+        error: response.error?.message ?? null
+      })
+    );
+
+    // Release only on TOTAL failure. Partial success keeps the claim so a retry
+    // cannot duplicate.
+    if (claimed && accepted === 0) {
+      await releaseNewEventAnnouncementClaim(params.eventId);
+    }
+  } catch (error) {
+    console.warn("notifyNewEvent failed", error);
   }
 }
 
