@@ -329,9 +329,11 @@ Migration `20260605143000_retire_executive_rename_manager_role.sql` renamed `off
 
 Verified against the live database (`shofawaztmdxytukhozo`) by reading `pg_proc.prosrc`:
 
+**Correction (added after adversarial review).** An earlier draft of this addendum claimed `enforce_event_status_transitions` was a live bug denying managers proposal completion. That was wrong. The branch is unreachable: a user-session write to `public.events` is rejected first by `events_require_admin_or_service_write`; no RLS policy lets a manager set `status='draft'` (`admins manage events` requires administrator, and the assignee policy's `WITH CHECK` allows only `submitted|needs_revisions|approved|rejected`); and a `service_role` caller returns earlier at the `auth.role()` check. Managers cannot edit events at all under the current posture, which matches the role model in CLAUDE.md. The literal is still corrected for consistency, but it unblocks nothing, and it is **not** the reason the submit flow is unused.
+
 | Function | Line | Effect on a manager |
 |---|---|---|
-| `enforce_event_status_transitions` | 39 | **Live bug today.** Denies proposal completion. |
+| `enforce_event_status_transitions` | 39 | Dead code. Three other gates deny managers first. Corrected for consistency only. |
 | `submit_event_for_review` | 41, 64 | Rejects. Dormant, flag-gated. |
 | `save_event_draft` | 91, 106 | Rejects. Dormant, flag-gated. |
 | `propose_event_draft` | 36, 81 | Rejects. Dormant, flag-gated. |
@@ -339,41 +341,26 @@ Verified against the live database (`shofawaztmdxytukhozo`) by reading `pg_proc.
 
 Three further functions mention `office_worker` but **normalise** it (`when role = 'office_worker' then 'manager'`) and are therefore harmless: `current_user_role`, `create_multi_venue_event_proposals`, `create_multi_venue_planning_items`. They are left alone.
 
-### The live one
+### Why this still matters
 
-`enforce_event_status_transitions` is a trigger, so it runs on every event status change regardless of `EVENT_SAVE_USE_RPC`. On the `approved_pending_details -> draft` transition (a manager completing an approved proposal):
-
-- line 16, administrators return early
-- line 19, service role returns early
-- line 29, the creator returns early
-- line 39, `if v_user_role = 'office_worker' and v_user_venue = new.venue_id then return new`
-- line 43, everyone else raises
-
-A manager who is not the creator can never match line 39, so they hit the exception. **A manager cannot complete a proposal created by someone else, even at their own venue.** There are 2 events sitting in `approved_pending_details` in production. This is the most likely reason the submit flow is not yet in use.
+None of the five is currently reachable: four sit behind `EVENT_SAVE_USE_RPC`, which is off, and the trigger branch is dead for the reasons above. The repair is worth doing anyway, because the flag cannot safely be turned on while four RPCs reject every manager, and decision 3 says the submit flow is wanted. It is preparatory, not a live fix.
 
 ### The fix
 
-Replace the literal `'office_worker'` with `'manager'` in the five authorising functions, preserving every other line of their logic. `create_or_replace` each one; no signature changes, so no grants change and no dependent objects break.
+Replace the literal `'office_worker'` with `'manager'` in the five authorising functions, **preserving every other line of their logic, including every venue predicate**. `create_or_replace` each one; no signature changes, so no grants change and no dependent objects break.
 
-The venue-scoping semantics need one deliberate change, because `venue_id` means something different now (product decision 4: set means single-venue, null means works across all venues). The existing checks read:
+**No permission widening.** An earlier draft of this spec proposed removing the "managers without a venue assignment cannot create events" rejection, and widening the trigger's venue check to treat a null `venue_id` as "every venue". That was based on product decision 4, which describes *staffing* (who works where) rather than *permissions* (what the code grants). It was reverted after review, for two reasons:
 
-```sql
--- create_multi_venue_event_drafts:43
-if v_user_role = 'office_worker' and v_user_venue is null then
-  raise exception 'Office workers without a venue assignment cannot create events';
-```
+- It contradicts the checked-in role model. CLAUDE.md and `src/lib/roles.ts` both treat a manager without a `venue_id` as effectively read-only, with `venue_id` acting as the capability switch.
+- 13 of 14 active managers have a null `venue_id`, so the permissive reading would have silently granted estate-wide write to almost every manager, inside a commit labelled a repair.
 
-Under decision 4 a null `venue_id` means "works across multiple or all venues", so that exception is now backwards: it rejects exactly the managers with the broadest remit. It is removed. The per-venue check at line 51 keeps its shape but only bites when the manager actually has a venue:
-
-```sql
-if v_user_role = 'manager' and v_user_venue is not null and v_user_venue != v_venue_id then
-  raise exception 'Manager % cannot manage venue %', v_created_by, v_venue_id;
-end if;
-```
-
-`save_event_draft:106` and `submit_event_for_review:64` already have this shape (`v_user_venue is null or v_user_venue = e.venue_id`) and need only the role literal changed.
+Changing that rule may well be right, but it is a separate product decision and belongs in its own change. See the open question below.
 
 Error message wording moves from "Office worker" to "Manager" throughout.
+
+### Open question raised by this addendum
+
+Should a manager with no `venue_id` be able to write across all venues, or remain read-only? The code says read-only today. Product decision 4 said those managers "work across multiple or all venues", which describes where they work, not what they may change. **Recommendation: leave as read-only** until you say otherwise, because 13 of 14 managers are in that state and the permissive reading is a large, silent grant.
 
 ### Scope boundary
 
