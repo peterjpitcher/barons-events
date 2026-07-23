@@ -132,6 +132,15 @@ export interface Database {
           submitted_by: string | null;
         };
       };
+      event_notification_claims: {
+        Row: {
+          event_id: string;
+          transition_key: string;
+          claimed_at: string;
+          claimed_by: string | null;
+          planned_count: number;
+        };
+      };
       approvals: {
         Row: {
           id: string;
