@@ -71,6 +71,7 @@ function eligibleEventRow(overrides: Record<string, unknown> = {}) {
     booking_url: null,
     status: "approved",
     deleted_at: null,
+    end_at: "2999-01-01T22:00:00.000Z",
     total_capacity: 10,
     max_tickets_per_booking: 5,
     venue: { is_internal: false },
@@ -322,6 +323,67 @@ describe("createBookingAction", () => {
     } else {
       throw new Error("Expected existing booking result");
     }
+  });
+
+  it("rejects a booking for an event that has already finished", async () => {
+    const finishedFrom = vi.fn((table: string) => {
+      if (table === "events") {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              maybeSingle: vi.fn().mockResolvedValue({
+                data: eligibleEventRow({ end_at: "2020-01-01T22:00:00.000Z" }),
+                error: null
+              })
+            })
+          })
+        };
+      }
+      return {
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null })
+          })
+        })
+      };
+    });
+    mockCreateSupabaseAdminClient.mockReturnValue({ from: finishedFrom } as never);
+
+    const result = await createBookingAction(VALID_INPUT);
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error).toBe("not_found");
+  });
+
+  it("rejects a booking for a completed event even when booking is still enabled", async () => {
+    const completedFrom = vi.fn((table: string) => {
+      if (table === "events") {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              maybeSingle: vi.fn().mockResolvedValue({
+                data: eligibleEventRow({
+                  status: "completed",
+                  end_at: "2020-01-01T22:00:00.000Z"
+                }),
+                error: null
+              })
+            })
+          })
+        };
+      }
+      return {
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null })
+          })
+        })
+      };
+    });
+    mockCreateSupabaseAdminClient.mockReturnValue({ from: completedFrom } as never);
+
+    const result = await createBookingAction(VALID_INPUT);
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error).toBe("not_found");
   });
 });
 

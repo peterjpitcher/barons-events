@@ -112,6 +112,7 @@ async function getPublicBookingEligibility(eventId: string): Promise<PublicBooki
         booking_url,
         status,
         deleted_at,
+        end_at,
         total_capacity,
         max_tickets_per_booking,
         booking_notes_enabled,
@@ -138,6 +139,14 @@ async function getPublicBookingEligibility(eventId: string): Promise<PublicBooki
       !venue ||
       venue.is_internal === true
     ) {
+      return { ok: false, reason: "not_found" };
+    }
+
+    // An event that has already finished takes no bookings, whatever its
+    // status or booking_enabled flag says. Checked here rather than only on
+    // the landing page so a replayed form post cannot bypass it.
+    const endAt = typeof row.end_at === "string" ? Date.parse(row.end_at) : Number.NaN;
+    if (!Number.isNaN(endAt) && endAt <= Date.now()) {
       return { ok: false, reason: "not_found" };
     }
 
