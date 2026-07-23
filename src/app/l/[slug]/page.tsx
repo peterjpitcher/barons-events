@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 import { formatInLondon, normaliseWebsiteTimeText } from "@/lib/datetime";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getConfirmedTicketCount } from "@/lib/bookings";
-import { resolveEventBookingState, shouldNoIndex } from "@/lib/event-booking-state";
+import { resolveEventBookingState, shouldNoIndex, type EventBookingState } from "@/lib/event-booking-state";
 import { buildEventLandingUrl, canonicalEventPath, parseEventIdFromSlug } from "@/lib/event-public-url";
 import { BookingForm } from "./BookingForm";
 import { BookingUnavailableNotice } from "./BookingUnavailableNotice";
@@ -20,11 +20,15 @@ interface PageProps {
  * like "closed" on purpose: an event with booking switched on but no format
  * set is our data problem, not something to explain to a customer.
  */
-const BOOKING_STATE_MESSAGES: Record<"finished" | "closed" | "misconfigured" | "sold_out", string> = {
+const BOOKING_STATE_MESSAGES: Record<Exclude<EventBookingState["kind"], "open">, string> = {
   finished: "This event has finished.",
   closed: "No booking needed, just come along.",
   misconfigured: "No booking needed, just come along.",
-  sold_out: "Sorry, this event is fully booked."
+  sold_out: "Sorry, this event is fully booked.",
+  // Unreachable: an external booking URL redirects before render. Present so
+  // the map stays total, and so the page degrades to a sensible notice rather
+  // than a crash if that redirect is ever removed.
+  external: "Bookings for this event are handled on another site."
 };
 
 /**
@@ -184,7 +188,11 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       // the slug form in search results. Built from the public base URL, not
       // the request host: a canonical must be the one true public address,
       // whereas a redirect must stay on the host the request arrived on.
-      canonical: buildEventLandingUrl({ id: event.id, title: event.title, seoSlug: event.seo_slug })
+      // public_title first, falling back to the internal title, exactly as
+      // toPublicEvent does. Feeding the internal title here would advertise a
+      // canonical that differs from the eventPageUrl the public API gives the
+      // brand site, and would leak internal venue-suffixed naming into search.
+      canonical: buildEventLandingUrl({ id: event.id, title, seoSlug: event.seo_slug })
     },
     openGraph: {
       title,
@@ -212,15 +220,19 @@ export default async function EventLandingPage({ params }: PageProps) {
     permanentRedirect(canonicalEventPath(event.seo_slug, host));
   }
 
-  const confirmedCount = await getConfirmedTicketCount(event.id);
-  const bookingState = resolveEventBookingState({
+  // Resolve once without a ticket count. Capacity is the only input that
+  // needs a query, and it only matters when the event is otherwise open, so
+  // the count is skipped entirely for finished, external, closed and
+  // misconfigured events. That is most of them.
+  const stateInput = {
     bookingUrl: event.booking_url,
     bookingEnabled: event.booking_enabled,
     bookingType: event.booking_type,
     endAt: event.end_at,
     totalCapacity: event.total_capacity,
-    confirmedTickets: confirmedCount
-  });
+    confirmedTickets: 0
+  };
+  let bookingState = resolveEventBookingState(stateInput);
 
   // An external booking link short-circuits the local flow.
   // permanentRedirect issues an HTTP 308: search engines forward link equity
@@ -228,6 +240,13 @@ export default async function EventLandingPage({ params }: PageProps) {
   // shareable handle should the URL ever be cleared.
   if (bookingState.kind === "external") {
     permanentRedirect(bookingState.url);
+  }
+
+  if (bookingState.kind === "open" && event.total_capacity != null) {
+    bookingState = resolveEventBookingState({
+      ...stateInput,
+      confirmedTickets: await getConfirmedTicketCount(event.id)
+    });
   }
 
   const { date: dateStr, time: timeStr } = formatInLondon(event.start_at);
