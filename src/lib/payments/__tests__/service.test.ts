@@ -163,6 +163,54 @@ describe("createPaidCheckoutSession", () => {
     expect(mocks.createPaidBookingAtomic).not.toHaveBeenCalled();
   });
 
+  it("refuses to open a checkout session for an event that has finished", async () => {
+    // Paid checkout is a separate entry point from getPublicBookingEligibility.
+    // Without its own guard a customer could open a real Stripe session, and
+    // pay, for an event that is already over.
+    mocks.from.mockImplementation((table: string) => {
+      if (table === "events") {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              maybeSingle: vi.fn().mockResolvedValue({
+                data: {
+                  id: "550e8400-e29b-41d4-a716-446655440000",
+                  title: "Bottomless Paint and Sip",
+                  public_title: null,
+                  booking_type: "paid_seated",
+                  booking_url: null,
+                  booking_enabled: true,
+                  ticket_price: 42,
+                  status: "completed",
+                  deleted_at: null,
+                  start_at: "2020-04-13T18:00:00Z",
+                  end_at: "2020-04-13T20:00:00Z",
+                  venue: { name: "Barons Riverside", is_internal: false },
+                },
+                error: null,
+              })
+            })
+          })
+        };
+      }
+      return {};
+    });
+
+    const result = await createPaidCheckoutSession({
+      eventId: "550e8400-e29b-41d4-a716-446655440000",
+      firstName: "Jane",
+      lastName: null,
+      mobile: "+447911123456",
+      email: "jane@example.com",
+      ticketCount: 1,
+      marketingOptIn: false,
+    });
+
+    expect(result).toEqual({ success: false, error: "not_found" });
+    expect(mocks.createPaidBookingAtomic).not.toHaveBeenCalled();
+    expect(stripePaymentProvider.createOrder).not.toHaveBeenCalled();
+  });
+
   it("records event booking and payment audit rows when checkout setup succeeds", async () => {
     mocks.createPaidBookingAtomic.mockResolvedValue({ ok: true, bookingId: "booking-1" });
     vi.mocked(stripePaymentProvider.createOrder).mockResolvedValue({

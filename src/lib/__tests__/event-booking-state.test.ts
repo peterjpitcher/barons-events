@@ -23,11 +23,22 @@ describe("resolveEventBookingState", () => {
       .toEqual({ kind: "external", url: "https://example.com/book" });
   });
 
-  it("prefers external even for a finished event, so old links keep redirecting", () => {
+  it("ranks finished above external, so a past event never redirects to a live booking page", () => {
+    // 33 live events have both a booking URL and a past end date. Sending a
+    // customer to a third-party booking page for an event that is over would
+    // be worse than losing the redirect, and it would contradict the
+    // server-side guard that refuses bookings on finished events.
     const state = resolveEventBookingState(
       input({ bookingUrl: "https://example.com/book", endAt: "2020-01-01T00:00:00.000Z" })
     );
-    expect(state.kind).toBe("external");
+    expect(state.kind).toBe("finished");
+  });
+
+  it("still redirects an upcoming event that has an external booking url", () => {
+    const state = resolveEventBookingState(
+      input({ bookingUrl: "https://example.com/book", endAt: "2026-03-21T22:00:00.000Z" })
+    );
+    expect(state).toEqual({ kind: "external", url: "https://example.com/book" });
   });
 
   it("returns finished once the end time has passed", () => {

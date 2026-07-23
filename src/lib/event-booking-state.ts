@@ -28,10 +28,16 @@ export type BookingStateInput = {
  * (end_at is stored UTC), so no timezone conversion is involved. Europe/London
  * matters for display only.
  *
- * An unparseable date returns false: we would rather show a live booking form
- * for an event with bad data than wrongly tell customers it has finished.
+ * An unparseable or absent date returns false: we would rather show a live
+ * booking form for an event with bad data than wrongly tell customers it has
+ * finished.
+ *
+ * This is the single definition of "finished" for the whole public booking
+ * surface. It backs the landing page, the free booking action and the paid
+ * checkout session, so those three cannot drift apart.
  */
-function hasEventFinished(endAt: string, now: Date = new Date()): boolean {
+export function hasEventFinished(endAt: string | null | undefined, now: Date = new Date()): boolean {
+  if (typeof endAt !== "string") return false;
   const parsed = Date.parse(endAt);
   if (Number.isNaN(parsed)) return false;
   return parsed <= now.getTime();
@@ -40,9 +46,14 @@ function hasEventFinished(endAt: string, now: Date = new Date()): boolean {
 /**
  * Resolve the single booking state for an event. Order is significant:
  *
- * 1. external  - an external booking URL short-circuits everything, including
- *                finished, so links already in the wild keep redirecting.
- * 2. finished  - a past event reads as finished, not as closed or sold out.
+ * 1. finished  - a past event reads as finished, whatever else is configured.
+ *                This deliberately outranks external: 33 live events have both
+ *                a booking URL and a past end date, and redirecting a customer
+ *                to a live third-party booking page for an event that is over
+ *                would be worse than any link equity it preserves. It also
+ *                keeps the page consistent with the server-side guard that
+ *                refuses bookings on finished events.
+ * 2. external  - an external booking URL short-circuits the local flow.
  * 3. closed    - booking deliberately switched off.
  * 4. misconfigured - booking on but no usable format. Presented to the customer
  *                exactly like closed; distinct only so we can spot it.
@@ -50,13 +61,13 @@ function hasEventFinished(endAt: string, now: Date = new Date()): boolean {
  * 6. open      - take the booking.
  */
 export function resolveEventBookingState(input: BookingStateInput): EventBookingState {
+  if (hasEventFinished(input.endAt, input.now ?? new Date())) {
+    return { kind: "finished" };
+  }
+
   const bookingUrl = input.bookingUrl?.trim();
   if (bookingUrl) {
     return { kind: "external", url: bookingUrl };
-  }
-
-  if (hasEventFinished(input.endAt, input.now ?? new Date())) {
-    return { kind: "finished" };
   }
 
   if (!input.bookingEnabled) {

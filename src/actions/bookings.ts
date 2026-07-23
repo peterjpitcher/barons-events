@@ -15,6 +15,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { upsertCustomerForBooking, linkBookingToCustomer } from "@/lib/customers";
 import { verifyTurnstile } from "@/lib/turnstile";
 import { isBookingFormat, isPaidBookingFormat, type BookingFormat } from "@/lib/booking-format";
+import { hasEventFinished } from "@/lib/event-booking-state";
 import { processRefund, transferBooking } from "@/lib/payments/service";
 
 const BOOKING_UPDATE_TOKEN_TTL_MS = 10 * 60 * 1000;
@@ -144,9 +145,10 @@ async function getPublicBookingEligibility(eventId: string): Promise<PublicBooki
 
     // An event that has already finished takes no bookings, whatever its
     // status or booking_enabled flag says. Checked here rather than only on
-    // the landing page so a replayed form post cannot bypass it.
-    const endAt = typeof row.end_at === "string" ? Date.parse(row.end_at) : Number.NaN;
-    if (!Number.isNaN(endAt) && endAt <= Date.now()) {
+    // the landing page so a replayed form post cannot bypass it. Shares its
+    // definition with the landing page and paid checkout so the three cannot
+    // drift apart.
+    if (hasEventFinished(row.end_at as string | null)) {
       return { ok: false, reason: "not_found" };
     }
 

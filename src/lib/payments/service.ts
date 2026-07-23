@@ -13,6 +13,7 @@ import {
 } from "@/lib/notifications";
 import { recordSystemAuditLogEntry } from "@/lib/audit-log";
 import { isBookingFormat, isPaidBookingFormat } from "@/lib/booking-format";
+import { hasEventFinished } from "@/lib/event-booking-state";
 import {
   CHECKOUT_SESSION_TTL_SECONDS,
   PAYMENT_CURRENCY,
@@ -165,7 +166,7 @@ async function fetchPaidEvent(eventId: string): Promise<{
   const { data, error } = await db
     .from("events")
     .select(`
-      id, title, public_title, booking_type, booking_url, ticket_price, booking_enabled, status, deleted_at, start_at,
+      id, title, public_title, booking_type, booking_url, ticket_price, booking_enabled, status, deleted_at, start_at, end_at,
       venue:venues!events_venue_id_fkey(name, is_internal)
     `)
     .eq("id", eventId)
@@ -182,6 +183,14 @@ async function fetchPaidEvent(eventId: string): Promise<{
     !isPaidBookingFormat(bookingFormat) ||
     typeof row.booking_url === "string"
   ) {
+    return null;
+  }
+
+  // An event that has finished takes no money. This mirrors the guard in
+  // getPublicBookingEligibility and shares its definition of "finished":
+  // paid checkout is a separate entry point, so without this a customer
+  // could open a real Stripe session for an event that is already over.
+  if (hasEventFinished(row.end_at as string | null)) {
     return null;
   }
 
