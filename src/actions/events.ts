@@ -38,6 +38,7 @@ import {
   normaliseOptionalInteger as normaliseOptionalIntegerField,
 } from "@/lib/normalise";
 import { logEventAction } from "@/lib/observability/event-action-log";
+import { canAddEventImage } from "@/lib/events/image-policy";
 
 const reviewerFallback = z.string().uuid().optional();
 const eventStatusUpdateSchema = z.object({
@@ -834,6 +835,7 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
   const rawEventIdRaw = formData.get("eventId");
   const rawEventId = typeof rawEventIdRaw === "string" ? rawEventIdRaw.trim() : "";
   const isCreate = !rawEventId;
+  let editContext: Awaited<ReturnType<typeof loadEventEditContext>> | null = null;
 
   if (isCreate) {
     if (!canProposeEvents(user.role)) {
@@ -848,6 +850,7 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
     if (!ctx) {
       return { success: false, message: "Event not found.", operationId };
     }
+    editContext = ctx;
     if (!canEditEvent(user.role, user.id, user.venueId, ctx)) {
       return { success: false, message: "You don't have permission to edit this event.", operationId };
     }
@@ -880,6 +883,13 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
   const endAt = typeof endAtValue === "string" ? endAtValue : "";
   const eventImageEntry = formData.get("eventImage");
   const eventImageFile = eventImageEntry instanceof File && eventImageEntry.size > 0 ? eventImageEntry : null;
+  if (eventImageFile && !canAddEventImage(editContext?.status)) {
+    return {
+      success: false,
+      message: "Event images can be added after the draft stage.",
+      operationId
+    };
+  }
 
   const parsed = eventDraftSchema.safeParse({
     eventId,
@@ -1390,6 +1400,13 @@ export async function submitEventForReviewAction(
   const assigneeOverride = typeof assigneeField === "string" ? assigneeField : undefined;
   const eventImageEntry = formData.get("eventImage");
   const eventImageFile = eventImageEntry instanceof File && eventImageEntry.size > 0 ? eventImageEntry : null;
+  if (eventImageFile && !canAddEventImage(editContext?.status)) {
+    return {
+      success: false,
+      message: "Event images can be added after the draft stage.",
+      operationId
+    };
+  }
   const requestedArtistIds = normaliseArtistIdList(formData.get("artistIds"));
   const requestedArtistNames = normaliseArtistNameList(formData.get("artistNames"));
 
@@ -1609,42 +1626,40 @@ export async function submitEventForReviewAction(
       const endAtValue = formData.get("endAt");
       const endAt = typeof endAtValue === "string" ? endAtValue : "";
 
-      const parsed = eventFormSchema
-        .omit({ eventId: true })
-        .safeParse({
-          venueId,
-          title,
-          eventType,
-          startAt,
-          endAt,
-          venueSpace: normaliseVenueSpacesField(formData.get("venueSpace")),
-          expectedHeadcount: formData.get("expectedHeadcount") ?? undefined,
-          wetPromo: formData.get("wetPromo") ?? undefined,
-          foodPromo: formData.get("foodPromo") ?? undefined,
-          bookingType: formData.get("bookingType") ?? undefined,
-          ticketPrice: formData.get("ticketPrice") ?? undefined,
-          checkInCutoffMinutes: formData.get("checkInCutoffMinutes") ?? undefined,
-          agePolicy: formData.get("agePolicy") ?? undefined,
-          accessibilityNotes: formData.get("accessibilityNotes") ?? undefined,
-          cancellationWindowHours: formData.get("cancellationWindowHours") ?? undefined,
-          termsAndConditions: formData.get("termsAndConditions") ?? undefined,
-          artistNames: formData.get("artistNames") ?? undefined,
-          goalFocus: formData.getAll("goalFocus").length
-            ? formData.getAll("goalFocus").join(",")
-            : formData.get("goalFocus") ?? undefined,
-          costTotal: formData.get("costTotal") ?? undefined,
-          costDetails: formData.get("costDetails") ?? undefined,
-          notes: formData.get("notes") ?? undefined,
-          managerResponsibleId: formData.get("managerResponsibleId") ?? undefined,
-          publicTitle: formData.get("publicTitle") ?? undefined,
-          publicTeaser: formData.get("publicTeaser") ?? undefined,
-          publicDescription: formData.get("publicDescription") ?? undefined,
-          publicHighlights: formData.get("publicHighlights") ?? undefined,
-          bookingUrl: formData.get("bookingUrl") ?? undefined,
-          seoTitle: formData.get("seoTitle") ?? undefined,
-          seoDescription: formData.get("seoDescription") ?? undefined,
-          seoSlug: formData.get("seoSlug") ?? undefined
-        });
+      const parsed = eventFormSchema.safeParse({
+        venueId,
+        title,
+        eventType,
+        startAt,
+        endAt,
+        venueSpace: normaliseVenueSpacesField(formData.get("venueSpace")),
+        expectedHeadcount: formData.get("expectedHeadcount") ?? undefined,
+        wetPromo: formData.get("wetPromo") ?? undefined,
+        foodPromo: formData.get("foodPromo") ?? undefined,
+        bookingType: formData.get("bookingType") ?? undefined,
+        ticketPrice: formData.get("ticketPrice") ?? undefined,
+        checkInCutoffMinutes: formData.get("checkInCutoffMinutes") ?? undefined,
+        agePolicy: formData.get("agePolicy") ?? undefined,
+        accessibilityNotes: formData.get("accessibilityNotes") ?? undefined,
+        cancellationWindowHours: formData.get("cancellationWindowHours") ?? undefined,
+        termsAndConditions: formData.get("termsAndConditions") ?? undefined,
+        artistNames: formData.get("artistNames") ?? undefined,
+        goalFocus: formData.getAll("goalFocus").length
+          ? formData.getAll("goalFocus").join(",")
+          : formData.get("goalFocus") ?? undefined,
+        costTotal: formData.get("costTotal") ?? undefined,
+        costDetails: formData.get("costDetails") ?? undefined,
+        notes: formData.get("notes") ?? undefined,
+        managerResponsibleId: formData.get("managerResponsibleId") ?? undefined,
+        publicTitle: formData.get("publicTitle") ?? undefined,
+        publicTeaser: formData.get("publicTeaser") ?? undefined,
+        publicDescription: formData.get("publicDescription") ?? undefined,
+        publicHighlights: formData.get("publicHighlights") ?? undefined,
+        bookingUrl: formData.get("bookingUrl") ?? undefined,
+        seoTitle: formData.get("seoTitle") ?? undefined,
+        seoDescription: formData.get("seoDescription") ?? undefined,
+        seoSlug: formData.get("seoSlug") ?? undefined
+      });
 
       if (!parsed.success) {
         return {

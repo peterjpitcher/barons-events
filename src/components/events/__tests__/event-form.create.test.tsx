@@ -86,6 +86,21 @@ describe("EventForm create defaults", () => {
 
     fireEvent.change(select, { target: { value: "paid_standing_unreserved" } });
     expect(screen.getByText("Required for paid events.")).toBeTruthy();
+    expect(
+      screen.getByText("Required for prepaid events so guests get a clear cancellation/refund policy.")
+    ).toBeTruthy();
+
+    fireEvent.change(select, { target: { value: "pay_on_arrival_standing" } });
+    expect(
+      screen.getByText("Optional for pay-on-arrival events because no advance payment is taken.")
+    ).toBeTruthy();
+  });
+
+  it("does not offer an image upload while creating a draft", () => {
+    renderCreateForm();
+
+    expect(screen.queryByLabelText("Event image (optional)")).toBeNull();
+    expect(screen.getByText("Event images can be added after the draft stage.")).toBeTruthy();
   });
 
   it("clears and disables ticket price for free formats", async () => {

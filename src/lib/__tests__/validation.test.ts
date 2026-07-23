@@ -46,11 +46,23 @@ describe("event validation schemas", () => {
     expect(result.success).toBe(true);
   });
 
-  it("requires cancellation window for non-free formats", () => {
+  it.each([
+    "pay_on_arrival_seated",
+    "pay_on_arrival_standing",
+    "pay_on_arrival_standing_unreserved"
+  ] as const)("allows %s without a cancellation window", (bookingType) => {
     const result = eventFormSchema.safeParse({
       ...basePayload,
-      bookingType: "pay_on_arrival_standing",
-      agePolicy: "18+"
+      bookingType
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("requires a cancellation window for prepaid formats", () => {
+    const result = eventFormSchema.safeParse({
+      ...basePayload,
+      bookingType: "paid_standing",
+      ticketPrice: 12.5
     });
     expect(result.success).toBe(false);
     if (result.success) return;

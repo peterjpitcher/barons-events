@@ -127,4 +127,36 @@ describe("EventForm edit-mode isolation", () => {
     const titleInput = container.querySelector('input[name="title"]') as HTMLInputElement;
     expect(titleInput.value).toBe("Seeded title");
   });
+
+  it("hides image upload before the draft is complete and shows it afterwards", () => {
+    const { rerender } = render(
+      <EventForm
+        mode="edit"
+        defaultValues={makeEvent({ status: "approved_pending_details" })}
+        venues={venues}
+        artists={[]}
+        eventTypes={["Live Music", "Quiz Night"]}
+        role="administrator"
+        userVenueId={null}
+        users={[]}
+      />
+    );
+
+    expect(screen.queryByLabelText("Event image (optional)")).toBeNull();
+
+    rerender(
+      <EventForm
+        mode="edit"
+        defaultValues={makeEvent({ status: "approved" })}
+        venues={venues}
+        artists={[]}
+        eventTypes={["Live Music", "Quiz Night"]}
+        role="administrator"
+        userVenueId={null}
+        users={[]}
+      />
+    );
+
+    expect(screen.getByLabelText("Event image (optional)")).toBeTruthy();
+  });
 });

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { BOOKING_FORMATS, isFreeBookingFormat, isPaidBookingFormat } from "@/lib/booking-format";
+import { BOOKING_FORMATS, isPaidBookingFormat } from "@/lib/booking-format";
 import { normaliseWebsiteTimeText } from "@/lib/datetime";
 import { daysBetween, parseDateOnly } from "@/lib/planning/utils";
 
@@ -169,7 +169,7 @@ export const eventFormSchema = eventDraftBaseSchema
         path: ["ticketPrice"]
       });
     }
-    if (!isFreeBookingFormat(values.bookingType) && values.cancellationWindowHours === undefined) {
+    if (isPaidBookingFormat(values.bookingType) && values.cancellationWindowHours === undefined) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "Add a cancellation/refund window in hours",

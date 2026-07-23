@@ -39,6 +39,7 @@ import { cn } from "@/lib/utils";
 import { normaliseEventDateTimeForStorage, toLondonDateTimeInputValue } from "@/lib/datetime";
 import { notesClashingWithSelection, type FormNote } from "@/lib/calendar-notes/form-clash";
 import type { EventSummary } from "@/lib/events";
+import { canAddEventImage } from "@/lib/events/image-policy";
 import type { UserRole } from "@/lib/types";
 import type { ArtistOption } from "@/lib/artists";
 import type { VenueRow } from "@/lib/venues";
@@ -520,6 +521,7 @@ export function EventForm({
   const isFreeBookingSelected = selectedBookingFormat ? isFreeBookingFormat(selectedBookingFormat) : false;
   const isPaidBookingSelected = selectedBookingFormat ? isPaidBookingFormat(selectedBookingFormat) : false;
   const isPayOnArrivalBookingSelected = selectedBookingFormat ? isPayOnArrivalBookingFormat(selectedBookingFormat) : false;
+  const canUploadEventImage = mode === "edit" && canAddEventImage(defaultValues?.status);
   const [ticketPrice, setTicketPrice] = useState(defaultValues?.ticket_price != null ? String(defaultValues.ticket_price) : "");
   const [selectedGoals, setSelectedGoals] = useState<Set<string>>(new Set(defaultGoalValues));
   const [checkInCutoffMinutes, setCheckInCutoffMinutes] = useState(
@@ -1095,12 +1097,26 @@ export function EventForm({
     </div>
   );
 
-  const eventImageField = (
+  const eventImageField = canUploadEventImage ? (
     <div className="space-y-1">
       <FieldLabel htmlFor="eventImage" help="Add a hero image to strengthen event listings and social shares.">
         Event image (optional)
       </FieldLabel>
       <Input id="eventImage" name="eventImage" type="file" accept="image/*" />
+      {defaultValues?.event_image_path ? (
+        <p className="text-xs text-subtle">
+          Current image: {defaultValues.event_image_path.split("/").at(-1) ?? defaultValues.event_image_path}
+        </p>
+      ) : null}
+    </div>
+  ) : (
+    <div className="space-y-1">
+      <p className="text-sm font-medium text-[var(--ink)]">Event image</p>
+      <p className="text-xs text-subtle">
+        {defaultValues?.event_image_path
+          ? "This event keeps its existing image. It can be replaced after the draft stage."
+          : "Event images can be added after the draft stage."}
+      </p>
       {defaultValues?.event_image_path ? (
         <p className="text-xs text-subtle">
           Current image: {defaultValues.event_image_path.split("/").at(-1) ?? defaultValues.event_image_path}
@@ -1246,7 +1262,15 @@ export function EventForm({
       <div className="space-y-1">
         <FieldLabel
           htmlFor="cancellationWindowHours"
-          help={isFreeBookingSelected ? "Optional for free-entry events." : "Required for bookable events so guests get a clear cancellation/refund policy."}
+          help={
+            isPaidBookingSelected
+              ? "Required for prepaid events so guests get a clear cancellation/refund policy."
+              : isPayOnArrivalBookingSelected
+                ? "Optional for pay-on-arrival events because no advance payment is taken."
+                : isFreeBookingSelected
+                  ? "Optional for free-entry events."
+                  : "Choose a booking format to set the cancellation/refund rules."
+          }
         >
           Cancellation / refund window (hours)
         </FieldLabel>

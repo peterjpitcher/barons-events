@@ -278,6 +278,43 @@ describe("submitEventForReviewAction — create path venue rules", () => {
     expect(redirect).toHaveBeenCalledWith(`/events/${createdEvent.id}`);
   });
 
+  it("allows pay-on-arrival publish without a cancellation window", async () => {
+    setupSuccessfulCreateSubmitMocks();
+    getUserMock.mockResolvedValue({ id: USER_A, role: "administrator", venueId: null });
+
+    await expect(
+      submitEventForReviewAction(
+        undefined,
+        validFullEventForm({ bookingType: "pay_on_arrival_standing" })
+      )
+    ).rejects.toThrow("NEXT_REDIRECT");
+
+    expect(createEventDraft).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bookingType: "pay_on_arrival_standing",
+        cancellationWindowHours: null,
+      })
+    );
+  });
+
+  it("keeps the cancellation window required for prepaid publish", async () => {
+    getUserMock.mockResolvedValue({ id: USER_A, role: "administrator", venueId: null });
+
+    const result = await submitEventForReviewAction(
+      undefined,
+      validFullEventForm({
+        bookingType: "paid_standing",
+        ticketPrice: "12.50",
+      })
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.fieldErrors).toEqual(expect.objectContaining({
+      cancellationWindowHours: expect.any(String),
+    }));
+    expect(createEventDraft).not.toHaveBeenCalled();
+  });
+
   it("strips ticket price from free booking formats server-side", async () => {
     setupSuccessfulCreateSubmitMocks();
     getUserMock.mockResolvedValue({ id: USER_A, role: "administrator", venueId: null });
@@ -432,6 +469,29 @@ describe("saveEventDraftAction — update path (canEditEvent)", () => {
     expect(result.success).toBe(false);
     expect(result.message).toMatch(/event not found/i);
   });
+
+  it.each(["draft", "approved_pending_details"])(
+    "rejects a forged image upload while saving %s",
+    async (status) => {
+      getUserMock.mockResolvedValue({ id: USER_A, role: "administrator", venueId: null });
+      loadCtxMock.mockResolvedValue({
+        venueId: VENUE_A,
+        managerResponsibleId: null,
+        createdBy: USER_A,
+        status,
+        deletedAt: null,
+      });
+      const data = validFullEventForm({ eventId: EVENT_ID });
+      data.set("eventImage", new File(["image"], "event.jpg", { type: "image/jpeg" }));
+
+      const result = await saveEventDraftAction(undefined, data);
+
+      expect(result.success).toBe(false);
+      expect(result.message).toMatch(/after the draft stage/i);
+      expect(updateEventDraft).not.toHaveBeenCalled();
+      expect(createSupabaseAdminClient).not.toHaveBeenCalled();
+    }
+  );
 });
 
 describe("submitEventForReviewAction — update path (canEditEvent)", () => {
@@ -531,6 +591,26 @@ describe("submitEventForReviewAction — update path (canEditEvent)", () => {
     }));
     expect(result.success).toBe(false);
     expect(result.message).toMatch(/don't have permission to edit/i);
+  });
+
+  it("rejects a forged draft image upload on submit", async () => {
+    getUserMock.mockResolvedValue({ id: USER_A, role: "administrator", venueId: null });
+    loadCtxMock.mockResolvedValue({
+      venueId: VENUE_A,
+      managerResponsibleId: null,
+      createdBy: USER_A,
+      status: "draft",
+      deletedAt: null,
+    });
+    const data = validFullEventForm({ eventId: EVENT_ID });
+    data.set("eventImage", new File(["image"], "event.jpg", { type: "image/jpeg" }));
+
+    const result = await submitEventForReviewAction(undefined, data);
+
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/after the draft stage/i);
+    expect(updateEventDraft).not.toHaveBeenCalled();
+    expect(createSupabaseAdminClient).not.toHaveBeenCalled();
   });
 });
 
