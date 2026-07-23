@@ -4,32 +4,14 @@ import { headers } from "next/headers";
 import { formatInLondon, normaliseWebsiteTimeText } from "@/lib/datetime";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getConfirmedTicketCount } from "@/lib/bookings";
-import { resolveEventBookingState, shouldNoIndex, type EventBookingState } from "@/lib/event-booking-state";
-import { buildEventLandingUrl, canonicalEventPath, parseEventIdFromSlug } from "@/lib/event-public-url";
+import { isBookingFormat, isPaidBookingFormat } from "@/lib/booking-format";
 import { BookingForm } from "./BookingForm";
-import { BookingUnavailableNotice } from "./BookingUnavailableNotice";
 
 export const revalidate = 60; // ISR — refresh every minute
 
 interface PageProps {
   params: Promise<{ slug: string }>;
 }
-
-/**
- * Customer-facing copy per non-bookable state. "misconfigured" reads exactly
- * like "closed" on purpose: an event with booking switched on but no format
- * set is our data problem, not something to explain to a customer.
- */
-const BOOKING_STATE_MESSAGES: Record<Exclude<EventBookingState["kind"], "open">, string> = {
-  finished: "This event has finished.",
-  closed: "No booking needed, just come along.",
-  misconfigured: "No booking needed, just come along.",
-  sold_out: "Sorry, this event is fully booked.",
-  // Unreachable: an external booking URL redirects before render. Present so
-  // the map stays total, and so the page degrades to a sensible notice rather
-  // than a crash if that redirect is ever removed.
-  external: "Bookings for this event are handled on another site."
-};
 
 /**
  * Build the public image URL from an event_image_path stored in Supabase Storage.
@@ -55,7 +37,6 @@ type EventRow = {
   public_highlights: string[] | null;
   event_image_path: string | null;
   start_at: string;
-  end_at: string;
   seo_slug: string | null;
   booking_enabled: boolean;
   booking_notes_enabled: boolean;
@@ -72,12 +53,31 @@ type EventRow = {
   } | null;
 };
 
-const EVENT_SELECT =
-  "id, title, public_title, public_teaser, public_description, public_highlights, event_image_path, start_at, end_at, seo_slug, booking_enabled, booking_notes_enabled, booking_type, booking_url, ticket_price, total_capacity, max_tickets_per_booking, status, venue:venues!events_venue_id_fkey(id, name, is_internal)";
+/**
+ * Fetch an event by its seo_slug using the service-role client.
+ * Uses admin client so we can see all events (RLS bypassed) and return 404
+ * ourselves based on booking_enabled flag.
+ */
+async function getEventBySlug(slug: string): Promise<EventRow | null> {
+  const db = createSupabaseAdminClient();
+  const { data, error } = await db
+    .from("events")
+    .select(
+      "id, title, public_title, public_teaser, public_description, public_highlights, event_image_path, start_at, seo_slug, booking_enabled, booking_notes_enabled, booking_type, booking_url, ticket_price, total_capacity, max_tickets_per_booking, status, venue:venues!events_venue_id_fkey(id, name, is_internal)"
+    )
+    .eq("seo_slug", slug)
+    .is("deleted_at", null)
+    .in("status", ["approved", "completed"])
+    .maybeSingle();
 
-/** Shape the raw Supabase row into EventRow, or null if it is not publicly visible. */
-function mapEventRow(data: unknown): EventRow | null {
+  if (error) {
+    console.error("getEventBySlug error:", error);
+    return null;
+  }
+
   if (!data) return null;
+
+  // Normalise the venue join (Supabase may return as array or object)
   const raw = data as Record<string, unknown>;
   const venueRaw = raw.venue;
   const venue = Array.isArray(venueRaw)
@@ -91,14 +91,12 @@ function mapEventRow(data: unknown): EventRow | null {
     title: raw.title as string,
     public_title: typeof raw.public_title === "string" ? normaliseWebsiteTimeText(raw.public_title) : null,
     public_teaser: typeof raw.public_teaser === "string" ? normaliseWebsiteTimeText(raw.public_teaser) : null,
-    public_description:
-      typeof raw.public_description === "string" ? normaliseWebsiteTimeText(raw.public_description) : null,
+    public_description: typeof raw.public_description === "string" ? normaliseWebsiteTimeText(raw.public_description) : null,
     public_highlights: Array.isArray(raw.public_highlights)
       ? (raw.public_highlights as string[]).map(normaliseWebsiteTimeText)
       : null,
     event_image_path: (raw.event_image_path as string | null) ?? null,
     start_at: raw.start_at as string,
-    end_at: raw.end_at as string,
     seo_slug: (raw.seo_slug as string | null) ?? null,
     booking_enabled: raw.booking_enabled as boolean,
     booking_notes_enabled: raw.booking_notes_enabled as boolean,
@@ -112,52 +110,6 @@ function mapEventRow(data: unknown): EventRow | null {
   };
 }
 
-/**
- * Resolve a public event from a URL path segment.
- *
- * Tries the seo_slug first, then the id-suffixed form (`anything--<uuid>`)
- * that PublicEvent.slug already publishes. The id form is what guarantees a
- * working URL for events that have no slug, and keeps old links alive when
- * somebody edits a slug.
- *
- * Uses the service-role client so we control visibility here rather than
- * through RLS: not deleted, approved or completed, venue not internal.
- */
-async function getEventBySlug(slug: string): Promise<EventRow | null> {
-  const db = createSupabaseAdminClient();
-
-  const bySlug = await db
-    .from("events")
-    .select(EVENT_SELECT)
-    .eq("seo_slug", slug)
-    .is("deleted_at", null)
-    .in("status", ["approved", "completed"])
-    .maybeSingle();
-
-  if (bySlug.error) {
-    console.error("getEventBySlug error:", bySlug.error);
-    return null;
-  }
-  if (bySlug.data) return mapEventRow(bySlug.data);
-
-  const eventId = parseEventIdFromSlug(slug);
-  if (!eventId) return null;
-
-  const byId = await db
-    .from("events")
-    .select(EVENT_SELECT)
-    .eq("id", eventId)
-    .is("deleted_at", null)
-    .in("status", ["approved", "completed"])
-    .maybeSingle();
-
-  if (byId.error) {
-    console.error("getEventById error:", byId.error);
-    return null;
-  }
-  return mapEventRow(byId.data);
-}
-
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params;
   const event = await getEventBySlug(slug);
@@ -166,34 +118,9 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const title = event.public_title || event.title;
   const imageUrl = buildImageUrl(event.event_image_path);
 
-  // Non-bookable pages duplicate the main Barons website's own event pages,
-  // so keep them out of the index while still following their links.
-  // Capacity is passed as null on purpose: a sold-out event stays indexable,
-  // and generateMetadata should not pay for a ticket-count query.
-  const state = resolveEventBookingState({
-    bookingUrl: event.booking_url,
-    bookingEnabled: event.booking_enabled,
-    bookingType: event.booking_type,
-    endAt: event.end_at,
-    totalCapacity: null,
-    confirmedTickets: 0
-  });
-
   return {
     title: `${title} — Barons Pub Company`,
     description: event.public_teaser ?? undefined,
-    robots: shouldNoIndex(state) ? { index: false, follow: true } : undefined,
-    alternates: {
-      // Self-referencing canonical so the id-suffixed form never competes with
-      // the slug form in search results. Built from the public base URL, not
-      // the request host: a canonical must be the one true public address,
-      // whereas a redirect must stay on the host the request arrived on.
-      // public_title first, falling back to the internal title, exactly as
-      // toPublicEvent does. Feeding the internal title here would advertise a
-      // canonical that differs from the eventPageUrl the public API gives the
-      // brand site, and would leak internal venue-suffixed naming into search.
-      canonical: buildEventLandingUrl({ id: event.id, title, seoSlug: event.seo_slug })
-    },
     openGraph: {
       title,
       description: event.public_teaser ?? undefined,
@@ -206,48 +133,28 @@ export default async function EventLandingPage({ params }: PageProps) {
   const { slug } = await params;
   const event = await getEventBySlug(slug);
 
-  if (!event) {
+  if (!event || !event.booking_enabled) {
     notFound();
   }
 
-  const headersList = await headers();
-  const host = headersList.get("host");
-  const nonce = headersList.get("x-nonce") ?? undefined;
-
-  // Reached via the id-suffixed form but the event has a real slug: send the
-  // customer to the pretty URL and let search engines follow the equity.
-  if (event.seo_slug && event.seo_slug !== slug) {
-    permanentRedirect(canonicalEventPath(event.seo_slug, host));
-  }
-
-  // Resolve once without a ticket count. Capacity is the only input that
-  // needs a query, and it only matters when the event is otherwise open, so
-  // the count is skipped entirely for finished, external, closed and
-  // misconfigured events. That is most of them.
-  const stateInput = {
-    bookingUrl: event.booking_url,
-    bookingEnabled: event.booking_enabled,
-    bookingType: event.booking_type,
-    endAt: event.end_at,
-    totalCapacity: event.total_capacity,
-    confirmedTickets: 0
-  };
-  let bookingState = resolveEventBookingState(stateInput);
-
-  // An external booking link short-circuits the local flow.
-  // permanentRedirect issues an HTTP 308: search engines forward link equity
+  // External booking link short-circuits the local booking flow.
+  // permanentRedirect issues an HTTP 308 — search engines forward link equity
   // to the destination, browsers preserve method, and the slug remains a
   // shareable handle should the URL ever be cleared.
-  if (bookingState.kind === "external") {
-    permanentRedirect(bookingState.url);
+  if (event.booking_url) {
+    permanentRedirect(event.booking_url);
   }
 
-  if (bookingState.kind === "open" && event.total_capacity != null) {
-    bookingState = resolveEventBookingState({
-      ...stateInput,
-      confirmedTickets: await getConfirmedTicketCount(event.id)
-    });
-  }
+  const bookingFormat = isBookingFormat(event.booking_type) ? event.booking_type : null;
+  const isPaidInAppBooking = bookingFormat ? isPaidBookingFormat(bookingFormat) : false;
+
+  // Count confirmed tickets for sold-out detection
+  const confirmedCount = await getConfirmedTicketCount(event.id);
+  const isSoldOut =
+    event.total_capacity != null && confirmedCount >= event.total_capacity;
+
+  const headersList = await headers();
+  const nonce = headersList.get("x-nonce") ?? undefined;
 
   const { date: dateStr, time: timeStr } = formatInLondon(event.start_at);
 
@@ -370,22 +277,18 @@ export default async function EventLandingPage({ params }: PageProps) {
             </div>
           )}
 
-          {/* Booking area: what shows here is decided by the event's own rules */}
+          {/* Booking form */}
           <div className="mt-auto">
-            {bookingState.kind === "open" ? (
-              <BookingForm
-                eventId={event.id}
-                maxTickets={event.max_tickets_per_booking}
-                isSoldOut={false}
-                bookingType={bookingState.format}
-                isPaidBooking={bookingState.isPaid}
-                ticketPrice={event.ticket_price}
-                bookingNotesEnabled={event.booking_notes_enabled}
-                nonce={nonce}
-              />
-            ) : (
-              <BookingUnavailableNotice message={BOOKING_STATE_MESSAGES[bookingState.kind]} />
-            )}
+            <BookingForm
+              eventId={event.id}
+              maxTickets={event.max_tickets_per_booking}
+              isSoldOut={isSoldOut}
+              bookingType={bookingFormat}
+              isPaidBooking={isPaidInAppBooking}
+              ticketPrice={event.ticket_price}
+              bookingNotesEnabled={event.booking_notes_enabled}
+              nonce={nonce}
+            />
           </div>
         </div>
       </div>

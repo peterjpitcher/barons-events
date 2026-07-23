@@ -165,16 +165,13 @@ export async function cancelBooking(bookingId: string): Promise<void> {
 export async function generateUniqueEventSlug(title: string, startAt: Date): Promise<string> {
   const db = createSupabaseAdminClient();
 
-  // Build base slug: lowercase, alphanumeric + hyphens, max 60 chars.
-  // The hyphen trim runs AFTER the slice, not before: truncating at 60 can
-  // land straight on a separator, and a slug ending in a hyphen fails
-  // seoSlugSchema, which would then block every later save of that event.
+  // Build base slug: lowercase, alphanumeric + hyphens, max 60 chars
   const dateStr = startAt.toISOString().slice(0, 10); // YYYY-MM-DD
   const base = `${title}-${dateStr}`
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
-    .slice(0, 60)
-    .replace(/^-+|-+$/g, "");
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
 
   // Check if base is already unique
   const { count: baseCount } = await db

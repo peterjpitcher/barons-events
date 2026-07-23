@@ -1,8 +1,6 @@
 import "server-only";
 
 import { isBookingFormat, isFreeBookingFormat, type BookingFormat } from "@/lib/booking-format";
-import { buildEventLandingUrl } from "@/lib/event-public-url";
-import { buildEventSlug, slugify } from "@/lib/event-slug";
 import { parseVenueSpaces } from "@/lib/venue-spaces";
 import { normaliseOptionalText, normaliseOptionalInteger } from "@/lib/normalise";
 import { SHORT_LINK_HOST } from "@/lib/short-link-config";
@@ -17,8 +15,6 @@ export type PublicVenue = {
   address: string | null;
   capacity: number | null;
 };
-
-export type BookingAvailability = "external" | "in_app" | "none";
 
 export type PublicEvent = {
   id: string;
@@ -42,10 +38,6 @@ export type PublicEvent = {
   bookingUrl: string | null;
   bookingEnabled: boolean;
   bookingPageUrl: string | null;
-  /** Always present. The BaronsHub landing page for this event. */
-  eventPageUrl: string;
-  /** How booking is handled for this event, as configured. */
-  bookingAvailability: BookingAvailability;
   eventImageUrl: string | null;
   seoTitle: string | null;
   seoDescription: string | null;
@@ -130,26 +122,24 @@ function buildBookingPageUrl(seoSlug: string | null, bookingEnabled: boolean): s
   return `https://${SHORT_LINK_HOST}/${encodeURIComponent(seoSlug)}`;
 }
 
-/**
- * How booking is handled, as configured. Describes setup, not live
- * availability: it does not change as an event sells out or passes, so it stays
- * cache-friendly. The landing page owns live state.
- */
-function resolveBookingAvailability(
-  bookingUrl: string | null,
-  bookingEnabled: boolean,
-  bookingType: BookingFormat | null
-): BookingAvailability {
-  if (bookingUrl) return "external";
-  if (bookingEnabled && bookingType) return "in_app";
-  return "none";
-}
-
 export function isValidIsoDate(value: string): boolean {
   return !Number.isNaN(Date.parse(value));
 }
 
-export { buildEventSlug, slugify };
+export function slugify(value: string): string {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}
+
+export function buildEventSlug(event: { id: string; title: string; seoSlug?: string | null }): string {
+  const slugBase = typeof event.seoSlug === "string" && event.seoSlug.trim().length ? event.seoSlug : event.title;
+  const base = slugify(slugBase) || "event";
+  return `${base}--${event.id}`;
+}
 
 export function encodeCursor(cursor: PublicEventsCursor): string {
   return Buffer.from(JSON.stringify(cursor)).toString("base64url");
@@ -249,8 +239,6 @@ export function toPublicEvent(row: RawEventRow): PublicEvent {
     bookingUrl,
     bookingEnabled,
     bookingPageUrl: buildBookingPageUrl(seoSlug, bookingEnabled),
-    eventPageUrl: buildEventLandingUrl({ id: row.id, title, seoSlug }),
-    bookingAvailability: resolveBookingAvailability(bookingUrl, bookingEnabled, bookingType),
     eventImageUrl: buildEventImageUrl(row.event_image_path),
     seoTitle: seoTitle ? normaliseWebsiteTimeText(seoTitle) : null,
     seoDescription: seoDescription ? normaliseWebsiteTimeText(seoDescription) : null,

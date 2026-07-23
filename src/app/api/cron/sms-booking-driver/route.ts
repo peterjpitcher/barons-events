@@ -30,7 +30,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   const { data: events, error: eventsError } = await db
     .from("events")
     .select(`
-      id, title, public_title, event_type, booking_type, venue_id, start_at,
+      id, public_title, event_type, booking_type, venue_id, start_at,
       ticket_price, total_capacity, booking_url, seo_slug, max_tickets_per_booking,
       venue:venues!events_venue_id_fkey!inner ( name )
     `)
@@ -69,10 +69,6 @@ export async function GET(request: Request): Promise<NextResponse> {
     const venue = (row.venue as unknown as Record<string, unknown>) ?? {};
     const campaignEvent: CampaignEvent = {
       id: row.id as string,
-      // public_title first, falling back to the internal title, mirroring
-      // toPublicEvent. That keeps the SMS link byte-identical to the
-      // eventPageUrl the public API hands the brand site.
-      title: (row.public_title as string) || (row.title as string) || "Event",
       publicTitle: (row.public_title as string) || "Event",
       eventType: row.event_type as string,
       bookingType: isBookingFormat(row.booking_type) ? row.booking_type : "paid_seated",

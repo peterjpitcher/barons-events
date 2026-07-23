@@ -166,8 +166,6 @@ type PublicEvent = {
   bookingUrl: string | null; // optional booking link (full URL)
   bookingEnabled: boolean; // true when BaronsHub's public booking page is enabled
   bookingPageUrl: string | null; // public /l/ booking page URL when available
-  eventPageUrl: string; // always present; the BaronsHub event page, which redirects to bookingUrl when one is set
-  bookingAvailability: "external" | "in_app" | "none"; // how booking is handled, as configured
   eventImageUrl: string | null; // public storage URL if an event image exists
   seoTitle: string | null; // optional SEO title (<= 60 chars); in BaronsHub UI we include the event date to disambiguate repeats
   seoDescription: string | null; // optional SEO description (<= 155 chars); in BaronsHub UI we include the event date to disambiguate repeats
@@ -208,8 +206,6 @@ type PublicEvent = {
   "bookingUrl": "https://example.com/book",
   "bookingEnabled": true,
   "bookingPageUrl": "https://l.baronspubs.com/quiz-night-with-elliott-2026-01-06",
-  "eventPageUrl": "https://l.baronspubs.com/quiz-night-with-elliott-2026-01-06",
-  "bookingAvailability": "external",
   "eventImageUrl": "https://<supabase>/storage/v1/object/public/event-images/<event-id>/hero.jpg",
   "seoTitle": "Quiz Night with Elliott | 6 Jan 2026",
   "seoDescription": "Join us for Quiz Night with Elliott on 6 Jan 2026 at The Cricketers. Book now.",
@@ -239,23 +235,10 @@ BaronsHub stores events in `public.events`. The API maps fields like this:
 - `PublicEvent.bookingUrl` → `events.booking_url`
 - `PublicEvent.bookingEnabled` → `events.booking_enabled`
 - `PublicEvent.bookingPageUrl` → computed from `events.seo_slug` when `events.booking_enabled` is true
-- `PublicEvent.eventPageUrl` → computed from `events.seo_slug`, falling back to `<slug>--<id>`; always present
-- `PublicEvent.bookingAvailability` → `external` when `events.booking_url` is set, `in_app` when booking is enabled with a booking type, otherwise `none`
 - `PublicEvent.seoTitle` → `events.seo_title`
 - `PublicEvent.seoDescription` → `events.seo_description`
 - `PublicEvent.seoSlug` → `events.seo_slug`
 - `PublicEvent.slug` → computed by BaronsHub as `<slugBase>--<eventId>` where `slugBase` is `seoSlug` if present, else `title`
-
-### Compatibility note (2026-07-23)
-
-`eventPageUrl` and `bookingAvailability` are additions. No existing field changed name, type,
-nullability or value. In particular `slug`, `seoSlug` and `bookingPageUrl` are untouched for every
-event that already existed.
-
-Every public event now has a working `eventPageUrl`, including events that take no bookings. That
-page shows the event detail with no booking controls, so it is safe to link to unconditionally.
-Use `bookingAvailability` rather than the presence of `bookingPageUrl` to decide whether to label a
-link "Book now" or "More info".
 
 ## Pagination
 `GET /api/v1/events` returns `meta.nextCursor`.

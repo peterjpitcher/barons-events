@@ -15,7 +15,6 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { upsertCustomerForBooking, linkBookingToCustomer } from "@/lib/customers";
 import { verifyTurnstile } from "@/lib/turnstile";
 import { isBookingFormat, isPaidBookingFormat, type BookingFormat } from "@/lib/booking-format";
-import { hasEventFinished } from "@/lib/event-booking-state";
 import { processRefund, transferBooking } from "@/lib/payments/service";
 
 const BOOKING_UPDATE_TOKEN_TTL_MS = 10 * 60 * 1000;
@@ -113,7 +112,6 @@ async function getPublicBookingEligibility(eventId: string): Promise<PublicBooki
         booking_url,
         status,
         deleted_at,
-        end_at,
         total_capacity,
         max_tickets_per_booking,
         booking_notes_enabled,
@@ -140,15 +138,6 @@ async function getPublicBookingEligibility(eventId: string): Promise<PublicBooki
       !venue ||
       venue.is_internal === true
     ) {
-      return { ok: false, reason: "not_found" };
-    }
-
-    // An event that has already finished takes no bookings, whatever its
-    // status or booking_enabled flag says. Checked here rather than only on
-    // the landing page so a replayed form post cannot bypass it. Shares its
-    // definition with the landing page and paid checkout so the three cannot
-    // drift apart.
-    if (hasEventFinished(row.end_at as string | null)) {
       return { ok: false, reason: "not_found" };
     }
 
