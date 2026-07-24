@@ -85,9 +85,8 @@ describe("public-api events helpers", () => {
     expect(event.agePolicy).toBe("18+ only (ID required)");
     expect(event.accessibilityNotes).toBe("Step-free side entrance available on request.");
     expect(event.cancellationWindowHours).toBe(48);
-    expect(event.bookingUrl).toBe("https://example.com/book");
+    expect(event.bookingUrl).toBe("https://l.baronspubs.com/cask-ale-showcase");
     expect(event.bookingEnabled).toBe(true);
-    expect(event.bookingPageUrl).toBe("https://l.baronspubs.com/cask-ale-showcase");
     expect(event.eventImageUrl).toBeNull();
     expect(event.seoSlug).toBe("cask-ale-showcase");
     expect(event.seoTitle).toBe("Cask Ale Showcase at 8pm");
@@ -176,7 +175,7 @@ describe("public-api events helpers", () => {
     expect(event.ticketPrice).toBeNull();
   });
 
-  it("only exposes a public booking page URL for enabled booking pages with an SEO slug", () => {
+  it("always exposes a landing bookingUrl, using the seo_slug when present", () => {
     const event = toPublicEvent({
       id: "aaaaaaa1-0000-4000-8000-000000000001",
       title: "Free event",
@@ -213,8 +212,55 @@ describe("public-api events helpers", () => {
       }
     });
 
+    // Booking is disabled, but the landing URL is still present: the page shows
+    // the event details, so the brand site always has one link to follow.
     expect(event.bookingEnabled).toBe(false);
-    expect(event.bookingPageUrl).toBeNull();
+    expect(event.bookingUrl).toBe("https://l.baronspubs.com/disabled-booking-page");
+  });
+
+  it("falls back to the id-suffixed URL form when there is no seo_slug", () => {
+    const event = toPublicEvent({
+      id: "aaaaaaa1-0000-4000-8000-000000000009",
+      title: "Sunday Roast Session",
+      public_title: null,
+      public_teaser: null,
+      public_description: null,
+      public_highlights: null,
+      booking_type: null,
+      ticket_price: null,
+      check_in_cutoff_minutes: null,
+      age_policy: null,
+      accessibility_notes: null,
+      cancellation_window_hours: null,
+      terms_and_conditions: null,
+      booking_url: null,
+      booking_enabled: false,
+      event_image_path: null,
+      seo_title: null,
+      seo_description: null,
+      seo_slug: null,
+      event_type: "Live Music",
+      status: "approved",
+      start_at: "2025-04-18T18:00:00.000Z",
+      end_at: "2025-04-18T22:00:00.000Z",
+      venue_space: "Main Bar",
+      wet_promo: null,
+      food_promo: null,
+      updated_at: "2025-04-01T12:00:00.000Z",
+      venue: {
+        id: "9f9c5da2-8a6e-4db0-84b7-8ae0b25177e7",
+        name: "Barons Riverside",
+        address: null,
+        capacity: null
+      }
+    });
+
+    // No seo_slug, so the landing URL uses the <slug>--<id> form that
+    // /l/[slug] resolves by id. It matches PublicEvent.slug's base.
+    expect(event.bookingUrl).toBe(
+      "https://l.baronspubs.com/sunday-roast-session--aaaaaaa1-0000-4000-8000-000000000009"
+    );
+    expect(event.slug).toBe("sunday-roast-session--aaaaaaa1-0000-4000-8000-000000000009");
   });
 
   it("rejects non-public events", () => {

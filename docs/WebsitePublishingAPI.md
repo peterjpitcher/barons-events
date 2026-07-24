@@ -163,9 +163,8 @@ type PublicEvent = {
   accessibilityNotes: string | null;
   cancellationWindowHours: number | null;
   termsAndConditions: string | null;
-  bookingUrl: string | null; // optional booking link (full URL)
-  bookingEnabled: boolean; // true when BaronsHub's public booking page is enabled
-  bookingPageUrl: string | null; // public /l/ booking page URL when available
+  bookingUrl: string; // always present; the one link to send a customer to for this event (see notes below)
+  bookingEnabled: boolean; // true when BaronsHub takes the booking in-app; false when the link is external ticketing or details-only
   eventImageUrl: string | null; // public storage URL if an event image exists
   seoTitle: string | null; // optional SEO title (<= 60 chars); in BaronsHub UI we include the event date to disambiguate repeats
   seoDescription: string | null; // optional SEO description (<= 155 chars); in BaronsHub UI we include the event date to disambiguate repeats
@@ -203,9 +202,8 @@ type PublicEvent = {
   "accessibilityNotes": "Step-free access available. Contact venue for support.",
   "cancellationWindowHours": 24,
   "termsAndConditions": "Please arrive on time. Late entry may be refused.",
-  "bookingUrl": "https://example.com/book",
+  "bookingUrl": "https://l.baronspubs.com/quiz-night-with-elliott-2026-01-06",
   "bookingEnabled": true,
-  "bookingPageUrl": "https://l.baronspubs.com/quiz-night-with-elliott-2026-01-06",
   "eventImageUrl": "https://<supabase>/storage/v1/object/public/event-images/<event-id>/hero.jpg",
   "seoTitle": "Quiz Night with Elliott | 6 Jan 2026",
   "seoDescription": "Join us for Quiz Night with Elliott on 6 Jan 2026 at The Cricketers. Book now.",
@@ -232,13 +230,23 @@ BaronsHub stores events in `public.events`. The API maps fields like this:
 - `PublicEvent.title` → `events.public_title` (fallback `events.title`)
 - `PublicEvent.teaser` → `events.public_teaser`
 - `PublicEvent.description` → `events.public_description` only. Internal `events.notes` is intentionally excluded from API selects and serializers.
-- `PublicEvent.bookingUrl` → `events.booking_url`
+- `PublicEvent.bookingUrl` → the BaronsHub landing page for the event, `https://l.baronspubs.com/<seo_slug>` when a slug exists, otherwise the `<slug>--<eventId>` form. Always present. It redirects to `events.booking_url` (the ticket provider) when one is set, shows the in-app booking form when `events.booking_enabled` is true, and otherwise shows the event details.
 - `PublicEvent.bookingEnabled` → `events.booking_enabled`
-- `PublicEvent.bookingPageUrl` → computed from `events.seo_slug` when `events.booking_enabled` is true
 - `PublicEvent.seoTitle` → `events.seo_title`
 - `PublicEvent.seoDescription` → `events.seo_description`
 - `PublicEvent.seoSlug` → `events.seo_slug`
 - `PublicEvent.slug` → computed by BaronsHub as `<slugBase>--<eventId>` where `slugBase` is `seoSlug` if present, else `title`
+
+### Change note (2026-07-24): one booking URL
+
+`bookingUrl` is now a single, always-present link and the field `bookingPageUrl` has been removed.
+
+This is a breaking change. Previously `bookingUrl` was the raw external link (or `null`) and `bookingPageUrl` was a separate `/l/` link that was often `null`. There is now one field to use:
+
+- Use `bookingUrl` as the destination for every event's booking or "more info" link. It is never `null`.
+- `bookingUrl` always points at a BaronsHub page that resolves for every event. It forwards to the ticket provider when there is external ticketing, so you do not need to know or store the provider's own URL.
+- Use `bookingEnabled` only to choose the label: `true` means BaronsHub takes the booking, so "Book now" fits; `false` means the link is external ticketing or a details page, so "More info" or "Tickets" fits.
+- Remove any code that reads `bookingPageUrl` or that falls back from one URL field to the other.
 
 ## Pagination
 `GET /api/v1/events` returns `meta.nextCursor`.

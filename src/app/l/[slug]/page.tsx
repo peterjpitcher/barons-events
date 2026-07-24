@@ -5,6 +5,7 @@ import { formatInLondon, normaliseWebsiteTimeText } from "@/lib/datetime";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getConfirmedTicketCount } from "@/lib/bookings";
 import { isBookingFormat, isPaidBookingFormat } from "@/lib/booking-format";
+import { parseEventIdFromSlug } from "@/lib/event-public-url";
 import { BookingForm } from "./BookingForm";
 
 export const revalidate = 60; // ISR — refresh every minute
@@ -53,25 +54,26 @@ type EventRow = {
   } | null;
 };
 
+const EVENT_LANDING_SELECT =
+  "id, title, public_title, public_teaser, public_description, public_highlights, event_image_path, start_at, seo_slug, booking_enabled, booking_notes_enabled, booking_type, booking_url, ticket_price, total_capacity, max_tickets_per_booking, status, venue:venues!events_venue_id_fkey(id, name, is_internal)";
+
 /**
- * Fetch an event by its seo_slug using the service-role client.
- * Uses admin client so we can see all events (RLS bypassed) and return 404
- * ourselves based on booking_enabled flag.
+ * Fetch a public event by an exact column match using the service-role client.
+ * RLS is bypassed, so public visibility is enforced here: only approved or
+ * completed, non-deleted events at non-internal venues are returned.
  */
-async function getEventBySlug(slug: string): Promise<EventRow | null> {
+async function fetchPublicEvent(column: "seo_slug" | "id", value: string): Promise<EventRow | null> {
   const db = createSupabaseAdminClient();
   const { data, error } = await db
     .from("events")
-    .select(
-      "id, title, public_title, public_teaser, public_description, public_highlights, event_image_path, start_at, seo_slug, booking_enabled, booking_notes_enabled, booking_type, booking_url, ticket_price, total_capacity, max_tickets_per_booking, status, venue:venues!events_venue_id_fkey(id, name, is_internal)"
-    )
-    .eq("seo_slug", slug)
+    .select(EVENT_LANDING_SELECT)
+    .eq(column, value)
     .is("deleted_at", null)
     .in("status", ["approved", "completed"])
     .maybeSingle();
 
   if (error) {
-    console.error("getEventBySlug error:", error);
+    console.error("fetchPublicEvent error:", error);
     return null;
   }
 
@@ -110,6 +112,21 @@ async function getEventBySlug(slug: string): Promise<EventRow | null> {
   };
 }
 
+/**
+ * Resolve an event from a landing-page slug. Public URLs use the bare seo_slug
+ * when the event has one, and fall back to the `<slug>--<id>` form for events
+ * without a slug, so we try the seo_slug match first, then the embedded id.
+ */
+async function getEventBySlug(slug: string): Promise<EventRow | null> {
+  const bySlug = await fetchPublicEvent("seo_slug", slug);
+  if (bySlug) return bySlug;
+
+  const id = parseEventIdFromSlug(slug);
+  if (id) return fetchPublicEvent("id", id);
+
+  return null;
+}
+
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params;
   const event = await getEventBySlug(slug);
@@ -133,25 +150,29 @@ export default async function EventLandingPage({ params }: PageProps) {
   const { slug } = await params;
   const event = await getEventBySlug(slug);
 
-  if (!event || !event.booking_enabled) {
+  if (!event) {
     notFound();
   }
 
-  // External booking link short-circuits the local booking flow.
-  // permanentRedirect issues an HTTP 308 — search engines forward link equity
-  // to the destination, browsers preserve method, and the slug remains a
-  // shareable handle should the URL ever be cleared.
+  // An external booking link short-circuits to the ticket provider.
+  // permanentRedirect issues an HTTP 308: search engines forward link equity to
+  // the destination, browsers preserve method, and the slug stays a shareable
+  // handle should the URL ever be cleared.
   if (event.booking_url) {
     permanentRedirect(event.booking_url);
   }
 
+  // In-app booking shows the form. Otherwise this is a details-only page with no
+  // booking controls, so the public URL still resolves for every event.
+  const canBookInApp = event.booking_enabled;
+
   const bookingFormat = isBookingFormat(event.booking_type) ? event.booking_type : null;
   const isPaidInAppBooking = bookingFormat ? isPaidBookingFormat(bookingFormat) : false;
 
-  // Count confirmed tickets for sold-out detection
-  const confirmedCount = await getConfirmedTicketCount(event.id);
+  // Count confirmed tickets for sold-out detection (only relevant to the form)
+  const confirmedCount = canBookInApp ? await getConfirmedTicketCount(event.id) : 0;
   const isSoldOut =
-    event.total_capacity != null && confirmedCount >= event.total_capacity;
+    canBookInApp && event.total_capacity != null && confirmedCount >= event.total_capacity;
 
   const headersList = await headers();
   const nonce = headersList.get("x-nonce") ?? undefined;
@@ -277,18 +298,26 @@ export default async function EventLandingPage({ params }: PageProps) {
             </div>
           )}
 
-          {/* Booking form */}
+          {/* Booking form, or a details-only notice when no online booking */}
           <div className="mt-auto">
-            <BookingForm
-              eventId={event.id}
-              maxTickets={event.max_tickets_per_booking}
-              isSoldOut={isSoldOut}
-              bookingType={bookingFormat}
-              isPaidBooking={isPaidInAppBooking}
-              ticketPrice={event.ticket_price}
-              bookingNotesEnabled={event.booking_notes_enabled}
-              nonce={nonce}
-            />
+            {canBookInApp ? (
+              <BookingForm
+                eventId={event.id}
+                maxTickets={event.max_tickets_per_booking}
+                isSoldOut={isSoldOut}
+                bookingType={bookingFormat}
+                isPaidBooking={isPaidInAppBooking}
+                ticketPrice={event.ticket_price}
+                bookingNotesEnabled={event.booking_notes_enabled}
+                nonce={nonce}
+              />
+            ) : (
+              <div className="border-t border-[var(--slate-50)] px-6 py-5">
+                <p className="text-sm text-[var(--slate)]">
+                  Online booking isn&rsquo;t available for this event. Please contact the venue for details.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>

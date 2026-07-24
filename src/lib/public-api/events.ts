@@ -3,7 +3,8 @@ import "server-only";
 import { isBookingFormat, isFreeBookingFormat, type BookingFormat } from "@/lib/booking-format";
 import { parseVenueSpaces } from "@/lib/venue-spaces";
 import { normaliseOptionalText, normaliseOptionalInteger } from "@/lib/normalise";
-import { SHORT_LINK_HOST } from "@/lib/short-link-config";
+import { buildEventLandingUrl } from "@/lib/event-public-url";
+import { buildEventSlug } from "@/lib/event-slug";
 import { normaliseWebsiteTimeText } from "@/lib/datetime";
 
 export const PUBLIC_EVENT_STATUSES = ["approved", "completed"] as const;
@@ -35,9 +36,13 @@ export type PublicEvent = {
   accessibilityNotes: string | null;
   cancellationWindowHours: number | null;
   termsAndConditions: string | null;
-  bookingUrl: string | null;
+  /**
+   * The BaronsHub landing page for this event. Always present. It redirects to
+   * the ticket provider when the event is externally ticketed, shows the
+   * booking form for in-app booking, and otherwise shows the event details.
+   */
+  bookingUrl: string;
   bookingEnabled: boolean;
-  bookingPageUrl: string | null;
   eventImageUrl: string | null;
   seoTitle: string | null;
   seoDescription: string | null;
@@ -117,29 +122,13 @@ function buildEventImageUrl(path: unknown): string | null {
   return `${baseUrl}/storage/v1/object/public/event-images/${encodedPath}`;
 }
 
-function buildBookingPageUrl(seoSlug: string | null, bookingEnabled: boolean): string | null {
-  if (!bookingEnabled || !seoSlug) return null;
-  return `https://${SHORT_LINK_HOST}/${encodeURIComponent(seoSlug)}`;
-}
-
 export function isValidIsoDate(value: string): boolean {
   return !Number.isNaN(Date.parse(value));
 }
 
-export function slugify(value: string): string {
-  return value
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-}
-
-export function buildEventSlug(event: { id: string; title: string; seoSlug?: string | null }): string {
-  const slugBase = typeof event.seoSlug === "string" && event.seoSlug.trim().length ? event.seoSlug : event.title;
-  const base = slugify(slugBase) || "event";
-  return `${base}--${event.id}`;
-}
+// Re-exported from the leaf module so existing importers of these helpers from
+// this file keep working. buildEventSlug is also imported above for internal use.
+export { buildEventSlug, slugify } from "@/lib/event-slug";
 
 export function encodeCursor(cursor: PublicEventsCursor): string {
   return Buffer.from(JSON.stringify(cursor)).toString("base64url");
@@ -203,7 +192,6 @@ export function toPublicEvent(row: RawEventRow): PublicEvent {
   const teaser = normaliseOptionalText(row.public_teaser);
   const description = normaliseOptionalText(row.public_description) ?? null;
   const highlights = normaliseHighlights(row.public_highlights);
-  const bookingUrl = normaliseOptionalText(row.booking_url);
   const bookingEnabled = row.booking_enabled === true;
   const bookingType = isBookingFormat(row.booking_type) ? row.booking_type : null;
   const rawTicketPrice = typeof row.ticket_price === "number" && Number.isFinite(row.ticket_price) ? row.ticket_price : null;
@@ -236,9 +224,8 @@ export function toPublicEvent(row: RawEventRow): PublicEvent {
     accessibilityNotes,
     cancellationWindowHours,
     termsAndConditions,
-    bookingUrl,
+    bookingUrl: buildEventLandingUrl({ id: row.id, title, seoSlug }),
     bookingEnabled,
-    bookingPageUrl: buildBookingPageUrl(seoSlug, bookingEnabled),
     eventImageUrl: buildEventImageUrl(row.event_image_path),
     seoTitle: seoTitle ? normaliseWebsiteTimeText(seoTitle) : null,
     seoDescription: seoDescription ? normaliseWebsiteTimeText(seoDescription) : null,
