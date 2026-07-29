@@ -21,7 +21,10 @@ export function DropdownMenu({ trigger, children, align = "right" }: DropdownMen
     function handleEscape(e: KeyboardEvent): void {
       if (e.key === "Escape") setOpen(false);
     }
-    document.addEventListener("mousedown", handleClickOutside);
+    // Use click rather than mousedown. Some menu items open a confirmation
+    // dialog in a portal; closing on mousedown unmounts that dialog before its
+    // confirm button can receive the following click.
+    document.addEventListener("click", handleClickOutside);
     document.addEventListener("keydown", handleEscape);
 
     // Focus first menu item when opened
@@ -29,7 +32,7 @@ export function DropdownMenu({ trigger, children, align = "right" }: DropdownMen
     firstItem?.focus();
 
     return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("click", handleClickOutside);
       document.removeEventListener("keydown", handleEscape);
     };
   }, [open]);
