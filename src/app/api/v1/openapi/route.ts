@@ -373,6 +373,20 @@ const spec = {
                                   type: "string",
                                   enum: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
                                 },
+                                venueHours: {
+                                  type: "object",
+                                  description: "The venue's own trading hours for this day: the answer to 'is the venue open, and until when?'. Use this for any open/closed state or headline opening time. Do NOT derive it from the services array, which also carries food and ancillary services (Kitchen, Carvery, Pizza Shack) that close at different times to the venue itself.",
+                                  properties: {
+                                    serviceTypeId: { type: "string", format: "uuid", nullable: true },
+                                    serviceType: { type: "string", nullable: true, example: "Bar", description: "The service these hours came from, normally 'Bar', or 'Cafe Hours' at a venue with no bar. Null when the venue has neither, in which case it is reported closed." },
+                                    status: { type: "string", enum: ["open", "closed"] },
+                                    isOpen: { type: "boolean" },
+                                    openTime: { type: "string", nullable: true, example: "11:00" },
+                                    closeTime: { type: "string", nullable: true, example: "23:00" },
+                                    isOverride: { type: "boolean" },
+                                    note: { type: "string", nullable: true }
+                                  }
+                                },
                                 services: {
                                   type: "array",
                                   items: {

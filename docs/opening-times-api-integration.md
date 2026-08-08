@@ -83,6 +83,16 @@ GET /api/v1/opening-times?days=30&venueId=3b4e6f82-1a2b-4c3d-8e9f-0a1b2c3d4e5f
         {
           "date": "2026-03-10",
           "dayOfWeek": "Tuesday",
+          "venueHours": {
+            "serviceTypeId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+            "serviceType": "Bar",
+            "status": "open",
+            "isOpen": true,
+            "openTime": "11:00",
+            "closeTime": "23:00",
+            "isOverride": false,
+            "note": null
+          },
           "services": [
             {
               "serviceTypeId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
@@ -109,6 +119,16 @@ GET /api/v1/opening-times?days=30&venueId=3b4e6f82-1a2b-4c3d-8e9f-0a1b2c3d4e5f
         {
           "date": "2026-03-11",
           "dayOfWeek": "Wednesday",
+          "venueHours": {
+            "serviceTypeId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+            "serviceType": "Bar",
+            "status": "closed",
+            "isOpen": false,
+            "openTime": null,
+            "closeTime": null,
+            "isOverride": true,
+            "note": "Closed for private event"
+          },
           "services": [
             {
               "serviceTypeId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
@@ -161,7 +181,25 @@ GET /api/v1/opening-times?days=30&venueId=3b4e6f82-1a2b-4c3d-8e9f-0a1b2c3d4e5f
 |-------|------|-------------|
 | `date` | string (date) | The date in `YYYY-MM-DD` format |
 | `dayOfWeek` | string | Day name: `"Monday"` – `"Sunday"` |
+| `venueHours` | object | **The venue's own trading hours for this day.** Use this for anything that says whether the venue is open. See below |
 | `services` | array | Resolved opening times for service types this venue actually offers |
+
+#### `venues[].days[].venueHours`
+
+**This is the field to use for "we are open today until X" and for any open/closed state.** It is the venue's own trading hours, already worked out for you.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `serviceTypeId` | string (UUID) \| null | The service these hours came from |
+| `serviceType` | string \| null | Normally `"Bar"`, or `"Cafe Hours"` at a venue with no bar. `null` when the venue has neither, in which case it is reported closed |
+| `status` | string | `"open"` or `"closed"` |
+| `isOpen` | boolean | `true` if the venue is open on this day |
+| `openTime` | string \| null | Opening time in `HH:MM` (24-hour), or `null` if closed |
+| `closeTime` | string \| null | Closing time in `HH:MM` (24-hour), or `null` if closed |
+| `isOverride` | boolean | `true` when these hours are a date-specific exception |
+| `note` | string \| null | Optional note explaining the exception |
+
+**Do not work this out yourself from the `services` array.** That array also contains food and ancillary services (Kitchen, Carvery, Pizza Shack, Coffee Trailer) which open and close at different times to the venue itself. A pub whose bar is open until 23:00 may run a Pizza Shack that shuts at 21:30, and picking the wrong entry will tell customers the pub is shut while it is still serving.
 
 #### `venues[].days[].services[]`
 
@@ -177,6 +215,8 @@ GET /api/v1/opening-times?days=30&venueId=3b4e6f82-1a2b-4c3d-8e9f-0a1b2c3d4e5f
 | `note` | string \| null | Optional note explaining the exception (e.g. `"Bank holiday hours"`), only ever set when `isOverride` is `true` |
 
 ### Key Behaviours
+
+**The venue's opening hours are handed to you, not derived.** `venueHours` is the single source for "is this venue open, and until when". The `services` array is for showing individual service times (food served until, carvery between), never for deciding whether the venue itself is open.
 
 **Exceptions are already applied.** If a venue has special hours or a closure on a specific date, those are returned directly — you do not need to check for exceptions separately. The `isOverride` flag tells you when hours differ from the normal weekly pattern, so you can optionally display a visual indicator (e.g. "Special hours today").
 
@@ -303,6 +343,15 @@ function VenueOpeningTimes({ venue }) {
       {venue.days.map((day) => (
         <div key={day.date}>
           <h3>{day.dayOfWeek} <span>{day.date}</span></h3>
+
+          {/* The venue's own hours. Always use venueHours for this, never a
+              service picked out of day.services. */}
+          <p>
+            {day.venueHours.isOpen
+              ? `Open ${day.venueHours.openTime} – ${day.venueHours.closeTime}`
+              : 'Closed'}
+          </p>
+
           {day.services.length === 0 ? (
             <p>No opening times available.</p>
           ) : (
@@ -332,6 +381,12 @@ function VenueOpeningTimes({ venue }) {
 ---
 
 ## FAQ
+
+**Q: Which field tells me whether the venue is open right now?**
+`venues[].days[].venueHours`. Take today's entry and compare the current Europe/London time against `openTime` and `closeTime`. Never compute this from the `services` array: a Pizza Shack or Carvery closing earlier than the bar will make an open venue look shut.
+
+**Q: Why does `venueHours` sometimes have a `serviceType` of "Cafe Hours"?**
+Because that venue has no bar. Heather Farm Café is a café, so its trading hours come from Cafe Hours. Render `venueHours` the same way regardless of which service it came from.
 
 **Q: What timezone are the times in?**
 The `from`/`to` dates are computed in the Europe/London timezone (accounting for BST/GMT). The `openTime`/`closeTime` values are wall-clock times as entered by venue staff — treat them as local (Europe/London) times.

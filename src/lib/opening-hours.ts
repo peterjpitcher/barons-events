@@ -450,9 +450,11 @@ export async function deleteOpeningOverride(id: string): Promise<void> {
 // can be imported by client components without pulling in next/headers.
 export {
   resolveOpeningTimes,
+  VENUE_HEADLINE_SERVICE_PRIORITY,
   type ResolvedServiceHours,
   type ResolvedVenueService,
   type ResolvedDay,
+  type ResolvedDayVenueHours,
   type ResolvedVenueHours,
   type ResolvedOpeningTimes,
 } from "@/lib/opening-hours-resolver";

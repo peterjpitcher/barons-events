@@ -17,6 +17,18 @@ const ST_KITCHEN: ServiceTypeRow = {
   display_order: 1,
   created_at: "2026-01-01T00:00:00Z",
 };
+const ST_CAFE: ServiceTypeRow = {
+  id: "st-cafe",
+  name: "Cafe Hours",
+  display_order: 4,
+  created_at: "2026-01-01T00:00:00Z",
+};
+const ST_PIZZA: ServiceTypeRow = {
+  id: "st-pizza",
+  name: "Pizza Shack",
+  display_order: 6,
+  created_at: "2026-01-01T00:00:00Z",
+};
 
 const VENUE_1 = { id: "v1", name: "The Fox" };
 const VENUE_2 = { id: "v2", name: "The Swan" };
@@ -456,5 +468,145 @@ describe("resolveOpeningTimes", () => {
     expect(service.isOpen).toBe(false);
     expect(service.isOverride).toBe(true);
     expect(service.note).toBe("Deep clean");
+  });
+});
+
+// ─── venueHours: the venue's headline trading hours ──────────────────────────
+// Consumers asking "is the pub open, and until when?" must read `venueHours`
+// rather than picking a service out of the list themselves. Regression cover
+// for the 2026-08 brand-site defect where a venue's Pizza Shack closing time
+// was rendered as the pub's closing time.
+
+describe("resolveOpeningTimes: venueHours", () => {
+  it("uses the Bar and ignores a later-listed service that closes earlier", () => {
+    const result = resolveOpeningTimes({
+      serviceTypes: [ST_BAR, ST_KITCHEN, ST_PIZZA],
+      weeklyHours: [
+        makeWeeklyRow("v1", "st-bar", 0, "09:00", "23:00"),
+        makeWeeklyRow("v1", "st-kitchen", 0, "09:00", "22:00"),
+        makeWeeklyRow("v1", "st-pizza", 0, "12:00", "21:30"),
+      ],
+      overrides: [],
+      venues: [VENUE_1],
+      from: FROM,
+      days: 1,
+    });
+
+    const venueHours = result.venues[0].days[0].venueHours;
+    expect(venueHours.serviceType).toBe("Bar");
+    expect(venueHours.isOpen).toBe(true);
+    expect(venueHours.openTime).toBe("09:00");
+    expect(venueHours.closeTime).toBe("23:00");
+  });
+
+  it("falls back to Cafe Hours for a venue with no Bar", () => {
+    const result = resolveOpeningTimes({
+      serviceTypes: [ST_BAR, ST_KITCHEN, ST_CAFE],
+      weeklyHours: [
+        makeWeeklyRow("v1", "st-kitchen", 0, "09:00", "16:30"),
+        makeWeeklyRow("v1", "st-cafe", 0, "09:00", "17:00"),
+      ],
+      overrides: [],
+      venues: [VENUE_1],
+      from: FROM,
+      days: 1,
+    });
+
+    const venueHours = result.venues[0].days[0].venueHours;
+    expect(venueHours.serviceType).toBe("Cafe Hours");
+    expect(venueHours.closeTime).toBe("17:00");
+  });
+
+  it("never uses the Kitchen as the venue's headline hours", () => {
+    const result = resolveOpeningTimes({
+      serviceTypes: [ST_BAR, ST_KITCHEN],
+      weeklyHours: [
+        makeWeeklyRow("v1", "st-bar", 0, "09:00", "23:00"),
+        makeWeeklyRow("v1", "st-kitchen", 0, "09:00", "22:00"),
+      ],
+      overrides: [],
+      venues: [VENUE_1],
+      from: FROM,
+      days: 1,
+    });
+
+    expect(result.venues[0].days[0].venueHours.serviceType).toBe("Bar");
+    expect(result.venues[0].days[0].venueHours.closeTime).toBe("23:00");
+  });
+
+  it("reports closed when the headline service is closed that day", () => {
+    const result = resolveOpeningTimes({
+      serviceTypes: [ST_BAR, ST_PIZZA],
+      weeklyHours: [
+        makeWeeklyRow("v1", "st-bar", 0, null, null, "closed"),
+        makeWeeklyRow("v1", "st-bar", 1, "09:00", "23:00"),
+        // Pizza Shack is open on the closed day, and must not make the pub look open.
+        makeWeeklyRow("v1", "st-pizza", 0, "12:00", "21:30"),
+      ],
+      overrides: [],
+      venues: [VENUE_1],
+      from: FROM,
+      days: 1,
+    });
+
+    const venueHours = result.venues[0].days[0].venueHours;
+    expect(venueHours.serviceType).toBe("Bar");
+    expect(venueHours.status).toBe("closed");
+    expect(venueHours.isOpen).toBe(false);
+    expect(venueHours.openTime).toBeNull();
+    expect(venueHours.closeTime).toBeNull();
+  });
+
+  it("reports a null serviceType and closed when the venue has no headline service", () => {
+    const result = resolveOpeningTimes({
+      serviceTypes: [ST_BAR, ST_KITCHEN],
+      weeklyHours: [makeWeeklyRow("v1", "st-kitchen", 0, "09:00", "22:00")],
+      overrides: [],
+      venues: [VENUE_1],
+      from: FROM,
+      days: 1,
+    });
+
+    const venueHours = result.venues[0].days[0].venueHours;
+    expect(venueHours.serviceType).toBeNull();
+    expect(venueHours.isOpen).toBe(false);
+    expect(venueHours.closeTime).toBeNull();
+  });
+
+  it("carries the override flag and note through to venueHours", () => {
+    const result = resolveOpeningTimes({
+      serviceTypes: [ST_BAR],
+      weeklyHours: [makeWeeklyRow("v1", "st-bar", 0, "09:00", "23:00")],
+      overrides: [
+        makeOverride("2026-03-09", "st-bar", ["v1"], "09:00", "18:00", "open", "Bank holiday hours"),
+      ],
+      venues: [VENUE_1],
+      from: FROM,
+      days: 1,
+    });
+
+    const venueHours = result.venues[0].days[0].venueHours;
+    expect(venueHours.closeTime).toBe("18:00");
+    expect(venueHours.isOverride).toBe(true);
+    expect(venueHours.note).toBe("Bank holiday hours");
+  });
+
+  it("reports closed when the headline service is unavailable that day", () => {
+    const result = resolveOpeningTimes({
+      serviceTypes: [ST_BAR, ST_PIZZA],
+      weeklyHours: [
+        makeWeeklyRow("v1", "st-bar", 0, null, null, "unavailable"),
+        makeWeeklyRow("v1", "st-bar", 1, "09:00", "23:00"),
+        makeWeeklyRow("v1", "st-pizza", 0, "12:00", "21:30"),
+      ],
+      overrides: [],
+      venues: [VENUE_1],
+      from: FROM,
+      days: 1,
+    });
+
+    const venueHours = result.venues[0].days[0].venueHours;
+    expect(venueHours.serviceType).toBe("Bar");
+    expect(venueHours.isOpen).toBe(false);
   });
 });

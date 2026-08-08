@@ -24,9 +24,30 @@ export type ResolvedVenueService = {
   hasService: boolean;
 };
 
+/**
+ * The venue's own trading hours for a day: the answer to "is the pub open, and
+ * until when?". Consumers must read this rather than picking a service out of
+ * `services` themselves, because the list also carries food and ancillary
+ * services (Kitchen, Carvery, Pizza Shack) that do not govern whether the venue
+ * is open.
+ */
+export type ResolvedDayVenueHours = {
+  /** The service these hours came from, or null when the venue has none. */
+  serviceTypeId: string | null;
+  serviceType: string | null;
+  status: "open" | "closed";
+  isOpen: boolean;
+  openTime: string | null;
+  closeTime: string | null;
+  isOverride: boolean;
+  note: string | null;
+};
+
 export type ResolvedDay = {
   date: string;       // YYYY-MM-DD
   dayOfWeek: string;  // "Monday" … "Sunday"
+  /** The venue's headline trading hours. See ResolvedDayVenueHours. */
+  venueHours: ResolvedDayVenueHours;
   services: ResolvedServiceHours[];
 };
 
@@ -72,6 +93,36 @@ function normaliseTime(value: string | null): string | null {
 
 function serviceKey(venueId: string, serviceTypeId: string): string {
   return `${venueId}|${serviceTypeId}`;
+}
+
+/**
+ * Service types that can stand as a venue's headline trading hours, best first.
+ * "Bar" covers the pubs; "Cafe Hours" covers Heather Farm Cafe, which has no
+ * bar. Food and ancillary services (Kitchen, Carvery, Pizza Shack) are never
+ * eligible: they close at different times to the venue itself.
+ *
+ * This is a name-matched list because service types are configured centrally
+ * and carry no "this is the venue's trading hours" flag. If that flag is ever
+ * added to venue_service_types, resolve from it and retire this constant.
+ */
+export const VENUE_HEADLINE_SERVICE_PRIORITY = ["Bar", "Cafe Hours"];
+
+/**
+ * Picks the service type that represents this venue's own trading hours, from
+ * those the venue actually offers. Returns null when it offers none of them.
+ */
+function findHeadlineService(
+  venueId: string,
+  serviceTypes: ServiceTypeRow[],
+  offeredServices: Set<string>
+): ServiceTypeRow | null {
+  for (const name of VENUE_HEADLINE_SERVICE_PRIORITY) {
+    const serviceType = serviceTypes.find((candidate) => candidate.name === name);
+    if (serviceType && offeredServices.has(serviceKey(venueId, serviceType.id))) {
+      return serviceType;
+    }
+  }
+  return null;
 }
 
 /**
@@ -156,11 +207,20 @@ export function resolveOpeningTimes(params: {
   const to = dates[dates.length - 1] ?? from;
 
   const resolvedVenues: ResolvedVenueHours[] = venues.map((venue) => {
+    const offers = (serviceTypeId: string) =>
+      venueServiceSet.has(serviceKey(venue.id, serviceTypeId)) &&
+      servicesWithOpeningTimes.has(serviceKey(venue.id, serviceTypeId));
+
     const venueServiceAvailability = serviceTypes.map((st) => ({
       serviceTypeId: st.id,
       serviceType: st.name,
-      hasService: venueServiceSet.has(serviceKey(venue.id, st.id)) && servicesWithOpeningTimes.has(serviceKey(venue.id, st.id)),
+      hasService: offers(st.id),
     }));
+
+    const offeredServices = new Set(
+      serviceTypes.filter((st) => offers(st.id)).map((st) => serviceKey(venue.id, st.id))
+    );
+    const headlineService = findHeadlineService(venue.id, serviceTypes, offeredServices);
 
     const resolvedDays: ResolvedDay[] = dates.map((date) => {
       const jsUtcDay = new Date(date + "T00:00:00Z").getUTCDay();
@@ -226,7 +286,26 @@ export function resolveOpeningTimes(params: {
         }
       }
 
-      return { date, dayOfWeek: DB_DAY_NAMES[dbDay], services };
+      // The venue's headline hours mirror its trading service for this day.
+      // When that service is absent from `services` (marked unavailable) the
+      // honest answer for "is the pub open?" is no, so report it closed rather
+      // than falling through to another service.
+      const headlineEntry = headlineService
+        ? services.find((entry) => entry.serviceTypeId === headlineService.id)
+        : undefined;
+
+      const venueHours: ResolvedDayVenueHours = {
+        serviceTypeId: headlineService?.id ?? null,
+        serviceType: headlineService?.name ?? null,
+        status: headlineEntry?.status ?? "closed",
+        isOpen: headlineEntry?.isOpen ?? false,
+        openTime: headlineEntry?.openTime ?? null,
+        closeTime: headlineEntry?.closeTime ?? null,
+        isOverride: headlineEntry?.isOverride ?? false,
+        note: headlineEntry?.note ?? null,
+      };
+
+      return { date, dayOfWeek: DB_DAY_NAMES[dbDay], venueHours, services };
     });
 
     return {
