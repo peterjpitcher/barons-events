@@ -18,7 +18,13 @@ import {
 } from "@/lib/events/save-rpc";
 import { createBookingAtomic, cancelBooking, generateUniqueEventSlug } from "@/lib/bookings";
 import { cleanupOrphanArtists, parseArtistNames, syncEventArtists } from "@/lib/artists";
-import { eventDraftSchema, eventFormSchema, bookingUrlSchema } from "@/lib/validation";
+import {
+  eventDraftSchema,
+  eventFormSchema,
+  bookingUrlSchema,
+  ctaLabelSchema,
+  externalHttpUrlSchema
+} from "@/lib/validation";
 import { getFieldErrors } from "@/lib/form-errors";
 import type { ActionResult, EventStatus } from "@/lib/types";
 import type { Database } from "@/lib/supabase/database.types";
@@ -3411,15 +3417,37 @@ export async function revertToDraftAction(
 }
 
 
-const bookingSettingsSchema = z.object({
-  eventId: z.string().uuid("Invalid event ID"),
-  bookingEnabled: z.boolean(),
-  totalCapacity: z.number().int().positive().nullable(),
-  maxTicketsPerBooking: z.number().int().min(1).max(50),
-  bookingNotesEnabled: z.boolean().optional(),
-  smsPromoEnabled: z.boolean().optional(),
-  bookingUrl: bookingUrlSchema,
-});
+const bookingSettingsSchema = z
+  .object({
+    eventId: z.string().uuid("Invalid event ID"),
+    bookingEnabled: z.boolean(),
+    totalCapacity: z.number().int().positive().nullable(),
+    maxTicketsPerBooking: z.number().int().min(1).max(50),
+    bookingNotesEnabled: z.boolean().optional(),
+    smsPromoEnabled: z.boolean().optional(),
+    bookingUrl: bookingUrlSchema,
+    bookingCtaLabel: ctaLabelSchema,
+    secondaryCtaLabel: ctaLabelSchema,
+    secondaryCtaUrl: externalHttpUrlSchema,
+  })
+  .superRefine((values, ctx) => {
+    // The extra button needs both halves to render, and the matching database
+    // constraint would otherwise reject the save with an opaque error.
+    if (values.secondaryCtaUrl && !values.secondaryCtaLabel) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Add a label for the extra button.",
+        path: ["secondaryCtaLabel"],
+      });
+    }
+    if (values.secondaryCtaLabel && !values.secondaryCtaUrl) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Add a link for the extra button.",
+        path: ["secondaryCtaUrl"],
+      });
+    }
+  });
 
 export type UpdateBookingSettingsInput = z.infer<typeof bookingSettingsSchema>;
 export type UpdateBookingSettingsResult = ActionResult & {
@@ -3441,7 +3469,10 @@ export async function updateBookingSettingsAction(
 
   const parsed = bookingSettingsSchema.safeParse(input);
   if (!parsed.success) {
-    return { success: false, message: "Invalid booking settings." };
+    // Surface the first real message. The new label and link rules are things
+    // an administrator can fix, so "Invalid booking settings." is not enough.
+    const firstIssue = parsed.error.issues[0]?.message;
+    return { success: false, message: firstIssue ?? "Invalid booking settings." };
   }
 
   const {
@@ -3451,7 +3482,10 @@ export async function updateBookingSettingsAction(
     maxTicketsPerBooking,
     bookingNotesEnabled,
     smsPromoEnabled,
-    bookingUrl
+    bookingUrl,
+    bookingCtaLabel,
+    secondaryCtaLabel,
+    secondaryCtaUrl
   } = parsed.data;
 
   // This action uses the admin client below, so the server-side guard is
@@ -3521,6 +3555,9 @@ export async function updateBookingSettingsAction(
     booking_notes_enabled: nextBookingNotesEnabled,
     seo_slug: seoSlug,
     booking_url: nextBookingUrl,
+    booking_cta_label: bookingCtaLabel ?? null,
+    secondary_cta_label: secondaryCtaLabel ?? null,
+    secondary_cta_url: secondaryCtaUrl ?? null,
   };
   if (user.role === "administrator" && smsPromoEnabled !== undefined) {
     updatePayload.sms_promo_enabled = smsPromoEnabled;
@@ -3548,7 +3585,10 @@ export async function updateBookingSettingsAction(
         maxTicketsPerBooking,
         bookingNotesEnabled: nextBookingNotesEnabled,
         bookingUrl: nextBookingUrl,
-        bookingUrlTrackingStatus: trackedBookingUrl.status
+        bookingUrlTrackingStatus: trackedBookingUrl.status,
+        bookingCtaLabel: bookingCtaLabel ?? null,
+        secondaryCtaLabel: secondaryCtaLabel ?? null,
+        secondaryCtaUrl: secondaryCtaUrl ?? null
       }
     });
   } catch (auditError) {

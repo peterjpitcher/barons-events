@@ -37,9 +37,10 @@ export type PublicEvent = {
   cancellationWindowHours: number | null;
   termsAndConditions: string | null;
   /**
-   * The BaronsHub landing page for this event. Always present. It redirects to
-   * the ticket provider when the event is externally ticketed, shows the
-   * booking form for in-app booking, and otherwise shows the event details.
+   * The BaronsHub landing page for this event. Always present. It shows the
+   * event details, with a button through to the ticket provider when the event
+   * is externally ticketed, the booking form for in-app booking, and no call to
+   * action otherwise.
    */
   bookingUrl: string;
   bookingEnabled: boolean;

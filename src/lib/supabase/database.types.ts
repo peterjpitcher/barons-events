@@ -1093,6 +1093,7 @@ export type Database = {
           accessibility_notes: string | null
           age_policy: string | null
           assignee_id: string | null
+          booking_cta_label: string | null
           booking_enabled: boolean
           booking_notes_enabled: boolean
           booking_type: string | null
@@ -1120,6 +1121,8 @@ export type Database = {
           public_highlights: string[] | null
           public_teaser: string | null
           public_title: string | null
+          secondary_cta_label: string | null
+          secondary_cta_url: string | null
           seo_description: string | null
           seo_slug: string | null
           seo_title: string | null
@@ -1140,6 +1143,7 @@ export type Database = {
           accessibility_notes?: string | null
           age_policy?: string | null
           assignee_id?: string | null
+          booking_cta_label?: string | null
           booking_enabled?: boolean
           booking_notes_enabled?: boolean
           booking_type?: string | null
@@ -1167,6 +1171,8 @@ export type Database = {
           public_highlights?: string[] | null
           public_teaser?: string | null
           public_title?: string | null
+          secondary_cta_label?: string | null
+          secondary_cta_url?: string | null
           seo_description?: string | null
           seo_slug?: string | null
           seo_title?: string | null
@@ -1187,6 +1193,7 @@ export type Database = {
           accessibility_notes?: string | null
           age_policy?: string | null
           assignee_id?: string | null
+          booking_cta_label?: string | null
           booking_enabled?: boolean
           booking_notes_enabled?: boolean
           booking_type?: string | null
@@ -1214,6 +1221,8 @@ export type Database = {
           public_highlights?: string[] | null
           public_teaser?: string | null
           public_title?: string | null
+          secondary_cta_label?: string | null
+          secondary_cta_url?: string | null
           seo_description?: string | null
           seo_slug?: string | null
           seo_title?: string | null

@@ -230,7 +230,7 @@ BaronsHub stores events in `public.events`. The API maps fields like this:
 - `PublicEvent.title` → `events.public_title` (fallback `events.title`)
 - `PublicEvent.teaser` → `events.public_teaser`
 - `PublicEvent.description` → `events.public_description` only. Internal `events.notes` is intentionally excluded from API selects and serializers.
-- `PublicEvent.bookingUrl` → the BaronsHub landing page for the event, `https://l.baronspubs.com/<seo_slug>` when a slug exists, otherwise the `<slug>--<eventId>` form. Always present. It redirects to `events.booking_url` (the ticket provider) when one is set, shows the in-app booking form when `events.booking_enabled` is true, and otherwise shows the event details.
+- `PublicEvent.bookingUrl` → the BaronsHub landing page for the event, `https://l.baronspubs.com/<seo_slug>` when a slug exists, otherwise the `<slug>--<eventId>` form. Always present. The page always renders the event details, and its call to action is a button to `events.booking_url` (the ticket provider) when one is set, the in-app booking form when `events.booking_enabled` is true, and otherwise nothing.
 - `PublicEvent.bookingEnabled` → `events.booking_enabled`
 - `PublicEvent.seoTitle` → `events.seo_title`
 - `PublicEvent.seoDescription` → `events.seo_description`
@@ -244,9 +244,13 @@ BaronsHub stores events in `public.events`. The API maps fields like this:
 This is a breaking change. Previously `bookingUrl` was the raw external link (or `null`) and `bookingPageUrl` was a separate `/l/` link that was often `null`. There is now one field to use:
 
 - Use `bookingUrl` as the destination for every event's booking or "more info" link. It is never `null`.
-- `bookingUrl` always points at a BaronsHub page that resolves for every event. It forwards to the ticket provider when there is external ticketing, so you do not need to know or store the provider's own URL.
+- `bookingUrl` always points at a BaronsHub page that resolves for every event. When there is external ticketing, that page carries a button through to the provider, so you do not need to know or store the provider's own URL.
 - Use `bookingEnabled` only to choose the label: `true` means BaronsHub takes the booking, so "Book now" fits; `false` means the link is external ticketing or a details page, so "More info" or "Tickets" fits.
 - Remove any code that reads `bookingPageUrl` or that falls back from one URL field to the other.
+
+### Change note (2026-08-13): externally ticketed events no longer redirect
+
+Nothing changes in the API contract. Previously `bookingUrl` answered with a 308 redirect to the ticket provider whenever `events.booking_url` was set, so the customer never saw the BaronsHub event page. It now always renders that page, with the provider link as the main button. Deep links you already store keep working.
 
 ## Pagination
 `GET /api/v1/events` returns `meta.nextCursor`.

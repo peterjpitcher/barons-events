@@ -546,6 +546,9 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
             seoSlug={event.seo_slug ?? null}
             smsPromoEnabled={Boolean(event.sms_promo_enabled)}
             bookingUrl={event.booking_url ?? null}
+            bookingCtaLabel={event.booking_cta_label ?? null}
+            secondaryCtaLabel={event.secondary_cta_label ?? null}
+            secondaryCtaUrl={event.secondary_cta_url ?? null}
             bookingType={event.booking_type ?? null}
             userRole={user.role}
           />

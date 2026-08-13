@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { BOOKING_FORMATS, isPaidBookingFormat } from "@/lib/booking-format";
+import { CTA_LABEL_MAX_LENGTH } from "@/lib/event-cta";
 import { normaliseWebsiteTimeText } from "@/lib/datetime";
 import { daysBetween, parseDateOnly } from "@/lib/planning/utils";
 
@@ -96,6 +97,39 @@ export const bookingUrlSchema = z.preprocess(
     return trimmed.length ? trimmed : undefined;
   },
   z.string().url("Use a full URL (including https://)").optional()
+);
+
+/**
+ * Landing-page button text. Blank clears it and falls back to the label derived
+ * from the booking format.
+ */
+export const ctaLabelSchema = z.preprocess(
+  (value) => {
+    if (typeof value !== "string") return value;
+    const trimmed = value.trim();
+    return trimmed.length ? trimmed : undefined;
+  },
+  z
+    .string()
+    .max(CTA_LABEL_MAX_LENGTH, `Keep button labels to ${CTA_LABEL_MAX_LENGTH} characters or fewer`)
+    .optional()
+);
+
+/**
+ * Stricter than bookingUrlSchema: z.string().url() accepts javascript: and
+ * data:, which must never reach a customer-facing href.
+ */
+export const externalHttpUrlSchema = z.preprocess(
+  (value) => {
+    if (typeof value !== "string") return value;
+    const trimmed = value.trim();
+    return trimmed.length ? trimmed : undefined;
+  },
+  z
+    .string()
+    .url("Use a full URL (including https://)")
+    .refine((value) => /^https?:\/\//i.test(value), "Links must start with http:// or https://")
+    .optional()
 );
 
 const seoSlugSchema = z.preprocess(
