@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildTrackedBookingDestination,
+  buildTrackedEventDestination,
   parseExistingShortLinkCode
 } from "@/lib/event-booking-links";
 
@@ -31,5 +32,29 @@ describe("event booking link tracking helpers", () => {
     expect(url.searchParams.get("utm_medium")).toBe("booking_link");
     expect(url.searchParams.get("utm_campaign")).toBe("the_congakeyz_free_live_music_meade_hall");
     expect(url.searchParams.get("utm_content")).toBe("event_booking");
+  });
+
+  it("tags the extra button link separately so the two buttons stay tellable apart", () => {
+    const args = [
+      "https://baronspubs.com/menu",
+      "Wines of Puglia",
+      "9936c9f5-7f5d-4f02-b651-d72e15c36343"
+    ] as const;
+    const booking = new URL(buildTrackedEventDestination(...args, "booking"));
+    const extra = new URL(buildTrackedEventDestination(...args, "extra_cta"));
+
+    expect(extra.searchParams.get("utm_source")).toBe("baronshub");
+    expect(extra.searchParams.get("utm_medium")).toBe("event_cta");
+    expect(extra.searchParams.get("utm_content")).toBe("event_extra_button");
+    expect(extra.searchParams.get("utm_campaign")).toBe("wines_of_puglia");
+
+    // Different destinations, so the two buttons never collapse onto one short
+    // code even when they point at the same page.
+    expect(extra.toString()).not.toBe(booking.toString());
+  });
+
+  it("defaults to the booking variant", () => {
+    const args = ["https://tickets.example.com/buy", "Quiz Night", "63ba0f61"] as const;
+    expect(buildTrackedEventDestination(...args)).toBe(buildTrackedBookingDestination(...args));
   });
 });

@@ -128,6 +128,9 @@ export function BookingSettingsCard({
         if ("bookingUrl" in result) {
           setBookingUrl(result.bookingUrl ?? "");
         }
+        if ("secondaryCtaUrl" in result) {
+          setSecondaryCtaUrl(result.secondaryCtaUrl ?? "");
+        }
         if (result.seoSlug && !currentSlug) {
           setCurrentSlug(result.seoSlug);
         }
@@ -306,7 +309,10 @@ export function BookingSettingsCard({
               />
             </div>
             <div className="space-y-1">
-              <FieldLabel htmlFor="secondaryCtaUrl" help="Where the extra button sends guests.">
+              <FieldLabel
+                htmlFor="secondaryCtaUrl"
+                help="Where the extra button sends guests. Shortened automatically so clicks are counted in Links & QR Codes."
+              >
                 Button link
               </FieldLabel>
               <Input
