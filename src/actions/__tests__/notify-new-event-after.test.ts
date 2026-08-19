@@ -253,7 +253,7 @@ describe("submitEventForReviewAction schedules notifyNewEvent via after()", () =
       eventId: EVENT_ID,
       actorUserId: USER_A,
       transition: "admin_publish",
-      isFirstPublish: true,
+      operationId: expect.any(String),
     });
   });
 
@@ -283,11 +283,11 @@ describe("submitEventForReviewAction schedules notifyNewEvent via after()", () =
       eventId: EVENT_ID,
       actorUserId: USER_A,
       transition: "admin_publish",
-      isFirstPublish: true,
+      operationId: expect.any(String),
     });
   });
 
-  it("reports isFirstPublish false when the event had already left draft", async () => {
+  it("passes the save operation id through, so a republish is not a provider replay", async () => {
     setupSuccessfulSubmitMocks("needs_revisions");
     getUserMock.mockResolvedValue({ id: USER_A, role: "administrator", venueId: null });
     loadCtxMock.mockResolvedValue({
@@ -306,11 +306,16 @@ describe("submitEventForReviewAction schedules notifyNewEvent via after()", () =
     expect(result.success).toBe(true);
     await flushAfterCallbacks();
 
-    expect(notifyNewEvent).toHaveBeenCalledWith({
+    const call = (notifyNewEvent as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(call).toMatchObject({
       eventId: EVENT_ID,
       actorUserId: USER_A,
       transition: "admin_publish",
-      isFirstPublish: false,
     });
+    // The operation id is the per-occurrence half of the provider idempotency
+    // key. Without it, a revert and republish would build an identical key to
+    // the first publish and Resend could replay instead of sending.
+    expect(call.operationId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+    expect(call).not.toHaveProperty("isFirstPublish");
   });
 });

@@ -1,246 +1,124 @@
 import { describe, it, expect } from "vitest";
-import { planNewEventNotifications } from "../plan-new-event";
-import type { NotificationPerson } from "../plan-new-event";
+import { planNewEventNotifications, type NotificationPerson } from "../plan-new-event";
 
-function person(overrides: Partial<NotificationPerson> & { userId: string; email: string }): NotificationPerson {
-  return {
-    fullName: null,
-    venueId: null,
-    isCentralEventsLead: false,
-    isAdministrator: false,
-    ...overrides,
-  };
-}
+const CREATOR: NotificationPerson = {
+  userId: "u-creator",
+  email: "creator@barons.test",
+  fullName: "Casey Creator"
+};
 
-const alice = person({ userId: "u-alice", email: "Alice@barons.test", fullName: "Alice" });
-const bob = person({ userId: "u-bob", email: "bob@barons.test", fullName: "Bob" });
-const carol = person({ userId: "u-carol", email: "carol@barons.test", fullName: "Carol", venueId: "v-2" });
+const ASSIGNEE: NotificationPerson = {
+  userId: "u-assignee",
+  email: "assignee@barons.test",
+  fullName: "Ari Assignee"
+};
 
 describe("planNewEventNotifications", () => {
-  it("gives the acting admin the announcement, not the decision email", () => {
+  it("tells the creator their event was approved when an administrator publishes", () => {
     const plan = planNewEventNotifications({
       transition: "admin_publish",
-      isFirstPublish: true,
-      actorUserId: "u-alice",
-      eventVenueIds: ["v-1"],
-      creator: alice,
-      assignee: null,
-      activeUsers: [alice, bob],
+      actorUserId: "u-admin",
+      creator: CREATOR,
+      assignee: ASSIGNEE
     });
 
-    const forAlice = plan.messages.filter((m) => m.emailKey === "alice@barons.test");
-    expect(forAlice).toHaveLength(1);
-    expect(forAlice[0].kind).toBe("announcement");
-  });
-
-  it("gives a creator who is not the actor the decision email, not the announcement", () => {
-    const plan = planNewEventNotifications({
-      transition: "admin_publish",
-      isFirstPublish: true,
-      actorUserId: "u-bob",
-      eventVenueIds: ["v-1"],
-      creator: alice,
-      assignee: null,
-      activeUsers: [alice, bob],
+    expect(plan.message).toEqual({
+      kind: "review_decision",
+      sendTo: "creator@barons.test",
+      userId: "u-creator",
+      fullName: "Casey Creator"
     });
-
-    const forAlice = plan.messages.filter((m) => m.emailKey === "alice@barons.test");
-    expect(forAlice).toHaveLength(1);
-    expect(forAlice[0].kind).toBe("review_decision");
+    expect(plan.suppressed).toEqual([]);
   });
 
-  it("gives the assignee the review email, not the announcement", () => {
+  it("tells the assignee when a manager submits for review", () => {
     const plan = planNewEventNotifications({
       transition: "manager_submit",
-      isFirstPublish: true,
-      actorUserId: "u-carol",
-      eventVenueIds: ["v-1"],
-      creator: carol,
-      assignee: bob,
-      activeUsers: [alice, bob, carol],
+      actorUserId: "u-creator",
+      creator: CREATOR,
+      assignee: ASSIGNEE
     });
 
-    const forBob = plan.messages.filter((m) => m.emailKey === "bob@barons.test");
-    expect(forBob).toHaveLength(1);
-    expect(forBob[0].kind).toBe("submitted_for_review");
+    expect(plan.message).toMatchObject({
+      kind: "submitted_for_review",
+      sendTo: "assignee@barons.test",
+      userId: "u-assignee"
+    });
   });
 
-  it("includes every active user regardless of venue_id", () => {
+  it("says nothing when the publisher is the creator", () => {
     const plan = planNewEventNotifications({
       transition: "admin_publish",
-      isFirstPublish: true,
-      actorUserId: "u-bob",
-      eventVenueIds: ["v-1"],
-      creator: null,
-      assignee: null,
-      activeUsers: [alice, bob, carol],
+      actorUserId: "u-creator",
+      creator: CREATOR,
+      assignee: null
     });
 
-    expect(plan.messages.map((m) => m.emailKey).sort()).toEqual([
-      "alice@barons.test",
-      "bob@barons.test",
-      "carol@barons.test",
+    expect(plan.message).toBeNull();
+    expect(plan.suppressed).toEqual([
+      { userId: "u-creator", kind: "review_decision", reason: "self_notification" }
     ]);
   });
 
-  it("never plans two messages for one inbox", () => {
-    const twin = person({ userId: "u-twin", email: "ALICE@barons.test  " });
-    const plan = planNewEventNotifications({
-      transition: "admin_publish",
-      isFirstPublish: true,
-      actorUserId: "u-bob",
-      eventVenueIds: ["v-1"],
-      creator: alice,
-      assignee: null,
-      activeUsers: [alice, bob, twin],
-    });
-
-    const keys = plan.messages.map((m) => m.emailKey);
-    expect(new Set(keys).size).toBe(keys.length);
-  });
-
-  it("plans no announcement when this is not the first publish", () => {
-    const plan = planNewEventNotifications({
-      transition: "admin_publish",
-      isFirstPublish: false,
-      actorUserId: "u-bob",
-      eventVenueIds: ["v-1"],
-      creator: alice,
-      assignee: null,
-      activeUsers: [alice, bob],
-    });
-
-    expect(plan.requiresClaim).toBe(false);
-    expect(plan.messages.every((m) => m.kind !== "announcement")).toBe(true);
-    expect(plan.messages).toHaveLength(1);
-  });
-
-  it("drops people with a blank email", () => {
-    const blank = person({ userId: "u-blank", email: "   " });
-    const plan = planNewEventNotifications({
-      transition: "admin_publish",
-      isFirstPublish: true,
-      actorUserId: "u-bob",
-      eventVenueIds: ["v-1"],
-      creator: null,
-      assignee: null,
-      activeUsers: [bob, blank],
-    });
-
-    expect(plan.messages).toHaveLength(1);
-  });
-
-  it("property: never duplicates an inbox across 200 randomised inputs", () => {
-    const emails = ["a@x.test", "A@x.test ", "b@x.test", "c@x.test", " C@X.test"];
-    for (let seed = 0; seed < 200; seed++) {
-      const users = emails
-        .filter((_, i) => (seed >> i) % 2 === 0)
-        .map((email, i) => person({ userId: `u-${i}`, email }));
-      if (users.length === 0) continue;
-
-      const plan = planNewEventNotifications({
-        transition: seed % 2 === 0 ? "admin_publish" : "manager_submit",
-        isFirstPublish: seed % 3 !== 0,
-        actorUserId: users[seed % users.length].userId,
-        eventVenueIds: ["v-1"],
-        creator: users[0] ?? null,
-        assignee: users[users.length - 1] ?? null,
-        activeUsers: users,
-      });
-
-      const keys = plan.messages.map((m) => m.emailKey);
-      expect(new Set(keys).size, `seed ${seed}`).toBe(keys.length);
-    }
-  });
-
-  it("gives an actor who assigned the event to themselves the announcement, not the review email", () => {
+  it("says nothing when the submitter assigned the event to themselves", () => {
     const plan = planNewEventNotifications({
       transition: "manager_submit",
-      isFirstPublish: true,
-      actorUserId: "u-bob",
-      eventVenueIds: ["v-1"],
-      creator: alice,
-      assignee: bob,
-      activeUsers: [alice, bob],
+      actorUserId: "u-assignee",
+      creator: CREATOR,
+      assignee: ASSIGNEE
     });
 
-    const forBob = plan.messages.filter((m) => m.emailKey === "bob@barons.test");
-    expect(forBob).toHaveLength(1);
-    expect(forBob[0].kind).toBe("announcement");
-    expect(plan.suppressed).toContainEqual({
-      emailKey: "bob@barons.test",
-      userId: "u-bob",
-      kind: "submitted_for_review",
-      reason: "self_notification",
-    });
+    expect(plan.message).toBeNull();
+    expect(plan.suppressed[0]?.reason).toBe("self_notification");
   });
 
-  it("sends to the address as stored, trimmed, not the lowercased key", () => {
-    const shouty = person({ userId: "u-shouty", email: "  Shouty.Person@Barons.test  " });
-    const plan = planNewEventNotifications({
+  it("ignores the creator on a submit and the assignee on a publish", () => {
+    const publish = planNewEventNotifications({
       transition: "admin_publish",
-      isFirstPublish: true,
-      actorUserId: "u-bob",
-      eventVenueIds: ["v-1"],
+      actorUserId: "u-admin",
       creator: null,
-      assignee: null,
-      activeUsers: [shouty],
+      assignee: ASSIGNEE
     });
+    expect(publish.message).toBeNull();
 
-    expect(plan.messages[0].emailKey).toBe("shouty.person@barons.test");
-    expect(plan.messages[0].sendTo).toBe("Shouty.Person@Barons.test");
-  });
-
-  it("classifies suppression as already_targeted when a targeted message owns the inbox", () => {
-    const plan = planNewEventNotifications({
-      transition: "admin_publish",
-      isFirstPublish: true,
-      actorUserId: "u-bob",
-      eventVenueIds: ["v-1"],
-      creator: alice,
-      assignee: null,
-      activeUsers: [alice, bob],
-    });
-
-    expect(plan.suppressed).toContainEqual({
-      emailKey: "alice@barons.test",
-      userId: "u-alice",
-      kind: "announcement",
-      reason: "already_targeted",
-    });
-  });
-
-  it("classifies suppression as duplicate_email between two announcement recipients", () => {
-    const twin = person({ userId: "u-twin", email: "BOB@barons.test" });
-    const plan = planNewEventNotifications({
-      transition: "admin_publish",
-      isFirstPublish: true,
-      actorUserId: "u-alice",
-      eventVenueIds: ["v-1"],
-      creator: null,
-      assignee: null,
-      activeUsers: [bob, twin],
-    });
-
-    expect(plan.suppressed).toContainEqual({
-      emailKey: "bob@barons.test",
-      userId: "u-twin",
-      kind: "announcement",
-      reason: "duplicate_email",
-    });
-  });
-
-  it("never plans a review_decision on a manager_submit transition", () => {
-    const plan = planNewEventNotifications({
+    const submit = planNewEventNotifications({
       transition: "manager_submit",
-      isFirstPublish: true,
-      actorUserId: "u-carol",
-      eventVenueIds: ["v-1"],
-      creator: alice,
-      assignee: bob,
-      activeUsers: [alice, bob, carol],
+      actorUserId: "u-admin",
+      creator: CREATOR,
+      assignee: null
+    });
+    expect(submit.message).toBeNull();
+  });
+
+  it("never broadcasts: only the one targeted recipient can be returned", () => {
+    const plan = planNewEventNotifications({
+      transition: "admin_publish",
+      actorUserId: "u-admin",
+      creator: CREATOR,
+      assignee: ASSIGNEE
     });
 
-    expect(plan.messages.some((m) => m.kind === "review_decision")).toBe(false);
+    // The announcement to every active user was retired on 2026-08-19. If this
+    // ever returns a second recipient, the broadcast has crept back in.
+    expect(plan.message?.userId).toBe("u-creator");
+    expect(Object.keys(plan)).toEqual(["message", "suppressed"]);
+  });
+
+  it("trims the stored address before sending and skips a blank one", () => {
+    const padded = planNewEventNotifications({
+      transition: "admin_publish",
+      actorUserId: "u-admin",
+      creator: { ...CREATOR, email: "  creator@barons.test  " },
+      assignee: null
+    });
+    expect(padded.message?.sendTo).toBe("creator@barons.test");
+
+    const blank = planNewEventNotifications({
+      transition: "admin_publish",
+      actorUserId: "u-admin",
+      creator: { ...CREATOR, email: "   " },
+      assignee: null
+    });
+    expect(blank.message).toBeNull();
   });
 });

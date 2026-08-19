@@ -4,7 +4,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // Mocks — must be declared before the SUT import
 // ---------------------------------------------------------------------------
 
-const mockEmailSend = vi.fn().mockResolvedValue({ id: "mock-email-id" });
+// Resend RESOLVES on provider error rather than rejecting, so the mock must
+// carry the real response shape or the error path is untestable.
+const mockEmailSend = vi.fn().mockResolvedValue({ data: { id: "mock-email-id" }, error: null });
 
 vi.mock("resend", () => {
   return {
@@ -105,8 +107,11 @@ function makeUser(overrides: Partial<{
   deactivated_at: string | null;
   todo_digest_frequency: string;
   todo_digest_last_sent_on: string | null;
+  weekly_digest_last_sent_at: string | null;
 }> = {}) {
   return {
+    weekly_digest_last_sent_at:
+      overrides.weekly_digest_last_sent_at !== undefined ? overrides.weekly_digest_last_sent_at : null,
     id: overrides.id ?? "user-1",
     email: overrides.email ?? "alice@example.com",
     full_name: overrides.full_name ?? "Alice Smith",
@@ -779,6 +784,10 @@ describe("sendMandatoryWeeklyUpdateEmail", () => {
   });
 
   it("sends the mandatory weekly update with structured section styling", async () => {
+    // The content window is bounded by a real runCutoff, so the clock has to
+    // agree with the mocked London date or every fixture falls outside it.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-04-21T08:00:00.000Z"));
     vi.mocked(getTodayLondonIsoDate).mockReturnValueOnce("2026-04-21");
 
     setupMockDb({
@@ -808,19 +817,17 @@ describe("sendMandatoryWeeklyUpdateEmail", () => {
         ),
         error: null
       },
-      audit_log: {
-        data: [{ entity_id: "evt-approved", created_at: "2026-04-20T10:00:00Z" }],
-        error: null
-      },
       events: {
         data: [
           {
-            id: "evt-approved",
-            title: "Newly Approved Quiz",
+            id: "evt-new",
+            title: "Newly Created Quiz",
+            status: "draft",
+            created_at: "2026-04-20T10:00:00Z",
             start_at: "2026-04-30T19:00:00Z",
             venue_id: "venue-1",
             venue: { name: "The Star" },
-            event_venues: [{ venue_id: "venue-1" }]
+            event_venues: [{ venue_id: "venue-1", venue: { name: "The Star" } }]
           }
         ],
         error: null
@@ -858,11 +865,15 @@ describe("sendMandatoryWeeklyUpdateEmail", () => {
     expect(call.html).toContain("color: #ffffff;");
     expect(call.html).toContain("Total SOP items");
     expect(call.html).toContain("10 shown in email");
-    expect(call.html).toContain("Recently approved");
-    expect(call.html).toContain("Recently approved events");
+    expect(call.html).toContain("New events");
+    expect(call.html).toContain("New events added");
+    expect(call.html).toContain("since your last update");
     expect(call.html).toContain("Your SOP to-dos");
     expect(call.html).toContain("Debriefed events");
-    expect(call.html).toContain("Newly Approved Quiz");
+    expect(call.html).toContain("Newly Created Quiz");
+    // Status is always a word, never colour alone.
+    expect(call.html).toContain("Draft");
+    expect(call.html).not.toContain("Recently approved");
     expect(call.html).toContain("Weekly update task 10");
     expect(call.html).not.toContain("Weekly update task 11");
     expect(call.html).toContain("...and 2 more to-dos in BaronsHub.");
@@ -871,11 +882,13 @@ describe("sendMandatoryWeeklyUpdateEmail", () => {
     expect(call.html).toContain("Your helpful weekly update from BaronsHub sent every Tuesday");
     expect(call.html).not.toContain("Approved events in the last 7 days:");
     expect(call.html).not.toContain("This mandatory weekly update is sent every Tuesday.");
-    expect(call.text).toContain("Recently approved events in the last 7 days");
+    expect(call.text).toContain("New events added since your last update (1)");
+    expect(call.text).toContain("Newly Created Quiz");
     expect(call.text).toContain("Your SOP to-dos due now or in the next 14 days");
     expect(call.text).toContain("...and 2 more to-dos in BaronsHub.");
     expect(call.text).toContain("Your helpful weekly update from BaronsHub sent every Tuesday");
     expect(markPastEventOpenTodosNotRequired).toHaveBeenCalledOnce();
+    vi.useRealTimers();
   });
 
   it("includes a user's tasks even when they fall beyond the first 1,000 rows (pagination)", async () => {
@@ -912,7 +925,7 @@ describe("sendMandatoryWeeklyUpdateEmail", () => {
       },
       planning_task_assignees: { rows: [] },
       planning_tasks: { rows: planningTasks },
-      audit_log: { rows: [] },
+      events: { rows: [] },
       debriefs: { rows: [] }
     });
 
@@ -931,7 +944,7 @@ describe("sendMandatoryWeeklyUpdateEmail", () => {
       users: { rows: [{ ...makeUser({ id: "u1", email: "u1@example.com", venue_id: null }), weekly_digest_last_sent_on: null }] },
       planning_task_assignees: { rows: [] },
       planning_tasks: { rows: [] },
-      audit_log: { rows: [] },
+      events: { rows: [] },
       debriefs: { rows: [] }
     });
 
@@ -964,7 +977,7 @@ describe("sendMandatoryWeeklyUpdateEmail", () => {
       },
       planning_task_assignees: { rows: [] },
       planning_tasks: { rows: planningTasks },
-      audit_log: { rows: [] },
+      events: { rows: [] },
       debriefs: { rows: [] }
     });
 
@@ -975,5 +988,183 @@ describe("sendMandatoryWeeklyUpdateEmail", () => {
 
     const harryCall = mockEmailSend.mock.calls.find((c) => c[0].to[0] === "harry@example.com");
     expect(harryCall![0].html).toContain("Edge task");
+  });
+
+  // -------------------------------------------------------------------------
+  // New events section: window, cursors and provider failure
+  // -------------------------------------------------------------------------
+
+  /** Pins the clock to a Tuesday so runCutoff is deterministic. */
+  function onTuesday(iso = "2026-08-18T08:00:00.000Z"): void {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(iso));
+    vi.mocked(getTodayLondonIsoDate).mockReturnValue(iso.slice(0, 10));
+  }
+
+  it("bounds the shared events query by the earliest window and the run cutoff", async () => {
+    onTuesday();
+
+    const { calls } = setupPagedMockDb({
+      users: {
+        rows: [
+          // Caught up last week.
+          { ...makeUser({ id: "u1", email: "u1@example.com", venue_id: null }), weekly_digest_last_sent_on: "2026-08-11", weekly_digest_last_sent_at: "2026-08-11T08:00:00.000Z" },
+          // Missed a week, so the shared query has to reach back further.
+          { ...makeUser({ id: "u2", email: "u2@example.com", venue_id: null }), weekly_digest_last_sent_on: "2026-08-06", weekly_digest_last_sent_at: "2026-08-06T08:00:00.000Z" }
+        ]
+      },
+      planning_task_assignees: { rows: [] },
+      planning_tasks: { rows: [] },
+      events: { rows: [] },
+      debriefs: { rows: [] }
+    });
+
+    await sendMandatoryWeeklyUpdateEmail();
+
+    const eventCalls = calls["events"] ?? [];
+    const gte = eventCalls.find((c) => c.method === "gte" && c.args[0] === "created_at");
+    const lt = eventCalls.find((c) => c.method === "lt" && c.args[0] === "created_at");
+
+    // One query for both people, bounded by the EARLIER of the two cursors.
+    expect(gte?.args[1]).toBe("2026-08-06T08:00:00.000Z");
+    expect(lt?.args[1]).toBe("2026-08-18T08:00:00.000Z");
+    expect(eventCalls.some((c) => c.method === "is" && c.args[0] === "deleted_at")).toBe(true);
+    expect(eventCalls.some((c) => c.method === "not" && String(c.args[2]).includes("rejected"))).toBe(true);
+    vi.useRealTimers();
+  });
+
+  it("gives each recipient only what was created since their own last email", async () => {
+    onTuesday();
+
+    setupPagedMockDb({
+      users: {
+        rows: [
+          { ...makeUser({ id: "u1", email: "u1@example.com", venue_id: null }), weekly_digest_last_sent_on: "2026-08-11", weekly_digest_last_sent_at: "2026-08-11T08:00:00.000Z" },
+          { ...makeUser({ id: "u2", email: "u2@example.com", venue_id: null }), weekly_digest_last_sent_on: "2026-08-06", weekly_digest_last_sent_at: "2026-08-06T08:00:00.000Z" }
+        ]
+      },
+      planning_task_assignees: { rows: [] },
+      planning_tasks: { rows: [] },
+      events: {
+        rows: [
+          { id: "e-old", title: "Older Event", status: "approved", created_at: "2026-08-07T10:00:00.000Z", start_at: "2026-09-01T18:00:00Z", venue_id: "venue-1", venue: { name: "The Star" }, event_venues: [] },
+          { id: "e-new", title: "Newer Event", status: "approved", created_at: "2026-08-14T10:00:00.000Z", start_at: "2026-09-02T18:00:00Z", venue_id: "venue-1", venue: { name: "The Star" }, event_venues: [] }
+        ]
+      },
+      debriefs: { rows: [] }
+    });
+
+    await sendMandatoryWeeklyUpdateEmail();
+
+    const caughtUp = mockEmailSend.mock.calls.find((c) => c[0].to[0] === "u1@example.com")![0];
+    const behind = mockEmailSend.mock.calls.find((c) => c[0].to[0] === "u2@example.com")![0];
+
+    expect(caughtUp.html).toContain("Newer Event");
+    expect(caughtUp.html).not.toContain("Older Event");
+    expect(behind.html).toContain("Newer Event");
+    expect(behind.html).toContain("Older Event");
+    vi.useRealTimers();
+  });
+
+  it("advances both cursors together, and only after the provider accepts", async () => {
+    onTuesday();
+
+    const { calls } = setupPagedMockDb({
+      users: { rows: [{ ...makeUser({ id: "u1", email: "u1@example.com", venue_id: null }), weekly_digest_last_sent_on: "2026-08-11", weekly_digest_last_sent_at: "2026-08-11T08:00:00.000Z" }] },
+      planning_task_assignees: { rows: [] },
+      planning_tasks: { rows: [] },
+      events: { rows: [] },
+      debriefs: { rows: [] }
+    });
+
+    await sendMandatoryWeeklyUpdateEmail();
+
+    const update = (calls["users"] ?? []).find((c) => c.method === "update");
+    expect(update?.args[0]).toEqual({
+      weekly_digest_last_sent_on: "2026-08-18",
+      weekly_digest_last_sent_at: "2026-08-18T08:00:00.000Z"
+    });
+    vi.useRealTimers();
+  });
+
+  it("counts a resolved provider error as failed and leaves the cursors alone", async () => {
+    onTuesday();
+    // An id alongside an error isolates the error branch: an error must win
+    // over an apparently successful payload.
+    mockEmailSend.mockResolvedValueOnce({ data: { id: "msg-x" }, error: { message: "domain not verified" } });
+
+    const { calls } = setupPagedMockDb({
+      users: { rows: [{ ...makeUser({ id: "u1", email: "u1@example.com", venue_id: null }), weekly_digest_last_sent_on: "2026-08-11", weekly_digest_last_sent_at: "2026-08-11T08:00:00.000Z" }] },
+      planning_task_assignees: { rows: [] },
+      planning_tasks: { rows: [] },
+      events: { rows: [] },
+      debriefs: { rows: [] }
+    });
+
+    const result = await sendMandatoryWeeklyUpdateEmail();
+
+    // Before this check a rejected email advanced the cursor, so the recipient
+    // silently lost that week's update entirely.
+    expect(result).toEqual({ sent: 0, failed: 1, skippedAssignees: 0 });
+    expect((calls["users"] ?? []).some((c) => c.method === "update")).toBe(false);
+    vi.useRealTimers();
+  });
+
+  it("counts an accepted response with no message id as failed", async () => {
+    onTuesday();
+    mockEmailSend.mockResolvedValueOnce({ data: {}, error: null });
+
+    setupPagedMockDb({
+      users: { rows: [{ ...makeUser({ id: "u1", email: "u1@example.com", venue_id: null }), weekly_digest_last_sent_on: "2026-08-11", weekly_digest_last_sent_at: "2026-08-11T08:00:00.000Z" }] },
+      planning_task_assignees: { rows: [] },
+      planning_tasks: { rows: [] },
+      events: { rows: [] },
+      debriefs: { rows: [] }
+    });
+
+    const result = await sendMandatoryWeeklyUpdateEmail();
+
+    expect(result.failed).toBe(1);
+    expect(result.sent).toBe(0);
+    vi.useRealTimers();
+  });
+
+  it("falls back to the 14 day floor for someone who has never been sent one", async () => {
+    onTuesday();
+
+    const { calls } = setupPagedMockDb({
+      users: { rows: [{ ...makeUser({ id: "u1", email: "u1@example.com", venue_id: null }), weekly_digest_last_sent_on: null, weekly_digest_last_sent_at: null }] },
+      planning_task_assignees: { rows: [] },
+      planning_tasks: { rows: [] },
+      events: { rows: [] },
+      debriefs: { rows: [] }
+    });
+
+    await sendMandatoryWeeklyUpdateEmail();
+
+    const gte = (calls["events"] ?? []).find((c) => c.method === "gte" && c.args[0] === "created_at");
+    expect(gte?.args[1]).toBe("2026-08-04T08:00:00.000Z");
+    vi.useRealTimers();
+  });
+
+  it("no longer reads the approved-event audit rows", async () => {
+    onTuesday();
+
+    const { db } = setupPagedMockDb({
+      users: { rows: [{ ...makeUser({ id: "u1", email: "u1@example.com", venue_id: null }), weekly_digest_last_sent_on: null, weekly_digest_last_sent_at: null }] },
+      planning_task_assignees: { rows: [] },
+      planning_tasks: { rows: [] },
+      events: { rows: [] },
+      debriefs: { rows: [] }
+    });
+
+    await sendMandatoryWeeklyUpdateEmail();
+
+    // audit_log is still WRITTEN at the end of the run, but the section no
+    // longer READS event.approved. That action fired 4 times in the life of the
+    // system, which is why the old section was always empty.
+    const auditReads = db.from.mock.calls.filter(([table]: [string]) => table === "audit_log");
+    expect(auditReads).toHaveLength(1);
+    vi.useRealTimers();
   });
 });

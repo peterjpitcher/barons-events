@@ -4,27 +4,21 @@ export type NotificationPerson = {
   userId: string;
   email: string;
   fullName: string | null;
-  venueId: string | null;
-  isCentralEventsLead: boolean;
-  isAdministrator: boolean;
 };
 
-export type PlannedMessageKind = "review_decision" | "submitted_for_review" | "announcement";
+export type PlannedMessageKind = "review_decision" | "submitted_for_review";
 
 export type PlannedMessage = {
   kind: PlannedMessageKind;
-  /** trim().toLowerCase(). The identity key. Never used as the send address. */
-  emailKey: string;
-  /** The address exactly as stored. This is what goes in `to`. */
+  /** The address exactly as stored, trimmed. This is what goes in `to`. */
   sendTo: string;
   userId: string;
   fullName: string | null;
 };
 
-export type SuppressionReason = "self_notification" | "already_targeted" | "duplicate_email";
+export type SuppressionReason = "self_notification";
 
 export type SuppressedMessage = {
-  emailKey: string;
   userId: string;
   kind: PlannedMessageKind;
   reason: SuppressionReason;
@@ -32,105 +26,60 @@ export type SuppressedMessage = {
 
 export type PlanNewEventNotificationsInput = {
   transition: NewEventTransition;
-  /** True only when the row's status immediately BEFORE this transition was "draft". */
-  isFirstPublish: boolean;
   actorUserId: string;
-  /** events.venue_id plus every event_venues.venue_id. Retained for future scoping. */
-  eventVenueIds: string[];
   creator: NotificationPerson | null;
   assignee: NotificationPerson | null;
-  /** Active users with an email, stable order (full_name asc). */
-  activeUsers: NotificationPerson[];
 };
 
 export type NewEventNotificationPlan = {
-  /** Invariant: at most one entry per emailKey. Holds by construction. */
-  messages: PlannedMessage[];
+  /** At most one message per transition. Null means nobody needs telling. */
+  message: PlannedMessage | null;
   suppressed: SuppressedMessage[];
-  /** True when this transition is the announcing transition, so it must take the claim. */
-  requiresClaim: boolean;
 };
 
-function normalise(email: string): string {
-  return email.trim().toLowerCase();
-}
-
 /**
- * Decides the ONE message each normalised inbox receives for a new event.
+ * Decides the single workflow email a new event transition should send.
  *
- * Priority: assignee gets the review email; a creator who is not the actor gets
- * the decision email; everyone else, including the actor, gets the announcement.
- * The actor's own decision email is dropped because telling you that you
- * approved your own event is noise (product decision, 2026-07-23).
+ * Publishing tells the creator their event was approved. Submitting tells the
+ * assignee something is waiting for them. Neither sends when that person is the
+ * one who clicked, because telling you what you just did is noise (product
+ * decision, 2026-07-23).
+ *
+ * There is no longer a broadcast to every user. That was removed on 2026-08-19:
+ * new events now reach the wider team through the Tuesday update instead
+ * (see docs/superpowers/specs/2026-08-19-event-email-changes-scope.md).
+ *
+ * Identity is compared by `userId`, not by email. `public.users.email` carries a
+ * unique constraint (`users_email_key`), so two rows cannot share an inbox and
+ * the normalised-email comparison the broadcast needed is redundant here.
  */
 export function planNewEventNotifications(
   input: PlanNewEventNotificationsInput
 ): NewEventNotificationPlan {
-  const messages: PlannedMessage[] = [];
-  const suppressed: SuppressedMessage[] = [];
-  const claimedKeys = new Map<string, PlannedMessageKind>();
+  const recipient = input.transition === "admin_publish" ? input.creator : input.assignee;
+  const kind: PlannedMessageKind =
+    input.transition === "admin_publish" ? "review_decision" : "submitted_for_review";
 
-  const actorKey = ((): string | null => {
-    const found = input.activeUsers.find((u) => u.userId === input.actorUserId)
-      ?? (input.creator?.userId === input.actorUserId ? input.creator : null)
-      ?? (input.assignee?.userId === input.actorUserId ? input.assignee : null);
-    const key = found ? normalise(found.email) : "";
-    return key.length > 0 ? key : null;
-  })();
-
-  function plan(person: NotificationPerson, kind: PlannedMessageKind): void {
-    const emailKey = normalise(person.email);
-    if (emailKey.length === 0) return;
-    const existing = claimedKeys.get(emailKey);
-    if (existing) {
-      suppressed.push({
-        emailKey,
-        userId: person.userId,
-        kind,
-        reason: existing === "announcement" ? "duplicate_email" : "already_targeted",
-      });
-      return;
-    }
-    claimedKeys.set(emailKey, kind);
-    messages.push({ kind, emailKey, sendTo: person.email.trim(), userId: person.userId, fullName: person.fullName });
+  if (!recipient) {
+    return { message: null, suppressed: [] };
   }
 
-  /**
-   * Plans a targeted message, unless it would tell the actor about their own
-   * action. Self-notification is noise: the actor knows what they just did.
-   * A suppressed actor is not dropped, they fall through to the announcement
-   * loop below and receive the broadcast like everyone else.
-   */
-  function planTargeted(person: NotificationPerson, kind: PlannedMessageKind): void {
-    const emailKey = normalise(person.email);
-    if (emailKey.length > 0 && emailKey === actorKey) {
-      suppressed.push({ emailKey, userId: person.userId, kind, reason: "self_notification" });
-      return;
-    }
-    plan(person, kind);
-  }
-
-  // Targeted messages first, so they own their inbox before the broadcast runs.
-  if (input.transition === "admin_publish" && input.creator) {
-    planTargeted(input.creator, "review_decision");
+  const sendTo = recipient.email.trim();
+  if (sendTo.length === 0) {
+    return { message: null, suppressed: [] };
   }
 
   // The assignee is normally a different administrator, but assigneeOverride on
-  // the submit form allows self-assignment, so guard this branch too.
-  if (input.transition === "manager_submit" && input.assignee) {
-    planTargeted(input.assignee, "submitted_for_review");
+  // the submit form allows self-assignment, so both branches need this guard.
+  if (recipient.userId === input.actorUserId) {
+    return {
+      message: null,
+      suppressed: [{ userId: recipient.userId, kind, reason: "self_notification" }]
+    };
   }
 
-  const requiresClaim = input.isFirstPublish;
-  if (!requiresClaim) {
-    return { messages, suppressed, requiresClaim };
-  }
-
-  // Audience is every active user. Product decision 2026-07-23: the announcement
-  // goes to all application users, so there is no venue filter.
-  for (const person of input.activeUsers) {
-    plan(person, "announcement");
-  }
-
-  return { messages, suppressed, requiresClaim };
+  return {
+    message: { kind, sendTo, userId: recipient.userId, fullName: recipient.fullName },
+    suppressed: []
+  };
 }

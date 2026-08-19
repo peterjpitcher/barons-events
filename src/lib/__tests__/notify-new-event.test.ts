@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Mocks: must be declared before the SUT import
@@ -37,10 +37,8 @@ import { notifyNewEvent } from "../notifications";
 // Helpers
 // ---------------------------------------------------------------------------
 
-type ChainCall = { table: string; method: string; args: unknown[] };
-
-/** Every builder method called on a stubbed query chain, in order. */
-const chainCalls: ChainCall[] = [];
+/** Every table `.from()` was called with, so we can prove what is NOT read. */
+const tablesRead: string[] = [];
 
 const EVENT_ROW = {
   id: "e-1",
@@ -50,277 +48,161 @@ const EVENT_ROW = {
   start_at: new Date(Date.now() + 86_400_000).toISOString(),
   end_at: new Date(Date.now() + 90_000_000).toISOString(),
   venue: { name: "Test Venue" },
-  event_venues: [],
-  creator: { id: "u-1", full_name: "Actor", email: "actor@barons.test" },
-  assignee: null,
+  creator: { id: "u-1", full_name: "Casey Creator", email: "creator@barons.test" },
+  assignee: { id: "u-2", full_name: "Ari Assignee", email: "assignee@barons.test" },
 };
 
-const USER_ROWS = [
-  {
-    id: "u-1",
-    email: "actor@barons.test",
-    full_name: "Actor",
-    venue_id: null,
-    is_central_events_lead: false,
-    role: "administrator",
-  },
-  {
-    id: "u-2",
-    email: "other@barons.test",
-    full_name: "Other",
-    venue_id: "v-9",
-    is_central_events_lead: false,
-    role: "manager",
-  },
-];
-
-/**
- * One chainable stub serving both reads. The event read finishes with
- * maybeSingle(); the user list is awaited directly, so the chain is thenable.
- */
-function buildEventQueryStub(table: string): Record<string, unknown> {
-  const chain: Record<string, unknown> = {};
-  for (const method of ["select", "eq", "is", "not", "order", "in", "neq"]) {
-    chain[method] = (...args: unknown[]) => {
-      chainCalls.push({ table, method, args });
-      return chain;
-    };
-  }
-  chain.maybeSingle = async () => ({ data: EVENT_ROW, error: null });
-  chain.then = (resolve: (value: unknown) => unknown) => resolve({ data: USER_ROWS, error: null });
-  return chain;
-}
-
-type ClaimStubOptions = {
-  /** A 23505 error models a unique violation, so the claim is already held. */
-  claimResult?: { data: unknown; error: { code?: string; message: string } | null };
-  deleteSpy?: ReturnType<typeof vi.fn>;
-};
-
-function setupDb(options: ClaimStubOptions = {}): {
-  del: ReturnType<typeof vi.fn>;
-  insert: ReturnType<typeof vi.fn>;
-} {
-  const eqSecond = vi.fn().mockResolvedValue({ error: null });
-  const eqFirst = vi.fn().mockReturnValue({ eq: eqSecond });
-  const del = options.deleteSpy ?? vi.fn().mockReturnValue({ eq: eqFirst });
-  const insert = vi.fn().mockReturnValue({
-    select: () => ({
-      maybeSingle: async () => options.claimResult ?? { data: { event_id: "e-1" }, error: null },
-    }),
-  });
-
+function setupDb(eventRow: unknown = EVENT_ROW): void {
   mocks.from.mockImplementation((table: string) => {
-    if (table !== "event_notification_claims") return buildEventQueryStub(table);
-    return { insert, delete: del };
+    tablesRead.push(table);
+    const chain: Record<string, unknown> = {};
+    for (const method of ["select", "eq", "is", "not", "order", "in", "neq"]) {
+      chain[method] = () => chain;
+    }
+    chain.maybeSingle = async () => ({ data: eventRow, error: null });
+    return chain;
   });
-
-  return { del, insert };
 }
+
+const BASE_PARAMS = {
+  eventId: "e-1",
+  transition: "admin_publish" as const,
+  operationId: "op-aaaa-1111",
+};
 
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
 describe("notifyNewEvent", () => {
+  const originalEnv = { ...process.env };
+
   beforeEach(() => {
     vi.clearAllMocks();
-    chainCalls.length = 0;
+    tablesRead.length = 0;
+    process.env.RESEND_API_KEY = "re_test";
     process.env.BARONSHUB_OPERATIONAL_EMAILS_ENABLED = "true";
     delete process.env.NOTIFICATIONS_DISABLED;
-    process.env.RESEND_API_KEY = "test-key";
+    mocks.emailSend.mockResolvedValue({ data: { id: "msg-1" }, error: null });
+    setupDb();
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
   });
 
-  it("releases the claim when the batch send resolves with an error", async () => {
-    // Resend RESOLVES on provider failure. This is the regression this test guards.
-    mocks.batchSend.mockResolvedValue({ data: null, error: { message: "rate limited" } });
+  afterEach(() => {
+    process.env = { ...originalEnv };
+    vi.restoreAllMocks();
+  });
 
-    const eqSecond = vi.fn().mockResolvedValue({ error: null });
-    const eqFirst = vi.fn().mockReturnValue({ eq: eqSecond });
-    const del = vi.fn().mockReturnValue({ eq: eqFirst });
-    setupDb({ deleteSpy: del });
+  it("sends one email to the creator when an administrator publishes", async () => {
+    await notifyNewEvent({ ...BASE_PARAMS, actorUserId: "u-admin" });
 
-    await notifyNewEvent({
-      eventId: "e-1",
-      actorUserId: "u-1",
-      transition: "admin_publish",
-      isFirstPublish: true,
+    expect(mocks.emailSend).toHaveBeenCalledTimes(1);
+    const [payload] = mocks.emailSend.mock.calls[0];
+    expect(payload.to).toEqual(["creator@barons.test"]);
+    expect(payload.subject).toContain("Update on your event");
+  });
+
+  it("sends one email to the assignee when a manager submits", async () => {
+    await notifyNewEvent({ ...BASE_PARAMS, transition: "manager_submit", actorUserId: "u-1" });
+
+    expect(mocks.emailSend).toHaveBeenCalledTimes(1);
+    const [payload] = mocks.emailSend.mock.calls[0];
+    expect(payload.to).toEqual(["assignee@barons.test"]);
+    expect(payload.subject).toContain("ready for review");
+  });
+
+  it("sends nothing when the publisher is the creator", async () => {
+    await notifyNewEvent({ ...BASE_PARAMS, actorUserId: "u-1" });
+
+    expect(mocks.emailSend).not.toHaveBeenCalled();
+  });
+
+  it("never broadcasts: it does not read the user list or touch the claims table", async () => {
+    await notifyNewEvent({ ...BASE_PARAMS, actorUserId: "u-admin" });
+
+    expect(tablesRead).toEqual(["events"]);
+    expect(tablesRead).not.toContain("users");
+    expect(tablesRead).not.toContain("event_notification_claims");
+    expect(mocks.batchSend).not.toHaveBeenCalled();
+  });
+
+  it("keys idempotency on the operation id so a republish is not treated as a replay", async () => {
+    await notifyNewEvent({ ...BASE_PARAMS, actorUserId: "u-admin" });
+    const firstKey = mocks.emailSend.mock.calls[0][1].idempotencyKey;
+
+    mocks.emailSend.mockClear();
+    await notifyNewEvent({ ...BASE_PARAMS, actorUserId: "u-admin", operationId: "op-bbbb-2222" });
+    const secondKey = mocks.emailSend.mock.calls[0][1].idempotencyKey;
+
+    expect(firstKey).toBe("new-event:e-1:admin_publish:op-aaaa-1111");
+    expect(secondKey).toBe("new-event:e-1:admin_publish:op-bbbb-2222");
+    expect(firstKey).not.toBe(secondKey);
+  });
+
+  it("reuses the same key for a retry of the same operation", async () => {
+    await notifyNewEvent({ ...BASE_PARAMS, actorUserId: "u-admin" });
+    await notifyNewEvent({ ...BASE_PARAMS, actorUserId: "u-admin" });
+
+    expect(mocks.emailSend.mock.calls[0][1].idempotencyKey).toBe(
+      mocks.emailSend.mock.calls[1][1].idempotencyKey
+    );
+  });
+
+  it("treats a resolved provider error as a failure rather than a send", async () => {
+    mocks.emailSend.mockResolvedValue({ data: null, error: { message: "domain not verified" } });
+
+    await notifyNewEvent({ ...BASE_PARAMS, actorUserId: "u-admin" });
+
+    const logged = (console.log as unknown as ReturnType<typeof vi.fn>).mock.calls
+      .map(([line]) => String(line))
+      .find((line) => line.includes("notify_new_event"));
+    expect(logged).toBeDefined();
+    expect(JSON.parse(logged as string)).toMatchObject({
+      sent: false,
+      error: "domain not verified",
     });
-
-    expect(del).toHaveBeenCalled();
-    expect(eqFirst).toHaveBeenCalledWith("event_id", "e-1");
-    expect(eqSecond).toHaveBeenCalledWith("transition_key", "new_event");
   });
 
-  it("releases the claim when the batch send THROWS", async () => {
-    // A thrown send (network, DNS, timeout) must not strand the claim. If it
-    // does, that event's announcement can never be sent again by any retry.
-    mocks.batchSend.mockRejectedValue(new Error("socket hang up"));
+  it("treats an accepted response with no message id as a failure", async () => {
+    mocks.emailSend.mockResolvedValue({ data: {}, error: null });
 
-    const eqSecond = vi.fn().mockResolvedValue({ error: null });
-    const eqFirst = vi.fn().mockReturnValue({ eq: eqSecond });
-    const del = vi.fn().mockReturnValue({ eq: eqFirst });
-    setupDb({ deleteSpy: del });
+    await notifyNewEvent({ ...BASE_PARAMS, actorUserId: "u-admin" });
 
-    await notifyNewEvent({
-      eventId: "e-1",
-      actorUserId: "u-1",
-      transition: "admin_publish",
-      isFirstPublish: true,
-    });
-
-    expect(del).toHaveBeenCalled();
-    expect(eqFirst).toHaveBeenCalledWith("event_id", "e-1");
-    expect(eqSecond).toHaveBeenCalledWith("transition_key", "new_event");
+    const logged = (console.log as unknown as ReturnType<typeof vi.fn>).mock.calls
+      .map(([line]) => String(line))
+      .find((line) => line.includes("notify_new_event"));
+    expect(JSON.parse(logged as string).sent).toBe(false);
   });
 
-  it("keeps the claim on partial success", async () => {
-    mocks.batchSend.mockResolvedValue({ data: { data: [{ id: "m1" }] }, error: null });
-    const { del } = setupDb();
+  it("swallows a thrown send without throwing out of after()", async () => {
+    mocks.emailSend.mockRejectedValue(new Error("network down"));
 
-    await notifyNewEvent({
-      eventId: "e-1",
-      actorUserId: "u-1",
-      transition: "admin_publish",
-      isFirstPublish: true,
-    });
-
-    expect(mocks.batchSend).toHaveBeenCalledTimes(1);
-    expect(del).not.toHaveBeenCalled();
+    await expect(notifyNewEvent({ ...BASE_PARAMS, actorUserId: "u-admin" })).resolves.toBeUndefined();
   });
 
-  it("takes no claim when operational email is disabled", async () => {
+  it("sends nothing when operational emails are disabled", async () => {
     process.env.BARONSHUB_OPERATIONAL_EMAILS_ENABLED = "false";
-    setupDb();
 
-    await notifyNewEvent({
-      eventId: "e-1",
-      actorUserId: "u-1",
-      transition: "admin_publish",
-      isFirstPublish: true,
-    });
+    await notifyNewEvent({ ...BASE_PARAMS, actorUserId: "u-admin" });
 
+    expect(mocks.emailSend).not.toHaveBeenCalled();
     expect(mocks.from).not.toHaveBeenCalled();
-    expect(mocks.batchSend).not.toHaveBeenCalled();
   });
 
-  it("takes no claim when Resend is not configured", async () => {
-    delete process.env.RESEND_API_KEY;
-    setupDb();
+  it("sends nothing when the event has gone", async () => {
+    setupDb(null);
 
-    await notifyNewEvent({
-      eventId: "e-1",
-      actorUserId: "u-1",
-      transition: "admin_publish",
-      isFirstPublish: true,
-    });
+    await notifyNewEvent({ ...BASE_PARAMS, actorUserId: "u-admin" });
 
-    expect(mocks.from).not.toHaveBeenCalled();
-    expect(mocks.batchSend).not.toHaveBeenCalled();
+    expect(mocks.emailSend).not.toHaveBeenCalled();
   });
 
-  it("sends one batch with a deterministic idempotency key", async () => {
-    mocks.batchSend.mockResolvedValue({ data: { data: [{ id: "m1" }, { id: "m2" }] }, error: null });
-    setupDb();
+  it("sends nothing when the creator record has no email", async () => {
+    setupDb({ ...EVENT_ROW, creator: { id: "u-1", full_name: "Casey Creator", email: null } });
 
-    await notifyNewEvent({
-      eventId: "e-1",
-      actorUserId: "u-1",
-      transition: "admin_publish",
-      isFirstPublish: true,
-    });
+    await notifyNewEvent({ ...BASE_PARAMS, actorUserId: "u-admin" });
 
-    expect(mocks.batchSend).toHaveBeenCalledTimes(1);
-    const [payload, options] = mocks.batchSend.mock.calls[0];
-    // The key describes the PAYLOAD, not just the event. A later republish
-    // carries a different message set and must not collide with this one's
-    // cached provider response. Trailing 0 is the chunk offset.
-    expect(options).toEqual({
-      idempotencyKey: "new-event:e-1:admin_publish:2:announcement:0",
-    });
-    // The actor is also the creator, so their decision email is suppressed and
-    // they receive only the announcement.
-    expect(payload).toHaveLength(2);
-    expect(payload.map((entry: { to: string[] }) => entry.to[0]).sort()).toEqual([
-      "actor@barons.test",
-      "other@barons.test",
-    ]);
-    expect(
-      payload.every((entry: { subject: string }) => entry.subject.startsWith("New event coming soon:"))
-    ).toBe(true);
-  });
-
-  it("still sends targeted mail when the announcement claim is already held", async () => {
-    mocks.batchSend.mockResolvedValue({ data: { data: [{ id: "m1" }] }, error: null });
-    setupDb({ claimResult: { data: null, error: { code: "23505", message: "duplicate key" } } });
-
-    await notifyNewEvent({
-      eventId: "e-1",
-      actorUserId: "u-2",
-      transition: "admin_publish",
-      isFirstPublish: true,
-    });
-
-    expect(mocks.batchSend).toHaveBeenCalledTimes(1);
-    const [payload] = mocks.batchSend.mock.calls[0];
-    expect(payload).toHaveLength(1);
-    expect(payload[0].to).toEqual(["actor@barons.test"]);
-    expect(payload[0].subject).toBe("Update on your event: Test event");
-  });
-
-  it("lists active users with no venue filter", async () => {
-    mocks.batchSend.mockResolvedValue({ data: { data: [{ id: "m1" }, { id: "m2" }] }, error: null });
-    setupDb();
-
-    await notifyNewEvent({
-      eventId: "e-1",
-      actorUserId: "u-1",
-      transition: "admin_publish",
-      isFirstPublish: true,
-    });
-
-    const userCalls = chainCalls.filter((call) => call.table === "users");
-    expect(userCalls.map((call) => call.method)).toEqual(["select", "is", "not", "order"]);
-    expect(userCalls[0].args[0]).toBe("id, email, full_name, venue_id, is_central_events_lead, role");
-    expect(userCalls[1].args).toEqual(["deactivated_at", null]);
-    expect(userCalls[2].args).toEqual(["email", "is", null]);
-    expect(userCalls[3].args).toEqual(["full_name", { ascending: true }]);
-
-    // u-2 sits at venue v-9, which is not the event venue, and must still be
-    // included: the announcement goes to every application user.
-    const [payload] = mocks.batchSend.mock.calls[0];
-    expect(payload.map((entry: { to: string[] }) => entry.to[0])).toContain("other@barons.test");
-  });
-
-  it("plans no announcement and takes no claim when this is not the first publish", async () => {
-    mocks.batchSend.mockResolvedValue({ data: { data: [{ id: "m1" }] }, error: null });
-    const { insert } = setupDb();
-
-    await notifyNewEvent({
-      eventId: "e-1",
-      actorUserId: "u-2",
-      transition: "admin_publish",
-      isFirstPublish: false,
-    });
-
-    expect(insert).not.toHaveBeenCalled();
-    const [payload] = mocks.batchSend.mock.calls[0];
-    expect(payload).toHaveLength(1);
-    expect(payload[0].subject).toBe("Update on your event: Test event");
-  });
-
-  it("sends nothing when the batch would be empty", async () => {
-    setupDb();
-
-    await notifyNewEvent({
-      eventId: "e-1",
-      actorUserId: "u-1",
-      transition: "admin_publish",
-      isFirstPublish: false,
-    });
-
-    // The actor is the creator, so the only targeted message is suppressed and
-    // there is no announcement on a republish.
-    expect(mocks.batchSend).not.toHaveBeenCalled();
+    expect(mocks.emailSend).not.toHaveBeenCalled();
   });
 });

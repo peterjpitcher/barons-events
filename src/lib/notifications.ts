@@ -18,6 +18,13 @@ import {
   type NewEventTransition,
   type NotificationPerson,
 } from "@/lib/notifications/plan-new-event";
+import {
+  newEventVenueIds,
+  resolveNewEventWindowStart,
+  selectNewEventsForUser,
+  EXCLUDED_NEW_EVENT_STATUSES,
+  type NewEventRow,
+} from "@/lib/notifications/select-new-events";
 
 const RESEND_FROM_ADDRESS = process.env.RESEND_FROM_EMAIL ?? "BaronsHub 1.1 <noreply@auth.orangejelly.co.uk>";
 const BOOKING_RESEND_FROM_ADDRESS =
@@ -33,9 +40,8 @@ type UserRow = Database["public"]["Tables"]["users"]["Row"];
 type DebriefRow = Database["public"]["Tables"]["debriefs"]["Row"];
 
 /**
- * The smallest event shape the new-event email builders need. Both
- * EventContext and AnnouncementEventContext widen it, so a builder can be
- * called with either.
+ * The smallest event shape the new-event email builders need. EventContext
+ * widens it, so a builder can be called with either.
  */
 type NewEventEmailContext = EventRow & {
   venue: { name: string | null } | null;
@@ -45,13 +51,6 @@ type NewEventEmailContext = EventRow & {
 
 type EventContext = NewEventEmailContext & {
   debrief: DebriefRow | null;
-};
-
-type AnnouncementEventContext = NewEventEmailContext & {
-  event_venues?: Array<{
-    venue_id: string | null;
-    venue: { name: string | null } | null;
-  }> | null;
 };
 
 type ProposalEventContext = EventRow & {
@@ -79,7 +78,10 @@ type WeeklyUpdateEmailItem = {
 
 type WeeklyUpdateEmailContent = {
   recipientName: string | null;
-  approvedEvents: WeeklyUpdateEmailItem[];
+  newEvents: WeeklyUpdateEmailItem[];
+  /** Every match, not just the rows that fit. Drives the summary tile. */
+  newEventTotal: number;
+  newEventOverflowCount: number;
   todoItems: WeeklyUpdateEmailItem[];
   todoOverflowCount: number;
   debriefs: WeeklyUpdateEmailItem[];
@@ -269,7 +271,9 @@ function renderEmailTemplate({ headline, intro, body = [], button, meta, footerN
 
 function renderWeeklyUpdateEmail({
   recipientName,
-  approvedEvents,
+  newEvents,
+  newEventTotal,
+  newEventOverflowCount,
   todoItems,
   todoOverflowCount,
   debriefs,
@@ -301,6 +305,10 @@ function renderWeeklyUpdateEmail({
 
   const overflowHtml = todoOverflowCount > 0
     ? `<div class="item muted-item">...and ${todoOverflowCount} more to-dos in BaronsHub.</div>`
+    : "";
+
+  const newEventOverflowHtml = newEventOverflowCount > 0
+    ? `<div class="item muted-item">...and ${newEventOverflowCount} more in BaronsHub.</div>`
     : "";
 
   const html = `<!DOCTYPE html>
@@ -514,8 +522,8 @@ function renderWeeklyUpdateEmail({
           <div class="summary">
             <div class="summary-cell">
               <div class="summary-box">
-                <span class="summary-number">${approvedEvents.length}</span>
-                <span class="summary-label">Recently approved</span>
+                <span class="summary-number">${newEventTotal}</span>
+                <span class="summary-label">New events</span>
               </div>
             </div>
             <div class="summary-cell">
@@ -534,8 +542,9 @@ function renderWeeklyUpdateEmail({
           </div>
 
           <div class="section">
-            <h2 class="section-heading">Recently approved events <span class="count-pill">last 7 days</span></h2>
-            ${renderRows(approvedEvents, "No newly approved events for your scope.")}
+            <h2 class="section-heading">New events added <span class="count-pill">since your last update</span></h2>
+            ${renderRows(newEvents, "No new events added for your scope.")}
+            ${newEventOverflowHtml}
           </div>
 
           <div class="section">
@@ -567,20 +576,21 @@ function renderWeeklyUpdateEmail({
     "",
     `${greeting} here is your weekly BaronsHub update.`,
     "",
-    `Recently approved events in the last 7 days (${approvedEvents.length}):`,
-    ...(approvedEvents.length
-      ? approvedEvents.map((item) => `  - ${item.title} — ${item.detail}`)
-      : ["  No newly approved events for your scope."]),
+    `New events added since your last update (${newEventTotal}):`,
+    ...(newEvents.length
+      ? newEvents.map((item) => `  - ${item.title} · ${item.detail}`)
+      : ["  No new events added for your scope."]),
+    ...(newEventOverflowCount > 0 ? [`  ...and ${newEventOverflowCount} more in BaronsHub.`] : []),
     "",
     `Your SOP to-dos due now or in the next 14 days (${todoCount}):`,
     ...(todoItems.length
-      ? todoItems.map((item) => `  - ${item.title} — ${item.detail}`)
+      ? todoItems.map((item) => `  - ${item.title} · ${item.detail}`)
       : ["  No open to-dos. Nice work, you are all caught up."]),
     ...(todoOverflowCount > 0 ? [`  ...and ${todoOverflowCount} more to-dos in BaronsHub.`] : []),
     "",
     `Debriefed events in the last 7 days (${debriefs.length}):`,
     ...(debriefs.length
-      ? debriefs.map((item) => `  - ${item.title} — ${item.detail}`)
+      ? debriefs.map((item) => `  - ${item.title} · ${item.detail}`)
       : ["  No debriefs submitted for your scope."]),
     "",
     `Open BaronsHub: ${appUrl}`,
@@ -1196,7 +1206,11 @@ async function listUsersByRole(role: UserRow["role"]): Promise<Pick<UserRow, "id
   return (data ?? []) as Pick<UserRow, "id" | "email" | "full_name">[];
 }
 
-async function fetchAnnouncementEventContext(eventId: string): Promise<AnnouncementEventContext | null> {
+/**
+ * The event plus the two people a workflow transition can address. Uses the
+ * admin client because this runs from after(), outside a request's auth cookie.
+ */
+async function fetchTransitionEventContext(eventId: string): Promise<NewEventEmailContext | null> {
   const supabase = createSupabaseAdminClient();
   const { data, error } = await (supabase as any)
     .from("events")
@@ -1205,18 +1219,17 @@ async function fetchAnnouncementEventContext(eventId: string): Promise<Announcem
       *,
       venue:venues!events_venue_id_fkey(name),
       creator:users!events_created_by_fkey(id,full_name,email),
-      assignee:users!events_assignee_id_fkey(id,full_name,email),
-      event_venues(venue_id, venue:venues(name))
+      assignee:users!events_assignee_id_fkey(id,full_name,email)
     `
     )
     .eq("id", eventId)
     .maybeSingle();
 
   if (error) {
-    throw new Error(`Could not fetch event for announcement: ${error.message}`);
+    throw new Error(`Could not fetch event for notification: ${error.message}`);
   }
 
-  return (data as AnnouncementEventContext) ?? null;
+  return (data as NewEventEmailContext) ?? null;
 }
 
 const dateFormatter = new Intl.DateTimeFormat("en-GB", {
@@ -1426,32 +1439,6 @@ function buildSubmittedForReviewEmail(
 }
 
 /**
- * Wording is identical to the original sendNewEventAnnouncementEmail body.
- */
-function buildAnnouncementEmail(
-  event: EventRow,
-  venueLabel: string,
-  recipientName: string | null
-): BuiltEmail {
-  const { html, text } = renderEmailTemplate({
-    headline: "New event coming soon!",
-    intro: `${buildGreeting({ full_name: recipientName })} "${event.title}" has just been added to BaronsHub.`,
-    body: [
-      "The plan is now live for the team, with dates, venue details and next steps ready to review.",
-      "Open the event to see what is coming up and where your team fits in."
-    ],
-    button: { label: "Open event", url: eventLink(event.id) },
-    meta: [
-      `Event: ${event.title}`,
-      `Venue: ${venueLabel}`,
-      `When: ${formatEventWindow(event)}`,
-      formatSpacesLabel(event.venue_space)
-    ]
-  });
-  return { subject: `New event coming soon: ${event.title}`, html, text };
-}
-
-/**
  * Wording is identical to the original sendReviewDecisionEmail body. The
  * recipient is always the event creator, so the greeting still reads from
  * event.creator.
@@ -1504,229 +1491,96 @@ export async function sendReviewDecisionEmail(eventId: string, decision: string)
   }
 }
 
-/**
- * Every active user with an email, in a stable order. There is deliberately NO
- * venue filter: product decision 2026-07-23 is that the new-event announcement
- * goes to every application user.
- */
-async function listActiveNotificationPeople(): Promise<NotificationPerson[]> {
-  const db = createSupabaseAdminClient();
-  const { data, error } = await (db as any)
-    .from("users")
-    .select("id, email, full_name, venue_id, is_central_events_lead, role")
-    .is("deactivated_at", null)
-    .not("email", "is", null)
-    .order("full_name", { ascending: true });
-
-  if (error) {
-    throw new Error(`Could not list users for new-event notifications: ${error.message}`);
-  }
-
-  type ActiveUserRow = Pick<
-    UserRow,
-    "id" | "email" | "full_name" | "venue_id" | "is_central_events_lead" | "role"
-  >;
-
-  return ((data ?? []) as ActiveUserRow[])
-    .filter((user) => Boolean(user.email))
-    .map((user) => ({
-      userId: user.id,
-      email: user.email,
-      fullName: user.full_name,
-      venueId: user.venue_id,
-      isCentralEventsLead: Boolean(user.is_central_events_lead),
-      isAdministrator: user.role === "administrator"
-    }));
-}
-
-/**
- * Turns an event's creator or assignee join into a planner person. Prefers the
- * canonical active-user record so venue and role stay accurate; falls back to
- * the join when the person is deactivated, because a targeted confirmation
- * still belongs to them.
- */
+/** Turns an event's creator or assignee join into a planner person. */
 function toPerson(
-  user: Pick<UserRow, "id" | "email" | "full_name"> | null | undefined,
-  activeUsers: NotificationPerson[]
+  user: Pick<UserRow, "id" | "email" | "full_name"> | null | undefined
 ): NotificationPerson | null {
   if (!user?.id || !user.email) return null;
-  const known = activeUsers.find((person) => person.userId === user.id);
-  if (known) return known;
-  return {
-    userId: user.id,
-    email: user.email,
-    fullName: user.full_name,
-    venueId: null,
-    isCentralEventsLead: false,
-    isAdministrator: false
-  };
-}
-
-/** The event's own venue plus every linked multi-venue entry, deduplicated. */
-function collectVenueIds(event: AnnouncementEventContext): string[] {
-  return Array.from(
-    new Set(
-      [event.venue_id, ...(event.event_venues ?? []).map((link) => link.venue_id)].filter(
-        (id): id is string => Boolean(id)
-      )
-    )
-  );
-}
-
-/** Human-readable venue list for the announcement meta block. */
-function buildVenueLabel(event: AnnouncementEventContext): string {
-  const names = Array.from(
-    new Set(
-      [event.venue?.name, ...(event.event_venues ?? []).map((link) => link.venue?.name)].filter(
-        (name): name is string => Boolean(name)
-      )
-    )
-  );
-  return names.length ? names.join(", ") : "Venue to be confirmed";
+  return { userId: user.id, email: user.email, fullName: user.full_name };
 }
 
 /**
- * Takes the at-most-once barrier for the new-event announcement. Returns false
- * when somebody else already holds it, which is a normal outcome rather than an
- * error.
- */
-async function claimNewEventAnnouncement(params: {
-  eventId: string;
-  actorUserId: string;
-  plannedCount: number;
-}): Promise<boolean> {
-  const db = createSupabaseAdminClient();
-  const { data, error } = await (db as any)
-    .from("event_notification_claims")
-    .insert({
-      event_id: params.eventId,
-      transition_key: "new_event",
-      claimed_by: params.actorUserId,
-      planned_count: params.plannedCount
-    })
-    .select("event_id")
-    .maybeSingle();
-
-  // Unique violation means somebody else already claimed it. Not an error.
-  if (error) {
-    if (error.code === "23505") return false;
-    throw new Error(`Could not claim new-event announcement: ${error.message}`);
-  }
-  return Boolean(data);
-}
-
-/** Re-arms the announcement after a total send failure. */
-async function releaseNewEventAnnouncementClaim(eventId: string): Promise<void> {
-  const db = createSupabaseAdminClient();
-  await (db as any)
-    .from("event_notification_claims")
-    .delete()
-    .eq("event_id", eventId)
-    .eq("transition_key", "new_event");
-}
-
-/**
- * Sends exactly one email per person for a new event.
+ * Sends the single workflow email a new event transition warrants.
  *
- * The planner decides who gets what; this function only performs I/O. The
- * claim gates the ANNOUNCEMENT subset only, so a revert-and-republish still
- * delivers the creator's targeted confirmation without re-broadcasting.
+ * The planner decides who, if anyone, needs telling; this function only performs
+ * I/O. There is no longer a broadcast to every user: that was removed on
+ * 2026-08-19 and the wider team now learns about new events through the Tuesday
+ * update. See docs/superpowers/specs/2026-08-19-event-email-changes-scope.md.
  */
 export async function notifyNewEvent(params: {
   eventId: string;
   actorUserId: string;
   transition: NewEventTransition;
-  isFirstPublish: boolean;
+  /**
+   * The save operation's id. Makes the provider idempotency key unique per
+   * transition OCCURRENCE rather than per transition TYPE. Without it a revert
+   * and republish would build a byte-identical key to the first publish, and
+   * Resend could replay the original response instead of sending again.
+   */
+  operationId: string;
 }): Promise<void> {
   if (!areOperationalEmailsEnabled()) {
     logNotificationSkipped("notifyNewEvent", { eventId: params.eventId });
-    return; // never claim when email is off
+    return;
   }
   const resend = getResendClient();
-  if (!resend) return; // never claim without a provider
+  if (!resend) return;
 
   try {
-    const [event, activeUsers] = await Promise.all([
-      fetchAnnouncementEventContext(params.eventId),
-      listActiveNotificationPeople()
-    ]);
+    const event = await fetchTransitionEventContext(params.eventId);
     if (!event) return;
 
     const plan = planNewEventNotifications({
       transition: params.transition,
-      isFirstPublish: params.isFirstPublish,
       actorUserId: params.actorUserId,
-      eventVenueIds: collectVenueIds(event),
-      creator: toPerson(event.creator, activeUsers),
-      assignee: toPerson(event.assignee, activeUsers),
-      activeUsers
+      creator: toPerson(event.creator),
+      assignee: toPerson(event.assignee)
     });
 
-    let messages = plan.messages;
-    let claimed = false;
-
-    if (plan.requiresClaim && messages.some((message) => message.kind === "announcement")) {
-      claimed = await claimNewEventAnnouncement({
-        eventId: params.eventId,
-        actorUserId: params.actorUserId,
-        plannedCount: messages.length
-      });
-      if (!claimed) {
-        messages = messages.filter((message) => message.kind !== "announcement");
-      }
+    if (!plan.message) {
+      console.log(
+        JSON.stringify({
+          event: "notify_new_event",
+          eventId: params.eventId,
+          transition: params.transition,
+          kind: null,
+          sent: false,
+          suppressed: plan.suppressed.map((entry) => entry.reason)
+        })
+      );
+      return;
     }
 
-    if (messages.length === 0) return;
+    const built =
+      plan.message.kind === "submitted_for_review"
+        ? buildSubmittedForReviewEmail(event, plan.message.fullName)
+        : buildReviewDecisionEmail(event, "approved");
 
-    const venueLabel = buildVenueLabel(event);
-    const payload = messages.map((message) => {
-      const built =
-        message.kind === "announcement"
-          ? buildAnnouncementEmail(event, venueLabel, message.fullName)
-          : message.kind === "submitted_for_review"
-            ? buildSubmittedForReviewEmail(event, message.fullName)
-            : buildReviewDecisionEmail(event, "approved");
-      return {
-        from: RESEND_FROM_ADDRESS,
-        to: [message.sendTo],
-        subject: built.subject,
-        html: built.html,
-        text: built.text
-      };
-    });
-
-    // Resend caps a batch at 100 messages and defaults to strict validation, so
-    // an oversized batch fails in full rather than partially. Chunk instead.
-    const RESEND_BATCH_LIMIT = 100;
-
-    // The provider idempotency key must describe the PAYLOAD, not just the
-    // event. A republish after revert-to-draft finds the claim already held,
-    // filters the announcement out, and sends only the creator's confirmation.
-    // Reusing the first broadcast's key for that different payload would risk
-    // the provider replaying the original cached response.
-    const payloadShape = `${payload.length}:${[...new Set(messages.map((m) => m.kind))].sort().join("+")}`;
-
-    let accepted = 0;
+    let messageId: string | null = null;
     let providerError: string | null = null;
 
     try {
-      for (let offset = 0; offset < payload.length; offset += RESEND_BATCH_LIMIT) {
-        const chunk = payload.slice(offset, offset + RESEND_BATCH_LIMIT);
-        const response = await resend.batch.send(chunk, {
-          idempotencyKey: `new-event:${params.eventId}:${params.transition}:${payloadShape}:${offset}`
-        });
-        // Resend RESOLVES on provider error rather than rejecting. Never treat
-        // a resolved promise as success.
-        if (response.error) {
-          providerError = response.error.message;
-          break;
+      // Resend RESOLVES on provider error rather than rejecting. Never treat a
+      // resolved promise as success: check the error and require an id.
+      const response = await resend.emails.send(
+        {
+          from: RESEND_FROM_ADDRESS,
+          to: [plan.message.sendTo],
+          subject: built.subject,
+          html: built.html,
+          text: built.text
+        },
+        {
+          idempotencyKey: `new-event:${params.eventId}:${params.transition}:${params.operationId}`
         }
-        accepted += response.data?.data?.length ?? 0;
+      );
+      if (response.error) {
+        providerError = response.error.message;
+      } else {
+        messageId = response.data?.id ?? null;
+        if (!messageId) providerError = "Provider accepted the request without a message id";
       }
     } catch (sendError) {
-      // A thrown send (network, DNS, timeout) must still fall through to the
-      // release below. Letting it reach the outer catch would strand the claim
-      // and make the announcement permanently unsendable by any retry.
       providerError = sendError instanceof Error ? sendError.message : String(sendError);
     }
 
@@ -1735,20 +1589,13 @@ export async function notifyNewEvent(params: {
         event: "notify_new_event",
         eventId: params.eventId,
         transition: params.transition,
-        planned: payload.length,
-        accepted,
-        failed: payload.length - accepted,
-        suppressed: plan.suppressed.length,
+        kind: plan.message.kind,
+        sent: Boolean(messageId),
+        messageId,
+        suppressed: plan.suppressed.map((entry) => entry.reason),
         error: providerError
       })
     );
-
-    // Release when NOTHING was accepted, including when the send threw. If some
-    // messages were accepted the claim stands, so a retry cannot re-broadcast
-    // to the people who already received it.
-    if (claimed && accepted === 0) {
-      await releaseNewEventAnnouncementClaim(params.eventId);
-    }
   } catch (error) {
     console.warn("notifyNewEvent failed", error);
   }
@@ -2240,8 +2087,14 @@ async function fetchDigestRows<T>(label: string, buildQuery: () => any): Promise
  * Mandatory Tuesday weekly update.
  *
  * Sends to every active user once per ISO week. Personal to-dos are per-user;
- * approved/debriefed sections are venue-scoped when a user has `venue_id`,
- * otherwise global.
+ * the new-event and debrief sections are venue-scoped when a user has
+ * `venue_id`, otherwise global.
+ *
+ * The new-event section reports what was created since that person's own last
+ * accepted send, floored at 14 days. It replaced a "recently approved" section
+ * on 2026-08-19: that section read audit_log for `event.approved`, which had
+ * fired 4 times in the life of the system and 0 times in the preceding 30 days,
+ * so it printed its empty state every week for months.
  */
 export async function sendMandatoryWeeklyUpdateEmail(): Promise<{ sent: number; failed: number; skippedAssignees: number }> {
   if (!areOperationalEmailsEnabled()) {
@@ -2250,6 +2103,10 @@ export async function sendMandatoryWeeklyUpdateEmail(): Promise<{ sent: number; 
   }
   const resend = getResendClient();
   if (!resend) return { sent: 0, failed: 0, skippedAssignees: 0 };
+
+  // Captured once, before any query, so every recipient's window closes at the
+  // same instant. Events created during the send loop belong to next week.
+  const runCutoff = new Date().toISOString();
 
   const todayLondon = getTodayLondonIsoDate();
   const weekday = new Date(`${todayLondon}T12:00:00Z`).getUTCDay();
@@ -2266,15 +2123,6 @@ export async function sendMandatoryWeeklyUpdateEmail(): Promise<{ sent: number; 
 
   function firstRelation<T>(value: T | T[] | null | undefined): T | null {
     return Array.isArray(value) ? value[0] ?? null : value ?? null;
-  }
-
-  function eventVenueIds(event: { venue_id?: string | null; event_venues?: Array<{ venue_id: string | null }> | null }): Set<string> {
-    const ids = new Set<string>();
-    if (event.venue_id) ids.add(event.venue_id);
-    for (const link of event.event_venues ?? []) {
-      if (link.venue_id) ids.add(link.venue_id);
-    }
-    return ids;
   }
 
   function formatEventDate(value: string | null): string {
@@ -2298,6 +2146,7 @@ export async function sendMandatoryWeeklyUpdateEmail(): Promise<{ sent: number; 
     full_name: string | null;
     venue_id: string | null;
     weekly_digest_last_sent_on: string | null;
+    weekly_digest_last_sent_at: string | null;
   };
   type WeeklyTask = {
     id: string;
@@ -2307,11 +2156,11 @@ export async function sendMandatoryWeeklyUpdateEmail(): Promise<{ sent: number; 
     eventTitle: string | null;
   };
 
-  const [userRows, assigneeRows, legacyTasks, approvalAuditResult, debriefsResult] = await Promise.all([
+  const [userRows, assigneeRows, legacyTasks, debriefsResult] = await Promise.all([
     fetchDigestRows<WeeklyUser>("weekly update users", () =>
       db
         .from("users")
-        .select("id, email, full_name, venue_id, weekly_digest_last_sent_on")
+        .select("id, email, full_name, venue_id, weekly_digest_last_sent_on, weekly_digest_last_sent_at")
         .is("deactivated_at", null)
         .order("id", { ascending: true })
     ),
@@ -2343,22 +2192,14 @@ export async function sendMandatoryWeeklyUpdateEmail(): Promise<{ sent: number; 
         .order("id", { ascending: true })
     ),
 
-    // audit_log + debriefs are intentionally NOT paginated: both are bounded by the 7-day window
-    // (sevenDaysAgo) and stay well under PostgREST's 1000-row cap. See spec §10 (out of scope).
-    db
-      .from("audit_log")
-      .select("entity_id, created_at")
-      .eq("entity", "event")
-      .eq("action", "event.approved")
-      .gte("created_at", sevenDaysAgo),
-
+    // debriefs is intentionally NOT paginated: it is bounded by the 7-day window
+    // (sevenDaysAgo) and stays well under PostgREST's 1000-row cap.
     (db as any)
       .from("debriefs")
       .select("event_id, submitted_at, sales_uplift_percent, event:events(id, title, start_at, venue_id, venue:venues!events_venue_id_fkey(name), event_venues(venue_id))")
       .gte("submitted_at", sevenDaysAgo)
   ]);
 
-  if (approvalAuditResult.error) throw new Error(`Could not load approved event audit rows: ${approvalAuditResult.error.message}`);
   if (debriefsResult.error) throw new Error(`Could not load debrief rows: ${debriefsResult.error.message}`);
 
   const users = userRows
@@ -2411,15 +2252,31 @@ export async function sendMandatoryWeeklyUpdateEmail(): Promise<{ sent: number; 
     addTask(typeof rawTask.assignee_id === "string" ? rawTask.assignee_id : null, task);
   }
 
-  const approvedEventIds = [...new Set(((approvalAuditResult.data ?? []) as Array<{ entity_id: string | null }>).map((row) => row.entity_id).filter((id): id is string => Boolean(id)))];
-  const approvedEvents = approvedEventIds.length > 0
-    ? await (db as any)
-      .from("events")
-      .select("id, title, start_at, venue_id, venue:venues!events_venue_id_fkey(name), event_venues(venue_id)")
-      .in("id", approvedEventIds)
-      .is("deleted_at", null)
-    : { data: [], error: null };
-  if (approvedEvents.error) throw new Error(`Could not load approved events: ${approvedEvents.error.message}`);
+  // Every recipient's window start, so the shared query can be bounded by the
+  // earliest one. One query for seventeen people, not seventeen queries. A
+  // global limit here would be wrong: it must be applied AFTER each user's own
+  // window and venue filter, or their lists and overflow counts come out wrong.
+  const windowStarts = new Map(
+    users.map((user) => [
+      user.id,
+      resolveNewEventWindowStart(user.weekly_digest_last_sent_at, runCutoff)
+    ])
+  );
+  const earliestWindowStart = [...windowStarts.values()].sort()[0]
+    ?? resolveNewEventWindowStart(null, runCutoff);
+
+  const newEventRows = users.length > 0
+    ? await fetchDigestRows<NewEventRow>("weekly new events", () =>
+      (db as any)
+        .from("events")
+        .select("id, title, status, created_at, start_at, venue_id, venue:venues!events_venue_id_fkey(name), event_venues(venue_id, venue:venues(name))")
+        .gte("created_at", earliestWindowStart)
+        .lt("created_at", runCutoff)
+        .is("deleted_at", null)
+        .not("status", "in", `(${EXCLUDED_NEW_EVENT_STATUSES.join(",")})`)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false }))
+    : [];
 
   type WeeklyEvent = {
     id: string;
@@ -2436,12 +2293,21 @@ export async function sendMandatoryWeeklyUpdateEmail(): Promise<{ sent: number; 
     event: WeeklyEvent | WeeklyEvent[] | null;
   };
 
-  const approvedRows = (approvedEvents.data ?? []) as WeeklyEvent[];
   const debriefRows = (debriefsResult.data ?? []) as WeeklyDebrief[];
 
+  /**
+   * Scopes the debrief section. Shares newEventVenueIds so both sections in this
+   * email answer "which venues is this event at" the same way: the event_venues
+   * join table when it has links, events.venue_id only as a legacy fallback.
+   *
+   * The previous rule unioned the two, which let a stale legacy venue_id show an
+   * event to a manager at an unrelated venue. Verified a no-op against current
+   * data: 0 live events have a primary venue missing from their links, and the
+   * 18 events with no links at all still get the fallback.
+   */
   function inUserScope(user: WeeklyUser, event: WeeklyEvent): boolean {
     if (!user.venue_id) return true;
-    return eventVenueIds(event).has(user.venue_id);
+    return newEventVenueIds(event as unknown as NewEventRow).includes(user.venue_id);
   }
 
   let sent = 0;
@@ -2451,7 +2317,6 @@ export async function sendMandatoryWeeklyUpdateEmail(): Promise<{ sent: number; 
     try {
       const todoTasks = Array.from(tasksByUser.get(user.id)?.values() ?? [])
         .sort((a, b) => (a.dueDate ?? "").localeCompare(b.dueDate ?? "") || a.title.localeCompare(b.title));
-      const userApproved = approvedRows.filter((event) => inUserScope(user, event));
       const userDebriefs = debriefRows
         .map((row) => ({ ...row, event: firstRelation(row.event) }))
         .filter((row): row is WeeklyDebrief & { event: WeeklyEvent } => {
@@ -2459,12 +2324,12 @@ export async function sendMandatoryWeeklyUpdateEmail(): Promise<{ sent: number; 
           return Boolean(event) && inUserScope(user, event as WeeklyEvent);
         });
 
-      const approvedItems = userApproved.slice(0, 20).map((event) => {
-        const venue = firstRelation(event.venue);
-        return {
-          title: event.title,
-          detail: `${formatEventDate(event.start_at)} · ${venue?.name ?? "Unknown venue"}`
-        };
+      const newEventSelection = selectNewEventsForUser({
+        rows: newEventRows,
+        windowStart: windowStarts.get(user.id) ?? earliestWindowStart,
+        runCutoff,
+        userVenueId: user.venue_id,
+        formatDate: formatEventDate
       });
 
       const visibleTodoTasks = todoTasks.slice(0, WEEKLY_UPDATE_TODO_EMAIL_LIMIT);
@@ -2487,24 +2352,38 @@ export async function sendMandatoryWeeklyUpdateEmail(): Promise<{ sent: number; 
 
       const { html, text } = renderWeeklyUpdateEmail({
         recipientName: user.full_name,
-        approvedEvents: approvedItems,
+        newEvents: newEventSelection.items,
+        newEventTotal: newEventSelection.total,
+        newEventOverflowCount: newEventSelection.overflowCount,
         todoItems,
         todoOverflowCount: Math.max(0, todoTasks.length - visibleTodoTasks.length),
         debriefs: debriefItems,
         appUrl: plannerDashboardLink()
       });
 
-      await resend.emails.send({
+      // Resend RESOLVES on provider error rather than rejecting, so a resolved
+      // promise is not proof of acceptance. Without this check a rejected email
+      // advanced the cursor and the user silently lost that week entirely.
+      const response = await resend.emails.send({
         from: RESEND_FROM_ADDRESS,
         to: [user.email],
         subject: "Your weekly BaronsHub update",
         html,
         text
       });
+      if (response.error) {
+        throw new Error(`Email provider rejected the send: ${response.error.message}`);
+      }
+      if (!response.data?.id) {
+        throw new Error("Email provider accepted the request without a message id");
+      }
 
+      // Both cursors move together and only after acceptance. The date drives
+      // once-per-ISO-week suppression; the timestamp starts next week's content
+      // window. A failure above leaves both untouched, so next Tuesday retries.
       const { error: sentUpdateError } = await db
         .from("users")
-        .update({ weekly_digest_last_sent_on: todayLondon })
+        .update({ weekly_digest_last_sent_on: todayLondon, weekly_digest_last_sent_at: runCutoff })
         .eq("id", user.id);
       if (sentUpdateError) {
         console.error(`sendMandatoryWeeklyUpdateEmail: failed to record sent date for ${user.id}`, sentUpdateError);
@@ -2523,11 +2402,34 @@ export async function sendMandatoryWeeklyUpdateEmail(): Promise<{ sent: number; 
       entity_id: weekStart,
       action: "digest.batch_sent",
       actor_id: null,
-      meta: { sent, failed, skipped_assignees: skippedAssignees, weekly_update: true, date: todayLondon } as unknown as Database["public"]["Tables"]["audit_log"]["Row"]["meta"]
+      meta: {
+        sent,
+        failed,
+        skipped_assignees: skippedAssignees,
+        weekly_update: true,
+        date: todayLondon,
+        eligible: users.length,
+        window_start: earliestWindowStart,
+        run_cutoff: runCutoff,
+        new_event_rows: newEventRows.length
+      } as unknown as Database["public"]["Tables"]["audit_log"]["Row"]["meta"]
     });
   } catch (auditError) {
     console.error("sendMandatoryWeeklyUpdateEmail: failed to record audit entry", auditError);
   }
+
+  console.log(
+    JSON.stringify({
+      event: "weekly_update_batch",
+      eligible: users.length,
+      sent,
+      failed,
+      skippedAssignees,
+      windowStart: earliestWindowStart,
+      runCutoff,
+      newEventRows: newEventRows.length
+    })
+  );
 
   return { sent, failed, skippedAssignees };
 }
