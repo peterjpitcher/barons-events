@@ -40,9 +40,8 @@ type UserRow = Database["public"]["Tables"]["users"]["Row"];
 type DebriefRow = Database["public"]["Tables"]["debriefs"]["Row"];
 
 /**
- * The smallest event shape the new-event email builders need. Both
- * EventContext and AnnouncementEventContext widen it, so a builder can be
- * called with either.
+ * The smallest event shape the new-event email builders need. EventContext
+ * widens it, so a builder can be called with either.
  */
 type NewEventEmailContext = EventRow & {
   venue: { name: string | null } | null;
@@ -1492,11 +1491,6 @@ export async function sendReviewDecisionEmail(eventId: string, decision: string)
   }
 }
 
-/**
- * Every active user with an email, in a stable order. There is deliberately NO
- * venue filter: product decision 2026-07-23 is that the new-event announcement
- * goes to every application user.
- */
 /** Turns an event's creator or assignee join into a planner person. */
 function toPerson(
   user: Pick<UserRow, "id" | "email" | "full_name"> | null | undefined

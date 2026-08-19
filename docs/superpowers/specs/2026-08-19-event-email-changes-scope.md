@@ -174,6 +174,8 @@ Verified against production: 0 live events have a primary venue missing from the
 
 A user with no `venue_id` sees everything, unchanged.
 
+**Deviation recorded during implementation:** the debrief section shared the old union helper, so removing it forced a choice. Both sections now share the corrected join-first helper rather than keeping two different venue rules inside one email. Verified a no-op against current data by the same query as above, and it closes the same stale-legacy-venue hole in the debrief section. This is wider than "debriefs untouched" as originally scoped.
+
 ### Presentation
 
 - **Row detail:** `<date> · <all linked venue names> · <status label>`. Multi-venue events list every venue, so a manager included through a secondary link can see why the row is in their email (review F08). 10 live events are multi-venue.
@@ -199,7 +201,7 @@ Plain text mirrors the HTML, including the total, the overflow line and the stat
 
 ### Everything else unchanged
 
-Tuesday guard, ISO-week idempotency, the SOP to-do section, the debrief section, and the audit row written at the end.
+Tuesday guard, ISO-week idempotency, the SOP to-do section, the debrief section's content and 7-day window, and the audit row written at the end. The debrief section's venue scoping changes only as recorded above.
 
 ### Files
 
