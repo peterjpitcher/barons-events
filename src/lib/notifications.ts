@@ -18,6 +18,13 @@ import {
   type NewEventTransition,
   type NotificationPerson,
 } from "@/lib/notifications/plan-new-event";
+import {
+  newEventVenueIds,
+  resolveNewEventWindowStart,
+  selectNewEventsForUser,
+  EXCLUDED_NEW_EVENT_STATUSES,
+  type NewEventRow,
+} from "@/lib/notifications/select-new-events";
 
 const RESEND_FROM_ADDRESS = process.env.RESEND_FROM_EMAIL ?? "BaronsHub 1.1 <noreply@auth.orangejelly.co.uk>";
 const BOOKING_RESEND_FROM_ADDRESS =
@@ -72,7 +79,10 @@ type WeeklyUpdateEmailItem = {
 
 type WeeklyUpdateEmailContent = {
   recipientName: string | null;
-  approvedEvents: WeeklyUpdateEmailItem[];
+  newEvents: WeeklyUpdateEmailItem[];
+  /** Every match, not just the rows that fit. Drives the summary tile. */
+  newEventTotal: number;
+  newEventOverflowCount: number;
   todoItems: WeeklyUpdateEmailItem[];
   todoOverflowCount: number;
   debriefs: WeeklyUpdateEmailItem[];
@@ -262,7 +272,9 @@ function renderEmailTemplate({ headline, intro, body = [], button, meta, footerN
 
 function renderWeeklyUpdateEmail({
   recipientName,
-  approvedEvents,
+  newEvents,
+  newEventTotal,
+  newEventOverflowCount,
   todoItems,
   todoOverflowCount,
   debriefs,
@@ -294,6 +306,10 @@ function renderWeeklyUpdateEmail({
 
   const overflowHtml = todoOverflowCount > 0
     ? `<div class="item muted-item">...and ${todoOverflowCount} more to-dos in BaronsHub.</div>`
+    : "";
+
+  const newEventOverflowHtml = newEventOverflowCount > 0
+    ? `<div class="item muted-item">...and ${newEventOverflowCount} more in BaronsHub.</div>`
     : "";
 
   const html = `<!DOCTYPE html>
@@ -507,8 +523,8 @@ function renderWeeklyUpdateEmail({
           <div class="summary">
             <div class="summary-cell">
               <div class="summary-box">
-                <span class="summary-number">${approvedEvents.length}</span>
-                <span class="summary-label">Recently approved</span>
+                <span class="summary-number">${newEventTotal}</span>
+                <span class="summary-label">New events</span>
               </div>
             </div>
             <div class="summary-cell">
@@ -527,8 +543,9 @@ function renderWeeklyUpdateEmail({
           </div>
 
           <div class="section">
-            <h2 class="section-heading">Recently approved events <span class="count-pill">last 7 days</span></h2>
-            ${renderRows(approvedEvents, "No newly approved events for your scope.")}
+            <h2 class="section-heading">New events added <span class="count-pill">since your last update</span></h2>
+            ${renderRows(newEvents, "No new events added for your scope.")}
+            ${newEventOverflowHtml}
           </div>
 
           <div class="section">
@@ -560,20 +577,21 @@ function renderWeeklyUpdateEmail({
     "",
     `${greeting} here is your weekly BaronsHub update.`,
     "",
-    `Recently approved events in the last 7 days (${approvedEvents.length}):`,
-    ...(approvedEvents.length
-      ? approvedEvents.map((item) => `  - ${item.title} — ${item.detail}`)
-      : ["  No newly approved events for your scope."]),
+    `New events added since your last update (${newEventTotal}):`,
+    ...(newEvents.length
+      ? newEvents.map((item) => `  - ${item.title} · ${item.detail}`)
+      : ["  No new events added for your scope."]),
+    ...(newEventOverflowCount > 0 ? [`  ...and ${newEventOverflowCount} more in BaronsHub.`] : []),
     "",
     `Your SOP to-dos due now or in the next 14 days (${todoCount}):`,
     ...(todoItems.length
-      ? todoItems.map((item) => `  - ${item.title} — ${item.detail}`)
+      ? todoItems.map((item) => `  - ${item.title} · ${item.detail}`)
       : ["  No open to-dos. Nice work, you are all caught up."]),
     ...(todoOverflowCount > 0 ? [`  ...and ${todoOverflowCount} more to-dos in BaronsHub.`] : []),
     "",
     `Debriefed events in the last 7 days (${debriefs.length}):`,
     ...(debriefs.length
-      ? debriefs.map((item) => `  - ${item.title} — ${item.detail}`)
+      ? debriefs.map((item) => `  - ${item.title} · ${item.detail}`)
       : ["  No debriefs submitted for your scope."]),
     "",
     `Open BaronsHub: ${appUrl}`,
@@ -2075,8 +2093,14 @@ async function fetchDigestRows<T>(label: string, buildQuery: () => any): Promise
  * Mandatory Tuesday weekly update.
  *
  * Sends to every active user once per ISO week. Personal to-dos are per-user;
- * approved/debriefed sections are venue-scoped when a user has `venue_id`,
- * otherwise global.
+ * the new-event and debrief sections are venue-scoped when a user has
+ * `venue_id`, otherwise global.
+ *
+ * The new-event section reports what was created since that person's own last
+ * accepted send, floored at 14 days. It replaced a "recently approved" section
+ * on 2026-08-19: that section read audit_log for `event.approved`, which had
+ * fired 4 times in the life of the system and 0 times in the preceding 30 days,
+ * so it printed its empty state every week for months.
  */
 export async function sendMandatoryWeeklyUpdateEmail(): Promise<{ sent: number; failed: number; skippedAssignees: number }> {
   if (!areOperationalEmailsEnabled()) {
@@ -2085,6 +2109,10 @@ export async function sendMandatoryWeeklyUpdateEmail(): Promise<{ sent: number; 
   }
   const resend = getResendClient();
   if (!resend) return { sent: 0, failed: 0, skippedAssignees: 0 };
+
+  // Captured once, before any query, so every recipient's window closes at the
+  // same instant. Events created during the send loop belong to next week.
+  const runCutoff = new Date().toISOString();
 
   const todayLondon = getTodayLondonIsoDate();
   const weekday = new Date(`${todayLondon}T12:00:00Z`).getUTCDay();
@@ -2101,15 +2129,6 @@ export async function sendMandatoryWeeklyUpdateEmail(): Promise<{ sent: number; 
 
   function firstRelation<T>(value: T | T[] | null | undefined): T | null {
     return Array.isArray(value) ? value[0] ?? null : value ?? null;
-  }
-
-  function eventVenueIds(event: { venue_id?: string | null; event_venues?: Array<{ venue_id: string | null }> | null }): Set<string> {
-    const ids = new Set<string>();
-    if (event.venue_id) ids.add(event.venue_id);
-    for (const link of event.event_venues ?? []) {
-      if (link.venue_id) ids.add(link.venue_id);
-    }
-    return ids;
   }
 
   function formatEventDate(value: string | null): string {
@@ -2133,6 +2152,7 @@ export async function sendMandatoryWeeklyUpdateEmail(): Promise<{ sent: number; 
     full_name: string | null;
     venue_id: string | null;
     weekly_digest_last_sent_on: string | null;
+    weekly_digest_last_sent_at: string | null;
   };
   type WeeklyTask = {
     id: string;
@@ -2142,11 +2162,11 @@ export async function sendMandatoryWeeklyUpdateEmail(): Promise<{ sent: number; 
     eventTitle: string | null;
   };
 
-  const [userRows, assigneeRows, legacyTasks, approvalAuditResult, debriefsResult] = await Promise.all([
+  const [userRows, assigneeRows, legacyTasks, debriefsResult] = await Promise.all([
     fetchDigestRows<WeeklyUser>("weekly update users", () =>
       db
         .from("users")
-        .select("id, email, full_name, venue_id, weekly_digest_last_sent_on")
+        .select("id, email, full_name, venue_id, weekly_digest_last_sent_on, weekly_digest_last_sent_at")
         .is("deactivated_at", null)
         .order("id", { ascending: true })
     ),
@@ -2178,22 +2198,14 @@ export async function sendMandatoryWeeklyUpdateEmail(): Promise<{ sent: number; 
         .order("id", { ascending: true })
     ),
 
-    // audit_log + debriefs are intentionally NOT paginated: both are bounded by the 7-day window
-    // (sevenDaysAgo) and stay well under PostgREST's 1000-row cap. See spec §10 (out of scope).
-    db
-      .from("audit_log")
-      .select("entity_id, created_at")
-      .eq("entity", "event")
-      .eq("action", "event.approved")
-      .gte("created_at", sevenDaysAgo),
-
+    // debriefs is intentionally NOT paginated: it is bounded by the 7-day window
+    // (sevenDaysAgo) and stays well under PostgREST's 1000-row cap.
     (db as any)
       .from("debriefs")
       .select("event_id, submitted_at, sales_uplift_percent, event:events(id, title, start_at, venue_id, venue:venues!events_venue_id_fkey(name), event_venues(venue_id))")
       .gte("submitted_at", sevenDaysAgo)
   ]);
 
-  if (approvalAuditResult.error) throw new Error(`Could not load approved event audit rows: ${approvalAuditResult.error.message}`);
   if (debriefsResult.error) throw new Error(`Could not load debrief rows: ${debriefsResult.error.message}`);
 
   const users = userRows
@@ -2246,15 +2258,31 @@ export async function sendMandatoryWeeklyUpdateEmail(): Promise<{ sent: number; 
     addTask(typeof rawTask.assignee_id === "string" ? rawTask.assignee_id : null, task);
   }
 
-  const approvedEventIds = [...new Set(((approvalAuditResult.data ?? []) as Array<{ entity_id: string | null }>).map((row) => row.entity_id).filter((id): id is string => Boolean(id)))];
-  const approvedEvents = approvedEventIds.length > 0
-    ? await (db as any)
-      .from("events")
-      .select("id, title, start_at, venue_id, venue:venues!events_venue_id_fkey(name), event_venues(venue_id)")
-      .in("id", approvedEventIds)
-      .is("deleted_at", null)
-    : { data: [], error: null };
-  if (approvedEvents.error) throw new Error(`Could not load approved events: ${approvedEvents.error.message}`);
+  // Every recipient's window start, so the shared query can be bounded by the
+  // earliest one. One query for seventeen people, not seventeen queries. A
+  // global limit here would be wrong: it must be applied AFTER each user's own
+  // window and venue filter, or their lists and overflow counts come out wrong.
+  const windowStarts = new Map(
+    users.map((user) => [
+      user.id,
+      resolveNewEventWindowStart(user.weekly_digest_last_sent_at, runCutoff)
+    ])
+  );
+  const earliestWindowStart = [...windowStarts.values()].sort()[0]
+    ?? resolveNewEventWindowStart(null, runCutoff);
+
+  const newEventRows = users.length > 0
+    ? await fetchDigestRows<NewEventRow>("weekly new events", () =>
+      (db as any)
+        .from("events")
+        .select("id, title, status, created_at, start_at, venue_id, venue:venues!events_venue_id_fkey(name), event_venues(venue_id, venue:venues(name))")
+        .gte("created_at", earliestWindowStart)
+        .lt("created_at", runCutoff)
+        .is("deleted_at", null)
+        .not("status", "in", `(${EXCLUDED_NEW_EVENT_STATUSES.join(",")})`)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false }))
+    : [];
 
   type WeeklyEvent = {
     id: string;
@@ -2271,12 +2299,21 @@ export async function sendMandatoryWeeklyUpdateEmail(): Promise<{ sent: number; 
     event: WeeklyEvent | WeeklyEvent[] | null;
   };
 
-  const approvedRows = (approvedEvents.data ?? []) as WeeklyEvent[];
   const debriefRows = (debriefsResult.data ?? []) as WeeklyDebrief[];
 
+  /**
+   * Scopes the debrief section. Shares newEventVenueIds so both sections in this
+   * email answer "which venues is this event at" the same way: the event_venues
+   * join table when it has links, events.venue_id only as a legacy fallback.
+   *
+   * The previous rule unioned the two, which let a stale legacy venue_id show an
+   * event to a manager at an unrelated venue. Verified a no-op against current
+   * data: 0 live events have a primary venue missing from their links, and the
+   * 18 events with no links at all still get the fallback.
+   */
   function inUserScope(user: WeeklyUser, event: WeeklyEvent): boolean {
     if (!user.venue_id) return true;
-    return eventVenueIds(event).has(user.venue_id);
+    return newEventVenueIds(event as unknown as NewEventRow).includes(user.venue_id);
   }
 
   let sent = 0;
@@ -2286,7 +2323,6 @@ export async function sendMandatoryWeeklyUpdateEmail(): Promise<{ sent: number; 
     try {
       const todoTasks = Array.from(tasksByUser.get(user.id)?.values() ?? [])
         .sort((a, b) => (a.dueDate ?? "").localeCompare(b.dueDate ?? "") || a.title.localeCompare(b.title));
-      const userApproved = approvedRows.filter((event) => inUserScope(user, event));
       const userDebriefs = debriefRows
         .map((row) => ({ ...row, event: firstRelation(row.event) }))
         .filter((row): row is WeeklyDebrief & { event: WeeklyEvent } => {
@@ -2294,12 +2330,12 @@ export async function sendMandatoryWeeklyUpdateEmail(): Promise<{ sent: number; 
           return Boolean(event) && inUserScope(user, event as WeeklyEvent);
         });
 
-      const approvedItems = userApproved.slice(0, 20).map((event) => {
-        const venue = firstRelation(event.venue);
-        return {
-          title: event.title,
-          detail: `${formatEventDate(event.start_at)} · ${venue?.name ?? "Unknown venue"}`
-        };
+      const newEventSelection = selectNewEventsForUser({
+        rows: newEventRows,
+        windowStart: windowStarts.get(user.id) ?? earliestWindowStart,
+        runCutoff,
+        userVenueId: user.venue_id,
+        formatDate: formatEventDate
       });
 
       const visibleTodoTasks = todoTasks.slice(0, WEEKLY_UPDATE_TODO_EMAIL_LIMIT);
@@ -2322,24 +2358,38 @@ export async function sendMandatoryWeeklyUpdateEmail(): Promise<{ sent: number; 
 
       const { html, text } = renderWeeklyUpdateEmail({
         recipientName: user.full_name,
-        approvedEvents: approvedItems,
+        newEvents: newEventSelection.items,
+        newEventTotal: newEventSelection.total,
+        newEventOverflowCount: newEventSelection.overflowCount,
         todoItems,
         todoOverflowCount: Math.max(0, todoTasks.length - visibleTodoTasks.length),
         debriefs: debriefItems,
         appUrl: plannerDashboardLink()
       });
 
-      await resend.emails.send({
+      // Resend RESOLVES on provider error rather than rejecting, so a resolved
+      // promise is not proof of acceptance. Without this check a rejected email
+      // advanced the cursor and the user silently lost that week entirely.
+      const response = await resend.emails.send({
         from: RESEND_FROM_ADDRESS,
         to: [user.email],
         subject: "Your weekly BaronsHub update",
         html,
         text
       });
+      if (response.error) {
+        throw new Error(`Email provider rejected the send: ${response.error.message}`);
+      }
+      if (!response.data?.id) {
+        throw new Error("Email provider accepted the request without a message id");
+      }
 
+      // Both cursors move together and only after acceptance. The date drives
+      // once-per-ISO-week suppression; the timestamp starts next week's content
+      // window. A failure above leaves both untouched, so next Tuesday retries.
       const { error: sentUpdateError } = await db
         .from("users")
-        .update({ weekly_digest_last_sent_on: todayLondon })
+        .update({ weekly_digest_last_sent_on: todayLondon, weekly_digest_last_sent_at: runCutoff })
         .eq("id", user.id);
       if (sentUpdateError) {
         console.error(`sendMandatoryWeeklyUpdateEmail: failed to record sent date for ${user.id}`, sentUpdateError);
@@ -2358,11 +2408,34 @@ export async function sendMandatoryWeeklyUpdateEmail(): Promise<{ sent: number; 
       entity_id: weekStart,
       action: "digest.batch_sent",
       actor_id: null,
-      meta: { sent, failed, skipped_assignees: skippedAssignees, weekly_update: true, date: todayLondon } as unknown as Database["public"]["Tables"]["audit_log"]["Row"]["meta"]
+      meta: {
+        sent,
+        failed,
+        skipped_assignees: skippedAssignees,
+        weekly_update: true,
+        date: todayLondon,
+        eligible: users.length,
+        window_start: earliestWindowStart,
+        run_cutoff: runCutoff,
+        new_event_rows: newEventRows.length
+      } as unknown as Database["public"]["Tables"]["audit_log"]["Row"]["meta"]
     });
   } catch (auditError) {
     console.error("sendMandatoryWeeklyUpdateEmail: failed to record audit entry", auditError);
   }
+
+  console.log(
+    JSON.stringify({
+      event: "weekly_update_batch",
+      eligible: users.length,
+      sent,
+      failed,
+      skippedAssignees,
+      windowStart: earliestWindowStart,
+      runCutoff,
+      newEventRows: newEventRows.length
+    })
+  );
 
   return { sent, failed, skippedAssignees };
 }
