@@ -27,6 +27,7 @@ yarn-error.log*
 .superpowers/
 .worktrees/
 .claude/session-context.md
+.obsidian/
 
 # Graphify / Session-Setup
 graphify-out/
