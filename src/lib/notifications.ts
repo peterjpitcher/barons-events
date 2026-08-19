@@ -47,13 +47,6 @@ type EventContext = NewEventEmailContext & {
   debrief: DebriefRow | null;
 };
 
-type AnnouncementEventContext = NewEventEmailContext & {
-  event_venues?: Array<{
-    venue_id: string | null;
-    venue: { name: string | null } | null;
-  }> | null;
-};
-
 type ProposalEventContext = EventRow & {
   venue: { name: string | null } | null;
   creator: Pick<UserRow, "id" | "email" | "full_name"> | null;
@@ -1196,7 +1189,11 @@ async function listUsersByRole(role: UserRow["role"]): Promise<Pick<UserRow, "id
   return (data ?? []) as Pick<UserRow, "id" | "email" | "full_name">[];
 }
 
-async function fetchAnnouncementEventContext(eventId: string): Promise<AnnouncementEventContext | null> {
+/**
+ * The event plus the two people a workflow transition can address. Uses the
+ * admin client because this runs from after(), outside a request's auth cookie.
+ */
+async function fetchTransitionEventContext(eventId: string): Promise<NewEventEmailContext | null> {
   const supabase = createSupabaseAdminClient();
   const { data, error } = await (supabase as any)
     .from("events")
@@ -1205,18 +1202,17 @@ async function fetchAnnouncementEventContext(eventId: string): Promise<Announcem
       *,
       venue:venues!events_venue_id_fkey(name),
       creator:users!events_created_by_fkey(id,full_name,email),
-      assignee:users!events_assignee_id_fkey(id,full_name,email),
-      event_venues(venue_id, venue:venues(name))
+      assignee:users!events_assignee_id_fkey(id,full_name,email)
     `
     )
     .eq("id", eventId)
     .maybeSingle();
 
   if (error) {
-    throw new Error(`Could not fetch event for announcement: ${error.message}`);
+    throw new Error(`Could not fetch event for notification: ${error.message}`);
   }
 
-  return (data as AnnouncementEventContext) ?? null;
+  return (data as NewEventEmailContext) ?? null;
 }
 
 const dateFormatter = new Intl.DateTimeFormat("en-GB", {
@@ -1426,32 +1422,6 @@ function buildSubmittedForReviewEmail(
 }
 
 /**
- * Wording is identical to the original sendNewEventAnnouncementEmail body.
- */
-function buildAnnouncementEmail(
-  event: EventRow,
-  venueLabel: string,
-  recipientName: string | null
-): BuiltEmail {
-  const { html, text } = renderEmailTemplate({
-    headline: "New event coming soon!",
-    intro: `${buildGreeting({ full_name: recipientName })} "${event.title}" has just been added to BaronsHub.`,
-    body: [
-      "The plan is now live for the team, with dates, venue details and next steps ready to review.",
-      "Open the event to see what is coming up and where your team fits in."
-    ],
-    button: { label: "Open event", url: eventLink(event.id) },
-    meta: [
-      `Event: ${event.title}`,
-      `Venue: ${venueLabel}`,
-      `When: ${formatEventWindow(event)}`,
-      formatSpacesLabel(event.venue_space)
-    ]
-  });
-  return { subject: `New event coming soon: ${event.title}`, html, text };
-}
-
-/**
  * Wording is identical to the original sendReviewDecisionEmail body. The
  * recipient is always the event creator, so the greeting still reads from
  * event.creator.
@@ -1509,224 +1479,96 @@ export async function sendReviewDecisionEmail(eventId: string, decision: string)
  * venue filter: product decision 2026-07-23 is that the new-event announcement
  * goes to every application user.
  */
-async function listActiveNotificationPeople(): Promise<NotificationPerson[]> {
-  const db = createSupabaseAdminClient();
-  const { data, error } = await (db as any)
-    .from("users")
-    .select("id, email, full_name, venue_id, is_central_events_lead, role")
-    .is("deactivated_at", null)
-    .not("email", "is", null)
-    .order("full_name", { ascending: true });
-
-  if (error) {
-    throw new Error(`Could not list users for new-event notifications: ${error.message}`);
-  }
-
-  type ActiveUserRow = Pick<
-    UserRow,
-    "id" | "email" | "full_name" | "venue_id" | "is_central_events_lead" | "role"
-  >;
-
-  return ((data ?? []) as ActiveUserRow[])
-    .filter((user) => Boolean(user.email))
-    .map((user) => ({
-      userId: user.id,
-      email: user.email,
-      fullName: user.full_name,
-      venueId: user.venue_id,
-      isCentralEventsLead: Boolean(user.is_central_events_lead),
-      isAdministrator: user.role === "administrator"
-    }));
-}
-
-/**
- * Turns an event's creator or assignee join into a planner person. Prefers the
- * canonical active-user record so venue and role stay accurate; falls back to
- * the join when the person is deactivated, because a targeted confirmation
- * still belongs to them.
- */
+/** Turns an event's creator or assignee join into a planner person. */
 function toPerson(
-  user: Pick<UserRow, "id" | "email" | "full_name"> | null | undefined,
-  activeUsers: NotificationPerson[]
+  user: Pick<UserRow, "id" | "email" | "full_name"> | null | undefined
 ): NotificationPerson | null {
   if (!user?.id || !user.email) return null;
-  const known = activeUsers.find((person) => person.userId === user.id);
-  if (known) return known;
-  return {
-    userId: user.id,
-    email: user.email,
-    fullName: user.full_name,
-    venueId: null,
-    isCentralEventsLead: false,
-    isAdministrator: false
-  };
-}
-
-/** The event's own venue plus every linked multi-venue entry, deduplicated. */
-function collectVenueIds(event: AnnouncementEventContext): string[] {
-  return Array.from(
-    new Set(
-      [event.venue_id, ...(event.event_venues ?? []).map((link) => link.venue_id)].filter(
-        (id): id is string => Boolean(id)
-      )
-    )
-  );
-}
-
-/** Human-readable venue list for the announcement meta block. */
-function buildVenueLabel(event: AnnouncementEventContext): string {
-  const names = Array.from(
-    new Set(
-      [event.venue?.name, ...(event.event_venues ?? []).map((link) => link.venue?.name)].filter(
-        (name): name is string => Boolean(name)
-      )
-    )
-  );
-  return names.length ? names.join(", ") : "Venue to be confirmed";
+  return { userId: user.id, email: user.email, fullName: user.full_name };
 }
 
 /**
- * Takes the at-most-once barrier for the new-event announcement. Returns false
- * when somebody else already holds it, which is a normal outcome rather than an
- * error.
- */
-async function claimNewEventAnnouncement(params: {
-  eventId: string;
-  actorUserId: string;
-  plannedCount: number;
-}): Promise<boolean> {
-  const db = createSupabaseAdminClient();
-  const { data, error } = await (db as any)
-    .from("event_notification_claims")
-    .insert({
-      event_id: params.eventId,
-      transition_key: "new_event",
-      claimed_by: params.actorUserId,
-      planned_count: params.plannedCount
-    })
-    .select("event_id")
-    .maybeSingle();
-
-  // Unique violation means somebody else already claimed it. Not an error.
-  if (error) {
-    if (error.code === "23505") return false;
-    throw new Error(`Could not claim new-event announcement: ${error.message}`);
-  }
-  return Boolean(data);
-}
-
-/** Re-arms the announcement after a total send failure. */
-async function releaseNewEventAnnouncementClaim(eventId: string): Promise<void> {
-  const db = createSupabaseAdminClient();
-  await (db as any)
-    .from("event_notification_claims")
-    .delete()
-    .eq("event_id", eventId)
-    .eq("transition_key", "new_event");
-}
-
-/**
- * Sends exactly one email per person for a new event.
+ * Sends the single workflow email a new event transition warrants.
  *
- * The planner decides who gets what; this function only performs I/O. The
- * claim gates the ANNOUNCEMENT subset only, so a revert-and-republish still
- * delivers the creator's targeted confirmation without re-broadcasting.
+ * The planner decides who, if anyone, needs telling; this function only performs
+ * I/O. There is no longer a broadcast to every user: that was removed on
+ * 2026-08-19 and the wider team now learns about new events through the Tuesday
+ * update. See docs/superpowers/specs/2026-08-19-event-email-changes-scope.md.
  */
 export async function notifyNewEvent(params: {
   eventId: string;
   actorUserId: string;
   transition: NewEventTransition;
-  isFirstPublish: boolean;
+  /**
+   * The save operation's id. Makes the provider idempotency key unique per
+   * transition OCCURRENCE rather than per transition TYPE. Without it a revert
+   * and republish would build a byte-identical key to the first publish, and
+   * Resend could replay the original response instead of sending again.
+   */
+  operationId: string;
 }): Promise<void> {
   if (!areOperationalEmailsEnabled()) {
     logNotificationSkipped("notifyNewEvent", { eventId: params.eventId });
-    return; // never claim when email is off
+    return;
   }
   const resend = getResendClient();
-  if (!resend) return; // never claim without a provider
+  if (!resend) return;
 
   try {
-    const [event, activeUsers] = await Promise.all([
-      fetchAnnouncementEventContext(params.eventId),
-      listActiveNotificationPeople()
-    ]);
+    const event = await fetchTransitionEventContext(params.eventId);
     if (!event) return;
 
     const plan = planNewEventNotifications({
       transition: params.transition,
-      isFirstPublish: params.isFirstPublish,
       actorUserId: params.actorUserId,
-      eventVenueIds: collectVenueIds(event),
-      creator: toPerson(event.creator, activeUsers),
-      assignee: toPerson(event.assignee, activeUsers),
-      activeUsers
+      creator: toPerson(event.creator),
+      assignee: toPerson(event.assignee)
     });
 
-    let messages = plan.messages;
-    let claimed = false;
-
-    if (plan.requiresClaim && messages.some((message) => message.kind === "announcement")) {
-      claimed = await claimNewEventAnnouncement({
-        eventId: params.eventId,
-        actorUserId: params.actorUserId,
-        plannedCount: messages.length
-      });
-      if (!claimed) {
-        messages = messages.filter((message) => message.kind !== "announcement");
-      }
+    if (!plan.message) {
+      console.log(
+        JSON.stringify({
+          event: "notify_new_event",
+          eventId: params.eventId,
+          transition: params.transition,
+          kind: null,
+          sent: false,
+          suppressed: plan.suppressed.map((entry) => entry.reason)
+        })
+      );
+      return;
     }
 
-    if (messages.length === 0) return;
+    const built =
+      plan.message.kind === "submitted_for_review"
+        ? buildSubmittedForReviewEmail(event, plan.message.fullName)
+        : buildReviewDecisionEmail(event, "approved");
 
-    const venueLabel = buildVenueLabel(event);
-    const payload = messages.map((message) => {
-      const built =
-        message.kind === "announcement"
-          ? buildAnnouncementEmail(event, venueLabel, message.fullName)
-          : message.kind === "submitted_for_review"
-            ? buildSubmittedForReviewEmail(event, message.fullName)
-            : buildReviewDecisionEmail(event, "approved");
-      return {
-        from: RESEND_FROM_ADDRESS,
-        to: [message.sendTo],
-        subject: built.subject,
-        html: built.html,
-        text: built.text
-      };
-    });
-
-    // Resend caps a batch at 100 messages and defaults to strict validation, so
-    // an oversized batch fails in full rather than partially. Chunk instead.
-    const RESEND_BATCH_LIMIT = 100;
-
-    // The provider idempotency key must describe the PAYLOAD, not just the
-    // event. A republish after revert-to-draft finds the claim already held,
-    // filters the announcement out, and sends only the creator's confirmation.
-    // Reusing the first broadcast's key for that different payload would risk
-    // the provider replaying the original cached response.
-    const payloadShape = `${payload.length}:${[...new Set(messages.map((m) => m.kind))].sort().join("+")}`;
-
-    let accepted = 0;
+    let messageId: string | null = null;
     let providerError: string | null = null;
 
     try {
-      for (let offset = 0; offset < payload.length; offset += RESEND_BATCH_LIMIT) {
-        const chunk = payload.slice(offset, offset + RESEND_BATCH_LIMIT);
-        const response = await resend.batch.send(chunk, {
-          idempotencyKey: `new-event:${params.eventId}:${params.transition}:${payloadShape}:${offset}`
-        });
-        // Resend RESOLVES on provider error rather than rejecting. Never treat
-        // a resolved promise as success.
-        if (response.error) {
-          providerError = response.error.message;
-          break;
+      // Resend RESOLVES on provider error rather than rejecting. Never treat a
+      // resolved promise as success: check the error and require an id.
+      const response = await resend.emails.send(
+        {
+          from: RESEND_FROM_ADDRESS,
+          to: [plan.message.sendTo],
+          subject: built.subject,
+          html: built.html,
+          text: built.text
+        },
+        {
+          idempotencyKey: `new-event:${params.eventId}:${params.transition}:${params.operationId}`
         }
-        accepted += response.data?.data?.length ?? 0;
+      );
+      if (response.error) {
+        providerError = response.error.message;
+      } else {
+        messageId = response.data?.id ?? null;
+        if (!messageId) providerError = "Provider accepted the request without a message id";
       }
     } catch (sendError) {
-      // A thrown send (network, DNS, timeout) must still fall through to the
-      // release below. Letting it reach the outer catch would strand the claim
-      // and make the announcement permanently unsendable by any retry.
       providerError = sendError instanceof Error ? sendError.message : String(sendError);
     }
 
@@ -1735,20 +1577,13 @@ export async function notifyNewEvent(params: {
         event: "notify_new_event",
         eventId: params.eventId,
         transition: params.transition,
-        planned: payload.length,
-        accepted,
-        failed: payload.length - accepted,
-        suppressed: plan.suppressed.length,
+        kind: plan.message.kind,
+        sent: Boolean(messageId),
+        messageId,
+        suppressed: plan.suppressed.map((entry) => entry.reason),
         error: providerError
       })
     );
-
-    // Release when NOTHING was accepted, including when the send threw. If some
-    // messages were accepted the claim stands, so a retry cannot re-broadcast
-    // to the people who already received it.
-    if (claimed && accepted === 0) {
-      await releaseNewEventAnnouncementClaim(params.eventId);
-    }
   } catch (error) {
     console.warn("notifyNewEvent failed", error);
   }

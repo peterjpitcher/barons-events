@@ -1459,10 +1459,6 @@ export async function submitEventForReviewAction(
     }
 
     if (result.success) {
-      // Evaluated NOW, not inside the closure: after() defers the callback, so
-      // reading .status lazily would pick up any later mutation and silently
-      // stop every announcement with no test failure.
-      const wasDraft = preSubmitContext?.status === "draft";
       after(() => notifyNewEvent({
         eventId: parsedId.data,
         actorUserId: user.id,
@@ -1470,7 +1466,7 @@ export async function submitEventForReviewAction(
         // it is manager_submit. Marking it admin_publish would tell the creator
         // their event was APPROVED and would send the reviewer nothing.
         transition: "manager_submit",
-        isFirstPublish: wasDraft
+        operationId
       }));
       revalidatePath(`/events/${parsedId.data}`);
       revalidatePath("/events");
@@ -1875,17 +1871,13 @@ export async function submitEventForReviewAction(
       });
 
       // Captured because targetEventId is a mutable let: the closure runs after
-      // this scope has moved on, so narrowing must be pinned to a const. The
-      // status is pinned for the same reason: reading it lazily inside the
-      // deferred closure would silently break the guard if anything later
-      // mutates existingEvent.
+      // this scope has moved on, so narrowing must be pinned to a const.
       const announceEventId = targetEventId;
-      const wasDraftBeforeApproval = existingEvent.status === "draft";
       after(() => notifyNewEvent({
         eventId: announceEventId,
         actorUserId: user.id,
         transition: "admin_publish",
-        isFirstPublish: wasDraftBeforeApproval
+        operationId
       }));
 
       revalidatePath(`/events/${targetEventId}`);
@@ -1986,7 +1978,7 @@ export async function submitEventForReviewAction(
         eventId: submittedEventId,
         actorUserId: user.id,
         transition: "manager_submit",
-        isFirstPublish: statusBefore === "draft"
+        operationId
       }));
 
       revalidatePath(`/events/${targetEventId}`);
