@@ -1,10 +1,12 @@
-import { notFound, permanentRedirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import { ExternalLink } from "lucide-react";
 import { formatInLondon, normaliseWebsiteTimeText } from "@/lib/datetime";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getConfirmedTicketCount } from "@/lib/bookings";
 import { isBookingFormat, isPaidBookingFormat } from "@/lib/booking-format";
+import { resolveEventCtas } from "@/lib/event-cta";
 import { parseEventIdFromSlug } from "@/lib/event-public-url";
 import { BookingForm } from "./BookingForm";
 
@@ -43,6 +45,9 @@ type EventRow = {
   booking_notes_enabled: boolean;
   booking_type: string | null;
   booking_url: string | null;
+  booking_cta_label: string | null;
+  secondary_cta_label: string | null;
+  secondary_cta_url: string | null;
   ticket_price: number | null;
   total_capacity: number | null;
   max_tickets_per_booking: number;
@@ -55,7 +60,7 @@ type EventRow = {
 };
 
 const EVENT_LANDING_SELECT =
-  "id, title, public_title, public_teaser, public_description, public_highlights, event_image_path, start_at, seo_slug, booking_enabled, booking_notes_enabled, booking_type, booking_url, ticket_price, total_capacity, max_tickets_per_booking, status, venue:venues!events_venue_id_fkey(id, name, is_internal)";
+  "id, title, public_title, public_teaser, public_description, public_highlights, event_image_path, start_at, seo_slug, booking_enabled, booking_notes_enabled, booking_type, booking_url, booking_cta_label, secondary_cta_label, secondary_cta_url, ticket_price, total_capacity, max_tickets_per_booking, status, venue:venues!events_venue_id_fkey(id, name, is_internal)";
 
 /**
  * Fetch a public event by an exact column match using the service-role client.
@@ -104,6 +109,9 @@ async function fetchPublicEvent(column: "seo_slug" | "id", value: string): Promi
     booking_notes_enabled: raw.booking_notes_enabled as boolean,
     booking_type: (raw.booking_type as string | null) ?? null,
     booking_url: (raw.booking_url as string | null) ?? null,
+    booking_cta_label: (raw.booking_cta_label as string | null) ?? null,
+    secondary_cta_label: (raw.secondary_cta_label as string | null) ?? null,
+    secondary_cta_url: (raw.secondary_cta_url as string | null) ?? null,
     ticket_price: (raw.ticket_price as number | null) ?? null,
     total_capacity: (raw.total_capacity as number | null) ?? null,
     max_tickets_per_booking: (raw.max_tickets_per_booking as number) ?? 10,
@@ -154,25 +162,25 @@ export default async function EventLandingPage({ params }: PageProps) {
     notFound();
   }
 
-  // An external booking link short-circuits to the ticket provider.
-  // permanentRedirect issues an HTTP 308: search engines forward link equity to
-  // the destination, browsers preserve method, and the slug stays a shareable
-  // handle should the URL ever be cleared.
-  if (event.booking_url) {
-    permanentRedirect(event.booking_url);
-  }
-
-  // In-app booking shows the form. Otherwise this is a details-only page with no
-  // booking controls, so the public URL still resolves for every event.
-  const canBookInApp = event.booking_enabled;
+  // A custom booking link used to 308-redirect away from here, so the event
+  // copy we had written was never seen. The page now always renders and the
+  // custom link becomes the primary button instead.
+  const { bookingCta, showBookingForm, bookingCtaLabel, secondaryCta } = resolveEventCtas({
+    bookingUrl: event.booking_url,
+    bookingEnabled: event.booking_enabled,
+    bookingType: event.booking_type,
+    bookingCtaLabel: event.booking_cta_label,
+    secondaryCtaLabel: event.secondary_cta_label,
+    secondaryCtaUrl: event.secondary_cta_url
+  });
 
   const bookingFormat = isBookingFormat(event.booking_type) ? event.booking_type : null;
   const isPaidInAppBooking = bookingFormat ? isPaidBookingFormat(bookingFormat) : false;
 
   // Count confirmed tickets for sold-out detection (only relevant to the form)
-  const confirmedCount = canBookInApp ? await getConfirmedTicketCount(event.id) : 0;
+  const confirmedCount = showBookingForm ? await getConfirmedTicketCount(event.id) : 0;
   const isSoldOut =
-    canBookInApp && event.total_capacity != null && confirmedCount >= event.total_capacity;
+    showBookingForm && event.total_capacity != null && confirmedCount >= event.total_capacity;
 
   const headersList = await headers();
   const nonce = headersList.get("x-nonce") ?? undefined;
@@ -298,9 +306,9 @@ export default async function EventLandingPage({ params }: PageProps) {
             </div>
           )}
 
-          {/* Booking form, or a details-only notice when no online booking */}
+          {/* Booking form, custom link buttons, or a details-only notice */}
           <div className="mt-auto">
-            {canBookInApp ? (
+            {showBookingForm ? (
               <BookingForm
                 eventId={event.id}
                 maxTickets={event.max_tickets_per_booking}
@@ -309,15 +317,47 @@ export default async function EventLandingPage({ params }: PageProps) {
                 isPaidBooking={isPaidInAppBooking}
                 ticketPrice={event.ticket_price}
                 bookingNotesEnabled={event.booking_notes_enabled}
+                ctaLabel={bookingCtaLabel}
                 nonce={nonce}
               />
-            ) : (
+            ) : null}
+
+            {bookingCta || secondaryCta ? (
+              <div className="space-y-3 border-t border-[var(--slate-50)] px-6 py-5">
+                {bookingCta ? (
+                  <a
+                    href={bookingCta.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[11px] bg-[var(--navy)] px-5 text-sm font-bold text-white sm:bg-[var(--mustard)] sm:py-3 sm:uppercase sm:tracking-wider sm:hover:bg-[var(--mustard-dark)]"
+                  >
+                    {bookingCta.label}
+                    <ExternalLink className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
+                    <span className="sr-only">(opens in a new tab)</span>
+                  </a>
+                ) : null}
+                {secondaryCta ? (
+                  <a
+                    href={secondaryCta.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[11px] border border-[var(--navy)] px-5 text-sm font-semibold text-[var(--navy)] hover:bg-[var(--slate-50)]"
+                  >
+                    {secondaryCta.label}
+                    <ExternalLink className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
+                    <span className="sr-only">(opens in a new tab)</span>
+                  </a>
+                ) : null}
+              </div>
+            ) : null}
+
+            {!showBookingForm && !bookingCta && !secondaryCta ? (
               <div className="border-t border-[var(--slate-50)] px-6 py-5">
                 <p className="text-sm text-[var(--slate)]">
                   Online booking isn&rsquo;t available for this event. Please contact the venue for details.
                 </p>
               </div>
-            )}
+            ) : null}
           </div>
         </div>
       </div>

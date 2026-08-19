@@ -103,6 +103,9 @@ export interface Database {
           public_teaser: string | null;
           public_highlights: string[] | null;
           booking_url: string | null;
+          booking_cta_label: string | null;
+          secondary_cta_label: string | null;
+          secondary_cta_url: string | null;
           seo_title: string | null;
           seo_description: string | null;
           seo_slug: string | null;

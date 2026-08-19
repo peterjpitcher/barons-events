@@ -15,6 +15,7 @@ import {
   isBookingFormat,
   isPaidBookingFormat
 } from "@/lib/booking-format";
+import { CTA_LABEL_MAX_LENGTH } from "@/lib/event-cta";
 
 const LANDING_BASE = "l.baronspubs.com";
 
@@ -27,6 +28,9 @@ type BookingSettingsCardProps = {
   seoSlug: string | null;
   smsPromoEnabled?: boolean;
   bookingUrl: string | null;
+  bookingCtaLabel: string | null;
+  secondaryCtaLabel: string | null;
+  secondaryCtaUrl: string | null;
   bookingType: string | null;
   userRole?: string;
 };
@@ -40,6 +44,9 @@ export function BookingSettingsCard({
   seoSlug: initialSeoSlug,
   smsPromoEnabled: initialSmsPromoEnabled = false,
   bookingUrl: initialBookingUrl,
+  bookingCtaLabel: initialBookingCtaLabel,
+  secondaryCtaLabel: initialSecondaryCtaLabel,
+  secondaryCtaUrl: initialSecondaryCtaUrl,
   bookingType,
   userRole,
 }: BookingSettingsCardProps) {
@@ -52,6 +59,9 @@ export function BookingSettingsCard({
   const [currentSlug, setCurrentSlug] = useState<string | null>(initialSeoSlug);
   const [smsPromoEnabled, setSmsPromoEnabled] = useState(initialSmsPromoEnabled);
   const [bookingUrl, setBookingUrl] = useState(initialBookingUrl ?? "");
+  const [bookingCtaLabel, setBookingCtaLabel] = useState(initialBookingCtaLabel ?? "");
+  const [secondaryCtaLabel, setSecondaryCtaLabel] = useState(initialSecondaryCtaLabel ?? "");
+  const [secondaryCtaUrl, setSecondaryCtaUrl] = useState(initialSecondaryCtaUrl ?? "");
   const [isPending, startTransition] = useTransition();
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
@@ -69,6 +79,9 @@ export function BookingSettingsCard({
     const parsedCapacity = totalCapacity.trim() ? parseInt(totalCapacity, 10) : null;
     const parsedMax = parseInt(maxTickets, 10) || 10;
     const trimmedBookingUrl = bookingUrl.trim();
+    const trimmedBookingCtaLabel = bookingCtaLabel.trim();
+    const trimmedSecondaryCtaLabel = secondaryCtaLabel.trim();
+    const trimmedSecondaryCtaUrl = secondaryCtaUrl.trim();
 
     if (parsedCapacity !== null && (isNaN(parsedCapacity) || parsedCapacity < 1)) {
       toast.error("Capacity must be a positive number or left blank for unlimited.");
@@ -80,6 +93,21 @@ export function BookingSettingsCard({
       return;
     }
 
+    if (trimmedSecondaryCtaUrl && !/^https?:\/\//i.test(trimmedSecondaryCtaUrl)) {
+      toast.error("Extra button link must be a full URL starting with http:// or https://");
+      return;
+    }
+
+    if (trimmedSecondaryCtaUrl && !trimmedSecondaryCtaLabel) {
+      toast.error("Add a label for the extra button.");
+      return;
+    }
+
+    if (trimmedSecondaryCtaLabel && !trimmedSecondaryCtaUrl) {
+      toast.error("Add a link for the extra button.");
+      return;
+    }
+
     startTransition(async () => {
       const result = await updateBookingSettingsAction({
         eventId,
@@ -88,6 +116,9 @@ export function BookingSettingsCard({
         maxTicketsPerBooking: parsedMax,
         bookingNotesEnabled,
         bookingUrl: trimmedBookingUrl ? trimmedBookingUrl : undefined,
+        bookingCtaLabel: trimmedBookingCtaLabel ? trimmedBookingCtaLabel : undefined,
+        secondaryCtaLabel: trimmedSecondaryCtaLabel ? trimmedSecondaryCtaLabel : undefined,
+        secondaryCtaUrl: trimmedSecondaryCtaUrl ? trimmedSecondaryCtaUrl : undefined,
         ...(userRole === "administrator" ? { smsPromoEnabled } : {}),
       });
 
@@ -212,13 +243,13 @@ export function BookingSettingsCard({
             </p>
           ) : null}
 
-          {/* External booking link — short-circuits the local landing page when set */}
+          {/* External booking link: becomes the landing page's main button */}
           <div className="space-y-1">
             <FieldLabel
               htmlFor="bookingUrl"
               help={
                 bookingUrl.trim()
-                  ? "Guests are redirected here instead of the local booking page."
+                  ? "The landing page still shows, with this link as its main button."
                   : isPaidFormat
                     ? "Leave blank to use in-app Stripe Checkout."
                     : "Leave blank to use the local booking page."
@@ -233,6 +264,59 @@ export function BookingSettingsCard({
               onChange={(e) => setBookingUrl(e.target.value)}
               placeholder="https://example.com/buy-tickets"
             />
+          </div>
+
+          {/* Booking button text: applies to the link button and the in-app form */}
+          <div className="space-y-1">
+            <FieldLabel
+              htmlFor="bookingCtaLabel"
+              help={`Leave blank to use "${getBookingCtaLabel(bookingFormat)}".`}
+            >
+              Booking button label (optional)
+            </FieldLabel>
+            <Input
+              id="bookingCtaLabel"
+              type="text"
+              maxLength={CTA_LABEL_MAX_LENGTH}
+              value={bookingCtaLabel}
+              onChange={(e) => setBookingCtaLabel(e.target.value)}
+              placeholder={getBookingCtaLabel(bookingFormat)}
+            />
+          </div>
+
+          {/* Optional extra button below the main call to action */}
+          <div className="space-y-2 rounded-[var(--radius)] border border-[var(--hair)] px-3 py-2.5">
+            <p className="font-brand-mono text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-[var(--ink-muted)]">
+              Extra button (optional)
+            </p>
+            <div className="space-y-1">
+              <FieldLabel
+                htmlFor="secondaryCtaLabel"
+                help="Shown under the main button, for example &quot;See the menu&quot;. Fill in both fields or neither."
+              >
+                Button label
+              </FieldLabel>
+              <Input
+                id="secondaryCtaLabel"
+                type="text"
+                maxLength={CTA_LABEL_MAX_LENGTH}
+                value={secondaryCtaLabel}
+                onChange={(e) => setSecondaryCtaLabel(e.target.value)}
+                placeholder="See the menu"
+              />
+            </div>
+            <div className="space-y-1">
+              <FieldLabel htmlFor="secondaryCtaUrl" help="Where the extra button sends guests.">
+                Button link
+              </FieldLabel>
+              <Input
+                id="secondaryCtaUrl"
+                type="url"
+                value={secondaryCtaUrl}
+                onChange={(e) => setSecondaryCtaUrl(e.target.value)}
+                placeholder="https://example.com/menu"
+              />
+            </div>
           </div>
 
           {/* Total capacity */}

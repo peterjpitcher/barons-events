@@ -22,6 +22,8 @@ interface BookingFormProps {
   isPaidBooking: boolean;
   ticketPrice: number | null;
   bookingNotesEnabled?: boolean;
+  /** Custom button text. Falls back to the label derived from bookingType. */
+  ctaLabel?: string | null;
   nonce?: string;
 }
 
@@ -63,6 +65,7 @@ export function BookingForm({
   isPaidBooking,
   ticketPrice,
   bookingNotesEnabled = false,
+  ctaLabel: ctaLabelOverride,
   nonce
 }: BookingFormProps) {
   const [ticketCount, setTicketCount] = useState(1);
@@ -82,7 +85,7 @@ export function BookingForm({
   const [turnstileKey, setTurnstileKey] = useState(0);
   const formRef = useRef<HTMLFormElement>(null);
   const bookingFormat = isBookingFormat(bookingType) ? bookingType : null;
-  const ctaLabel = getBookingCtaLabel(bookingFormat);
+  const ctaLabel = ctaLabelOverride?.trim() || getBookingCtaLabel(bookingFormat);
   const bookingNoun = bookingFormat && isSeatedBookingFormat(bookingFormat) ? "seats" : "tickets";
   const paidTotal = isPaidBooking && ticketPrice != null ? ticketPrice * ticketCount : null;
   const requiresTurnstileToken =
