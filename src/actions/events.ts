@@ -36,7 +36,12 @@ import { generateTermsAndConditions, generateWebsiteCopy, type GeneratedWebsiteC
 import { isBookingFormat, isFreeBookingFormat, type BookingFormat } from "@/lib/booking-format";
 import { normaliseEventDateTimeForStorage, normaliseWebsiteTimeText } from "@/lib/datetime";
 import { normaliseSopNotRequiredTemplateIds } from "@/lib/planning/sop";
-import { getOrCreateTrackedBookingUrl, type TrackedBookingUrlStatus } from "@/lib/event-booking-links";
+import {
+  getOrCreateTrackedEventLinkUrl,
+  TrackedLinkInputError,
+  type TrackedBookingUrlResult,
+  type TrackedBookingUrlStatus
+} from "@/lib/event-booking-links";
 import { isEventRescheduleEnabled } from "@/lib/feature-flags";
 import {
   normaliseOptionalText as normaliseOptionalTextField,
@@ -3454,6 +3459,8 @@ export type UpdateBookingSettingsResult = ActionResult & {
   seoSlug?: string | null;
   bookingUrl?: string | null;
   bookingUrlTrackingStatus?: TrackedBookingUrlStatus;
+  secondaryCtaUrl?: string | null;
+  secondaryCtaUrlTrackingStatus?: TrackedBookingUrlStatus;
 };
 
 /**
@@ -3512,25 +3519,38 @@ export async function updateBookingSettingsAction(
     return { success: false, message: "Event not found." };
   }
 
-  let trackedBookingUrl: Awaited<ReturnType<typeof getOrCreateTrackedBookingUrl>>;
+  // Both landing-page buttons are shortened, so every outbound click is counted
+  // in Links & QR Codes. The two variants are tagged differently there.
+  const trackedLinkContext = {
+    eventId,
+    eventTitle: event.public_title?.trim() || event.title,
+    eventStartAt: event.start_at,
+    eventCampaignName: event.seo_slug ?? event.public_title ?? event.title,
+    createdBy: user.id
+  };
+
+  let trackedBookingUrl: TrackedBookingUrlResult;
+  let trackedSecondaryCtaUrl: TrackedBookingUrlResult;
   try {
-    trackedBookingUrl = await getOrCreateTrackedBookingUrl({
+    trackedBookingUrl = await getOrCreateTrackedEventLinkUrl({
+      ...trackedLinkContext,
       url: bookingUrl ?? null,
-      eventId,
-      eventTitle: event.public_title?.trim() || event.title,
-      eventStartAt: event.start_at,
-      eventCampaignName: event.seo_slug ?? event.public_title ?? event.title,
-      createdBy: user.id
+      variant: "booking"
+    });
+    trackedSecondaryCtaUrl = await getOrCreateTrackedEventLinkUrl({
+      ...trackedLinkContext,
+      url: secondaryCtaUrl ?? null,
+      variant: "extra_cta"
     });
   } catch (error) {
-    const detail = error instanceof Error ? error.message : "Unknown error";
-    if (detail.startsWith("Booking link") || detail.startsWith("That short link")) {
-      return { success: false, message: detail };
+    if (error instanceof TrackedLinkInputError) {
+      return { success: false, message: error.message };
     }
     console.error("updateBookingSettings tracked link creation failed:", error);
-    return { success: false, message: "Could not prepare the tracked booking link. Please try again." };
+    return { success: false, message: "Could not prepare the tracked link. Please try again." };
   }
   const nextBookingUrl = trackedBookingUrl.url;
+  const nextSecondaryCtaUrl = trackedSecondaryCtaUrl.url;
 
   // Auto-generate slug when enabling bookings for the first time
   let seoSlug: string | null = event.seo_slug ?? null;
@@ -3557,7 +3577,7 @@ export async function updateBookingSettingsAction(
     booking_url: nextBookingUrl,
     booking_cta_label: bookingCtaLabel ?? null,
     secondary_cta_label: secondaryCtaLabel ?? null,
-    secondary_cta_url: secondaryCtaUrl ?? null,
+    secondary_cta_url: nextSecondaryCtaUrl,
   };
   if (user.role === "administrator" && smsPromoEnabled !== undefined) {
     updatePayload.sms_promo_enabled = smsPromoEnabled;
@@ -3588,7 +3608,8 @@ export async function updateBookingSettingsAction(
         bookingUrlTrackingStatus: trackedBookingUrl.status,
         bookingCtaLabel: bookingCtaLabel ?? null,
         secondaryCtaLabel: secondaryCtaLabel ?? null,
-        secondaryCtaUrl: secondaryCtaUrl ?? null
+        secondaryCtaUrl: nextSecondaryCtaUrl,
+        secondaryCtaUrlTrackingStatus: trackedSecondaryCtaUrl.status
       }
     });
   } catch (auditError) {
@@ -3598,18 +3619,24 @@ export async function updateBookingSettingsAction(
     console.error("updateBookingSettings audit log entry failed:", auditError);
   }
   revalidatePath(`/events/${eventId}`);
-  const trackedMessage =
-    trackedBookingUrl.status === "created"
-      ? " Booking link was shortened for tracking."
-      : trackedBookingUrl.status === "reused"
-        ? " Booking link was replaced with an existing tracked short link."
+  const describeTracking = (label: string, status: TrackedBookingUrlStatus): string =>
+    status === "created"
+      ? ` ${label} was shortened for tracking.`
+      : status === "reused"
+        ? ` ${label} was replaced with an existing tracked short link.`
         : "";
+
+  const trackedMessage =
+    describeTracking("Booking link", trackedBookingUrl.status) +
+    describeTracking("Extra button link", trackedSecondaryCtaUrl.status);
 
   return {
     success: true,
     message: `Booking settings saved.${trackedMessage}`,
     seoSlug,
     bookingUrl: nextBookingUrl,
-    bookingUrlTrackingStatus: trackedBookingUrl.status
+    bookingUrlTrackingStatus: trackedBookingUrl.status,
+    secondaryCtaUrl: nextSecondaryCtaUrl,
+    secondaryCtaUrlTrackingStatus: trackedSecondaryCtaUrl.status
   };
 }

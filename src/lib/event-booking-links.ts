@@ -12,6 +12,52 @@ const SHORT_LINK_NAME_MAX = 120;
 
 type SupabaseAdminClient = ReturnType<typeof createSupabaseAdminClient>;
 
+/**
+ * Which landing-page button a tracked link belongs to. The variants differ only
+ * in how the resulting short link is labelled and tagged, so the two buttons
+ * stay tellable apart in Links & QR Codes and in campaign reporting.
+ */
+export type TrackedEventLinkVariant = "booking" | "extra_cta";
+
+type VariantConfig = {
+  linkType: "booking" | "event";
+  utmMedium: string;
+  utmContent: string;
+  nameSuffix: string;
+  label: string;
+  auditSource: string;
+};
+
+const VARIANTS: Record<TrackedEventLinkVariant, VariantConfig> = {
+  booking: {
+    linkType: "booking",
+    utmMedium: "booking_link",
+    utmContent: "event_booking",
+    nameSuffix: "Booking link",
+    label: "Booking link",
+    auditSource: "event_booking"
+  },
+  extra_cta: {
+    linkType: "event",
+    utmMedium: "event_cta",
+    utmContent: "event_extra_button",
+    nameSuffix: "Extra button",
+    label: "Extra button link",
+    auditSource: "event_extra_cta"
+  }
+};
+
+/**
+ * A problem the administrator can fix by editing the field, as opposed to an
+ * infrastructure failure. The caller surfaces `message` verbatim.
+ */
+export class TrackedLinkInputError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TrackedLinkInputError";
+  }
+}
+
 export type TrackedBookingUrlStatus = "empty" | "already-shortened" | "reused" | "created";
 
 export type TrackedBookingUrlResult = {
@@ -55,16 +101,31 @@ function normaliseExistingShortUrl(originalUrl: string, code: string): string {
   return url.toString();
 }
 
-export function buildTrackedBookingDestination(value: string, campaignName: string, eventId: string): string {
+export function buildTrackedEventDestination(
+  value: string,
+  campaignName: string,
+  eventId: string,
+  variant: TrackedEventLinkVariant = "booking"
+): string {
+  const config = VARIANTS[variant];
   const destination = new URL(value);
   destination.searchParams.set("utm_source", "baronshub");
-  destination.searchParams.set("utm_medium", "booking_link");
+  destination.searchParams.set("utm_medium", config.utmMedium);
   destination.searchParams.set("utm_campaign", slugifyForUtm(campaignName) || eventId.slice(0, 8));
-  destination.searchParams.set("utm_content", "event_booking");
+  destination.searchParams.set("utm_content", config.utmContent);
   return destination.toString();
 }
 
-function buildShortLinkName(eventTitle: string, eventStartAt: string | null | undefined): string {
+/** Kept for the booking-link call sites and their tests. */
+export function buildTrackedBookingDestination(value: string, campaignName: string, eventId: string): string {
+  return buildTrackedEventDestination(value, campaignName, eventId, "booking");
+}
+
+function buildShortLinkName(
+  eventTitle: string,
+  eventStartAt: string | null | undefined,
+  suffix: string
+): string {
   const title = eventTitle.trim() || "Event";
   const date = eventStartAt
     ? new Date(eventStartAt).toLocaleDateString("en-GB", {
@@ -74,7 +135,7 @@ function buildShortLinkName(eventTitle: string, eventStartAt: string | null | un
         timeZone: "Europe/London"
       })
     : null;
-  const name = `${title}${date ? ` (${date})` : ""} - Booking link`;
+  const name = `${title}${date ? ` (${date})` : ""} - ${suffix}`;
   return name.length > SHORT_LINK_NAME_MAX
     ? name.slice(0, SHORT_LINK_NAME_MAX).replace(/\s+\S*$/, "").trim()
     : name;
@@ -112,11 +173,12 @@ async function shortLinkCodeExists(db: SupabaseAdminClient, code: string): Promi
   return Boolean(data);
 }
 
-async function createTrackedBookingShortLink(params: {
+async function createTrackedShortLink(params: {
   db: SupabaseAdminClient;
   name: string;
   destination: string;
   createdBy: string;
+  config: VariantConfig;
 }): Promise<string> {
   // Shared insert-first generator: retries code collisions, propagates real errors.
   let link: ShortLink;
@@ -124,7 +186,7 @@ async function createTrackedBookingShortLink(params: {
     link = await insertShortLinkWithUniqueCode(params.db, {
       name: params.name,
       destination: params.destination,
-      link_type: "booking",
+      link_type: params.config.linkType,
       expires_at: null,
       created_by: params.createdBy
     });
@@ -132,26 +194,34 @@ async function createTrackedBookingShortLink(params: {
     throw new Error(`Could not create short link: ${error instanceof Error ? error.message : "Unknown error"}`);
   }
 
-  // Admin-client mutation — audit with the service-role logger, attributed to the acting user.
+  // Admin-client mutation, audited with the service-role logger and attributed
+  // to the acting user.
   await recordSystemAuditLogEntry({
     entity: "link",
     entityId: link.id,
     action: "link.created",
     actorId: params.createdBy,
-    meta: { name: params.name, linkType: "booking", source: "event_booking" }
+    meta: { name: params.name, linkType: params.config.linkType, source: params.config.auditSource }
   });
 
   return link.code;
 }
 
-export async function getOrCreateTrackedBookingUrl(params: {
+/**
+ * Turn an event's outbound link into a tracked short link, reusing an existing
+ * one where the destination already matches. Both landing-page buttons go
+ * through this, so every outbound click is counted in Links & QR Codes.
+ */
+export async function getOrCreateTrackedEventLinkUrl(params: {
   url: string | null | undefined;
   eventId: string;
   eventTitle: string;
   eventStartAt?: string | null;
   eventCampaignName?: string | null;
   createdBy: string;
+  variant?: TrackedEventLinkVariant;
 }): Promise<TrackedBookingUrlResult> {
+  const config = VARIANTS[params.variant ?? "booking"];
   const trimmedUrl = params.url?.trim() ?? "";
   if (!trimmedUrl) {
     return { url: null, status: "empty" };
@@ -161,11 +231,11 @@ export async function getOrCreateTrackedBookingUrl(params: {
   try {
     parsedUrl = new URL(trimmedUrl);
   } catch {
-    throw new Error("Booking link must be a full URL.");
+    throw new TrackedLinkInputError(`${config.label} must be a full URL.`);
   }
 
   if (!HTTP_PROTOCOLS.has(parsedUrl.protocol)) {
-    throw new Error("Booking link must start with http:// or https://.");
+    throw new TrackedLinkInputError(`${config.label} must start with http:// or https://.`);
   }
 
   const db = createSupabaseAdminClient();
@@ -173,23 +243,29 @@ export async function getOrCreateTrackedBookingUrl(params: {
   if (existingShortCode) {
     const exists = await shortLinkCodeExists(db, existingShortCode);
     if (!exists) {
-      throw new Error("That short link was not found in Links & QR Codes.");
+      throw new TrackedLinkInputError("That short link was not found in Links & QR Codes.");
     }
     return { url: normaliseExistingShortUrl(trimmedUrl, existingShortCode), status: "already-shortened" };
   }
 
   const campaignName = params.eventCampaignName?.trim() || params.eventTitle;
-  const trackedDestination = buildTrackedBookingDestination(trimmedUrl, campaignName, params.eventId);
+  const trackedDestination = buildTrackedEventDestination(
+    trimmedUrl,
+    campaignName,
+    params.eventId,
+    params.variant ?? "booking"
+  );
   const reusableCode = await findShortLinkCodeByDestination(db, trackedDestination);
   if (reusableCode) {
     return { url: buildShortUrl(reusableCode), status: "reused" };
   }
 
-  const newCode = await createTrackedBookingShortLink({
+  const newCode = await createTrackedShortLink({
     db,
-    name: buildShortLinkName(params.eventTitle, params.eventStartAt),
+    name: buildShortLinkName(params.eventTitle, params.eventStartAt, config.nameSuffix),
     destination: trackedDestination,
-    createdBy: params.createdBy
+    createdBy: params.createdBy,
+    config
   });
 
   return { url: buildShortUrl(newCode), status: "created" };
