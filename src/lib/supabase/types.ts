@@ -20,6 +20,7 @@ export interface Database {
           planning_queue_pinned: boolean;
           sop_drawer_pinned: boolean;
           weekly_digest_last_sent_on: string | null;
+          weekly_digest_last_sent_at: string | null;
           todo_digest_frequency: string;
           todo_digest_last_sent_on: string | null;
           venue_id: string | null;
