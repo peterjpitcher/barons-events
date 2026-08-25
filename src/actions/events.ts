@@ -50,6 +50,7 @@ import {
 } from "@/lib/normalise";
 import { logEventAction } from "@/lib/observability/event-action-log";
 import { canAddEventImage } from "@/lib/events/image-policy";
+import { canGenerateWebsiteCopy, canWriteSeoSlug } from "@/lib/events/ai-copy-policy";
 
 const reviewerFallback = z.string().uuid().optional();
 const eventStatusUpdateSchema = z.object({
@@ -274,6 +275,7 @@ const WEBSITE_COPY_EVENT_SELECT = `
   public_highlights,
   booking_url,
   notes,
+  first_published_at,
   venue:venues!events_venue_id_fkey(name,address),
   artists:event_artists(
     billing_order,
@@ -311,6 +313,7 @@ type WebsiteCopyEventRecord = {
   public_highlights: unknown;
   booking_url: string | null;
   notes: string | null;
+  first_published_at: string | null;
   venue: unknown;
   artists: unknown;
 };
@@ -466,10 +469,16 @@ async function ensureUniqueWebsiteCopySlug(seoSlug: string | null | undefined, e
 
 async function buildUniqueWebsiteCopyUpdatePayload(
   generated: GeneratedWebsiteCopy,
-  eventId: string
+  eventId: string,
+  firstPublishedAt: string | null
 ): Promise<Record<string, unknown>> {
   const payload = buildWebsiteCopyUpdatePayload(generated);
-  payload.seo_slug = await ensureUniqueWebsiteCopySlug(generated.seoSlug, eventId);
+  // Once an event has been published its public web address is fixed. The model
+  // returns a fresh slug every time, so writing it here would silently move a
+  // live URL that printed QR codes and the brand site both depend on.
+  if (canWriteSeoSlug(firstPublishedAt)) {
+    payload.seo_slug = await ensureUniqueWebsiteCopySlug(generated.seoSlug, eventId);
+  }
   return payload;
 }
 
@@ -759,11 +768,20 @@ async function autoApproveEvent(params: {
   if (!eventBeforeApproval) {
     throw new Error("Event not found.");
   }
-  const generatedWebsiteCopy = await generateWebsiteCopyFromEventRecord(eventBeforeApproval);
+  // Never regenerate over copy that already exists. AI generation is now
+  // available from the moment a proposal is approved, so by the time an event
+  // reaches auto-approval an administrator may well have generated copy and
+  // then edited it by hand. Regenerating here would silently destroy that.
+  // Mirrors the guard reviewerDecisionAction already applies.
+  const alreadyHasCopy = Boolean(eventBeforeApproval.public_title);
+
+  const generatedWebsiteCopy = alreadyHasCopy
+    ? null
+    : await generateWebsiteCopyFromEventRecord(eventBeforeApproval);
   const websiteCopyPayload = generatedWebsiteCopy
-    ? await buildUniqueWebsiteCopyUpdatePayload(generatedWebsiteCopy, params.eventId)
+    ? await buildUniqueWebsiteCopyUpdatePayload(generatedWebsiteCopy, params.eventId, eventBeforeApproval.first_published_at)
     : null;
-  if (!generatedWebsiteCopy) {
+  if (!alreadyHasCopy && !generatedWebsiteCopy) {
     console.warn("Auto-approval continuing without AI website copy.");
     warnings.push("Website copy could not be generated automatically");
   }
@@ -2079,7 +2097,11 @@ export async function reviewerDecisionAction(
             message: "Could not generate website copy. Approval was not saved. Check the AI service credentials and try again."
           };
         }
-        websiteCopyPayload = await buildUniqueWebsiteCopyUpdatePayload(generatedWebsiteCopy, parsedId.data);
+        websiteCopyPayload = await buildUniqueWebsiteCopyUpdatePayload(
+          generatedWebsiteCopy,
+          parsedId.data,
+          eventBeforeDecision.first_published_at
+        );
       }
     }
 
@@ -2913,8 +2935,8 @@ export async function generateWebsiteCopyAction(
     }
     // Admin-only function (canReviewEvents gates above) — no per-assignee scoping needed
 
-    if (record.status !== "approved" && record.status !== "completed") {
-      return { success: false, message: "Approve the event before generating website copy." };
+    if (!canGenerateWebsiteCopy(record.status)) {
+      return { success: false, message: "Website copy can only be generated once the event is approved." };
     }
 
     const generated = await generateWebsiteCopyFromEventRecord(record, formData);
@@ -2926,7 +2948,7 @@ export async function generateWebsiteCopyAction(
     await updateEventWithFallback({
       supabase,
       eventId: parsedEventId.data,
-      payload: await buildUniqueWebsiteCopyUpdatePayload(generated, parsedEventId.data),
+      payload: await buildUniqueWebsiteCopyUpdatePayload(generated, parsedEventId.data, record.first_published_at),
       contextLabel: "website copy"
     });
     await recordWebsiteCopyGeneratedAudit({ eventId: parsedEventId.data, actorId: user.id });

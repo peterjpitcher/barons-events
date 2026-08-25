@@ -40,6 +40,7 @@ import { normaliseEventDateTimeForStorage, toLondonDateTimeInputValue } from "@/
 import { notesClashingWithSelection, type FormNote } from "@/lib/calendar-notes/form-clash";
 import type { EventSummary } from "@/lib/events";
 import { canAddEventImage } from "@/lib/events/image-policy";
+import { canGenerateWebsiteCopy } from "@/lib/events/ai-copy-policy";
 import type { UserRole } from "@/lib/types";
 import type { ArtistOption } from "@/lib/artists";
 import type { VenueRow } from "@/lib/venues";
@@ -618,8 +619,11 @@ export function EventForm({
     }
     return options;
   }, [eventTypes, eventTypeValue]);
-  const canGenerateWebsiteCopy = mode === "edit"
-    ? Boolean(defaultValues?.id) && ["approved", "completed"].includes(defaultValues?.status ?? "")
+  // Shares one allowlist with the server action, so the button and the action
+  // can never disagree. Create mode has no event row and posts to a different,
+  // ungated action.
+  const canGenerateAiCopy = mode === "edit"
+    ? Boolean(defaultValues?.id) && canGenerateWebsiteCopy(defaultValues?.status)
     : true;
 
   function handleVenueChange(value: string) {
@@ -779,6 +783,10 @@ export function EventForm({
       }
     },
     generateWebsiteCopy: () => {
+      // The proxy button sits outside the disabling fieldset, so the status gate
+      // has to be applied here too. Without it the mobile action bar could
+      // submit a generation the desktop control refuses.
+      if (!canGenerateAiCopy) return;
       if (formRef.current && proxyGenerateRef.current) {
         formRef.current.requestSubmit(proxyGenerateRef.current);
       }
@@ -788,7 +796,7 @@ export function EventForm({
     isGenerating: isGeneratingPending,
     isPending,
     mode,
-    canGenerateWebsiteCopy,
+    canGenerateWebsiteCopy: canGenerateAiCopy,
     primaryLabel,
     secondaryLabel,
     showSecondaryAction
@@ -2007,7 +2015,7 @@ export function EventForm({
                   <WebsiteListingCard
                     websiteFields={websiteFields}
                     generateAction={activeWebsiteCopyAction}
-                    canGenerate={canGenerateWebsiteCopy}
+                    canGenerate={canGenerateAiCopy}
                     readOnly={readOnly}
                   />
                 </MobilePersistedFormSection>
