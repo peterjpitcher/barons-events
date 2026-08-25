@@ -21,7 +21,7 @@ import { canCreatePlanningItems, canManageAllPlanning, canViewPlanning } from "@
 import type { AppUser, UserRole } from "@/lib/types";
 import { createSupabaseActionClient, createSupabaseReadonlyClient } from "@/lib/supabase/server";
 import { generateInspirationItems } from "@/lib/planning/inspiration";
-import { generateSopChecklist, normaliseSopNotRequiredTemplateIds, recalculateSopDates, updateBlockedStatus } from "@/lib/planning/sop";
+import { generateSopChecklist, normaliseSopNotRequiredTemplateIds, recalculateSopDates, updateBlockedStatus, UUID_PATTERN } from "@/lib/planning/sop";
 import { recordAuditLogEntry } from "@/lib/audit-log";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { canCreatePlanningForVenueSelection, canEditVenueLinkedPlanning } from "@/lib/visibility";
@@ -36,6 +36,14 @@ const uuidSchema = z.string().uuid();
 const optionalUuidSchema = z.union([z.string().uuid(), z.literal(""), z.null(), z.undefined()]);
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD");
 const optionalDateTimeSchema = z.union([z.string().datetime(), z.literal(""), z.null(), z.undefined()]);
+/**
+ * SOP template ids must NOT use `z.string().uuid()`. Zod 4 enforces the RFC 4122
+ * version and variant nibbles, and the seeded templates are md5-derived, so 20 of
+ * the 28 live templates fail. Reuse the same lax shape the SOP layer already
+ * applies in `normaliseSopNotRequiredTemplateIds`, which is the only validation
+ * that matters here because the ids are matched against real template rows later.
+ */
+const sopTemplateIdSchema = z.string().regex(UUID_PATTERN, "Unrecognised SOP task");
 const planningStatusSchema = z.enum(["planned", "in_progress", "blocked", "done", "cancelled"]);
 const taskStatusSchema = z.enum(["open", "done", "not_required"]);
 const frequencySchema = z.enum(["daily", "weekly", "monthly"]);
@@ -77,7 +85,7 @@ const createItemSchema = z.object({
   startAt: optionalDateTimeSchema,
   endAt: optionalDateTimeSchema,
   status: planningStatusSchema.optional(),
-  sopNotRequiredTemplateIds: z.array(z.string().uuid()).optional()
+  sopNotRequiredTemplateIds: z.array(sopTemplateIdSchema).optional()
 });
 
 /** Calls the set_planning_item_venues helper to sync the join table. */
@@ -429,7 +437,7 @@ const createSeriesSchema = z
     recurrenceMonthday: z.number().int().min(1).max(31).optional().nullable(),
     startsOn: dateSchema,
     endsOn: dateSchema.optional().nullable(),
-    sopNotRequiredTemplateIds: z.array(z.string().uuid()).optional(),
+    sopNotRequiredTemplateIds: z.array(sopTemplateIdSchema).optional(),
     taskTemplates: z.array(taskTemplateSchema).optional()
   })
   .superRefine((values, ctx) => {

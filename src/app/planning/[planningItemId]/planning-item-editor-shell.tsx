@@ -10,6 +10,7 @@ import { VenueMultiSelect, type VenueOption } from "@/components/venues/venue-mu
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FieldError } from "@/components/ui/field-error";
+import { FormErrorSummary } from "@/components/ui/form-error-summary";
 import { FieldLabel } from "@/components/ui/field-label";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -17,6 +18,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { normaliseEventDateTimeForStorage, toLondonDateTimeInputValue } from "@/lib/datetime";
 import { deriveInitialVenueIds } from "@/lib/planning/utils";
 import type { PlanningItem, PlanningItemStatus, PlanningPerson, PlanningVenueOption } from "@/lib/planning/types";
+
+/** Error keys this form renders beside their own input. */
+const EDIT_HANDLED_ERROR_KEYS = [
+  "title",
+  "typeLabel",
+  "venueId",
+  "venueIds",
+  "startAt",
+  "endAt",
+  "targetDate"
+] as const;
 
 type PlanningItemEditorShellProps = {
   item: PlanningItem;
@@ -321,6 +333,12 @@ export function PlanningItemEditorShell({
             onChange={(event) => setDescription(event.target.value)}
           />
         </div>
+
+        <FormErrorSummary
+          id="planning-edit-error-summary"
+          errors={fieldErrors}
+          handledKeys={EDIT_HANDLED_ERROR_KEYS}
+        />
 
         {canEdit ? (
           <div className="hidden justify-end pt-1 md:flex">
