@@ -17,9 +17,10 @@ import { sendProposalSubmittedEmailOnce } from "@/lib/notifications";
 /**
  * Wave 3 — pre-event approval server actions.
  *
- * proposeEventAction: administrator submits a bare-bones proposal for multiple venues. Calls
- * create_multi_venue_event_proposals RPC. No event_type / venue_space /
- * end_at required; no SOP generated until approval.
+ * proposeEventAction: submits a bare-bones proposal for multiple venues. Calls
+ * create_multi_venue_event_proposals RPC. No event_type / venue_space required;
+ * no SOP generated until approval. end_at IS required as of 2026-08-25, so the
+ * proposal carries a real finish time rather than one invented at approval.
  *
  * preApproveEventAction: administrator only. Calls
  * pre_approve_event_proposal RPC (transitional status, planning item
@@ -29,15 +30,31 @@ import { sendProposalSubmittedEmailOnce } from "@/lib/notifications";
  * reason in approvals and transitions status to 'rejected'.
  */
 
-const proposalSchema = z.object({
-  title: z.string().min(1, "Add a title").max(200),
-  startAt: z.string().min(1, "Pick a start date & time"),
-  notes: z.string().min(1, "Add a short description").max(2000),
-  venueIds: z
-    .array(z.string().uuid())
-    .min(1, "Pick at least one venue")
-    .max(20, "Too many venues selected")
-});
+const proposalSchema = z
+  .object({
+    title: z.string().min(1, "Add a title").max(200),
+    startAt: z.string().min(1, "Pick a start date & time"),
+    endAt: z.string().min(1, "Pick an end date & time"),
+    notes: z.string().min(1, "Add a short description").max(2000),
+    venueIds: z
+      .array(z.string().uuid())
+      .min(1, "Pick at least one venue")
+      .max(20, "Too many venues selected")
+  })
+  .superRefine((values, ctx) => {
+    // Mirrors the events_end_after_start CHECK constraint exactly: strictly
+    // greater, not >=. A looser rule here would let the database reject the row
+    // instead, and both proposal paths surface raw Postgres text to the user.
+    // Compared as datetime-local strings, which sort correctly because they are
+    // fixed-width and share a timezone.
+    if (values.endAt <= values.startAt) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "The end time must be after the start time",
+        path: ["endAt"]
+      });
+    }
+  });
 
 function shouldUseSaveEventRpc(): boolean {
   return process.env.EVENT_SAVE_USE_RPC === "true";
@@ -78,6 +95,7 @@ export async function proposeEventAction(
   const parsed = proposalSchema.safeParse({
     title: formData.get("title"),
     startAt: formData.get("startAt"),
+    endAt: formData.get("endAt"),
     notes: formData.get("notes"),
     venueIds
   });
@@ -112,7 +130,23 @@ export async function proposeEventAction(
   }
 
   const idempotencyKey = readProposalIdempotencyKey(formData);
-  const startAtIso = normaliseEventDateTimeForStorage(parsed.data.startAt);
+
+  // normaliseEventDateTimeForStorage throws on a daylight-saving spring-forward
+  // gap time (a wall clock that never happens). Uncaught, that surfaced as a
+  // server-action crash rather than a field error.
+  let startAtIso: string;
+  let endAtIso: string;
+  try {
+    startAtIso = normaliseEventDateTimeForStorage(parsed.data.startAt);
+    endAtIso = normaliseEventDateTimeForStorage(parsed.data.endAt);
+  } catch (error) {
+    console.error(`[event-propose:${operationId.slice(0, 8)}] Date normalisation failed`, error);
+    return {
+      success: false,
+      message: "That date and time does not exist, the clocks change that night. Pick another time.",
+      operationId
+    };
+  }
 
   if (shouldUseSaveEventRpc()) {
     const result = await callProposeEventDraftRpc({
@@ -120,6 +154,7 @@ export async function proposeEventAction(
         venue_ids: parsed.data.venueIds,
         title: parsed.data.title,
         start_at: startAtIso,
+        end_at: endAtIso,
         notes: parsed.data.notes
       },
       idempotencyKey,
@@ -161,6 +196,7 @@ export async function proposeEventAction(
       venue_ids: parsed.data.venueIds,
       title: parsed.data.title,
       start_at: startAtIso,
+      end_at: endAtIso,
       notes: parsed.data.notes
     },
     p_idempotency_key: idempotencyKey

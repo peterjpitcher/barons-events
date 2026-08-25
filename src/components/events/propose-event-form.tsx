@@ -72,6 +72,10 @@ function formatIsoDate(dateString: string): string {
 export function ProposeEventForm({ venues, defaultVenueId, clashNotes = [], notesUnavailable = false }: ProposeEventFormProps) {
   const [state, formAction, isPending] = useActionState(proposeEventAction, undefined);
   const [startAt, setStartAt] = useState("");
+  const [endAt, setEndAt] = useState("");
+  // True once the user edits the end time themselves, after which changing the
+  // start no longer overwrites their choice.
+  const [endAtDirty, setEndAtDirty] = useState(false);
   const [selectedVenueIds, setSelectedVenueIds] = useState<string[]>(() => {
     if (defaultVenueId && venues.some((v) => v.id === defaultVenueId)) {
       return [defaultVenueId];
@@ -92,6 +96,44 @@ export function ProposeEventForm({ venues, defaultVenueId, clashNotes = [], note
       : "00000000-0000-4000-8000-000000000003"
   );
   const router = useRouter();
+
+  // Mirrors the full event form: the end prefills to three hours after the
+  // start and follows it until the user sets their own. Kept as wall-clock
+  // arithmetic on the datetime-local string, so an event spanning a clock
+  // change keeps the duration the user sees rather than the elapsed hours.
+  function addThreeHours(localValue: string): string {
+    const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(localValue);
+    if (!match) return "";
+    const [, year, month, day, hour, minute] = match;
+    const asDate = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute)));
+    if (Number.isNaN(asDate.getTime())) return "";
+    // Date.UTC silently rolls impossible values over (month 13 becomes January
+    // of the next year), so confirm the parts survived the round trip rather
+    // than returning a plausible but wrong date.
+    if (
+      asDate.getUTCFullYear() !== Number(year) ||
+      asDate.getUTCMonth() !== Number(month) - 1 ||
+      asDate.getUTCDate() !== Number(day) ||
+      asDate.getUTCHours() !== Number(hour) ||
+      asDate.getUTCMinutes() !== Number(minute)
+    ) {
+      return "";
+    }
+    asDate.setUTCHours(asDate.getUTCHours() + 3);
+    const pad = (value: number) => String(value).padStart(2, "0");
+    return `${asDate.getUTCFullYear()}-${pad(asDate.getUTCMonth() + 1)}-${pad(asDate.getUTCDate())}T${pad(asDate.getUTCHours())}:${pad(asDate.getUTCMinutes())}`;
+  }
+
+  function handleStartChange(value: string) {
+    setStartAt(value);
+    if (endAtDirty) return;
+    setEndAt(value ? addThreeHours(value) : "");
+  }
+
+  // Both are fixed-width local datetime strings in the same timezone, so a
+  // string comparison orders them correctly.
+  const endBeforeStart = Boolean(startAt && endAt && endAt <= startAt);
+
   const shortNoticeEnteredByDate = useMemo(() => {
     if (!startAt) return null;
     const eventDate = startAt.slice(0, 10);
@@ -99,16 +141,17 @@ export function ProposeEventForm({ venues, defaultVenueId, clashNotes = [], note
     const enteredByDate = addDaysIsoDate(eventDate, -REQUIRED_NOTICE_DAYS);
     return enteredByDate < todayIsoDate() ? enteredByDate : null;
   }, [startAt]);
-  // Advisory clash check against venue calendar notes. Uses the same startAt
-  // value the action normalises on submit; proposals have no end time.
+  // Advisory clash check against venue calendar notes. Uses the same values the
+  // action normalises on submit, including the real end time so an event that
+  // runs past midnight is checked against both dates.
   const clashingNotes = useMemo(() => {
     const startAtIso = toClashSelectionIso(startAt);
     if (!startAtIso) return [];
     return notesClashingWithSelection(
-      { venueIds: selectedVenueIds, startAt: startAtIso, endAt: null },
+      { venueIds: selectedVenueIds, startAt: startAtIso, endAt: toClashSelectionIso(endAt) },
       clashNotes
     );
-  }, [startAt, selectedVenueIds, clashNotes]);
+  }, [startAt, endAt, selectedVenueIds, clashNotes]);
 
   useEffect(() => {
     if (state?.message) {
@@ -150,7 +193,7 @@ export function ProposeEventForm({ venues, defaultVenueId, clashNotes = [], note
           value={startAt}
           required
           className="h-12 text-[16px] md:h-10 md:text-sm"
-          onChange={(event) => setStartAt(event.target.value)}
+          onChange={(event) => handleStartChange(event.target.value)}
         />
         {shortNoticeEnteredByDate ? (
           <p className="rounded-[6px] border border-[var(--mustard)] bg-[var(--mustard-tint)] px-2 py-1.5 text-xs text-[var(--mustard-dark)]" role="status">
@@ -164,6 +207,30 @@ export function ProposeEventForm({ venues, defaultVenueId, clashNotes = [], note
             {"⚠️"} Heads up: {clashingNotes.map((n) => `"${n.title}"`).join(", ")} noted at this venue on this date. You can still save.
           </p>
         ) : null}
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="propose-end">When does it finish?</Label>
+        <Input
+          id="propose-end"
+          name="endAt"
+          type="datetime-local"
+          value={endAt}
+          required
+          min={startAt || undefined}
+          aria-invalid={Boolean(endBeforeStart)}
+          aria-describedby="propose-end-hint"
+          className="h-12 text-[16px] md:h-10 md:text-sm"
+          onChange={(event) => {
+            setEndAtDirty(true);
+            setEndAt(event.target.value);
+          }}
+        />
+        <p id="propose-end-hint" className="text-xs text-subtle">
+          {endBeforeStart
+            ? "The end time must be after the start time."
+            : "Filled in for you as three hours after the start. Change it if that is wrong."}
+        </p>
       </div>
 
       <div className="space-y-2">

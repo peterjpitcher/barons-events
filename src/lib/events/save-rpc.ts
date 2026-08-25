@@ -92,6 +92,10 @@ export type ProposeEventDraftPayload = {
   venue_ids: string[];
   title: string;
   start_at: string;
+  /** Required by the form since 2026-08-25. Optional here so the RPC contract
+   * stays tolerant of a caller that has no finish time, matching the nullable
+   * events.end_at column. */
+  end_at?: string;
   notes: string;
 };
 

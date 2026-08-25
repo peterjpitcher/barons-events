@@ -1243,10 +1243,22 @@ const timeFormatter = new Intl.DateTimeFormat("en-GB", {
   minute: "2-digit"
 });
 
-function formatEventWindow(event: EventRow): string {
-  const start = new Date(event.start_at);
-  const end = new Date(event.end_at);
-  return `${dateFormatter.format(start)} · ${timeFormatter.format(start)} – ${timeFormatter.format(end)}`;
+/** Exported for tests. Not part of the module's intended public surface. */
+export function formatEventWindow(event: EventRow): string {
+  // `new Date(null)` is the 1970 epoch, not an invalid date, so a truthiness
+  // check has to come before the NaN check on both fields.
+  const start = event.start_at ? new Date(event.start_at) : null;
+  if (!start || Number.isNaN(start.getTime())) return "Date not set";
+
+  // end_at is nullable, and `new Date(null)` is the 1970 epoch rather than an
+  // invalid date, so an unguarded format here emails a plausible but wrong
+  // finish time. Proposals raised before end time became required still have no
+  // end, and so does anything else that skipped it.
+  const end = event.end_at ? new Date(event.end_at) : null;
+  const startText = `${dateFormatter.format(start)} · ${timeFormatter.format(start)}`;
+  if (!end || Number.isNaN(end.getTime())) return `${startText} – end time TBC`;
+
+  return `${startText} – ${timeFormatter.format(end)}`;
 }
 
 function formatProposalStart(value: string | null): string {
