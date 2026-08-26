@@ -15,6 +15,10 @@ vi.mock('@/lib/planning/sop', () => ({
   generateSopChecklist: vi.fn(),
   recalculateSopDates: vi.fn(),
   updateBlockedStatus: vi.fn(),
+  // Read at module load by the zod schemas in @/actions/planning, so it must be
+  // a real regex rather than a vi.fn(). Kept in step with the export in sop.ts.
+  UUID_PATTERN: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+  normaliseSopNotRequiredTemplateIds: vi.fn().mockReturnValue([]),
 }));
 // Also mock planning module to prevent its internals from running
 vi.mock('@/lib/planning', () => ({

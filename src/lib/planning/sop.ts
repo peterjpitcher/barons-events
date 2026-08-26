@@ -23,7 +23,16 @@ type PastEventTodoCleanupOptions = {
   pageSize?: number;
 };
 
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/**
+ * Deliberately lax uuid shape for SOP template ids.
+ *
+ * The seeded template ids were built with `md5(key)::uuid`, so they are valid
+ * Postgres uuids but carry no RFC 4122 version or variant bits. Zod 4's strict
+ * `.uuid()` rejects 20 of the 28 live templates. Anything matching this pattern
+ * is still checked against real `sop_task_templates` rows downstream, so an
+ * unrecognised id simply matches nothing.
+ */
+export const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DEFAULT_PAGE_SIZE = 1000;
 const DEFAULT_IN_CHUNK_SIZE = 500;
 

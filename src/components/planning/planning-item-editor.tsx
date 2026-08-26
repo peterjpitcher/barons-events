@@ -10,12 +10,29 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FieldError } from "@/components/ui/field-error";
 import { FieldLabel } from "@/components/ui/field-label";
+import { FormErrorSummary } from "@/components/ui/form-error-summary";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import type { PlanningPerson, PlanningVenueOption, RecurrenceFrequency } from "@/lib/planning/types";
 import type { SopTemplateTree } from "@/lib/planning/sop-types";
+
+/** Error keys the single-item form renders beside their own input. */
+const SINGLE_HANDLED_ERROR_KEYS = ["title", "typeLabel", "targetDate", "venueId", "venueIds", "ownerId"] as const;
+
+/** Error keys the recurring-series form renders beside their own input. */
+const SERIES_HANDLED_ERROR_KEYS = [
+  "title",
+  "typeLabel",
+  "venueId",
+  "ownerId",
+  "startsOn",
+  "endsOn",
+  "recurrenceInterval",
+  "recurrenceWeekdays",
+  "recurrenceMonthday"
+] as const;
 
 type PlanningItemEditorProps = {
   today: string;
@@ -206,7 +223,20 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
       return;
     }
 
+    // An empty box coerces to 0, which the schema rejects with a message that
+    // used to have nowhere to appear. Catch it here, next to its own field.
     const parsedMonthday = Number(monthday);
+    if (frequency === "monthly" && (!Number.isInteger(parsedMonthday) || parsedMonthday < 1 || parsedMonthday > 31)) {
+      toast.error("Choose a day of month between 1 and 31.");
+      setSeriesFieldErrors({ recurrenceMonthday: "Choose a day of month between 1 and 31" });
+      return;
+    }
+
+    if (frequency === "weekly" && weekdays.length === 0) {
+      toast.error("Choose at least one weekday.");
+      setSeriesFieldErrors({ recurrenceWeekdays: "Choose at least one weekday" });
+      return;
+    }
 
     runAction(
       () =>
@@ -313,6 +343,8 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                     value={itemOwnerId}
                     disabled={isPending}
                     className="h-12 text-[16px] md:h-10 md:text-sm"
+                    aria-invalid={Boolean(singleFieldErrors.ownerId)}
+                    aria-describedby="planning-item-owner-error"
                     onChange={(event) => setItemOwnerId(event.target.value)}
                   >
                     <option value="">Unassigned</option>
@@ -322,6 +354,7 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                       </option>
                     ))}
                   </Select>
+                  <FieldError id="planning-item-owner-error" message={singleFieldErrors.ownerId} />
                 </div>
                 <div className="space-y-1">
                   <FieldLabel
@@ -362,6 +395,11 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                   <FieldError id="planning-item-venue-error" message={singleFieldErrors.venueId ?? singleFieldErrors.venueIds} />
                 </div>
               </div>
+              <FormErrorSummary
+                id="planning-item-error-summary"
+                errors={singleFieldErrors}
+                handledKeys={SINGLE_HANDLED_ERROR_KEYS}
+              />
               <Button type="button" disabled={isPending} className="hidden md:inline-flex" onClick={submitSingleItem}>
                 <Plus className="mr-1 h-4 w-4" aria-hidden="true" /> Add planning item
               </Button>
@@ -495,6 +533,7 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                       </label>
                     ))}
                   </div>
+                  <FieldError id="planning-series-weekdays-error" message={seriesFieldErrors.recurrenceWeekdays} />
                 </fieldset>
               ) : null}
 
@@ -510,8 +549,11 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                     disabled={isPending}
                     className="h-12 text-[16px] md:h-10 md:text-sm"
                     inputMode="numeric"
+                    aria-invalid={Boolean(seriesFieldErrors.recurrenceMonthday)}
+                    aria-describedby="planning-series-monthday-error"
                     onChange={(event) => setMonthday(event.target.value)}
                   />
+                  <FieldError id="planning-series-monthday-error" message={seriesFieldErrors.recurrenceMonthday} />
                 </div>
               ) : null}
 
@@ -523,6 +565,8 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                     value={seriesOwnerId}
                     disabled={isPending}
                     className="h-12 text-[16px] md:h-10 md:text-sm"
+                    aria-invalid={Boolean(seriesFieldErrors.ownerId)}
+                    aria-describedby="planning-series-owner-error"
                     onChange={(event) => setSeriesOwnerId(event.target.value)}
                   >
                     <option value="">Unassigned</option>
@@ -532,6 +576,7 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                       </option>
                     ))}
                   </Select>
+                  <FieldError id="planning-series-owner-error" message={seriesFieldErrors.ownerId} />
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="planning-series-venue">Venue</Label>
@@ -555,6 +600,11 @@ export function PlanningItemEditor({ today, users, venues, onChanged, currentUse
                 </div>
               </div>
 
+              <FormErrorSummary
+                id="planning-series-error-summary"
+                errors={seriesFieldErrors}
+                handledKeys={SERIES_HANDLED_ERROR_KEYS}
+              />
               <Button type="button" disabled={isPending} className="hidden md:inline-flex" onClick={submitSeries}>
                 <Repeat className="mr-1 h-4 w-4" aria-hidden="true" /> Create recurring series
               </Button>
