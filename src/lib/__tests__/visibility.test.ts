@@ -3,7 +3,9 @@ import {
   canCreatePlanningForVenueSelection,
   canEditVenueLinkedPlanning,
   canManagerUseVenueSelection,
-  canViewVenueLinkedResource
+  canViewVenueLinkedResource,
+  isLinkedToVenue,
+  linkedVenueIds
 } from "@/lib/visibility";
 import type { AppUser } from "@/lib/types";
 
@@ -60,5 +62,19 @@ describe("venue-linked writes", () => {
     expect(canCreatePlanningForVenueSelection(assignedManager, ["venue-a"])).toBe(true);
     expect(canCreatePlanningForVenueSelection(unassignedManager, ["venue-a"])).toBe(false);
     expect(canEditVenueLinkedPlanning(unassignedManager, { venue_id: "venue-a" })).toBe(false);
+  });
+});
+
+describe("venue link matching", () => {
+  it("matches both primary and secondary event venues", () => {
+    const event = {
+      venue_id: "meade-hall",
+      venues: [{ id: "meade-hall" }, { id: "crown-and-cushion" }]
+    };
+
+    expect(linkedVenueIds(event)).toEqual(["meade-hall", "crown-and-cushion"]);
+    expect(isLinkedToVenue(event, "meade-hall")).toBe(true);
+    expect(isLinkedToVenue(event, "crown-and-cushion")).toBe(true);
+    expect(isLinkedToVenue(event, "another-venue")).toBe(false);
   });
 });

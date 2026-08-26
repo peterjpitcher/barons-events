@@ -83,6 +83,7 @@ export async function GET(request: Request) {
       wet_promo,
       food_promo,
       updated_at,
+      ${venueId ? "venue_filter:event_venues(venue_filter_venue:venues!inner())," : ""}
       venue:venues!events_venue_id_fkey!inner(
         id,
         name,
@@ -112,7 +113,10 @@ export async function GET(request: Request) {
     query = query.gt("updated_at", updatedSince);
   }
   if (venueId) {
-    query = query.eq("venue_id", venueId);
+    query = query
+      .eq("venue_filter.venue_id", venueId)
+      .eq("venue_filter.venue_filter_venue.is_internal", false)
+      .or(`venue_id.eq.${venueId},venue_filter.not.is.null`);
   }
   if (eventType) {
     query = query.eq("event_type", eventType);
