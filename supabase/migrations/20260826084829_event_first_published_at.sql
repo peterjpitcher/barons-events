@@ -49,23 +49,35 @@ create trigger events_set_first_published_at
 --
 -- The `or e.seo_slug is not null` clause is load-bearing: it catches events that
 -- have since been cancelled but still hold a slug from when they were live.
-update public.events e
-set first_published_at = coalesce(
-  (
-    select min(a.created_at)
-    from public.audit_log a
-    where a.entity = 'event'
-      -- audit_log.entity_id is text; events.id is uuid.
-      and a.entity_id = e.id::text
-      and (
-        a.action = 'event.approved'
-        or (a.action = 'event.status_changed' and a.meta->>'status' in ('approved', 'completed'))
-      )
-  ),
-  e.updated_at,
-  e.created_at
-)
-where e.first_published_at is null
-  and (e.status in ('approved', 'completed') or e.seo_slug is not null);
+-- public.events carries events_require_admin_or_service_write, a BEFORE trigger
+-- that rejects any write unless auth.role() is service_role or the caller is an
+-- administrator. A migration is neither, so the backfill is declared as a system
+-- write by setting the claim transaction-locally. The trigger already has a
+-- service_role branch for exactly this; disabling the trigger instead would
+-- leave the table unprotected if anything failed midway.
+do $backfill$
+begin
+  perform set_config('request.jwt.claims', '{"role":"service_role"}', true);
+
+  update public.events e
+    set first_published_at = coalesce(
+    (
+      select min(a.created_at)
+      from public.audit_log a
+      where a.entity = 'event'
+        -- audit_log.entity_id is text; events.id is uuid.
+        and a.entity_id = e.id::text
+        and (
+          a.action = 'event.approved'
+          or (a.action = 'event.status_changed' and a.meta->>'status' in ('approved', 'completed'))
+        )
+    ),
+    e.updated_at,
+    e.created_at
+  )
+  where e.first_published_at is null
+    and (e.status in ('approved', 'completed') or e.seo_slug is not null);
+end
+$backfill$;
 
 notify pgrst, 'reload schema';
