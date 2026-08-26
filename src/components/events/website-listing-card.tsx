@@ -32,7 +32,7 @@ export function WebsiteListingCard({
             <p className="mb-2 text-sm text-subtle">
               {canGenerate
                 ? "Generate website copy from this event’s details using AI."
-                : "Approve the event to enable AI generation."}
+                : "AI generation is available once the event has been approved."}
             </p>
             <SubmitButton
               label="Generate with AI"
