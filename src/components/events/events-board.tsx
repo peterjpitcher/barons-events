@@ -30,7 +30,7 @@ import {
 import type { EventSummary } from "@/lib/events";
 import type { CalendarNote } from "@/lib/calendar-notes";
 import { addDays } from "@/lib/planning/utils";
-import { canCreateCalendarNote, canManageCalendarNote, canProposeEvents, canReviewEvents } from "@/lib/roles";
+import { canCreateCalendarNote, canCreateEventsDirectly, canManageCalendarNote, canProposeEvents, canReviewEvents } from "@/lib/roles";
 import type { AppUser } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -229,8 +229,11 @@ export function EventsBoard({ user, events, venues, notes, notesFailed, initialM
   const rawVenue = searchParams.get("venueId") ?? "all";
   const rawMatrixStart = searchParams.get("start");
   const myVenueId = user.venueId ?? null;
-  const createScopeVenueId = user.role === "administrator" ? undefined : null;
-  const canCreate = canProposeEvents(user.role);
+  // Creating outright and proposing are different rights. Everything linking
+  // to /events/new is administrator-only; only the Propose button, which links
+  // to /events/propose, follows the wider capability.
+  const canCreate = canCreateEventsDirectly(user.role);
+  const canPropose = canProposeEvents(user.role);
 
   const canApproveEvent = useCallback(
     (event: EventSummary) => {
@@ -618,7 +621,7 @@ export function EventsBoard({ user, events, venues, notes, notesFailed, initialM
               <Link href="/events/new">New event</Link>
             </Button>
           ) : null}
-          {canCreate ? (
+          {canPropose ? (
             <Button asChild variant="secondary">
               <Link href="/events/propose">Propose an event</Link>
             </Button>
@@ -928,14 +931,8 @@ export function EventsBoard({ user, events, venues, notes, notesFailed, initialM
             notes={venueFilteredNotes}
             monthCursor={monthCursor}
             onChangeMonth={setMonthCursor}
-            canCreate={
-              canCreate &&
-              (createScopeVenueId === undefined ||
-                createScopeVenueId === null ||
-                !filteredVenueId ||
-                filteredVenueId === createScopeVenueId)
-            }
-            createVenueId={filteredVenueId ?? (typeof createScopeVenueId === "string" ? createScopeVenueId : undefined)}
+            canCreate={canCreate}
+            createVenueId={filteredVenueId ?? undefined}
             getStatusLabel={(status) => (statusConfig[status] ?? statusConfig.draft).label}
             getStatusAccent={(status) => statusAccentStyles[status] ?? statusAccentStyles.draft}
             canApproveEvent={canApproveEvent}
@@ -952,7 +949,6 @@ export function EventsBoard({ user, events, venues, notes, notesFailed, initialM
             rangeStart={matrixStart}
             onChangeStart={setMatrixStart}
             canCreate={canCreate}
-            createScopeVenueId={createScopeVenueId}
           />
         ) : (
           <EventsListTable
@@ -1588,7 +1584,6 @@ type SevenDayMatrixProps = {
   rangeStart: dayjs.Dayjs;
   onChangeStart: (value: dayjs.Dayjs) => void;
   canCreate: boolean;
-  createScopeVenueId: string | null | undefined;
 };
 
 function SevenDayMatrix({
@@ -1598,8 +1593,7 @@ function SevenDayMatrix({
   onOpenNote,
   rangeStart,
   onChangeStart,
-  canCreate,
-  createScopeVenueId
+  canCreate
 }: SevenDayMatrixProps) {
   const safeStart = rangeStart.isValid() ? rangeStart.startOf("day") : dayjs().startOf("day");
   const days = useMemo(() => Array.from({ length: 7 }, (_, index) => safeStart.add(index, "day")), [safeStart]);
@@ -1667,13 +1661,8 @@ function SevenDayMatrix({
                 notes={notesByVenue.get(venue.id) ?? []}
                 onOpenNote={onOpenNote}
                 days={days}
-                canCreate={
-                  canCreate &&
-                  (createScopeVenueId === undefined || createScopeVenueId === venue.id)
-                }
-                createVenueId={
-                  createScopeVenueId === undefined ? venue.id : createScopeVenueId ?? undefined
-                }
+                canCreate={canCreate}
+                createVenueId={venue.id}
               />
             ))
           )}

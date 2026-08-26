@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { EventForm } from "@/components/events/event-form";
 import { EventPageHeader } from "@/components/events/event-page-header";
 import { getCurrentUser } from "@/lib/auth";
-import { canProposeEvents } from "@/lib/roles";
+import { canCreateEventsDirectly } from "@/lib/roles";
 import { listVenues } from "@/lib/venues";
 import { listEventTypes } from "@/lib/event-types";
 import { listArtists } from "@/lib/artists";
@@ -36,7 +36,7 @@ export default async function NewEventPage({ searchParams }: PageProps) {
     redirect("/login");
   }
 
-  if (!canProposeEvents(user.role)) {
+  if (!canCreateEventsDirectly(user.role)) {
     redirect("/unauthorized");
   }
 

@@ -63,6 +63,7 @@ import {
   submitEventForReviewAction,
   deleteEventAction,
   generateWebsiteCopyFromFormAction,
+  generateTermsAndConditionsAction,
   updateBookingSettingsAction,
 } from "../events";
 import { loadEventEditContext } from "@/lib/events/edit-context";
@@ -722,6 +723,44 @@ describe("generateWebsiteCopyFromFormAction", () => {
     }));
     expect(result.success).toBe(false);
     expect(result.message).toMatch(/permission|administrators|venue managers/i);
+  });
+
+  // Must keep failing now that canProposeEvents includes managers. These LLM
+  // actions moved to canUseEventAiTools precisely so they did not ride along
+  // with the widened propose capability.
+  it("still rejects a venue-assigned manager after propose rights were widened", async () => {
+    getUserMock.mockResolvedValue({ id: USER_A, role: "manager", venueId: VENUE_A });
+    const result = await generateWebsiteCopyFromFormAction(undefined, formData({
+      title: "T",
+    }));
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/permission/i);
+  });
+});
+
+// ─── generateTermsAndConditionsAction ────────────────────────────────────────
+
+describe("generateTermsAndConditionsAction", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  // Same shape and same gate as the website copy action, and just as costly.
+  // Missed by the design review; caught while splitting the capability.
+  it("rejects managers with no event context", async () => {
+    getUserMock.mockResolvedValue({ id: USER_A, role: "manager", venueId: null });
+    const result = await generateTermsAndConditionsAction(undefined, formData({
+      title: "T",
+    }));
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/permission/i);
+  });
+
+  it("rejects a venue-assigned manager with no event context", async () => {
+    getUserMock.mockResolvedValue({ id: USER_A, role: "manager", venueId: VENUE_A });
+    const result = await generateTermsAndConditionsAction(undefined, formData({
+      title: "T",
+    }));
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/permission/i);
   });
 });
 

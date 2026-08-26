@@ -125,16 +125,85 @@ describe("proposeEventAction", () => {
     );
   });
 
-  it("rejects manager without event creation permission", async () => {
+  // Inverted 2026-08-26. Proposing for approval is the point of the manager
+  // account; creating outright stays administrator-only and is covered in
+  // rbac.test.ts.
+  it("allows an unassigned manager to propose", async () => {
     getUserMock.mockResolvedValue({ id: "manager-1", role: "manager", venueId: null });
+    selectInMock.mockResolvedValue({ data: [{ id: VENUE_A, is_internal: false }], error: null });
+    rpcMock.mockResolvedValue({ data: { event_id: "e1" }, error: null });
+
     const result = await proposeEventAction(undefined, fd({
       title: "x",
       startAt: "2026-05-01T10:00:00Z",
       notes: "x",
       venueIds: VENUE_A,
     }));
+
+    expect(result.success).toBe(true);
+    expect(rpcMock).toHaveBeenCalledWith(
+      "create_multi_venue_event_proposals",
+      expect.objectContaining({
+        p_payload: expect.objectContaining({ created_by: "manager-1", venue_ids: [VENUE_A] }),
+      }),
+    );
+  });
+
+  it("deduplicates repeated venue ids before they reach the database", async () => {
+    // event_venues has a composite primary key, so a repeated id used to reach
+    // Postgres and come back as a raw constraint violation.
+    getUserMock.mockResolvedValue({ id: "admin-1", role: "administrator", venueId: null });
+    selectInMock.mockResolvedValue({ data: [{ id: VENUE_A, is_internal: false }], error: null });
+    rpcMock.mockResolvedValue({ data: { event_id: "e1" }, error: null });
+
+    const result = await proposeEventAction(undefined, fd({
+      title: "Test",
+      startAt: "2026-05-01T10:00:00Z",
+      notes: "Test",
+      venueIds: [VENUE_A, VENUE_A],
+    }));
+
+    expect(result.success).toBe(true);
+    expect(rpcMock).toHaveBeenCalledWith(
+      "create_multi_venue_event_proposals",
+      expect.objectContaining({
+        p_payload: expect.objectContaining({ venue_ids: [VENUE_A] }),
+      }),
+    );
+  });
+
+  it("does not surface raw database error text to the user", async () => {
+    getUserMock.mockResolvedValue({ id: "admin-1", role: "administrator", venueId: null });
+    selectInMock.mockResolvedValue({ data: [{ id: VENUE_A, is_internal: false }], error: null });
+    rpcMock.mockResolvedValue({
+      data: null,
+      error: { message: 'duplicate key value violates unique constraint "event_venues_pkey"' }
+    });
+
+    const result = await proposeEventAction(undefined, fd({
+      title: "Test",
+      startAt: "2026-05-01T10:00:00Z",
+      notes: "Test",
+      venueIds: VENUE_A,
+    }));
+
     expect(result.success).toBe(false);
-    expect(result.message).toMatch(/permission/i);
+    expect(result.message).not.toMatch(/constraint|duplicate key|pkey/i);
+    expect(result.message).toMatch(/could not submit/i);
+  });
+
+  it("refuses an unassigned manager the internal venue", async () => {
+    getUserMock.mockResolvedValue({ id: "manager-1", role: "manager", venueId: null });
+    selectInMock.mockResolvedValue({ data: [{ id: VENUE_A, is_internal: true }], error: null });
+
+    const result = await proposeEventAction(undefined, fd({
+      title: "x",
+      startAt: "2026-05-01T10:00:00Z",
+      notes: "x",
+      venueIds: VENUE_A,
+    }));
+
+    expect(result.success).toBe(false);
     expect(rpcMock).not.toHaveBeenCalled();
   });
 
@@ -245,8 +314,12 @@ describe("proposeEventAction", () => {
     );
   });
 
-  it("rejects a venue-assigned manager before venue validation", async () => {
+  // The venue rule is enforced here, not by filtering the picker: this action
+  // is reachable directly, and the live path calls the RPC with the
+  // service-role key, which bypasses RLS and the events write trigger.
+  it("refuses a venue-assigned manager proposing for another venue", async () => {
     getUserMock.mockResolvedValue({ id: "ow-1", role: "manager", venueId: VENUE_A });
+    selectInMock.mockResolvedValue({ data: [{ id: VENUE_B, is_internal: false }], error: null });
 
     const result = await proposeEventAction(undefined, fd({
       title: "Test",
@@ -256,13 +329,32 @@ describe("proposeEventAction", () => {
     }));
 
     expect(result.success).toBe(false);
-    expect(result.message).toMatch(/permission/i);
-    expect(selectInMock).not.toHaveBeenCalled();
+    expect(result.message).toMatch(/your assigned venue/i);
     expect(rpcMock).not.toHaveBeenCalled();
   });
 
-  it("rejects a venue-assigned manager for their assigned venue", async () => {
+  it("refuses a venue-assigned manager smuggling a second venue alongside their own", async () => {
     getUserMock.mockResolvedValue({ id: "ow-1", role: "manager", venueId: VENUE_A });
+    selectInMock.mockResolvedValue({
+      data: [{ id: VENUE_A, is_internal: false }, { id: VENUE_B, is_internal: false }],
+      error: null
+    });
+
+    const result = await proposeEventAction(undefined, fd({
+      title: "Test",
+      startAt: "2026-05-01T10:00:00Z",
+      notes: "Test",
+      venueIds: [VENUE_A, VENUE_B],
+    }));
+
+    expect(result.success).toBe(false);
+    expect(rpcMock).not.toHaveBeenCalled();
+  });
+
+  it("allows a venue-assigned manager to propose for their own venue", async () => {
+    getUserMock.mockResolvedValue({ id: "ow-1", role: "manager", venueId: VENUE_A });
+    selectInMock.mockResolvedValue({ data: [{ id: VENUE_A, is_internal: false }], error: null });
+    rpcMock.mockResolvedValue({ data: { event_id: "e1" }, error: null });
 
     const result = await proposeEventAction(undefined, fd({
       title: "Test",
@@ -271,10 +363,8 @@ describe("proposeEventAction", () => {
       venueIds: VENUE_A,
     }));
 
-    expect(result.success).toBe(false);
-    expect(result.message).toMatch(/permission/i);
-    expect(selectInMock).not.toHaveBeenCalled();
-    expect(rpcMock).not.toHaveBeenCalled();
+    expect(result.success).toBe(true);
+    expect(rpcMock).toHaveBeenCalled();
   });
 
   it("returns retryable error when venue query fails", async () => {

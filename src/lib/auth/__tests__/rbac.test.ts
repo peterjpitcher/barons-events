@@ -52,6 +52,10 @@ import type { AppUser } from "@/lib/types";
 import {
   isAdministrator,
   canProposeEvents,
+  canCreateEventsDirectly,
+  canUseEventAiTools,
+  proposableVenueIds,
+  canProposeForVenues,
   canEditEvent,
   type EventEditContext,
   canViewEvents,
@@ -777,7 +781,77 @@ describe("roles.ts — final capability functions", () => {
 
   describe("canProposeEvents", () => {
     it("administrator can propose", () => expect(canProposeEvents("administrator")).toBe(true));
-    it("manager cannot propose", () => expect(canProposeEvents("manager")).toBe(false));
+    // Widened 2026-08-26: proposing for approval is the point of the manager
+    // account. Creating outright is a separate capability, asserted below.
+    it("manager can propose", () => expect(canProposeEvents("manager")).toBe(true));
+  });
+
+  describe("canCreateEventsDirectly", () => {
+    it("administrator can create outright", () =>
+      expect(canCreateEventsDirectly("administrator")).toBe(true));
+    // Must stay false. The full event form writes under the user's own session
+    // and the events trigger rejects non-administrators, so a manager reaching
+    // it would complete a long form and then hit a database error.
+    it("manager cannot create outright", () =>
+      expect(canCreateEventsDirectly("manager")).toBe(false));
+  });
+
+  describe("canUseEventAiTools", () => {
+    it("administrator can use the LLM copy tools", () =>
+      expect(canUseEventAiTools("administrator")).toBe(true));
+    // These cost money per call and carry no event to scope them, so they must
+    // not ride along with the widened propose capability.
+    it("manager cannot use the LLM copy tools", () =>
+      expect(canUseEventAiTools("manager")).toBe(false));
+  });
+
+  describe("proposal venue scope", () => {
+    const venues = [
+      { id: "venue-A" },
+      { id: "venue-B" },
+      { id: "venue-internal", isInternal: true }
+    ];
+
+    it("gives an administrator every venue, including internal", () => {
+      expect(proposableVenueIds("administrator", null, venues)).toEqual([
+        "venue-A",
+        "venue-B",
+        "venue-internal"
+      ]);
+    });
+
+    it("restricts a venue-assigned manager to that venue", () => {
+      expect(proposableVenueIds("manager", "venue-A", venues)).toEqual(["venue-A"]);
+    });
+
+    it("gives an unassigned manager every venue except internal ones", () => {
+      expect(proposableVenueIds("manager", null, venues)).toEqual(["venue-A", "venue-B"]);
+    });
+
+    it("returns nothing when the assigned venue no longer exists", () => {
+      expect(proposableVenueIds("manager", "venue-gone", venues)).toEqual([]);
+    });
+
+    it("rejects a venue-assigned manager submitting another venue", () => {
+      expect(canProposeForVenues("manager", "venue-A", ["venue-B"], venues)).toBe(false);
+      expect(canProposeForVenues("manager", "venue-A", ["venue-A", "venue-B"], venues)).toBe(false);
+      expect(canProposeForVenues("manager", "venue-A", ["venue-A"], venues)).toBe(true);
+    });
+
+    it("rejects an unassigned manager submitting the internal venue", () => {
+      expect(canProposeForVenues("manager", null, ["venue-internal"], venues)).toBe(false);
+      expect(canProposeForVenues("manager", null, ["venue-A", "venue-internal"], venues)).toBe(false);
+      expect(canProposeForVenues("manager", null, ["venue-A", "venue-B"], venues)).toBe(true);
+    });
+
+    it("allows an administrator any combination", () => {
+      expect(canProposeForVenues("administrator", null, ["venue-A", "venue-internal"], venues)).toBe(true);
+    });
+
+    it("rejects an empty selection for everyone", () => {
+      expect(canProposeForVenues("administrator", null, [], venues)).toBe(false);
+      expect(canProposeForVenues("manager", null, [], venues)).toBe(false);
+    });
   });
 
   describe("canEditEvent", () => {
