@@ -493,6 +493,47 @@ export async function createSopDependencyAction(
     }
 
     const db = createSupabaseAdminClient();
+
+    // Reject a chain that loops back on itself. The per-task editor has done
+    // this walk for a while (src/actions/planning.ts); the template editor only
+    // checked self-reference, so A waits on B waits on A was accepted here.
+    // A loop at template level is worse than at task level: it is copied onto
+    // every checklist generated from then on, and both tasks are permanently
+    // blocked with no way to release either.
+    const { data: dependencyRows, error: dependencyError } = await db
+      .from("sop_task_dependencies")
+      .select("task_template_id, depends_on_template_id");
+
+    if (dependencyError) {
+      console.error("createSopDependencyAction: dependency load failed", dependencyError);
+      return { success: false, message: "Could not create dependency." };
+    }
+
+    const edges = new Map<string, string[]>();
+    for (const row of (dependencyRows ?? []) as Array<{ task_template_id: string; depends_on_template_id: string }>) {
+      const existing = edges.get(row.task_template_id) ?? [];
+      existing.push(row.depends_on_template_id);
+      edges.set(row.task_template_id, existing);
+    }
+    // Add the proposed edge, then ask whether the prerequisite can reach back
+    // to the dependent task.
+    edges.set(parsed.data.taskTemplateId, [
+      ...(edges.get(parsed.data.taskTemplateId) ?? []),
+      parsed.data.dependsOnTemplateId
+    ]);
+
+    const visited = new Set<string>();
+    const reachesTarget = (currentId: string): boolean => {
+      if (currentId === parsed.data.taskTemplateId) return true;
+      if (visited.has(currentId)) return false;
+      visited.add(currentId);
+      return (edges.get(currentId) ?? []).some((nextId) => reachesTarget(nextId));
+    };
+
+    if (reachesTarget(parsed.data.dependsOnTemplateId)) {
+      return { success: false, message: "That dependency would create a circular chain." };
+    }
+
     const { error } = await db.from("sop_task_dependencies").insert({
       task_template_id: parsed.data.taskTemplateId,
       depends_on_template_id: parsed.data.dependsOnTemplateId,

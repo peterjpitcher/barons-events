@@ -1,5 +1,6 @@
 "use client";
 
+import { AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SopTemplateTree } from "@/lib/planning/sop-types";
 
@@ -30,6 +31,24 @@ export function SopNotRequiredPicker({
   if (!template || taskCount === 0) {
     return null;
   }
+
+  // Warn when a prerequisite is marked N/A while something that waits on it is
+  // left required. Marking "Food specs" N/A leaves "Allergens", "Shopping list"
+  // and "Communication with kitchen on menu" waiting on a task that will never
+  // be done, so they stay blocked for the life of the event with nothing to
+  // release them. The trigger is a tick, not an untick.
+  const allTasks = template?.sections.flatMap((section) => section.tasks) ?? [];
+  const titleById = new Map(allTasks.map((task) => [task.id, task.title]));
+  const strandedPairs = allTasks
+    .filter((task) => !selected.has(task.id))
+    .flatMap((task) =>
+      (task.dependencies ?? [])
+        .filter((dependency) => selected.has(dependency.dependsOnTemplateId))
+        .map((dependency) => ({
+          waitingTitle: task.title,
+          prerequisiteTitle: titleById.get(dependency.dependsOnTemplateId) ?? "another task"
+        }))
+    );
 
   function toggleTask(templateId: string, checked: boolean) {
     const next = new Set(selected);
@@ -63,6 +82,25 @@ export function SopNotRequiredPicker({
       <p className="text-xs leading-5 text-[var(--ink-muted)]">
         {note}
       </p>
+      {strandedPairs.length > 0 ? (
+        <div
+          role="status"
+          className="flex gap-2 rounded-[6px] border border-[var(--mustard)] bg-[var(--paper)] p-2 text-xs text-[var(--ink)]"
+        >
+          <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--mustard-dark)]" aria-hidden="true" />
+          <div className="space-y-1">
+            <p className="font-semibold">Some tasks are left waiting</p>
+            <ul className="space-y-0.5">
+              {strandedPairs.map((pair) => (
+                <li key={`${pair.waitingTitle}-${pair.prerequisiteTitle}`}>
+                  {pair.waitingTitle} waits on {pair.prerequisiteTitle}, which you have marked N/A. It will stay
+                  blocked unless you mark it N/A too.
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      ) : null}
       <div className={cn("space-y-3 overflow-y-auto pr-1", variant === "rail" ? "max-h-[calc(100vh-15rem)]" : "max-h-56")}>
         {template.sections.map((section) => (
           <fieldset key={section.id} className="space-y-1.5">
