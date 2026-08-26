@@ -2474,12 +2474,17 @@ export async function sendMandatoryWeeklyUpdateEmail(): Promise<{ sent: number; 
       });
 
       const visibleTodoTasks = todoTasks.slice(0, WEEKLY_UPDATE_TODO_EMAIL_LIMIT);
+      const todayInLondon = getTodayLondonIsoDate();
       const todoItems = visibleTodoTasks.map((task) => {
         const due = task.dueDate ? formatInLondon(`${task.dueDate}T00:00:00Z`).date : "TBD";
+        // The email never said which of these were late, so a task three weeks
+        // overdue read exactly like one due next Friday. Words, not colour, so
+        // it survives plain-text mail too.
+        const isOverdue = task.dueDate !== null && task.dueDate < todayInLondon;
         const context = task.eventTitle ? `${task.planningTitle} / ${task.eventTitle}` : task.planningTitle;
         return {
-          title: task.title,
-          detail: `${due} · ${context}`
+          title: isOverdue ? `${task.title} (overdue)` : task.title,
+          detail: `${isOverdue ? "Was due " : ""}${due} · ${context}`
         };
       });
 

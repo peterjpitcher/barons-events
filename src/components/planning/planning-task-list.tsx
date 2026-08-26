@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Link2, Plus, Trash2, Pencil, X } from "lucide-react";
+import { londonDateString } from "@/lib/planning/utils";
 import {
   createPlanningTaskAction,
   createPlanningTaskDependencyAction,
@@ -123,12 +124,17 @@ export function PlanningTaskList({ itemId, tasks, users, onChanged }: PlanningTa
     setDueDate(inputDateToday());
   }
 
+  const todayInLondon = londonDateString();
+
   return (
     <section className="space-y-2 border-t border-[var(--hair)] pt-2">
       <h4 className="text-xs font-semibold uppercase tracking-[0.08em] text-subtle">Todo list</h4>
       <ul className="space-y-1.5">
         {sortedTasks.map((task) => {
-          const isOverdue = task.status === "open" && task.dueDate < new Date().toISOString().slice(0, 10);
+          // London date, not UTC. Between midnight and 1am in summer the UTC date
+          // is still yesterday, so this marked tasks overdue here while the rest of
+          // the app said they were not.
+          const isOverdue = task.status === "open" && task.dueDate < todayInLondon;
           const isResolved = task.status === "done" || task.status === "not_required";
           const isBlocked = task.status === "open" && task.isBlocked;
           const titleClass = isResolved ? "line-through text-subtle" : "font-medium";

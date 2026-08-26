@@ -196,7 +196,12 @@ export default async function OverviewPage(): Promise<React.ReactNode> {
   const todoResult = await safeFetch(getDashboardTodoItems(user, today));
 
   // Fetch upcoming events (all roles)
-  const allEvents = await safeFetch(listEventsForUser(user));
+  // includePast: the booking and payment pulse count across every event by
+  // creation date, not by event date, so narrowing this to upcoming events
+  // would silently shrink "confirmed bookings this week", "tickets this week"
+  // and "net sales this month" with nothing logged. The dashboard filters to
+  // upcoming itself, just below.
+  const allEvents = await safeFetch(listEventsForUser(user, { includePast: true }));
   const upcomingEvents = allEvents
     ? allEvents
         .filter((event) => new Date(event.start_at) >= new Date())

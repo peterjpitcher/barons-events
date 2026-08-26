@@ -700,6 +700,68 @@ async function fetchRevisionTodos(user: AppUser, today: string): Promise<TodoIte
   });
 }
 
+/**
+ * Event ids whose outstanding debrief has no named owner, but which this user
+ * owns by the fallback chain.
+ *
+ * Charlotte confirmed debriefs are owned by the venue's manager, falling back
+ * to the central events lead where a venue has no manager. Both debrief queries
+ * previously scoped only on the event's own manager_responsible_id and
+ * created_by, so events carrying neither reached nobody at all. Eleven of the
+ * twenty-eight outstanding debriefs were invisible to every user on that basis,
+ * which made chasing them impossible rather than merely unlikely.
+ */
+async function fetchOrphanedDebriefEventIds(user: AppUser): Promise<string[]> {
+  const db = createSupabaseAdminClient();
+
+  const { data, error } = await db
+    .from("events")
+    .select("id, venue_id, venue:venues!events_venue_id_fkey(default_manager_responsible_id), debriefs(id)")
+    .eq("status", "approved")
+    .lt("end_at", new Date().toISOString())
+    .is("deleted_at", null)
+    .is("manager_responsible_id", null)
+    .is("created_by", null)
+    .order("end_at", { ascending: true })
+    .limit(50);
+
+  if (error) throw error;
+
+  const rows = (data ?? []) as Array<{
+    id: string;
+    venue: { default_manager_responsible_id: string | null } | Array<{ default_manager_responsible_id: string | null }> | null;
+    debriefs?: Array<{ id: string }> | null;
+  }>;
+
+  const outstanding = rows.filter((row) => !row.debriefs || row.debriefs.length === 0);
+  if (outstanding.length === 0) return [];
+
+  const venueManagerIds = outstanding.map((row) => {
+    const venue = Array.isArray(row.venue) ? row.venue[0] : row.venue;
+    return venue?.default_manager_responsible_id ?? null;
+  });
+
+  // Only look up the lead when something actually has no venue manager.
+  const needsFallback = venueManagerIds.some((id) => !id);
+  let isCentralLead = false;
+  if (needsFallback) {
+    const { data: leadRow } = await db
+      .from("users")
+      .select("id")
+      .eq("id", user.id)
+      .eq("is_central_events_lead", true)
+      .maybeSingle();
+    isCentralLead = Boolean(leadRow);
+  }
+
+  return outstanding
+    .filter((_, index) => {
+      const venueManagerId = venueManagerIds[index];
+      return venueManagerId ? venueManagerId === user.id : isCentralLead;
+    })
+    .map((row) => row.id);
+}
+
 async function fetchDebriefTodos(user: AppUser, today: string): Promise<TodoItem[]> {
   const db = createSupabaseAdminClient();
 
@@ -713,8 +775,16 @@ async function fetchDebriefTodos(user: AppUser, today: string): Promise<TodoItem
     .order("end_at", { ascending: true })
     .limit(10);
 
-  // Personal dashboard: scope to manager responsible with creator fallback
-  query = query.or(`manager_responsible_id.eq.${user.id},and(manager_responsible_id.is.null,created_by.eq.${user.id})`);
+  // Scope to the named responsible manager, the creator when nobody is named,
+  // and events with neither that fall to this user through the venue manager or
+  // central lead fallback (decision 28).
+  const orphanIds = await fetchOrphanedDebriefEventIds(user);
+  const ownershipFilter = [
+    `manager_responsible_id.eq.${user.id}`,
+    `and(manager_responsible_id.is.null,created_by.eq.${user.id})`,
+    ...(orphanIds.length > 0 ? [`id.in.(${orphanIds.join(",")})`] : [])
+  ].join(",");
+  query = query.or(ownershipFilter);
 
   const { data, error } = await query;
   if (error) throw error;
@@ -767,8 +837,14 @@ export async function getDebriefsDue(user: AppUser): Promise<Array<{
     .order("end_at", { ascending: false })
     .limit(10);
 
-  // Personal dashboard: scope to manager responsible with creator fallback
-  query = query.or(`manager_responsible_id.eq.${user.id},and(manager_responsible_id.is.null,created_by.eq.${user.id})`);
+  // Same ownership chain as fetchDebriefTodos; see decision 28.
+  const orphanIds = await fetchOrphanedDebriefEventIds(user);
+  const ownershipFilter = [
+    `manager_responsible_id.eq.${user.id}`,
+    `and(manager_responsible_id.is.null,created_by.eq.${user.id})`,
+    ...(orphanIds.length > 0 ? [`id.in.(${orphanIds.join(",")})`] : [])
+  ].join(",");
+  query = query.or(ownershipFilter);
 
   const { data, error } = await query;
   if (error) throw error;

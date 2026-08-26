@@ -70,6 +70,8 @@ type EventsBoardProps = {
   notes: CalendarNote[];
   notesFailed?: boolean;
   initialMonth?: string;
+  /** True when the page was loaded with ?past=1, so older events are present. */
+  includePast?: boolean;
 };
 
 const statusConfig: Record<
@@ -142,7 +144,6 @@ const statusSortOrder: Record<EventSummary["status"], number> = {
 };
 
 const localStorageKey = "events-board-view";
-const localStorageHidePastKey = "events-board-hide-past";
 
 function normaliseEvents(events: EventSummary[]): EventWithDates[] {
   return events
@@ -221,7 +222,7 @@ function parseInitialMonth(value: string | undefined): dayjs.Dayjs | null {
   return parsed.isValid() ? parsed.startOf("month") : null;
 }
 
-export function EventsBoard({ user, events, venues, notes, notesFailed, initialMonth }: EventsBoardProps) {
+export function EventsBoard({ user, events, venues, notes, notesFailed, initialMonth, includePast = false }: EventsBoardProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -264,7 +265,26 @@ export function EventsBoard({ user, events, venues, notes, notesFailed, initialM
   const [eventTypeFilter, setEventTypeFilter] = useState<string>("all");
   const [startDateFilter, setStartDateFilter] = useState("");
   const [endDateFilter, setEndDateFilter] = useState("");
-  const [hidePastEvents, setHidePastEvents] = useState(true);
+  // Older events are no longer sent to the browser at all, so this is a server
+  // round trip rather than a local filter. Starting from the URL keeps the
+  // control honest about what is actually loaded.
+  const [hidePastEvents, setHidePastEvents] = useState(!includePast);
+  /**
+   * Older events are fetched, not filtered. Past events past the grace period
+   * never reach the browser, so showing them means asking the server for them.
+   */
+  function togglePastEvents() {
+    const params = new URLSearchParams(searchParams.toString());
+    if (hidePastEvents) {
+      params.set("past", "1");
+    } else {
+      params.delete("past");
+    }
+    setHidePastEvents((value) => !value);
+    const query = params.toString();
+    router.push(query ? `${pathname}?${query}` : pathname);
+  }
+
   const pendingVenueIdRef = useRef<string | null>(null);
   const monthLabel = useMemo(() => monthCursor.format("MMMM YYYY"), [monthCursor]);
 
@@ -308,18 +328,11 @@ export function EventsBoard({ user, events, venues, notes, notesFailed, initialM
     }
   }, [view]);
 
-  useEffect(() => {
-    const stored = typeof window !== "undefined" ? window.localStorage.getItem(localStorageHidePastKey) : null;
-    if (stored !== null) {
-      setHidePastEvents(stored === "true");
-    }
-  }, []);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(localStorageHidePastKey, String(hidePastEvents));
-    }
-  }, [hidePastEvents]);
+  // The remembered "show past" preference has been dropped on purpose. Older
+  // events are now excluded by the server, so a stored preference could say
+  // "past shown" while the browser had never received them. A control that
+  // disagrees with the data is worse than one extra click, and the URL now
+  // carries the state instead.
 
   useEffect(() => {
     const params = new URLSearchParams();
@@ -810,7 +823,7 @@ export function EventsBoard({ user, events, venues, notes, notesFailed, initialM
                 type="button"
                 variant={hidePastEvents ? "secondary" : "ghost"}
                 size="sm"
-                onClick={() => setHidePastEvents((v) => !v)}
+                onClick={() => togglePastEvents()}
               >
                 <Clock className="mr-1 h-4 w-4" />
                 {hidePastEvents ? "Past hidden" : "Show past"}

@@ -188,7 +188,29 @@ export async function listReviewQueue(user: AppUser): Promise<EventSummary[]> {
     }));
 }
 
-export async function listEventsForUser(user: AppUser): Promise<EventSummary[]> {
+/**
+ * How long a finished event stays on the events views.
+ *
+ * Charlotte Whindle asked for events to drop off the list once they have
+ * passed, and chose a week so there is time to write the debrief before the
+ * event disappears.
+ */
+export const PAST_EVENT_GRACE_DAYS = 7;
+
+export type ListEventsOptions = {
+  /**
+   * Load every event regardless of date. Used by the "show past" view and by
+   * the dashboard, whose booking and payment figures count across all events
+   * by their creation date, not the event date. Narrowing the shared query
+   * would silently shrink those totals with nothing logged.
+   */
+  includePast?: boolean;
+};
+
+export async function listEventsForUser(
+  user: AppUser,
+  options: ListEventsOptions = {}
+): Promise<EventSummary[]> {
   const supabase = await createSupabaseReadonlyClient();
 
   let query = supabase
@@ -198,6 +220,26 @@ export async function listEventsForUser(user: AppUser): Promise<EventSummary[]> 
     )
     .is("deleted_at", null)
     .order("start_at", { ascending: true });
+
+  if (!options.includePast) {
+    const cutoff = new Date(Date.now() - PAST_EVENT_GRACE_DAYS * 24 * 60 * 60 * 1000).toISOString();
+    // Deliberately generous. Only settled events drop off:
+    //  - still running, or finished within the grace period
+    //  - no end time recorded, so judged on the start instead
+    //  - anything still awaiting a decision or still being written, whatever
+    //    its date, so a draft or an undecided proposal can never vanish
+    //  - anything created in the last day, matching the board's own rule, so a
+    //    backdated event does not disappear the moment it is saved
+    const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    query = query.or(
+      [
+        `end_at.gte.${cutoff}`,
+        `and(end_at.is.null,start_at.gte.${cutoff})`,
+        "status.in.(draft,pending_approval,approved_pending_details,needs_revisions,submitted)",
+        `created_at.gte.${dayAgo}`
+      ].join(",")
+    );
+  }
 
   const role = user.role as string;
   if (role !== "administrator" && role !== "manager") {

@@ -7,7 +7,7 @@ import { listCalendarNotes, type CalendarNote } from "@/lib/calendar-notes";
 import { EventsBoard } from "@/components/events/events-board";
 
 type EventsPageProps = {
-  searchParams?: Promise<{ month?: string }>;
+  searchParams?: Promise<{ month?: string; past?: string }>;
 };
 
 export default async function EventsPage({ searchParams }: EventsPageProps) {
@@ -19,8 +19,14 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
     redirect("/unauthorized");
   }
 
+  const { month, past } = (await searchParams) ?? {};
+  // ?past=1 is the escape hatch behind the "Show past" control. Without it the
+  // rolling window would make an older event genuinely unreachable rather than
+  // merely tidied away.
+  const includePast = past === "1";
+
   const [events, venues, notesResult] = await Promise.all([
-    listEventsForUser(user),
+    listEventsForUser(user, { includePast }),
     listVenues(),
     listCalendarNotes().catch(
       (): { notes: CalendarNote[]; truncated: boolean; failed: true } => ({
@@ -30,8 +36,6 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
       })
     ),
   ]);
-  const { month } = (await searchParams) ?? {};
-
   return (
     <EventsBoard
       user={user}
@@ -40,6 +44,7 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
       notes={notesResult.notes}
       notesFailed={"failed" in notesResult}
       initialMonth={month}
+      includePast={includePast}
     />
   );
 }
