@@ -6,7 +6,7 @@ import { randomUUID } from "crypto";
 import { getCurrentUser } from "@/lib/auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseActionClient } from "@/lib/supabase/server";
-import { canProposeEvents } from "@/lib/roles";
+import { canProposeEvents, canProposeForVenues } from "@/lib/roles";
 import { recordAuditLogEntry } from "@/lib/audit-log";
 import type { ActionResult } from "@/lib/types";
 import { callProposeEventDraftRpc } from "@/lib/events/save-rpc";
@@ -91,7 +91,11 @@ export async function proposeEventAction(
   const user = await getCurrentUser();
   if (!user) return { success: false, message: "You must be signed in.", operationId };
 
-  const venueIds = formData.getAll("venueIds").filter((v): v is string => typeof v === "string" && v.length > 0);
+  // Deduplicated: event_venues has a composite primary key, so a repeated id
+  // would reach Postgres and come back as a raw constraint violation.
+  const venueIds = Array.from(
+    new Set(formData.getAll("venueIds").filter((v): v is string => typeof v === "string" && v.length > 0))
+  );
   const parsed = proposalSchema.safeParse({
     title: formData.get("title"),
     startAt: formData.get("startAt"),
@@ -116,9 +120,12 @@ export async function proposeEventAction(
   // outage surfaces as a retryable failure rather than a user-facing "venue
   // not available" message.
   const supabase = await createSupabaseActionClient();
+  // is_internal is selected too, because the venue rule below has to know
+  // whether a requested venue is a head-office row. Filtering the picker alone
+  // is not authorisation: this action is reachable directly.
   const { data: validVenues, error: venueErr } = await supabase
     .from("venues")
-    .select("id")
+    .select("id, is_internal")
     .in("id", parsed.data.venueIds);
   if (venueErr) {
     console.error(`[event-propose:${operationId.slice(0, 8)}] Venue validation query failed`, { error: venueErr });
@@ -127,6 +134,23 @@ export async function proposeEventAction(
   const validIds = new Set((validVenues ?? []).map((v) => v.id));
   if (parsed.data.venueIds.some((id) => !validIds.has(id))) {
     return { success: false, message: "One or more selected venues are not available.", operationId };
+  }
+
+  // The live proposal path calls the RPC with the service-role key, which
+  // bypasses RLS and the events write trigger, so this is the only place the
+  // venue rule is actually enforced for it.
+  const venueOptions = (validVenues ?? []).map((v) => ({
+    id: v.id,
+    isInternal: Boolean((v as { is_internal?: boolean }).is_internal)
+  }));
+  if (!canProposeForVenues(user.role, user.venueId, parsed.data.venueIds, venueOptions)) {
+    return {
+      success: false,
+      message: user.venueId
+        ? "You can only propose events for your assigned venue."
+        : "One or more selected venues are not available.",
+      operationId
+    };
   }
 
   const idempotencyKey = readProposalIdempotencyKey(formData);
@@ -203,8 +227,10 @@ export async function proposeEventAction(
   });
 
   if (error) {
+    // Log the detail, show a sentence. The RPC raises exceptions whose text is
+    // raw Postgres, which is meaningless to the user and leaks schema detail.
     console.error(`[event-propose:${operationId.slice(0, 8)}] create_multi_venue_event_proposals RPC failed:`, error);
-    return { success: false, message: error.message ?? "Could not submit the proposal.", operationId };
+    return { success: false, message: "Could not submit the proposal. Please try again.", operationId };
   }
 
   revalidatePath("/events");

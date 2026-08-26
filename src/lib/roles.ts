@@ -12,9 +12,84 @@ export function isAdministrator(role: UserRole): boolean {
   return role === "administrator";
 }
 
-/** Can propose or submit an event. Event creation is administrator-only. */
+/**
+ * Can raise an event proposal for an administrator to approve.
+ *
+ * Administrators and managers. This is the point of the manager account: they
+ * propose, an administrator approves, and the administrator then completes the
+ * details. Gates /events/propose and proposeEventAction only.
+ */
 export function canProposeEvents(role: UserRole): boolean {
+  return role === "administrator" || role === "manager";
+}
+
+/**
+ * Can create an event outright through the full form, skipping approval.
+ *
+ * Administrators only. Kept separate from canProposeEvents because the full
+ * form writes through the user's own session and the events table has a
+ * BEFORE trigger that rejects non-administrators. A manager reaching that form
+ * would fill it in and then be told "Only administrators can create or edit
+ * events" by the database.
+ */
+export function canCreateEventsDirectly(role: UserRole): boolean {
   return role === "administrator";
+}
+
+/**
+ * Can call the LLM copy tools that take a form payload and no event.
+ *
+ * Administrators only. These cost money per call and have no event to scope
+ * them, so they must not ride along with the widened propose capability.
+ */
+export function canUseEventAiTools(role: UserRole): boolean {
+  return role === "administrator";
+}
+
+/** Minimal venue shape the proposal venue rules need. */
+export type ProposableVenue = {
+  id: string;
+  isInternal?: boolean;
+};
+
+/**
+ * Which venues this user may raise a proposal for. One source of truth for the
+ * page's option list and the server action's guard, so the two cannot drift.
+ *
+ * - Administrator: every venue, including the internal one.
+ * - Manager with a venue: exactly that venue.
+ * - Manager without a venue: every venue except internal ones, which are
+ *   head-office rows rather than pubs.
+ */
+export function proposableVenueIds(
+  role: UserRole,
+  userVenueId: string | null,
+  venues: ProposableVenue[]
+): string[] {
+  if (role === "administrator") return venues.map((venue) => venue.id);
+  if (role !== "manager") return [];
+  if (userVenueId) {
+    return venues.some((venue) => venue.id === userVenueId) ? [userVenueId] : [];
+  }
+  return venues.filter((venue) => !venue.isInternal).map((venue) => venue.id);
+}
+
+/**
+ * Server-side guard for a submitted venue selection.
+ *
+ * Must be applied in the server action, not only by filtering the picker: the
+ * live proposal path runs under the service-role key, which bypasses RLS and
+ * the events write trigger, so nothing downstream re-checks the venue.
+ */
+export function canProposeForVenues(
+  role: UserRole,
+  userVenueId: string | null,
+  requestedVenueIds: string[],
+  venues: ProposableVenue[]
+): boolean {
+  if (requestedVenueIds.length === 0) return false;
+  const allowed = new Set(proposableVenueIds(role, userVenueId, venues));
+  return requestedVenueIds.every((id) => allowed.has(id));
 }
 
 /** Context an edit check needs about the event being edited. */

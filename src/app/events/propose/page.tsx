@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
-import { canProposeEvents } from "@/lib/roles";
+import { canCreateEventsDirectly, canProposeEvents, proposableVenueIds } from "@/lib/roles";
 import { listVenues } from "@/lib/venues";
 import { listCalendarNotes } from "@/lib/calendar-notes";
 import { ProposeEventForm } from "@/components/events/propose-event-form";
@@ -19,13 +19,19 @@ export default async function ProposeEventPage() {
   if (!canProposeEvents(user.role)) redirect("/unauthorized");
 
   const venueRows = await listVenues();
-  const venues: VenueOption[] = venueRows.map((v) => ({
+  const allVenues: VenueOption[] = venueRows.map((v) => ({
     id: v.id,
     name: v.name,
 
     category: (((v as any).category ?? "pub") === "cafe" ? "cafe" : "pub") as "pub" | "cafe",
     isInternal: Boolean((v as any).is_internal)
   }));
+
+  // Filter server-side. The action re-checks the submitted ids, but the picker
+  // must not offer a venue the user cannot propose for in the first place.
+  const allowedVenueIds = new Set(proposableVenueIds(user.role, user.venueId, allVenues));
+  const venues = allVenues.filter((venue) => allowedVenueIds.has(venue.id));
+  const isVenueLocked = user.role !== "administrator" && Boolean(user.venueId) && venues.length === 1;
 
   // Advisory clash warning data: a failed fetch must never block the form.
   const notesResult = await listCalendarNotes().catch(() => ({ notes: [], truncated: false, failed: true as const }));
@@ -49,10 +55,18 @@ export default async function ProposeEventPage() {
           </p>
         </div>
         <div className="rounded-[10px] border border-[var(--hair)] bg-[var(--paper)] p-4 shadow-card">
-          <ProposeEventForm venues={venues} defaultVenueId={null} clashNotes={clashNotes} notesUnavailable={notesUnavailable} />
-          <p className="mt-4 text-xs text-subtle">
-            Need to submit a fully-detailed event straight away? <Link className="underline" href="/events/new">Use the full event form.</Link>
-          </p>
+          <ProposeEventForm
+            venues={venues}
+            defaultVenueId={user.venueId}
+            lockedVenueName={isVenueLocked ? venues[0].name : null}
+            clashNotes={clashNotes}
+            notesUnavailable={notesUnavailable}
+          />
+          {canCreateEventsDirectly(user.role) ? (
+            <p className="mt-4 text-xs text-subtle">
+              Need to submit a fully-detailed event straight away? <Link className="underline" href="/events/new">Use the full event form.</Link>
+            </p>
+          ) : null}
         </div>
       </section>
     </div>

@@ -45,11 +45,15 @@ export function UpcomingEventsCard({ events, userRole }: UpcomingEventsCardProps
         {events.length === 0 ? (
           <div className="text-sm text-subtle">
             <p>No upcoming events.</p>
-            {canProposeEvents(userRole) && (
+            {/* This card only renders for managers (src/app/page.tsx), so the
+                empty state offers the propose route rather than the
+                administrator-only full form, which would 404 into
+                /unauthorized. */}
+            {canProposeEvents(userRole) ? (
               <Button asChild size="sm" className="mt-2">
-                <Link href="/events/new">New Event</Link>
+                <Link href="/events/propose">Propose an event</Link>
               </Button>
-            )}
+            ) : null}
           </div>
         ) : (
           events.slice(0, 4).map((event) => (

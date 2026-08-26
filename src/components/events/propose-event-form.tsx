@@ -20,6 +20,12 @@ type ProposeEventFormProps = {
    * managers a sensible default without restricting the picker.
    */
   defaultVenueId?: string | null;
+  /**
+   * When set, the user may only propose for this one venue, so it is shown as a
+   * plain read-only line rather than a dropdown with a single option. Named
+   * rather than boolean so the constraint reads as a fact, not a greyed control.
+   */
+  lockedVenueName?: string | null;
   /** Venue calendar notes used for the advisory clash warning near the date field. */
   clashNotes?: FormNote[];
   /** True when calendar notes could not be loaded, so the clash check is unavailable. */
@@ -69,7 +75,7 @@ function formatIsoDate(dateString: string): string {
   }).format(new Date(Date.UTC(year, month - 1, day)));
 }
 
-export function ProposeEventForm({ venues, defaultVenueId, clashNotes = [], notesUnavailable = false }: ProposeEventFormProps) {
+export function ProposeEventForm({ venues, defaultVenueId, lockedVenueName = null, clashNotes = [], notesUnavailable = false }: ProposeEventFormProps) {
   const [state, formAction, isPending] = useActionState(proposeEventAction, undefined);
   const [startAt, setStartAt] = useState("");
   const [endAt, setEndAt] = useState("");
@@ -235,17 +241,31 @@ export function ProposeEventForm({ venues, defaultVenueId, clashNotes = [], note
 
       <div className="space-y-2">
         <span className="text-sm font-medium text-[var(--ink)]">Which venues?</span>
-        <VenueMultiSelect
-          venues={venues}
-          selectedIds={selectedVenueIds}
-          onChange={setSelectedVenueIds}
-          hiddenFieldName="venueIds"
-          allowEmpty={false}
-          placeholder="Choose venues"
-        />
-        {selectedVenueIds.length === 0 ? (
-          <p className="text-xs text-[var(--burgundy)]">Pick at least one venue.</p>
-        ) : null}
+        {lockedVenueName && venues.length === 1 ? (
+          <>
+            <p className="rounded-[8px] border border-[var(--hair)] bg-[var(--canvas-2)] px-3 py-2 text-sm text-[var(--ink)]">
+              {lockedVenueName}
+              <span className="mt-0.5 block text-xs text-subtle">
+                Proposals are raised for your own venue.
+              </span>
+            </p>
+            <input type="hidden" name="venueIds" value={venues[0].id} readOnly />
+          </>
+        ) : (
+          <>
+            <VenueMultiSelect
+              venues={venues}
+              selectedIds={selectedVenueIds}
+              onChange={setSelectedVenueIds}
+              hiddenFieldName="venueIds"
+              allowEmpty={false}
+              placeholder="Choose venues"
+            />
+            {selectedVenueIds.length === 0 ? (
+              <p className="text-xs text-[var(--burgundy)]">Pick at least one venue.</p>
+            ) : null}
+          </>
+        )}
       </div>
 
       <div className="space-y-2">

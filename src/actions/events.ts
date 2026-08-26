@@ -7,7 +7,7 @@ import { z } from "zod";
 import { createSupabaseActionClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth";
-import { canReviewEvents, canProposeEvents, canEditEvent } from "@/lib/roles";
+import { canReviewEvents, canCreateEventsDirectly, canUseEventAiTools, canEditEvent } from "@/lib/roles";
 import { loadEventEditContext } from "@/lib/events/edit-context";
 import { appendEventVersion, cloneEventForReschedule, createEventDraft, createEventPlanningItem, ensureEventPlanningItem, findExistingRescheduleClone, getEventBookingImpact, recordApproval, softDeleteEvent, updateEventDraft, updateEventAssignee } from "@/lib/events";
 import {
@@ -867,7 +867,7 @@ export async function saveEventDraftAction(_: ActionResult | undefined, formData
   let editContext: Awaited<ReturnType<typeof loadEventEditContext>> | null = null;
 
   if (isCreate) {
-    if (!canProposeEvents(user.role)) {
+    if (!canCreateEventsDirectly(user.role)) {
       return { success: false, message: "You don't have permission to create events.", operationId };
     }
   } else {
@@ -1407,7 +1407,7 @@ export async function submitEventForReviewAction(
   let editContext: Awaited<ReturnType<typeof loadEventEditContext>> | null = null;
 
   if (!rawEventId) {
-    if (!canProposeEvents(user.role)) {
+    if (!canCreateEventsDirectly(user.role)) {
       return { success: false, message: "You don't have permission to submit events.", operationId };
     }
   } else {
@@ -2976,7 +2976,7 @@ export async function generateWebsiteCopyFromFormAction(
   }
 
   // LLM utility with no event context — capability alone gates it.
-  if (!canProposeEvents(user.role)) {
+  if (!canUseEventAiTools(user.role)) {
     return { success: false, message: "You don't have permission to generate website copy." };
   }
 
@@ -3093,7 +3093,7 @@ export async function generateTermsAndConditionsAction(
       return { success: false, message: "You don't have permission to edit this event." };
     }
   } else {
-    if (!canProposeEvents(user.role)) {
+    if (!canUseEventAiTools(user.role)) {
       return { success: false, message: "You don't have permission to generate terms." };
     }
   }
