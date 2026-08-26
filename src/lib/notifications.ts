@@ -1871,6 +1871,135 @@ export async function sendAssigneeReassignmentEmail(
   }
 }
 
+/**
+ * Tell people a task they own is no longer waiting on anything else.
+ *
+ * This is the missing half of the SOP dependency feature. The chain itself has
+ * worked in production for months: ticking "Food specs" correctly unblocks
+ * "Allergens", "Shopping list" and "Communication with kitchen on menu". Nobody
+ * was ever told, so the dependent task simply sat there until someone happened
+ * to look.
+ *
+ * Batched per recipient, not per task. One prerequisite can release several
+ * tasks at once, and "Setup Event" releases eight, so sending per task would
+ * put eight separate emails in one person's inbox in the same second.
+ *
+ * Never called from the cron sweeps. Those close hundreds of tasks in one run
+ * and would turn this into a mailshot.
+ */
+export async function sendTasksUnblockedEmail(taskIds: string[]): Promise<void> {
+  if (taskIds.length === 0) return;
+
+  if (!areOperationalEmailsEnabled()) {
+    logNotificationSkipped("sendTasksUnblockedEmail", { taskIds });
+    return;
+  }
+  const resend = getResendClient();
+  if (!resend) return;
+
+  try {
+    const supabase = createSupabaseAdminClient();
+
+    const { data: taskRows, error: taskError } = await (supabase as any)
+      .from("planning_tasks")
+      .select(`
+        id, title, due_date, assignee_id, status, is_blocked,
+        planning_item:planning_items!inner(id, title, event:events(id, title))
+      `)
+      .in("id", taskIds)
+      .eq("status", "open");
+
+    if (taskError) throw new Error(taskError.message);
+
+    // Re-checked rather than trusted: between the status write and this call a
+    // sweep or another user may have closed or re-blocked the task.
+    const tasks = ((taskRows ?? []) as Array<{
+      id: string;
+      title: string | null;
+      due_date: string | null;
+      assignee_id: string | null;
+      is_blocked: boolean | null;
+      planning_item: { id: string; title: string | null; event: { id: string; title: string | null } | null } | null;
+    }>).filter((task) => !task.is_blocked);
+
+    if (tasks.length === 0) return;
+
+    const { data: assigneeRows, error: assigneeError } = await (supabase as any)
+      .from("planning_task_assignees")
+      .select("task_id, user_id")
+      .in("task_id", tasks.map((task) => task.id));
+
+    if (assigneeError) throw new Error(assigneeError.message);
+
+    // The junction table is the source of truth; assignee_id is the legacy
+    // single-owner column and is used only where no junction row exists.
+    const byRecipient = new Map<string, typeof tasks>();
+    for (const task of tasks) {
+      const junctionUserIds = ((assigneeRows ?? []) as Array<{ task_id: string; user_id: string }>)
+        .filter((row) => row.task_id === task.id)
+        .map((row) => row.user_id);
+      const recipients = junctionUserIds.length > 0
+        ? junctionUserIds
+        : task.assignee_id
+          ? [task.assignee_id]
+          : [];
+
+      for (const userId of recipients) {
+        const existing = byRecipient.get(userId) ?? [];
+        existing.push(task);
+        byRecipient.set(userId, existing);
+      }
+    }
+
+    if (byRecipient.size === 0) return;
+
+    const results = await Promise.allSettled(
+      [...byRecipient.entries()].map(async ([userId, userTasks]) => {
+        const user = await fetchUser(userId);
+        if (!user?.email) return;
+
+        const single = userTasks.length === 1;
+        const headline = single ? "A task is ready to start" : `${userTasks.length} tasks are ready to start`;
+        const lines = userTasks.map((task) => {
+          const where = task.planning_item?.event?.title ?? task.planning_item?.title ?? "Planning";
+          // Same rendering the Tuesday update uses, so a task reads the same in both.
+          const due = task.due_date ? ` (due ${formatInLondon(`${task.due_date}T00:00:00Z`).date})` : "";
+          return `${task.title ?? "Untitled task"} - ${where}${due}`;
+        });
+
+        const { html, text } = renderEmailTemplate({
+          headline,
+          intro: `${buildGreeting(user, "Hi")} ${
+            single
+              ? "a task assigned to you was waiting on something else. That is now done, so you can pick it up."
+              : "some tasks assigned to you were waiting on something else. Those are now done, so you can pick them up."
+          }`,
+          body: ["Nothing else is blocking them."],
+          button: { label: "Open your tasks", url: plannerDashboardLink() },
+          meta: lines
+        });
+
+        await resend.emails.send({
+          from: RESEND_FROM_ADDRESS,
+          to: user.email,
+          subject: single ? `Ready to start: ${userTasks[0].title ?? "your task"}` : headline,
+          html,
+          text
+        });
+      })
+    );
+
+    results.forEach((result, index) => {
+      if (result.status === "rejected") {
+        console.warn(`Failed to send unblocked-task email to recipient ${index}`, result.reason);
+      }
+    });
+  } catch (error) {
+    // Never allowed to fail the status change that triggered it.
+    console.warn("Failed to send unblocked-task email", error);
+  }
+}
+
 export async function sendPostEventDigestEmail(eventId: string) {
   if (!areOperationalEmailsEnabled()) {
     logNotificationSkipped("sendPostEventDigestEmail", { eventId });

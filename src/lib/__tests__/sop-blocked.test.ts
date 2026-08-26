@@ -76,11 +76,14 @@ describe("updateBlockedStatus", () => {
       { data: [{ task_id: "dep-task-1" }], error: null },
       { data: [{ depends_on_task_id: "completed-task" }], error: null },
       { data: [{ id: "completed-task", status: "done" }], error: null },
-      { data: null, error: null },
+      { data: [{ id: "dep-task-1" }], error: null },
     ]);
     (createSupabaseAdminClient as Mock).mockReturnValue(client);
 
-    await expect(updateBlockedStatus("completed-task", "done")).resolves.toBeUndefined();
+    // Returns the tasks that became workable, so the caller can tell the owner.
+    await expect(updateBlockedStatus("completed-task", "done")).resolves.toEqual({
+      unblockedTaskIds: ["dep-task-1"],
+    });
   });
 
   it("behaves identically for not_required status — unblocks resolved dependents", async () => {
@@ -88,11 +91,13 @@ describe("updateBlockedStatus", () => {
       { data: [{ task_id: "dep-task-1" }], error: null },
       { data: [{ depends_on_task_id: "completed-task" }], error: null },
       { data: [{ id: "completed-task", status: "not_required" }], error: null },
-      { data: null, error: null },
+      { data: [{ id: "dep-task-1" }], error: null },
     ]);
     (createSupabaseAdminClient as Mock).mockReturnValue(client);
 
-    await expect(updateBlockedStatus("completed-task", "not_required")).resolves.toBeUndefined();
+    await expect(updateBlockedStatus("completed-task", "not_required")).resolves.toEqual({
+      unblockedTaskIds: ["dep-task-1"],
+    });
   });
 
   it("keeps dependent task blocked when NOT all of its dependencies are resolved", async () => {
@@ -114,11 +119,14 @@ describe("updateBlockedStatus", () => {
         ],
         error: null,
       },
-      { data: null, error: null },
+      { data: [{ id: "dep-task-1" }], error: null },
     ]);
     (createSupabaseAdminClient as Mock).mockReturnValue(client);
 
-    await expect(updateBlockedStatus("completed-task", "done")).resolves.toBeUndefined();
+    // Still waiting on other-task, so nobody is told it is ready.
+    await expect(updateBlockedStatus("completed-task", "done")).resolves.toEqual({
+      unblockedTaskIds: [],
+    });
   });
 
   // ── open (reopen) path ────────────────────────────────────────────────────
@@ -130,7 +138,10 @@ describe("updateBlockedStatus", () => {
     ]);
     (createSupabaseAdminClient as Mock).mockReturnValue(client);
 
-    await expect(updateBlockedStatus("completed-task", "open")).resolves.toBeUndefined();
+    // Reopening blocks dependents; nothing becomes workable.
+    await expect(updateBlockedStatus("completed-task", "open")).resolves.toEqual({
+      unblockedTaskIds: [],
+    });
   });
 
   // ── no-op paths ───────────────────────────────────────────────────────────
@@ -139,7 +150,7 @@ describe("updateBlockedStatus", () => {
     const client = buildClient([{ data: [], error: null }]);
     (createSupabaseAdminClient as Mock).mockReturnValue(client);
 
-    await expect(updateBlockedStatus("lonely-task", "done")).resolves.toBeUndefined();
+    await expect(updateBlockedStatus("lonely-task", "done")).resolves.toEqual({ unblockedTaskIds: [] });
     // Only 1 from() call — early return after finding no dependents
     expect(client.from).toHaveBeenCalledTimes(1);
   });
@@ -148,7 +159,7 @@ describe("updateBlockedStatus", () => {
     const client = buildClient([{ data: [], error: null }]);
     (createSupabaseAdminClient as Mock).mockReturnValue(client);
 
-    await expect(updateBlockedStatus("lonely-task", "open")).resolves.toBeUndefined();
+    await expect(updateBlockedStatus("lonely-task", "open")).resolves.toEqual({ unblockedTaskIds: [] });
     expect(client.from).toHaveBeenCalledTimes(1);
   });
 
@@ -156,7 +167,7 @@ describe("updateBlockedStatus", () => {
     const client = buildClient([{ data: null, error: null }]);
     (createSupabaseAdminClient as Mock).mockReturnValue(client);
 
-    await expect(updateBlockedStatus("lonely-task", "done")).resolves.toBeUndefined();
+    await expect(updateBlockedStatus("lonely-task", "done")).resolves.toEqual({ unblockedTaskIds: [] });
     expect(client.from).toHaveBeenCalledTimes(1);
   });
 

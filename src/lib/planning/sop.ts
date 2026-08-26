@@ -109,6 +109,8 @@ async function markOpenTasksNotRequired(taskIds: string[], completedBy: string |
 
   const updatedIds = ((data ?? []) as Array<{ id: string }>).map((row) => row.id);
   for (const taskId of updatedIds) {
+    // Sweep path: deliberately ignores the unblocked list. These run in bulk
+    // and notifying here would send a mailshot.
     await updateBlockedStatus(taskId, "not_required");
   }
 
@@ -302,6 +304,8 @@ export async function markPastEventOpenTodosNotRequired(
   }
 
   for (const task of updated) {
+    // Sweep path: deliberately ignores the unblocked list. These run in bulk
+    // and notifying here would send a mailshot.
     await updateBlockedStatus(task.id, "not_required");
   }
 
@@ -371,11 +375,24 @@ export async function recalculateSopDates(
  * Update is_blocked status for tasks affected by a status change.
  * Call this after any task status change (done, not_required, or back to open).
  */
+/**
+ * Recompute the blocked flag on every task that depends on the one just
+ * changed, and report which of them became workable as a result.
+ *
+ * The newly-unblocked set was already being computed here and thrown away.
+ * Returning it is what lets a caller tell the assignee their turn has come,
+ * which is the half of the dependency feature that was missing: the chain
+ * itself has worked in production for months, silently.
+ *
+ * Callers that run in a sweep (the cron paths) should ignore the return value
+ * rather than notifying, or completing one prerequisite fans out a burst.
+ */
 export async function updateBlockedStatus(
   completedTaskId: string,
   newStatus: string
-): Promise<void> {
+): Promise<{ unblockedTaskIds: string[] }> {
   const db = createSupabaseAdminClient();
+  const unblockedTaskIds: string[] = [];
 
   if (newStatus === "done" || newStatus === "not_required") {
     // Find all tasks that depend on the completed task
@@ -385,7 +402,7 @@ export async function updateBlockedStatus(
       .eq("depends_on_task_id", completedTaskId);
 
     if (depError) throw new Error(depError.message);
-    if (!dependentRows || dependentRows.length === 0) return;
+    if (!dependentRows || dependentRows.length === 0) return { unblockedTaskIds };
 
     // For each dependent task, check if ALL its dependencies are now resolved
     for (const row of dependentRows) {
@@ -409,11 +426,20 @@ export async function updateBlockedStatus(
         (t: { id: string; status: string }) => t.status === "done" || t.status === "not_required"
       );
 
-      await db
+      // .select() so we only report tasks that were actually still open. A
+      // task already done or not-required matches nothing and must not
+      // generate a "you can start this now" message.
+      const { data: updatedRows, error: updateError } = await db
         .from("planning_tasks")
         .update({ is_blocked: !allResolved })
         .eq("id", row.task_id)
-        .eq("status", "open");
+        .eq("status", "open")
+        .select("id");
+
+      if (updateError) throw new Error(updateError.message);
+      if (allResolved && (updatedRows ?? []).length > 0) {
+        unblockedTaskIds.push(row.task_id);
+      }
     }
   } else if (newStatus === "open") {
     // Task reopened — all tasks depending on it become blocked
@@ -423,7 +449,7 @@ export async function updateBlockedStatus(
       .eq("depends_on_task_id", completedTaskId);
 
     if (depError) throw new Error(depError.message);
-    if (!dependentRows || dependentRows.length === 0) return;
+    if (!dependentRows || dependentRows.length === 0) return { unblockedTaskIds };
 
     const taskIds = dependentRows.map((r: { task_id: string }) => r.task_id);
     await db
@@ -432,6 +458,8 @@ export async function updateBlockedStatus(
       .in("id", taskIds)
       .eq("status", "open");
   }
+
+  return { unblockedTaskIds };
 }
 
 /**

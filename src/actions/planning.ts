@@ -23,6 +23,7 @@ import { createSupabaseActionClient, createSupabaseReadonlyClient } from "@/lib/
 import { generateInspirationItems } from "@/lib/planning/inspiration";
 import { generateSopChecklist, normaliseSopNotRequiredTemplateIds, recalculateSopDates, updateBlockedStatus, UUID_PATTERN } from "@/lib/planning/sop";
 import { recordAuditLogEntry } from "@/lib/audit-log";
+import { sendTasksUnblockedEmail } from "@/lib/notifications";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { canCreatePlanningForVenueSelection, canEditVenueLinkedPlanning } from "@/lib/visibility";
 
@@ -1075,7 +1076,16 @@ export async function togglePlanningTaskStatusAction(input: unknown): Promise<Pl
       if (parsed.data.status === "open") {
         await refreshPlanningTaskBlockedStatus(parsed.data.taskId);
       }
-      await updateBlockedStatus(parsed.data.taskId, parsed.data.status);
+      const { unblockedTaskIds } = await updateBlockedStatus(parsed.data.taskId, parsed.data.status);
+
+      // Only this path notifies. It is the one place a person ticks a task off
+      // by hand; the two cron sweeps close tasks in bulk and must stay silent.
+      // Fire and forget: an email problem must never fail the tick.
+      if (unblockedTaskIds.length > 0) {
+        sendTasksUnblockedEmail(unblockedTaskIds).catch((notifyErr) => {
+          console.warn("Failed to send unblocked-task notification:", notifyErr);
+        });
+      }
     } catch (blockErr) {
       console.error("Failed to update blocked status:", blockErr);
     }
