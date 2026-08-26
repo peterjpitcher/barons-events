@@ -13,6 +13,8 @@ type PendingProposal = {
   id: string;
   title: string;
   startAt: string;
+  /** Null for proposals raised before an end time was required. */
+  endAt?: string | null;
   notes: string | null;
   /** Display summary — e.g. "The Cricketers" or "The Cricketers + 2 more". */
   venueName: string;
@@ -69,6 +71,13 @@ export function PendingProposalRow({ proposal, canDecide = false }: { proposal: 
     timeZone: "Europe/London"
   }).format(new Date(proposal.startAt));
 
+  // Older proposals have no end time. Show "TBC" rather than an invented one.
+  const endDate = proposal.endAt ? new Date(proposal.endAt) : null;
+  const formattedEnd = endDate && !Number.isNaN(endDate.getTime())
+    ? new Intl.DateTimeFormat("en-GB", { timeStyle: "short", timeZone: "Europe/London" }).format(endDate)
+    : null;
+  const formattedWindow = formattedEnd ? `${formattedStart} until ${formattedEnd}` : `${formattedStart} (end time TBC)`;
+
   const detailsId = `proposal-details-${proposal.id}`;
   const notesPreview = proposal.notes
     ? proposal.notes.length > 80
@@ -119,8 +128,8 @@ export function PendingProposalRow({ proposal, canDecide = false }: { proposal: 
                 ? proposal.venueNames.join(", ")
                 : proposal.venueName}
             </dd>
-            <dt className="font-semibold text-subtle">Start</dt>
-            <dd className="text-[var(--ink)]">{formattedStart}</dd>
+            <dt className="font-semibold text-subtle">When</dt>
+            <dd className="text-[var(--ink)]">{formattedWindow}</dd>
             <dt className="font-semibold text-subtle">Proposed by</dt>
             <dd className="text-[var(--ink)]">{proposal.creatorName}</dd>
             <dt className="font-semibold text-subtle">Notes</dt>

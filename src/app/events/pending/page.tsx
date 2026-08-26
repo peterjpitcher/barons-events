@@ -19,7 +19,7 @@ export default async function PendingProposalsPage() {
   const { data: rows } = await (db as any)
     .from("events")
     .select(`
-      id, title, start_at, status, created_by, venue_id, notes, created_at,
+      id, title, start_at, end_at, status, created_by, venue_id, notes, created_at,
       event_venues(venue_id, is_primary, venue:venues(id,name)),
       creator:created_by(id, full_name, email)
     `)
@@ -36,6 +36,7 @@ export default async function PendingProposalsPage() {
     id: string;
     title: string;
     start_at: string;
+    end_at: string | null;
     notes: string | null;
     event_venues?: RawAttachment[] | null;
     creator: { full_name: string | null; email: string | null } | Array<{ full_name: string | null; email: string | null }> | null;
@@ -61,6 +62,7 @@ export default async function PendingProposalsPage() {
       id: r.id,
       title: r.title,
       startAt: r.start_at,
+      endAt: r.end_at,
       notes: r.notes,
       venueName,
       venueNames: venues.map((v) => v.name),
