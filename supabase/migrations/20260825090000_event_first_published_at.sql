@@ -55,7 +55,8 @@ set first_published_at = coalesce(
     select min(a.created_at)
     from public.audit_log a
     where a.entity = 'event'
-      and a.entity_id = e.id
+      -- audit_log.entity_id is text; events.id is uuid.
+      and a.entity_id = e.id::text
       and (
         a.action = 'event.approved'
         or (a.action = 'event.status_changed' and a.meta->>'status' in ('approved', 'completed'))
