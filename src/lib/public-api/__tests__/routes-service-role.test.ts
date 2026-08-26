@@ -143,6 +143,30 @@ describe("public API routes use service-role reads behind bearer auth", () => {
     expect(String(selectCall?.args[0])).not.toMatch(/\bnotes\b/);
   });
 
+  it("/api/v1/events includes secondary venue links while keeping the primary venue response", async () => {
+    const eventsQuery = makeQueryResult([publicEventRow()]);
+    const supabase = makeSupabaseClient({ events: eventsQuery });
+    mocks.createSupabaseAdminClient.mockReturnValue(supabase);
+    const venueId = "33333333-3333-4333-8333-333333333333";
+
+    const response = await getEvents(authedRequest(`/api/v1/events?venueId=${venueId}`));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0].venue.id).toBe("22222222-2222-4222-8222-222222222222");
+    expect(body.data[0]).not.toHaveProperty("venue_filter");
+    expect(eventsQuery.calls).toEqual(
+      expect.arrayContaining([
+        { method: "eq", args: ["venue_filter.venue_id", venueId] },
+        { method: "eq", args: ["venue_filter.venue_filter_venue.is_internal", false] },
+        { method: "or", args: [`venue_id.eq.${venueId},venue_filter.not.is.null`] },
+      ]),
+    );
+    const selectCall = eventsQuery.calls.find((call) => call.method === "select");
+    expect(String(selectCall?.args[0])).toContain("venue_filter:event_venues");
+  });
+
   it("/api/v1/venues keeps internal venues filtered out", async () => {
     const venuesQuery = makeQueryResult([
       { id: "22222222-2222-4222-8222-222222222222", name: "Barons Test", address: null, capacity: 100 },

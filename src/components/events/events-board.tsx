@@ -42,6 +42,7 @@ import { Select } from "@/components/ui/select";
 import { PageHeader } from "@/components/ui/design-primitives";
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+import { isLinkedToVenue } from "@/lib/visibility";
 
 dayjs.extend(advancedFormat);
 dayjs.extend(utc);
@@ -366,7 +367,7 @@ export function EventsBoard({ user, events, venues, notes, notesFailed, initialM
 
   const venueFilteredEvents = useMemo(() => {
     if (!filteredVenueId) return eventDataset;
-    return eventDataset.filter((event) => event.venue?.id === filteredVenueId);
+    return eventDataset.filter((event) => isLinkedToVenue(event, filteredVenueId));
   }, [eventDataset, filteredVenueId]);
 
   const venueFilteredNotes = useMemo(() => {
@@ -1614,7 +1615,7 @@ function SevenDayMatrix({
     return venues.map((venue) => {
       const venueEvents = events.filter(
         (event) =>
-          event.venue?.id === venue.id &&
+          isLinkedToVenue(event, venue.id) &&
           (event.start.isBefore(rangeEnd) || event.start.isSame(rangeEnd)) &&
           (event.end.isAfter(safeStart) || event.end.isSame(safeStart))
       );
